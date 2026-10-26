@@ -4571,27 +4571,52 @@ function gunBus(ctx) {
 
 // 🎙️ A shot that is a recording. A weapon listed in WEAPON_SAMPLES plays a real sample instead of the made-up one: the file is fetched and decoded
 // once the audio is running, and until it is there (or if it never comes: the page opened from disk, a browser that cannot decode it) the made-up
-// sound plays exactly as it always did. `from` and `len` cut the useful part out of the file (the Vector's is a 3 s clip and everything after 0.3 s is
-// nearly silence), `fade` rounds the cut off, `rate` is a range of playback speeds (1 to 1 leaves the recording exactly as it is), `gain` is the level against the others.
-const WEAPON_SAMPLES = {
-  vector: { url: 'sounds/vector-shot.mp3', gain: 0.2, from: 0.0, len: 1.2, fade: 0.4, rate: [1, 1] },   // (the clip as it was made: the same sound every shot, at its own pitch; only the last 1.8 s of silence is not played)
+// sound plays exactly as it always did. Several weapons can share one file (it is decoded once). Per weapon: `from` and `len` cut the useful part out
+// of the file (these are 3-4 s clips and the end of every one is nearly silence; `from` also skips the quiet before the bang so the sound lands with
+// the muzzle flash), `fade` rounds the cut off, `rate` is a range of playback speeds (1 to 1 leaves the recording exactly as it is; a heavier gun
+// sharing a file with a lighter one plays it a little lower), `gain` is the level against the others (solved by rendering each through the game's own sound code and matching the loudness of the first 0.3 s to a target for that kind of gun: snipers loudest, then rockets and big pistols, then the launcher; the arc rifle fires too fast to be loud).
+// A name in an ability's own id (hand_cannon_ab, barrett_ab ...) is not listed on purpose: the big shots keep their own sound, so you can hear them coming.
+const SAMPLE_FILES = {
+  vector:    'sounds/vector-shot.mp3',      // a sharp crack, over in a third of a second
+  thump:     'sounds/thump-shot.mp3',       // a big dull thud, nearly all low end: a large-bore pistol
+  ring:      'sounds/ring-shot.mp3',        // a heavy mid-range shot that rings out for a second and a half: a rifle in open ground
+  blast:     'sounds/rocket-blast.mp3',     // a roar that holds full level for the first second and dies away over four: something launched
+  lightning: 'sounds/lightning-bolt.mp3',   // a crackle that builds, a crack, then the thunder
 };
-const _sampleState = {};
+const WEAPON_SAMPLES = {
+  vector:           { file: 'vector',    gain: 0.20, from: 0.00, len: 1.2, fade: 0.4, rate: [1, 1] },   // (the clip as it was made: the same sound every shot, at its own pitch; only the last 1.8 s of silence is not played)
+  // snipers: the ring. The bigger the gun the lower it plays
+  srx:              { file: 'ring',      gain: 1.16, from: 0.10, len: 2.0, fade: 0.7, rate: [1, 1] },
+  amr:              { file: 'ring',      gain: 1.11, from: 0.10, len: 2.0, fade: 0.7, rate: [0.9, 0.9] },
+  barrett:          { file: 'ring',      gain: 1.18, from: 0.10, len: 2.0, fade: 0.7, rate: [0.85, 0.85] },
+  // big-bore pistols: the thud
+  hand_cannon:      { file: 'thump',     gain: 0.43, from: 0.02, len: 1.6, fade: 0.6, rate: [1, 1] },
+  desert_eagle:     { file: 'thump',     gain: 0.62, from: 0.02, len: 1.6, fade: 0.6, rate: [1.08, 1.08] },
+  // things that are launched: the blast
+  bazooka:          { file: 'blast',     gain: 0.17, from: 0.00, len: 3.2, fade: 1.2, rate: [1, 1] },
+  rpg:              { file: 'blast',     gain: 0.16, from: 0.00, len: 2.6, fade: 1.0, rate: [1.1, 1.1] },
+  grenade_launcher: { file: 'blast',     gain: 0.14, from: 0.00, len: 1.4, fade: 0.6, rate: [1.25, 1.25] },
+  // lightning: the bolt, cut to the weapon (a shotgun of it, a rifle that fires it as fast as it can)
+  storm_bloom:      { file: 'lightning', gain: 0.40, from: 0.02, len: 2.2, fade: 0.6, rate: [1, 1] },
+  arc_rifle:        { file: 'lightning', gain: 0.16, from: 0.02, len: 0.5, fade: 0.25, rate: [1, 1] },
+  storm_cannon:     { file: 'lightning', gain: 0.34, from: 0.02, len: 2.4, fade: 0.7, rate: [0.9, 0.9] },
+};
+const _sampleState = {};                                            // by file (so the Vector's is _sampleState.vector), not by weapon
 let _sampleVoices = 0;
 function weaponSampleFor(ctx, id) {
   const def = WEAPON_SAMPLES[id]; if (!def) return null;
-  const st = _sampleState[id] || (_sampleState[id] = { buf: null, loading: false, failed: false });
+  const url = SAMPLE_FILES[def.file], st = _sampleState[def.file] || (_sampleState[def.file] = { buf: null, loading: false, failed: false });
   if (st.buf) return { def, buf: st.buf };
   if (!st.loading && !st.failed && typeof fetch === 'function') {
     st.loading = true;
-    fetch(def.url).then(r => r.ok ? r.arrayBuffer() : Promise.reject(new Error('HTTP ' + r.status)))
+    fetch(url).then(r => r.ok ? r.arrayBuffer() : Promise.reject(new Error('HTTP ' + r.status)))
       .then(ab => new Promise((res, rej) => { const p = ctx.decodeAudioData(ab, res, rej); if (p && p.catch) p.catch(rej); }))
       .then(b => { st.buf = b; st.loading = false; })
-      .catch((e) => { st.failed = true; st.loading = false; try { console.warn('[sample] ' + def.url + ' did not load, the made-up sound plays instead:', e && e.message); } catch (x) {} });
+      .catch((e) => { st.failed = true; st.loading = false; try { console.warn('[sample] ' + url + ' did not load, the made-up sound plays instead:', e && e.message); } catch (x) {} });
   }
   return null;
 }
-function weaponSamplesPreload(ctx) { for (const id of Object.keys(WEAPON_SAMPLES)) weaponSampleFor(ctx, id); }
+function weaponSamplesPreload(ctx) { for (const id of Object.keys(WEAPON_SAMPLES)) weaponSampleFor(ctx, id); }   // (one fetch per file: the rest find it loading)
 function sampleBus(ctx) {                                          // a recording is already as loud as it is: it gets a limiter of its own, not the made-up guns' bus (which squashes everything into one level)
   if (ctx._sampleBus) return ctx._sampleBus;
   const input = ctx.createGain(), lim = ctx.createDynamicsCompressor();
@@ -4633,7 +4658,7 @@ function playWeaponSound(idOrWeapon, opts = {}) {
   const distGain = soundDistanceGain(opts.position, opts.remote);
   const mult = (opts.volume ?? 1) * distGain * (opts.remote ? 0.75 : 1) * SOUND_MIX;
   const start = ctx.currentTime + 0.002;
-  // A recorded shot: the Vector is the Vector whatever skin is on it, so every skin plays the recording too (the skins' own made-up sounds are not used for a weapon that has one). Its own path, none of the made-up layers
+  // A recorded shot (see WEAPON_SAMPLES): the gun is the gun whatever skin is on it, so every skin plays the recording too (the skins' own made-up sounds are not used for a weapon that has one). Its own path, none of the made-up layers
   if (id) { const smp = weaponSampleFor(ctx, id); if (smp) { playWeaponSample(ctx, start, smp, mult, distGain, !!opts.remote); return; } }
   const mainGain = ctx.createGain();
   // Real guns go through the shared gun bus (see gunBus): mastered to the level of
@@ -4651,7 +4676,6 @@ function playWeaponSound(idOrWeapon, opts = {}) {
     send.gain.value = (opts.remote ? 0.070 : 0.037) * distGain * (indoor ? 1 : 1.15) * tailBoost;
     mainGain.connect(send).connect(getReverbBus(ctx, indoor));
   } catch (e) {}
-  // A recorded shot (the Vector's own, not a skin's): through the same bus and room as the made-up ones, and none of the made-up layers
   // Outdoors the crack keeps going. Indoors there is nowhere for it to go.
   if (p.tail) {
     const indoorNow = INDOOR_MAPS.has(typeof activeMapName !== 'undefined' ? activeMapName : '');

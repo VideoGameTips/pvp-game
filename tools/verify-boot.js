@@ -3220,12 +3220,24 @@ if (ok && process.argv.includes('--zombietower')) {
 }
 
 if (ok && process.argv.includes('--sample')) {
-  // A recorded shot: the Vector plays its own sample (a real file, shipped in the itch bundle) once it is loaded, through a path of its own; before that, or if the file never
-  // comes, the made-up shot plays exactly as before; other guns are not touched; every skin of the Vector plays it too.
-  const file = path.join(__dirname, '..', 'public', 'sounds', 'vector-shot.mp3'), itch = fs.readFileSync(path.join(__dirname, 'build-itch.sh'), 'utf8');
+  // Recorded shots: a weapon in WEAPON_SAMPLES plays its own recording (real files, shipped in the itch bundle) once it is loaded, through a path of its own; before that, or if the
+  // file never comes, the made-up shot plays exactly as before; guns without one are not touched; no skin changes it; weapons sharing a file fetch it once.
+  const tbl = JSON.parse(vm.runInThisContext('JSON.stringify({ files: SAMPLE_FILES, samples: WEAPON_SAMPLES })'));
+  const itch = fs.readFileSync(path.join(__dirname, 'build-itch.sh'), 'utf8'), filesLine = (itch.match(/^FILES=\(([^)]*)\)/m) || [])[1] || '';
+  const LENGTH = { vector: 3.0, thump: 3.0, ring: 3.0, blast: 4.0, lightning: 3.0 };       // seconds in each file as it was made
   const more = [];
-  if (!fs.existsSync(file) || fs.statSync(file).size < 5000) more.push('public/sounds/vector-shot.mp3 should be there');
-  if (!/FILES=\([^)]*sounds\/vector-shot\.mp3/.test(itch)) more.push('the itch bundle should carry the Vector sample (FILES in tools/build-itch.sh)');
+  for (const [k, u] of Object.entries(tbl.files)) {
+    const f = path.join(__dirname, '..', 'public', u);
+    if (!fs.existsSync(f) || fs.statSync(f).size < 5000) more.push('public/' + u + ' should be there');
+    if (!filesLine.split(/\s+/).includes(u)) more.push('the itch bundle should carry ' + u + ' (FILES in tools/build-itch.sh)');
+    if (/^[/]/.test(u) || /^https?:/.test(u)) more.push(u + ': the sample path has to be relative (the game is not served from a root)');
+    if (!LENGTH[k]) more.push('add the length of the "' + k + '" file to LENGTH in this test');
+  }
+  for (const [id, d] of Object.entries(tbl.samples)) {
+    if (!tbl.files[d.file]) more.push(id + ' names a file that is not in SAMPLE_FILES: ' + d.file);
+    else if (LENGTH[d.file] && d.from + d.len * d.rate[1] > LENGTH[d.file] + 0.01) more.push(id + ' plays past the end of its file (from ' + d.from + ' + ' + d.len + ' x ' + d.rate[1] + ' > ' + LENGTH[d.file] + ')');
+    if (!(d.gain > 0) || !(d.len > 0.2) || !(d.fade > 0 && d.fade <= d.len) || !(d.rate[0] > 0.5 && d.rate[1] < 2 && d.rate[0] <= d.rate[1])) more.push(id + ' has a setting that makes no sense: ' + JSON.stringify(d));
+  }
   const out = vm.runInThisContext(`(() => {
     const issues = [];
     const node = () => { const t = { connect: x => x, disconnect() {}, start() {}, stop() {}, setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {}, setTargetAtTime() {}, cancelScheduledValues() {}, value: 0 };
@@ -3233,41 +3245,55 @@ if (ok && process.argv.includes('--sample')) {
     let sources = 0, lastSrc = null, sampleHits = 0; const SAMPLE = { duration: 3, numberOfChannels: 2 };
     const ctx = new Proxy({ currentTime: 1, sampleRate: 48000, state: 'running', destination: node(), createBufferSource() { sources++; const n = node(); lastSrc = new Proxy(n, { get: (o, k) => o[k], set: (o, k, v) => { if (k === 'buffer' && v === SAMPLE) sampleHits++; o[k] = v; return true; } }); return lastSrc; }, createBuffer(ch, len) { return { numberOfChannels: ch, length: len, duration: len / 48000, getChannelData: () => new Float32Array(len) }; } },
                           { get: (o, k) => (k in o ? o[k] : (typeof k === 'string' && k.startsWith('create') ? (() => node()) : undefined)) });
-    const saved = { ctx: getAudioCtx, blast: playMuzzleBlast, st: _sampleState.vector, voices: _sampleVoices, last: { ...weaponSoundLastAt } };
+    const saved = { ctx: getAudioCtx, blast: playMuzzleBlast, st: { ..._sampleState }, voices: _sampleVoices, last: { ...weaponSoundLastAt }, fetch: globalThis.fetch };
     let blasts = 0; getAudioCtx = () => ctx; playMuzzleBlast = () => { blasts++; };
     const clear = () => { for (const k of Object.keys(weaponSoundLastAt)) delete weaponSoundLastAt[k]; };
+    const setAll = (st) => { for (const k of Object.keys(SAMPLE_FILES)) _sampleState[k] = st(); };
+    const ids = Object.keys(WEAPON_SAMPLES);
     try {
-      if (!WEAPON_SAMPLES.vector || !/vector-shot\\.mp3$/.test(WEAPON_SAMPLES.vector.url)) issues.push('the Vector should have a sample');
-      { const D = WEAPON_SAMPLES.vector; if (D.rate[0] !== 1 || D.rate[1] !== 1) issues.push('the recording should play at its own pitch (rate 1): it is the sound that was sent'); if (D.from !== 0 || D.len < 1) issues.push('the recording should play from its start, and all of its audible length'); }
-      if (/^\\//.test(WEAPON_SAMPLES.vector.url) || /^https?:/.test(WEAPON_SAMPLES.vector.url)) issues.push('the sample path has to be relative (the game is not served from a root)');
-      // not loaded yet: the made-up shot
-      _sampleState.vector = { buf: null, loading: true, failed: false }; clear(); blasts = 0; sampleHits = 0; playWeaponSound('vector', {});
-      if (!blasts || sampleHits) issues.push('until the file is there the made-up shot plays (blasts ' + blasts + ', samples ' + sampleHits + ')');
+      if (!WEAPON_SAMPLES.vector) issues.push('the Vector should have a sample');
+      { const D = WEAPON_SAMPLES.vector; if (D.rate[0] !== 1 || D.rate[1] !== 1) issues.push('the Vector recording should play at its own pitch (rate 1): it is the sound that was sent'); if (D.from !== 0 || D.len < 1) issues.push('the Vector recording should play from its start, and all of its audible length'); }
+      for (const id of ids) if (!WEAPONS.some(w => w.id === id)) issues.push(id + ' has a recording but is not a weapon');
+      // the heavier the gun, the lower the shared recording plays
+      { const R = (i) => WEAPON_SAMPLES[i].rate[0]; if (!(R('amr') < R('srx') && R('barrett') <= R('amr'))) issues.push('the bigger snipers should play the ring lower: srx ' + R('srx') + ', amr ' + R('amr') + ', barrett ' + R('barrett')); }
+      // a big shot's own ability keeps its own sound
+      for (const ab of ['hand_cannon_ab', 'barrett_ab', 'desert_eagle_ab']) { if (WEAPON_SAMPLES[ab]) issues.push(ab + ' is a powershot: it keeps its own sound'); }
+      // not loaded yet: the made-up shot, for each of them
+      setAll(() => ({ buf: null, loading: true, failed: false }));
+      for (const id of ids) { clear(); blasts = 0; sampleHits = 0; playWeaponSound(id, {}); if (sampleHits) issues.push(id + ': until the file is there the made-up shot plays (samples ' + sampleHits + ')'); }
       // failed to load: the same
-      _sampleState.vector = { buf: null, loading: false, failed: true }; clear(); blasts = 0; sampleHits = 0; playWeaponSound('vector', {});
-      if (!blasts || sampleHits) issues.push('if the file never comes the made-up shot plays');
-      // loaded: the sample, none of the made-up layers, cut to its length, pitched about a little
-      _sampleState.vector = { buf: SAMPLE, loading: false, failed: false }; clear(); blasts = 0; sampleHits = 0; _sampleVoices = 0; playWeaponSound('vector', {});
-      if (sampleHits !== 1 || blasts) issues.push('once loaded the Vector should play its sample and not the made-up shot (samples ' + sampleHits + ', blasts ' + blasts + ')');
+      setAll(() => ({ buf: null, loading: false, failed: true }));
+      for (const id of ids) { clear(); sampleHits = 0; playWeaponSound(id, {}); if (sampleHits) issues.push(id + ': if the file never comes the made-up shot plays'); }
+      // loaded: the sample, none of the made-up layers
+      setAll(() => ({ buf: SAMPLE, loading: false, failed: false }));
+      for (const id of ids) { clear(); blasts = 0; sampleHits = 0; _sampleVoices = 0; playWeaponSound(id, {}); if (sampleHits !== 1) issues.push(id + ': once loaded it should play its recording (samples ' + sampleHits + ')'); }
+      clear(); blasts = 0; _sampleVoices = 0; playWeaponSound('vector', {}); if (blasts) issues.push('once loaded the Vector should not play the made-up shot as well (blasts ' + blasts + ')');
       // someone else's gun in the distance is the sample too
-      clear(); sampleHits = 0; _sampleVoices = 0; playWeaponSound('vector', { remote: true, position: new THREE.Vector3(30, 1, 0) }); if (sampleHits !== 1) issues.push('a distant Vector is the recording too');
+      for (const id of ids) { clear(); sampleHits = 0; _sampleVoices = 0; playWeaponSound(id, { remote: true, position: new THREE.Vector3(30, 1, 0) }); if (sampleHits !== 1) issues.push('a distant ' + id + ' is the recording too'); }
+      // a powershot plays its own sound, not the recording
+      for (const ab of ['hand_cannon_ab', 'barrett_ab']) { clear(); sampleHits = 0; playWeaponSound(ab, {}); if (sampleHits) issues.push(ab + ' must not play the recording of the plain shot'); }
       // a burst does not pile up without end
       clear(); sampleHits = 0; _sampleVoices = 0; for (let i = 0; i < 40; i++) { clear(); playWeaponSound('vector', {}); } if (sampleHits !== 40) issues.push('every shot of a burst should play the recording, played ' + sampleHits + ' of 40');
       clear(); sampleHits = 0; _sampleVoices = 0; for (let i = 0; i < 90; i++) { clear(); playWeaponSound('vector', {}); } if (sampleHits > 52 || sampleHits < 44) issues.push('a runaway burst should be capped near fifty voices, played ' + sampleHits);
       _sampleVoices = 0;
       // other guns are untouched
-      clear(); sampleHits = 0; _sampleVoices = 0; playWeaponSound('ak20', {}); if (sampleHits) issues.push('the AK20 must keep its own sound');
-      // the Vector is the Vector under any skin: the MP5 one, and the ones with a gag sound of their own, all play the recording
+      for (const id of ['ak20', 'p90', 'sg8', 'pistol', 'rpd', 'railgun']) { clear(); sampleHits = 0; _sampleVoices = 0; playWeaponSound(id, {}); if (sampleHits) issues.push('the ' + id + ' must keep its own sound'); }
+      // a gun is the gun under any skin: the MP5 one, and the ones with a gag sound of their own, all play the recording (checked on a rifle, a pistol and the Vector)
       const keepFx = _skinFxFor;
-      for (const snd of [{ kind: 'auto_blast', vol: 0.18, dur: 0.07, f1: 0, f2: 0, action: 'slide' }, { kind: 'zip', vol: 0.22, dur: 0.06, f1: 1800, f2: 3400 }, { kind: 'bubblegun', vol: 0.2, dur: 0.07, f1: 420, f2: 980 }]) {
-        _skinFxFor = (i) => i === 'vector' ? { sound: snd } : keepFx(i);
-        clear(); sampleHits = 0; _sampleVoices = 0; playWeaponSound('vector', {}); if (sampleHits !== 1) issues.push('a Vector skin (' + snd.kind + ') should play the recording too');
+      for (const who of ['vector', 'srx', 'hand_cannon']) for (const snd of [{ kind: 'auto_blast', vol: 0.18, dur: 0.07, f1: 0, f2: 0, action: 'slide' }, { kind: 'zip', vol: 0.22, dur: 0.06, f1: 1800, f2: 3400 }, { kind: 'bubblegun', vol: 0.2, dur: 0.07, f1: 420, f2: 980 }]) {
+        _skinFxFor = (i) => i === who ? { sound: snd } : keepFx(i);
+        clear(); sampleHits = 0; _sampleVoices = 0; playWeaponSound(who, {}); if (sampleHits !== 1) issues.push('a ' + who + ' skin (' + snd.kind + ') should play the recording too');
       }
       _skinFxFor = keepFx;
-    } finally { getAudioCtx = saved.ctx; playMuzzleBlast = saved.blast; _sampleState.vector = saved.st; _sampleVoices = saved.voices; for (const k of Object.keys(weaponSoundLastAt)) delete weaponSoundLastAt[k]; Object.assign(weaponSoundLastAt, saved.last); }
+      // one fetch per file, not one per weapon
+      { const urls = []; globalThis.fetch = (u) => { urls.push(u); return new Promise(() => {}); };
+        for (const k of Object.keys(_sampleState)) delete _sampleState[k];
+        weaponSamplesPreload(ctx); const want = new Set(Object.values(SAMPLE_FILES));
+        if (urls.length !== want.size || new Set(urls).size !== want.size) issues.push('each file should be fetched once, however many weapons use it: ' + urls.length + ' fetches for ' + want.size + ' files'); }
+    } finally { getAudioCtx = saved.ctx; playMuzzleBlast = saved.blast; globalThis.fetch = saved.fetch; for (const k of Object.keys(_sampleState)) delete _sampleState[k]; Object.assign(_sampleState, saved.st); _sampleVoices = saved.voices; for (const k of Object.keys(weaponSoundLastAt)) delete weaponSoundLastAt[k]; Object.assign(weaponSoundLastAt, saved.last); }
     return issues;
   })()`);
-  console.log('sample checks: the Vector plays its recording when it is loaded, the made-up shot before that or if it never comes, other guns keep theirs, every Vector skin plays the recording, bursts are capped, the file is in the itch bundle');
+  console.log('sample checks: every recording plays when it is loaded (and for someone far away), the made-up shot before that or if it never comes, guns without one keep theirs, powershots keep their own, no skin changes it, heavier snipers play lower, bursts are capped, each file is fetched once, every file is in the itch bundle and long enough for its cut');
   if (out.length || more.length) { ok = false; console.log([...more, ...out].join('\n')); }
 }
 
