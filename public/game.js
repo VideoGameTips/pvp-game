@@ -4633,8 +4633,8 @@ function playWeaponSound(idOrWeapon, opts = {}) {
   const distGain = soundDistanceGain(opts.position, opts.remote);
   const mult = (opts.volume ?? 1) * distGain * (opts.remote ? 0.75 : 1) * SOUND_MIX;
   const start = ctx.currentTime + 0.002;
-  // A recorded shot (the Vector's own; a skin that is only another real gun keeps it, a skin with a sound of its own does not): its own path, none of the made-up layers
-  if (id && (!fx || (fx.sound && fx.sound.kind === 'auto_blast'))) { const smp = weaponSampleFor(ctx, id); if (smp) { playWeaponSample(ctx, start, smp, mult, distGain, !!opts.remote); return; } }
+  // A recorded shot: the Vector is the Vector whatever skin is on it, so every skin plays the recording too (the skins' own made-up sounds are not used for a weapon that has one). Its own path, none of the made-up layers
+  if (id) { const smp = weaponSampleFor(ctx, id); if (smp) { playWeaponSample(ctx, start, smp, mult, distGain, !!opts.remote); return; } }
   const mainGain = ctx.createGain();
   // Real guns go through the shared gun bus (see gunBus): mastered to the level of
   // real game gunfire. Everything else keeps its own compressor and level.

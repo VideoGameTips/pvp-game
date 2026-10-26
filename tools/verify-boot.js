@@ -3221,7 +3221,7 @@ if (ok && process.argv.includes('--zombietower')) {
 
 if (ok && process.argv.includes('--sample')) {
   // A recorded shot: the Vector plays its own sample (a real file, shipped in the itch bundle) once it is loaded, through a path of its own; before that, or if the file never
-  // comes, the made-up shot plays exactly as before; other guns are not touched; a skin's own sound is kept.
+  // comes, the made-up shot plays exactly as before; other guns are not touched; every skin of the Vector plays it too.
   const file = path.join(__dirname, '..', 'public', 'sounds', 'vector-shot.mp3'), itch = fs.readFileSync(path.join(__dirname, 'build-itch.sh'), 'utf8');
   const more = [];
   if (!fs.existsSync(file) || fs.statSync(file).size < 5000) more.push('public/sounds/vector-shot.mp3 should be there');
@@ -3257,16 +3257,17 @@ if (ok && process.argv.includes('--sample')) {
       _sampleVoices = 0;
       // other guns are untouched
       clear(); sampleHits = 0; _sampleVoices = 0; playWeaponSound('ak20', {}); if (sampleHits) issues.push('the AK20 must keep its own sound');
-      // a skin that is only another real gun (the MP5 Vector) sounds like the recording; a skin with a gag sound of its own keeps it
+      // the Vector is the Vector under any skin: the MP5 one, and the ones with a gag sound of their own, all play the recording
       const keepFx = _skinFxFor;
-      _skinFxFor = (i) => i === 'vector' ? { sound: { kind: 'auto_blast', vol: 0.18, dur: 0.07, f1: 0, f2: 0, action: 'slide' } } : keepFx(i);
-      clear(); sampleHits = 0; _sampleVoices = 0; playWeaponSound('vector', {}); if (sampleHits !== 1) issues.push('the MP5 Vector skin is a real gun too: it sounds like the recording');
-      _skinFxFor = (i) => i === 'vector' ? { sound: { kind: 'zip', vol: 0.22, dur: 0.06, f1: 1800, f2: 3400 } } : keepFx(i);
-      clear(); sampleHits = 0; _sampleVoices = 0; playWeaponSound('vector', {}); _skinFxFor = keepFx; if (sampleHits) issues.push('a skin with a gag sound of its own keeps it');
+      for (const snd of [{ kind: 'auto_blast', vol: 0.18, dur: 0.07, f1: 0, f2: 0, action: 'slide' }, { kind: 'zip', vol: 0.22, dur: 0.06, f1: 1800, f2: 3400 }, { kind: 'bubblegun', vol: 0.2, dur: 0.07, f1: 420, f2: 980 }]) {
+        _skinFxFor = (i) => i === 'vector' ? { sound: snd } : keepFx(i);
+        clear(); sampleHits = 0; _sampleVoices = 0; playWeaponSound('vector', {}); if (sampleHits !== 1) issues.push('a Vector skin (' + snd.kind + ') should play the recording too');
+      }
+      _skinFxFor = keepFx;
     } finally { getAudioCtx = saved.ctx; playMuzzleBlast = saved.blast; _sampleState.vector = saved.st; _sampleVoices = saved.voices; for (const k of Object.keys(weaponSoundLastAt)) delete weaponSoundLastAt[k]; Object.assign(weaponSoundLastAt, saved.last); }
     return issues;
   })()`);
-  console.log('sample checks: the Vector plays its recording when it is loaded, the made-up shot before that or if it never comes, other guns and skins keep theirs, bursts are capped, the file is in the itch bundle');
+  console.log('sample checks: the Vector plays its recording when it is loaded, the made-up shot before that or if it never comes, other guns keep theirs, every Vector skin plays the recording, bursts are capped, the file is in the itch bundle');
   if (out.length || more.length) { ok = false; console.log([...more, ...out].join('\n')); }
 }
 
