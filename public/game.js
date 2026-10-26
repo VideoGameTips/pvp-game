@@ -4569,6 +4569,50 @@ function gunBus(ctx) {
   return (ctx._gunBus = input);
 }
 
+// 🎙️ A shot that is a recording. A weapon listed in WEAPON_SAMPLES plays a real sample instead of the made-up one: the file is fetched and decoded
+// once the audio is running, and until it is there (or if it never comes: the page opened from disk, a browser that cannot decode it) the made-up
+// sound plays exactly as it always did. `from` and `len` cut the useful part out of the file (the Vector's is a 3 s clip and everything after 0.2 s is
+// nearly silence), `fade` rounds the cut off, `rate` varies the pitch a little so a burst is not one sound repeated, `gain` is the level against the others.
+const WEAPON_SAMPLES = {
+  vector: { url: 'sounds/vector-shot.mp3', gain: 0.2, from: 0.0, len: 0.17, fade: 0.07, rate: [0.97, 1.04] },
+};
+const _sampleState = {};
+let _sampleVoices = 0;
+function weaponSampleFor(ctx, id) {
+  const def = WEAPON_SAMPLES[id]; if (!def) return null;
+  const st = _sampleState[id] || (_sampleState[id] = { buf: null, loading: false, failed: false });
+  if (st.buf) return { def, buf: st.buf };
+  if (!st.loading && !st.failed && typeof fetch === 'function') {
+    st.loading = true;
+    fetch(def.url).then(r => r.ok ? r.arrayBuffer() : Promise.reject(new Error('HTTP ' + r.status)))
+      .then(ab => new Promise((res, rej) => { const p = ctx.decodeAudioData(ab, res, rej); if (p && p.catch) p.catch(rej); }))
+      .then(b => { st.buf = b; st.loading = false; })
+      .catch(() => { st.failed = true; st.loading = false; });
+  }
+  return null;
+}
+function weaponSamplesPreload(ctx) { for (const id of Object.keys(WEAPON_SAMPLES)) weaponSampleFor(ctx, id); }
+function sampleBus(ctx) {                                          // a recording is already as loud as it is: it gets a limiter of its own, not the made-up guns' bus (which squashes everything into one level)
+  if (ctx._sampleBus) return ctx._sampleBus;
+  const input = ctx.createGain(), lim = ctx.createDynamicsCompressor();
+  lim.threshold.value = -12; lim.knee.value = 6; lim.ratio.value = 10; lim.attack.value = 0.002; lim.release.value = 0.08;
+  input.connect(lim).connect(ctx.destination);
+  return (ctx._sampleBus = input);
+}
+function playWeaponSample(ctx, start, S, level, distGain, remote) {
+  if (_sampleVoices > 10) return;                                   // a long burst of them piling up helps nobody
+  const d = S.def, src = ctx.createBufferSource(), g = ctx.createGain(), r = d.rate[0] + Math.random() * (d.rate[1] - d.rate[0]), t1 = start + d.len;
+  src.buffer = S.buf; src.playbackRate.value = r;
+  g.gain.setValueAtTime(level * d.gain, start); g.gain.setValueAtTime(level * d.gain, Math.max(start, t1 - d.fade)); g.gain.linearRampToValueAtTime(0.0001, t1);
+  src.connect(g); g.connect(sampleBus(ctx));
+  try {                                                             // and a whisper of the room, as the made-up shots get (someone else's, across the map, gets more of it)
+    const indoor = INDOOR_MAPS.has(typeof activeMapName !== 'undefined' ? activeMapName : ''), send = ctx.createGain();
+    send.gain.value = (remote ? 0.070 : 0.037) * distGain * (indoor ? 1 : 1.15); g.connect(send).connect(getReverbBus(ctx, indoor));
+  } catch (e) {}
+  _sampleVoices++; src.onended = () => { _sampleVoices = Math.max(0, _sampleVoices - 1); };
+  src.start(start, d.from, d.len * r + 0.02); src.stop(t1 + 0.03);
+}
+
 function playWeaponSound(idOrWeapon, opts = {}) {
   const ctx = getAudioCtx();
   if (!ctx) return;
@@ -4589,6 +4633,8 @@ function playWeaponSound(idOrWeapon, opts = {}) {
   const distGain = soundDistanceGain(opts.position, opts.remote);
   const mult = (opts.volume ?? 1) * distGain * (opts.remote ? 0.75 : 1) * SOUND_MIX;
   const start = ctx.currentTime + 0.002;
+  // A recorded shot (the Vector's own, not a skin's): its own path, none of the made-up layers
+  if (!fx && id) { const smp = weaponSampleFor(ctx, id); if (smp) { playWeaponSample(ctx, start, smp, mult, distGain, !!opts.remote); return; } }
   const mainGain = ctx.createGain();
   // Real guns go through the shared gun bus (see gunBus): mastered to the level of
   // real game gunfire. Everything else keeps its own compressor and level.
@@ -4605,6 +4651,7 @@ function playWeaponSound(idOrWeapon, opts = {}) {
     send.gain.value = (opts.remote ? 0.070 : 0.037) * distGain * (indoor ? 1 : 1.15) * tailBoost;
     mainGain.connect(send).connect(getReverbBus(ctx, indoor));
   } catch (e) {}
+  // A recorded shot (the Vector's own, not a skin's): through the same bus and room as the made-up ones, and none of the made-up layers
   // Outdoors the crack keeps going. Indoors there is nowhere for it to go.
   if (p.tail) {
     const indoorNow = INDOOR_MAPS.has(typeof activeMapName !== 'undefined' ? activeMapName : '');
@@ -11996,6 +12043,7 @@ function updateMapLadderMove(dt, input) {
       const feet = playerFeetY();
       if (sideways > p.width/2+.25 || front < -.15 || front > 1 || feet < p.bottom-.35 || feet > p.top+.2) continue;
       if (input.dot(p.normal) > -.15 && !(keys['KeyS'] || joyDir.y > .15)) continue;
+      if (candidate.locked) { if (candidate.onBlocked) candidate.onBlocked(candidate); continue; }   // (a shut hatch: see the tower)
       ladder = candidate; window._mapLadder = ladder; break;
     }
   }
@@ -14279,12 +14327,108 @@ function buildBattlegroundLayout() {
     deco(-20, 20, 7.5, 7.7, sz * 72 - 0.2, sz * 72 + 0.2, C.red, true);
     for (const x of [-10, 0, 10]) deco(x - 0.4, x + 0.4, 6.88, 6.98, sz * 83 - 6, sz * 83 + 6, C.red, true);
   }
+  // ── more of an arena: a crowd, banners, painted floors, pyro, confetti, moving spots, sponsors (all for the eye; the only solid thing added is the trophy's pedestal)
+  _IRR.battle = { crowd: [], flames: [], beams: [], confetti: null, flags: [] };
+  {
+    const rc = _thRng(name + ':crowd'), mkTex = (key, w, h, draw) => surfTex(key, w, (ctx, s) => { draw(ctx, s); });
+    // the crowd: a body and a head in every seat, in the colours of the two teams; a fifth of them are on their feet with their arms up and do the wave
+    const SHIRT = [0xd8402e, 0xd8402e, 0xe8eaee, 0xe8eaee, 0x20242a, 0x7a7f87, 0xff8a3a, 0x2a78c8], SKIN = [0xf1c9a5, 0xe0ac86, 0xc68642, 0x8d5524, 0x6b3f1e, 0xffdbac], JEANS = [0x2a3a5a, 0x1c1e22, 0x3a3f46];
+    const sit = _thBuf(), SLOT = 8, SLOTS = 16;
+    for (const sx of [-1, 1]) for (let sl = 0; sl < SLOTS; sl++) {
+      const z0 = -64 + sl * SLOT, up = _thBuf();
+      for (let i = 0; i < 6; i++) {
+        const x0 = sx > 0 ? 54 + i * 2.4 : -69.2, x1 = sx > 0 ? 69.2 : -54 - i * 2.4, xc = sx > 0 ? x0 + 1.15 : x1 - 1.15, top = 5.2 + (i + 1) * 1.2;
+        for (let z = z0 + 0.6; z < z0 + SLOT - 0.3; z += 1.15) {
+          if (rc() < 0.16) continue;                                           // an empty seat
+          const shirt = SHIRT[(rc() * SHIRT.length) | 0], skin = SKIN[(rc() * SKIN.length) | 0], jeans = JEANS[(rc() * JEANS.length) | 0], zz = z + (rc() - 0.5) * 0.22, standing = rc() < 0.22;
+          if (standing) {
+            _thBox(up, _TH_WORLD, xc, top + 0.28, zz, 0.4, 0.56, 0.3, jeans); _thBox(up, _TH_WORLD, xc, top + 0.84, zz, 0.46, 0.6, 0.34, shirt); _thBox(up, _TH_WORLD, xc, top + 1.33, zz, 0.27, 0.3, 0.27, skin);
+            for (const a of [-1, 1]) _thBox(up, _TH_WORLD, xc, top + 1.42, zz + a * 0.3, 0.11, 0.62, 0.11, skin);       // both arms up
+          } else {
+            _thBox(sit, _TH_WORLD, xc, top + 0.42, zz, 0.46, 0.56, 0.34, shirt); _thBox(sit, _TH_WORLD, xc, top + 0.88, zz, 0.27, 0.3, 0.27, skin);
+            _thBox(sit, _TH_WORLD, xc - sx * 0.3, top + 0.2, zz, 0.34, 0.2, 0.3, jeans);                              // knees towards the pitch
+          }
+        }
+      }
+      const grp = new THREE.Group(); _thMesh(grp, up, false); G.add(grp); _IRR.battle.crowd.push({ grp, z: z0 + SLOT / 2, sx });
+    }
+    _thMesh(G, sit, false);
+    // banners hung on the walls above the stands, each its own colours
+    const banner = (label, bg, fg, sub) => mkTex('bg-banner-' + label, 256, 256, (ctx, s) => {
+      ctx.fillStyle = bg; ctx.fillRect(0, 0, s, s); ctx.fillStyle = fg; ctx.fillRect(0, 0, s, 16); ctx.fillRect(0, s - 16, s, 16);
+      ctx.fillRect(s * 0.05, s * 0.14, 6, s * 0.72); ctx.fillRect(s * 0.95 - 6, s * 0.14, 6, s * 0.72);
+      ctx.save(); ctx.translate(s / 2, s / 2); ctx.scale(0.57, 1); ctx.fillStyle = fg; ctx.font = 'bold ' + Math.floor(s * 0.3) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(label, 0, -s * 0.06);
+      ctx.font = 'bold ' + Math.floor(s * 0.11) + 'px monospace'; ctx.fillText(sub, 0, s * 0.27); ctx.restore();
+    });
+    const BAN = [banner('HOME', '#e8eaee', '#c8202a', 'BATTLEGROUND'), banner('AWAY', '#8a1a1a', '#e8eaee', 'BATTLEGROUND'), banner('FINAL', '#15171b', '#ff2a2a', 'ROUND 7'), banner('LIVE', '#c8202a', '#ffffff', 'ON AIR')];
+    for (const sx of [-1, 1]) for (let i = 0; i < 6; i++) {
+      const z = -52 + i * 20.8, p = new THREE.Mesh(new THREE.PlaneGeometry(7, 4), new THREE.MeshBasicMaterial({ map: BAN[(i + (sx > 0 ? 1 : 0)) % 4], side: THREE.DoubleSide }));
+      p.position.set(sx * 69.12, 13.8, z); p.rotation.y = -sx * Math.PI / 2; p.userData.mapGlow = true; G.add(p);
+      deco(sx * 69.0 - 0.1, sx * 69.0 + 0.1, 15.8, 16.0, z - 3.8, z + 3.8, 0x2c3037); deco(sx * 69.0 - 0.1, sx * 69.0 + 0.1, 11.7, 11.9, z - 3.8, z + 3.8, 0x2c3037);
+    }
+    // the floor: the two ends in their own colours with the names painted in, a logo on the stage, chevrons out of each tunnel
+    const painted = (key, w, d, x, y, z, draw, rotY = 0) => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshBasicMaterial({ map: mkTex(key, 512, 512, draw), transparent: true, depthWrite: false }));
+      m.rotation.x = -Math.PI / 2; m.rotation.z = rotY; m.position.set(x, y, z); m.userData.mapGlow = true; G.add(m); return m;
+    };
+    for (const sz of [-1, 1]) {
+      deco(-20, 20, 0.012, 0.02, sz > 0 ? 56 : -78, sz > 0 ? 78 : -56, sz > 0 ? 0x2a3446 : 0x3a1418);
+      painted('bg-end-' + sz, 30, 12, 0, 0.035, sz * 66, (ctx, s) => { ctx.clearRect(0, 0, s, s); ctx.fillStyle = sz > 0 ? 'rgba(232,234,238,0.9)' : 'rgba(255,60,60,0.9)'; ctx.font = 'bold ' + Math.floor(s * 0.36) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.save(); ctx.translate(s / 2, s / 2); ctx.scale(0.4, 1); ctx.fillText(sz > 0 ? 'HOME' : 'AWAY', 0, 0); ctx.restore(); }, sz > 0 ? 0 : Math.PI);
+      for (let k = 0; k < 4; k++) { const z = sz * (52 - k * 3.2); deco(-3.2, -2.6, 0.03, 0.06, z - 0.9, z + 0.9, C.red, true); deco(2.6, 3.2, 0.03, 0.06, z - 0.9, z + 0.9, C.red, true); deco(-2.6, 2.6, 0.03, 0.06, z - sz * 0.9 - 0.12, z - sz * 0.9 + 0.12, C.red, true); }
+    }
+    painted('bg-logo', 24, 24, 0, 3.04, 0, (ctx, s) => {                                                   // the stage: a shield with a ring round it
+      ctx.clearRect(0, 0, s, s); ctx.strokeStyle = '#ff2a2a'; ctx.lineWidth = 10; ctx.beginPath(); ctx.arc(s / 2, s / 2, s * 0.46, 0, 6.3); ctx.stroke();
+      ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(s / 2, s / 2, s * 0.40, 0, 6.3); ctx.stroke();
+      ctx.fillStyle = '#15171b'; ctx.beginPath(); ctx.moveTo(s * 0.28, s * 0.24); ctx.lineTo(s * 0.72, s * 0.24); ctx.lineTo(s * 0.72, s * 0.52); ctx.quadraticCurveTo(s * 0.72, s * 0.74, s * 0.5, s * 0.8); ctx.quadraticCurveTo(s * 0.28, s * 0.74, s * 0.28, s * 0.52); ctx.closePath(); ctx.fill(); ctx.strokeStyle = '#e8eaee'; ctx.lineWidth = 6; ctx.stroke();
+      ctx.fillStyle = '#ff2a2a'; ctx.font = 'bold ' + Math.floor(s * 0.28) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('BG', s / 2, s * 0.5);
+    });
+    // the trophy on the stage: a pedestal to stand behind, and a cup of gold that shines
+    K.box(0, 3.0, 0, 2.2, 1.2, 2.2, 0x1a1c20); deco(-1.15, 1.15, 4.2, 4.28, -1.15, 1.15, C.red, true);
+    for (const [w, h, y, c, lit] of [[1.3, 0.16, 4.28, 0xf2c030, true], [0.34, 0.9, 4.44, 0xf2c030, true], [0.9, 0.3, 5.34, 0xf2c030, true], [1.15, 0.45, 5.64, 0xffd24a, true], [1.3, 0.2, 6.09, 0xffe07a, true]]) deco(-w / 2, w / 2, y, y + h, -w / 2, w / 2, c, lit);
+    for (const a of [-1, 1]) { deco(a * 0.78 - 0.07, a * 0.78 + 0.07, 5.5, 6.0, -0.07, 0.07, 0xf2c030, true); }
+    // pyro: a column of flame on each stage pylon and at the foot of each stand, flickering (the scenery moves them)
+    const flameMat = new THREE.MeshBasicMaterial({ color: 0xff7a1a, transparent: true, opacity: 0.85 }), coreMat = new THREE.MeshBasicMaterial({ color: 0xffd24a, transparent: true, opacity: 0.9 });
+    for (const [x, y, z, s] of [[-11, 12, -11, 1], [11, 12, -11, 1], [-11, 12, 11, 1], [11, 12, 11, 1], [-50, 1.4, -58, 0.7], [50, 1.4, -58, 0.7], [-50, 1.4, 58, 0.7], [50, 1.4, 58, 0.7]]) {
+      const f = new THREE.Group(); f.position.set(x, y, z);
+      const a = new THREE.Mesh(new THREE.ConeGeometry(0.55 * s, 2.6 * s, 8), flameMat); a.position.y = 1.3 * s; const b = new THREE.Mesh(new THREE.ConeGeometry(0.28 * s, 1.7 * s, 8), coreMat); b.position.y = 0.85 * s;
+      a.userData.mapGlow = b.userData.mapGlow = true; f.add(a); f.add(b); G.add(f); _IRR.battle.flames.push({ g: f, ph: rc() * 6.28 });
+      deco(x - 0.5 * s, x + 0.5 * s, y - 0.3, y, z - 0.5 * s, z + 0.5 * s, 0x20242a);                              // the nozzle
+    }
+    // confetti cannons and the confetti: two cannons at the edge of the stage, a burst every while
+    for (const sx of [-1, 1]) deco(sx * 14 - 0.5, sx * 14 + 0.5, 0, 0.9, -0.5, 0.5, 0x20242a);
+    {
+      const N = 360, pos = new Float32Array(N * 3), col = new Float32Array(N * 3), vel = new Float32Array(N * 3), cc = [0xff2a2a, 0xe8eaee, 0xffd24a, 0x2a78c8, 0xff8a3a];
+      for (let i = 0; i < N; i++) { const c = new THREE.Color(cc[i % cc.length]); col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
+      const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+      const pts = new THREE.Points(geo, new THREE.PointsMaterial({ size: 0.34, vertexColors: true, sizeAttenuation: true })); pts.frustumCulled = false; pts.visible = false; pts.userData.mapGlow = true; G.add(pts);
+      _IRR.battle.confetti = { pts, pos, vel, N, t: 0, next: 6 };
+    }
+    // the moving spots: six beams hung from the roof, sweeping over the pitch
+    for (const [x, z, c] of [[-40, -30, 0xff4a4a], [40, -30, 0xdfe8ff], [-40, 30, 0xdfe8ff], [40, 30, 0xff4a4a], [0, -52, 0xff4a4a], [0, 52, 0xdfe8ff]]) {
+      const piv = new THREE.Group(); piv.position.set(x, 16.8, z);
+      const mat = new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.1, side: THREE.DoubleSide, depthWrite: false }); mat.fog = false;
+      const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 3.2, 26, 12, 1, true), mat); beam.position.y = -13; beam.userData.mapGlow = true; piv.add(beam);
+      const lamp = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.8, 1.1), new THREE.MeshBasicMaterial({ color: c })); lamp.userData.mapGlow = true; piv.add(lamp);
+      G.add(piv); _IRR.battle.beams.push({ piv, ph: rc() * 6.28, sp: 0.5 + rc() * 0.4 });
+    }
+    // sponsors along the end walls, and a neon line round them
+    const sponsor = (label, bg, fg) => mkTex('bg-sp-' + label, 512, 512, (ctx, s) => { ctx.fillStyle = bg; ctx.fillRect(0, 0, s, s); ctx.fillStyle = fg; ctx.fillRect(0, 0, s, 20); ctx.fillRect(0, s - 20, s, 20); ctx.font = 'bold ' + Math.floor(s * 0.3) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.translate(s / 2, s / 2); ctx.scale(0.24, 1); ctx.fillText(label, 0, 0); });
+    const SP = [sponsor('IRON TIDE', '#10151c', '#4fd0ff'), sponsor('TACO ENERGY', '#c8202a', '#ffe9a0'), sponsor('PVP ARENA', '#15171b', '#ff3a2a'), sponsor('HEADSHOT', '#e8eaee', '#101216'), sponsor('SUSHI LAB', '#1a2a2e', '#7affd2'), sponsor('BOUNCE BRAWL', '#2a1a40', '#ffd24a')];
+    for (const sz of [-1, 1]) for (const [x, i] of [[-55, 0], [-35, 1], [35, 2], [55, 3]]) {
+      const p = new THREE.Mesh(new THREE.PlaneGeometry(14, 3.2), new THREE.MeshBasicMaterial({ map: SP[(i + (sz > 0 ? 2 : 0)) % 6] })); p.position.set(x, 9, sz * 94.12); p.rotation.y = sz > 0 ? Math.PI : 0; p.userData.mapGlow = true; G.add(p);
+      deco(x - 7.2, x + 7.2, 7.3, 7.4, sz * 94.14 - 0.05, sz * 94.14 + 0.05, C.red, true); deco(x - 7.2, x + 7.2, 10.6, 10.7, sz * 94.14 - 0.05, sz * 94.14 + 0.05, C.red, true);
+    }
+    for (const sz of [-1, 1]) for (let x = -64; x <= 64; x += 8) if (Math.abs(x) > 22) deco(x - 0.08, x + 0.08, 1, 15.5, sz * 94.15 - 0.03, sz * 94.15 + 0.03, C.red, true);
+    // speaker stacks hung at the corners of the stands, and the cameras: one on a crane over each end
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) { const x = sx * 66, z = sz * 66; deco(x - 1.4, x + 1.4, 13, 17, z - 1.0, z + 1.0, 0x15171b); for (const y of [13.9, 15.3, 16.6]) deco(x - 1.1, x + 1.1, y, y + 0.6, z - 1.02 * 1, z + 1.02, 0x2c3037); deco(x - 0.05, x + 0.05, 17, 18, z - 0.05, z + 0.05, 0x2c3037); }
+    for (const sz of [-1, 1]) { const z = sz * 78; deco(-0.25, 0.25, 0, 3.4, z - 0.25, z + 0.25, 0x2c3037); deco(-1.6, 1.6, 3.4, 3.6, z - 0.12, z + 0.12, 0x2c3037); deco(-0.5, 0.5, 3.0, 3.6, z - 0.4, z + 0.4, 0x15171b); deco(-0.2, 0.2, 3.1, 3.5, z - sz * 0.46, z - sz * 0.4, C.red, true); }
+  }
   for (const [x, y, z, i, r] of [[0, 12, 0, 2.2, 40], [-30, 9, -40, 1.8, 34], [30, 9, -40, 1.8, 34], [-30, 9, 40, 1.8, 34], [30, 9, 40, 1.8, 34], [0, 5.5, 84, 1.6, 22], [0, 5.5, -84, 1.6, 22]]) {
     const l = new THREE.PointLight(0xff2a2a, i, r, 1.5); l.position.set(x, y, z); G.add(l);
   }
   _thMesh(G, detail, false); _thMesh(G, glow, true);
   K.spawn({ x0: -10, x1: 10, z0: 78, z1: 86 }, { x0: -10, x1: 10, z0: -86, z1: -78 });
-  K.poi('centre stage', 0, 0, 3.0);
+  K.poi('centre stage', 5, 5, 3.0);                                  // (the trophy's pedestal stands in the very middle)
   G.userData.identityRefined = true;
   G._skyColor = 0x0e0f13;
 }
@@ -14301,7 +14445,26 @@ _SCN.battleground = (K) => {
     const beam = K.mesh(new THREE.CylinderGeometry(1.5, 9, 220, 12, 1, true), K.veil(0xff4a4a, 0.14), 0, 150, 0, g); beam.rotation.z = 0.22 * sx; lights.push(beam);
     K.group.add(g);
   }
-  K.anim((dt, t) => lights.forEach((b, i) => { b.rotation.x = 0.28 * Math.sin(t * 0.5 + i * 1.6); b.material.opacity = 0.1 + 0.06 * Math.sin(t * 0.9 + i); }));
+  K.anim((dt, t) => {
+    lights.forEach((b, i) => { b.rotation.x = 0.28 * Math.sin(t * 0.5 + i * 1.6); b.material.opacity = 0.1 + 0.06 * Math.sin(t * 0.9 + i); });
+    const B = _IRR.battle; if (!B) return;
+    for (const c of B.crowd) c.grp.position.y = 0.34 * Math.max(0, Math.sin(t * 2.6 - c.z * 0.085 + (c.sx > 0 ? 0 : 1.9)));           // the wave runs down both stands, the ones on their feet bob in turn
+    for (const f of B.flames) { const k = 0.8 + 0.35 * Math.sin(t * 13 + f.ph) * Math.sin(t * 7.3 + f.ph * 2); f.g.scale.set(0.9 + 0.1 * Math.sin(t * 9 + f.ph), k, 0.9 + 0.1 * Math.cos(t * 8 + f.ph)); }
+    for (const b of B.beams) { b.piv.rotation.x = 0.55 * Math.sin(t * b.sp + b.ph); b.piv.rotation.z = 0.55 * Math.cos(t * b.sp * 0.73 + b.ph * 1.3); }
+    const C = B.confetti; if (C) {                                                                                                       // a burst out of both cannons every twenty seconds
+      C.next -= dt;
+      if (C.next <= 0 && !C.pts.visible) {
+        C.pts.visible = true; C.t = 0;
+        for (let i = 0; i < C.N; i++) { const side = i % 2 ? 1 : -1; C.pos[i * 3] = side * 14; C.pos[i * 3 + 1] = 1; C.pos[i * 3 + 2] = (Math.random() - 0.5) * 2; C.vel[i * 3] = -side * (3 + Math.random() * 7); C.vel[i * 3 + 1] = 12 + Math.random() * 12; C.vel[i * 3 + 2] = (Math.random() - 0.5) * 10; }
+      }
+      if (C.pts.visible) {
+        C.t += dt; const a = C.pos, v = C.vel;
+        for (let i = 0; i < C.N; i++) { v[i * 3 + 1] -= 7 * dt; v[i * 3] *= 0.995; a[i * 3] += v[i * 3] * dt + Math.sin(C.t * 3 + i) * dt * 1.5; a[i * 3 + 1] = Math.max(0.05, a[i * 3 + 1] + v[i * 3 + 1] * dt); a[i * 3 + 2] += v[i * 3 + 2] * dt; if (a[i * 3 + 1] <= 0.06) { v[i * 3 + 1] = 0; v[i * 3] *= 0.8; v[i * 3 + 2] *= 0.8; } else if (v[i * 3 + 1] < -1.2) v[i * 3 + 1] = -1.2; }
+        C.pts.geometry.attributes.position.needsUpdate = true;
+        if (C.t > 11) { C.pts.visible = false; C.next = 20; }
+      }
+    }
+  });
 };
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -14322,6 +14485,14 @@ Object.assign(_AEV, {
 });
 _ap('atoll', { ground: 'sand', amp: 0.02, mottle: [0.95, 0.9, 0.78], fog: [90, 340], zen: 0x4fb0ee, sun: [0.95, 0.42, 0xffd49c], cloud: _CL(11, 0xffffff), fx: ['spray', 'glints'], gusty: 0.45,
   snd: { waves: 0.4, wind: 0.14, windF: 520, ev: [['gull', 7, 16, 0.45], ['parrot', 11, 26, 0.4], ['steeldrum', 24, 50, 0.33], ['coconut', 14, 32, 0.3], ['bird', 16, 34, 0.25]] } });
+
+// six places that had no ambience at all get some (only the sound: the look of each is left as it was)
+_ap('storm_pier', { gusty: 0.8, snd: { waves: 0.42, wind: 0.42, windF: 620, rain: 0.1, ev: [['thunder', 8, 20, 0.55], ['gull', 14, 28, 0.35], ['creak', 7, 16, 0.4], ['horn', 40, 80, 0.4]] } });
+_ap('pinball_arcade', { snd: { hum: [55, 0.04], ev: [['beep', 2.5, 7, 0.4], ['chime', 6, 14, 0.35], ['ding', 3, 9, 0.35], ['glitch', 10, 24, 0.3]] } });
+_ap('laser_vault', { snd: { hum: [48, 0.05], ev: [['beep', 5, 12, 0.3], ['clank', 14, 30, 0.3], ['glitch', 18, 40, 0.25]] } });
+_ap('cargo_belts', { snd: { rumble: 0.16, hum: [50, 0.04], ev: [['clank', 3, 8, 0.42], ['chain', 6, 15, 0.35], ['beep', 8, 18, 0.3], ['rails', 16, 34, 0.35]] } });
+_ap('gale_peaks', { gusty: 1.2, snd: { wind: 0.62, windF: 700, ev: [['hawk', 14, 32, 0.45], ['bird', 24, 50, 0.2]] } });
+_ap('magma_rise', { snd: { rumble: 0.24, hiss: 0.05, hissF: 4000, ev: [['crackle', 4, 10, 0.4], ['thump', 9, 20, 0.45], ['boom', 25, 55, 0.4]] } });
 
 // the land, as rectangles [x0, x1, z0, z1, kind]: sand, or the planks of a pier
 const ATOLL_LAND = (() => {
@@ -14794,10 +14965,18 @@ function buildZombieTower() {
     // the ladder up from here, through the slab above: on the face of the hole that looks towards the middle of the floor
     if (depart) {
       const [px, pz] = depart, north = pz < 0, zf = north ? pz - TOWER_HOLE : pz + TOWER_HOLE;
-      addGridLadder(name, px, zf + (north ? -0.07 : 0.07), north ? 0 : Math.PI, y0, y0 + HF, 1.25);
+      F.ladder = addGridLadder(name, px, zf + (north ? -0.07 : 0.07), north ? 0 : Math.PI, y0, y0 + HF, 1.25);
       deco(px - 1.9, px + 1.9, y0, y0 + 0.03, pz - 1.9, pz + 1.9, C.yellow);                      // a painted square on the floor under it
-      deco(px - 1.5, px + 1.5, y0 + CEIL - 0.1, y0 + CEIL, pz - 1.5, pz - 1.35, C.green, true); deco(px - 1.5, px + 1.5, y0 + CEIL - 0.1, y0 + CEIL, pz + 1.35, pz + 1.5, C.green, true);   // a green light round the hole in the ceiling
-      deco(px - 1.5, px - 1.35, y0 + CEIL - 0.1, y0 + CEIL, pz - 1.35, pz + 1.35, C.green, true); deco(px + 1.35, px + 1.5, y0 + CEIL - 0.1, y0 + CEIL, pz - 1.35, pz + 1.35, C.green, true);
+      // a light round the hole in the ceiling (green: open, red: the hatch is shut) and the hatch itself, which is there while the floor is not clear
+      const ringMat = new THREE.MeshBasicMaterial({ color: 0x39ff88 }), ringG = new THREE.Group();
+      for (const [x0, x1, z0, z1] of [[px - 1.5, px + 1.5, pz - 1.5, pz - 1.35], [px - 1.5, px + 1.5, pz + 1.35, pz + 1.5], [px - 1.5, px - 1.35, pz - 1.35, pz + 1.35], [px + 1.35, px + 1.5, pz - 1.35, pz + 1.35]]) {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, 0.1, z1 - z0), ringMat); m.position.set((x0 + x1) / 2, y0 + CEIL - 0.05, (z0 + z1) / 2); m.userData.mapGlow = true; ringG.add(m);   // (mapGlow: the halo pass leaves it out: its colour changes)
+      }
+      G.add(ringG); F.ring = ringMat;
+      const hatch = new THREE.Group(); hatch.position.set(px, y0 + HF - 0.12, pz);
+      hatch.add(new THREE.Mesh(new THREE.BoxGeometry(2.96, 0.14, 2.96), new THREE.MeshLambertMaterial({ color: 0x2a2d32 })));
+      for (const dz of [-0.9, 0, 0.9]) { const b = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.03, 0.16), new THREE.MeshBasicMaterial({ color: 0xff3a2a })); b.position.set(0, -0.08, dz); b.userData.mapGlow = true; hatch.add(b); }
+      hatch.visible = false; G.add(hatch); F.hatch = hatch;
     }
     // the walls of this floor: a baseboard, a stripe at the height of a hand, pilasters between the lamps
     for (const [x0, x1, z0, z1] of [[-HALF, HALF, -HALF, -HALF + 0.2], [-HALF, HALF, HALF - 0.2, HALF], [-HALF, -HALF + 0.2, -HALF, HALF], [HALF - 0.2, HALF, -HALF, HALF]]) {
@@ -14894,11 +15073,27 @@ function towerGrid(k) {
 // ═══ 🎵 MUSIC ═══════════════════════════════════════════════════════════════════════════════════════════════════════
 // No audio files: the music is played by the game, on the same Web Audio context as the sounds. Each track is a few chords and a few
 // layers (pads, a choir, bells, plucks, a bass, stabs, drums), written as a function from a bar number to the notes in it, so a loop is
-// always the same loop. The lobby and the menus have a theme; a few maps have their own (see MUSIC_FOR_MAP); the rest stay quiet, as
-// they always were. Settings → MUSIC turns it down or off. It starts with the first click (the browser will not play before one).
+// always the same loop. The lobby and the menus have a theme, and every map has a track (see MUSIC_FOR_MAP: a few have their own, the rest
+// share one by the kind of place). Settings → MUSIC turns it down or off. It starts with the first click (the browser will not play before one).
 var MUSIC = { ctx: null, track: null, bus: null, out: null, bar: 0, nextT: 0 };
-const MUSIC_FOR_MAP = { atoll: 'tropic', sky_arena: 'heaven', dreamscape: 'heaven', shipyard: 'industry', battleground: 'arena', neon_tokyo: 'neon', cyber: 'neon', space: 'drift', orbital_station: 'drift', gravity_lab: 'drift' };
-const _MSC = { major: [0, 2, 4, 5, 7, 9, 11], minor: [0, 2, 3, 5, 7, 8, 10], lydian: [0, 2, 4, 6, 7, 9, 11], phrygian: [0, 1, 3, 5, 7, 8, 10] };
+const MUSIC_FOR_MAP = {
+  // the ones that had a track of their own
+  atoll: 'tropic', sky_arena: 'heaven', dreamscape: 'heaven', shipyard: 'industry', battleground: 'arena', neon_tokyo: 'neon', cyber: 'neon', space: 'drift', orbital_station: 'drift', gravity_lab: 'drift',
+  // and now every other place, by what kind of place it is
+  blank: 'groove', urban: 'groove', duel_grid: 'groove', duel_crossroads: 'groove', duel_pillars: 'groove', duel_platform: 'groove', m4_tower: 'groove', m4_tower_big: 'groove', m4_tower_super: 'groove',
+  warehouse: 'industry', refinery: 'industry', cargo_belts: 'industry',
+  volcano: 'forge', magma_rise: 'forge', foundry: 'forge',
+  forest: 'jungle', vietnam: 'jungle', overgrowth: 'jungle', biosphere: 'jungle', flying_moai: 'jungle',
+  desert: 'frontier', temple: 'frontier', arena: 'frontier', train: 'frontier',
+  tundra: 'frost', holiday: 'sleigh',
+  chernobyl: 'dread', sewer: 'dread', labyrinth: 'dread', doomsday: 'dread', lockdown: 'dread', laser_vault: 'dread', zombie_tower: 'dread',
+  trenches: 'march', pearl_harbor: 'march', carrier: 'march', pyongyang: 'march', base_raid: 'march',
+  carnival: 'circus', pinball_arcade: 'circus', traffic_cone_republic: 'circus', obby: 'circus',
+  opera: 'lounge', studio: 'lounge', titanic: 'lounge', supermarket: 'lounge', glassworks: 'lounge', airport: 'lounge',
+  skydock: 'storm', storm_pier: 'storm', big_harbor: 'storm', gale_peaks: 'storm',
+  big_arena: 'arena', super_arena: 'arena', br_arena: 'arena',
+};
+const _MSC = { major: [0, 2, 4, 5, 7, 9, 11], minor: [0, 2, 3, 5, 7, 8, 10], lydian: [0, 2, 4, 6, 7, 9, 11], phrygian: [0, 1, 3, 5, 7, 8, 10], dorian: [0, 2, 3, 5, 7, 9, 10], pent: [0, 3, 5, 7, 10] };
 const _mHz = (m) => 440 * Math.pow(2, (m - 69) / 12);
 const _mNote = (root, scale, deg, oct = 0) => { const S = _MSC[scale], n = S.length, d = Math.floor(deg / n), i = ((deg % n) + n) % n; return root + S[i] + 12 * (d + oct); };
 const _mChord = (root, scale, deg, oct = 0) => [_mNote(root, scale, deg, oct), _mNote(root, scale, deg + 2, oct), _mNote(root, scale, deg + 4, oct)];
@@ -15042,6 +15237,123 @@ const MUSIC_TRACKS = {
     for (let s = 0; s < 16; s += 2) ev.push(_mE(s, 1, 'hat', null, 0.18)); for (let s = 1; s < 16; s += 2) ev.push(_mE(s, 1, 'hat', null, 0.1));              // a shaker
     return ev;
   } },
+  // ── a track for every kind of place ─────────────────────────────────────────────────────────────────────────────────────────────
+  frontier: { bpm: 82, bars: 8, mix: { pad: 0.45, drone: 0.95, pluck: 1.25, bass: 0.8, drums: 0.9, bell: 0.6 }, send: { pad: 0.5, pluck: 0.4, bell: 0.6 }, bar(b) {      // a desert: a drone, a twanging pentatonic, hand drums
+    const R = 45, P = [0, 0, 3, 4, 0, 0, 3, 4], c = P[b], root = R + [0, 0, 5, 7][b % 4], ev = [];
+    ev.push(_mE(0, 16, 'drone', [R - 12, R - 5], 0.8)); ev.push(_mE(0, 16, 'pad', [root, root + 7, root + 12], 0.35));
+    const mel = [[0, 0], [3, 2], [6, 3], [8, 4], [11, 3], [14, 2]];
+    for (const [s, deg] of mel) ev.push(Object.assign(_mE(s, 2.4, 'pluck', [_mNote(R + 12, 'pent', deg + (b % 4 === 2 ? 1 : 0), 0)], 0.5), { w: 'sawtooth' }));
+    for (const s of [0, 6, 8]) ev.push(Object.assign(_mE(s, 1.6, 'bass', [root - 12], 0.7), { w: 'square', cut: 600 }));
+    for (const s of [0, 6, 10]) ev.push(_mE(s, 1, 'tim', null, s === 0 ? 0.6 : 0.35));
+    for (const s of [4, 12]) ev.push(_mE(s, 1, 'clap', null, 0.22)); for (let s = 1; s < 16; s += 2) ev.push(_mE(s, 1, 'hat', null, 0.1));
+    if (b >= 4) ev.push(_mE(2, 10, 'bell', [_mNote(R + 12, 'pent', 7 + (b % 2) * 2, 1)], 0.3));
+    return ev;
+  } },
+  jungle: { bpm: 104, bars: 8, mix: { pad: 0.5, drone: 0.9, pluck: 1.0, bass: 0.7, drums: 1.0, bell: 0.55 }, send: { pad: 0.5, pluck: 0.45, bell: 0.5 }, bar(b) {     // a forest: toms, shakers, a marimba, the hum of the air
+    const R = 50, P = [0, 0, 3, 0, 0, 4, 3, 0], c = P[b], ev = [];
+    ev.push(_mE(0, 16, 'drone', [R - 12, R - 5], 0.7)); ev.push(_mE(0, 16, 'pad', [R + [0, 0, 5, 0, 0, 7, 5, 0][b], R + [0, 0, 5, 0, 0, 7, 5, 0][b] + 7], 0.3));
+    for (const s of [0, 3, 6, 7, 10, 12, 14]) ev.push(_mE(s, 1, s % 6 === 0 ? 'tim' : 'kick', null, s === 0 ? 0.7 : 0.4));
+    for (let s = 0; s < 16; s += 2) ev.push(_mE(s, 1, 'hat', null, 0.2)); for (const s of [3, 7, 11, 15]) ev.push(_mE(s, 1, 'hat', null, 0.28));
+    const mar = [0, 2, 4, 2, 3, 1, 2, 0];
+    for (let k = 0; k < 8; k++) ev.push(_mE(k * 2, 1.6, 'pluck', [_mNote(R + 12, 'pent', mar[(k + b) % 8] + (b % 4 >= 2 ? 1 : 0), 0)], 0.45));
+    for (const s of [0, 8]) ev.push(Object.assign(_mE(s, 3, 'bass', [R - 12 + (b % 4 === 3 ? 3 : 0)], 0.65), { w: 'triangle' }));
+    if (b % 2) ev.push(_mE(5, 6, 'bell', [_mNote(R + 12, 'pent', 6, 1)], 0.28));
+    return ev;
+  } },
+  frost: { bpm: 60, bars: 8, mix: { pad: 1.2, drone: 1.0, bell: 1.3, pluck: 0.7 }, send: { pad: 0.8, bell: 0.9, pluck: 0.7 }, bar(b) {                                    // a cold place: slow chords, a bell here and there, wind
+    const R = 52, P = [0, 5, 3, 4, 0, 5, 1, 4], c = P[b], ev = [];
+    ev.push(_mE(0, 16, 'pad', _mChord(R, 'minor', c, 0), 0.7)); ev.push(_mE(0, 16, 'drone', [_mNote(R, 'minor', c, -2)], 0.7));
+    const S = [[2, 7], [6, 9], [10, 8], [13, 6]]; for (const [s, deg] of S) if ((s + b * 3) % 5 !== 0) ev.push(_mE(s, 6, 'bell', [_mNote(R, 'minor', c + deg - 7, 2)], 0.38));
+    for (let s = 0; s < 16; s += 4) ev.push(_mE(s, 3, 'pluck', [_mNote(R, 'minor', c + (s % 8 ? 2 : 4), 1)], 0.28));
+    ev.push(_mE(0, 1, 'hiss', null, 0.5)); ev.push(_mE(8, 1, 'hiss', null, 0.35));
+    return ev;
+  } },
+  sleigh: { bpm: 118, bars: 8, mix: { pad: 0.7, bass: 1.0, pluck: 1.1, bell: 1.6, drums: 0.9 }, send: { pad: 0.4, pluck: 0.3, bell: 0.7 }, bar(b) {                      // a holiday: sleigh bells, an oom-pah, a bright tune
+    const R = 57, P = [0, 0, 3, 0, 0, 5, 3, 4], c = P[b], ch = _mChord(R, 'major', c, 0), root = _mNote(R, 'major', c, -1), ev = [];
+    ev.push(_mE(0, 16, 'pad', ch, 0.4));
+    for (let s = 0; s < 16; s += 2) ev.push(_mE(s, 1, 'hat', null, s % 4 === 0 ? 0.3 : 0.22));                          // the bells on the harness
+    for (const s of [0, 8]) ev.push(Object.assign(_mE(s, 3, 'bass', [root], 0.7), { w: 'triangle' }));
+    for (const s of [4, 12]) ev.push(_mE(s, 2, 'pluck', [ch[0] + 12, ch[1] + 12, ch[2] + 12], 0.3));
+    const T = [[0, 4], [2, 4], [4, 5], [6, 4], [8, 7], [10, 5], [12, 4], [14, 2]], U = [[0, 5], [2, 4], [4, 2], [6, 4], [8, 5], [10, 4], [12, 2], [14, 0]];
+    for (const [s, deg] of (b % 2 ? U : T)) ev.push(_mE(s, 2, 'bell', [_mNote(R, 'major', deg + (c ? 0 : 0), 1)], 0.5));
+    for (const s of [0, 8]) ev.push(_mE(s, 1, 'kick', null, 0.45));
+    return ev;
+  } },
+  dread: { bpm: 52, bars: 8, mix: { drone: 1.5, choir: 0.7, bell: 0.9, drums: 0.9, pad: 0.8 }, send: { drone: 0.4, choir: 0.9, bell: 1.0, pad: 0.6 }, bar(b) {                // somewhere you should not be: a low drone, a heartbeat, a note that does not belong
+    const R = 38, ev = [];
+    ev.push(_mE(0, 16, 'drone', [R, R + 7], 0.8)); ev.push(_mE(0, 16, 'pad', [R + 12, R + 13, R + 19], 0.35));
+    ev.push(_mE(0, 1, 'tim', null, 0.55)); ev.push(_mE(2, 1, 'tim', null, 0.35));
+    if (b % 2) { ev.push(_mE(8, 1, 'tim', null, 0.45)); ev.push(_mE(10, 1, 'tim', null, 0.28)); }
+    if (b >= 2) ev.push(_mE(3 + (b * 5) % 9, 8, 'bell', [R + 36 + (b % 3), R + 42], 0.3));
+    if (b % 4 === 3) ev.push(_mE(0, 15, 'riser', null, 0.35)); if (b % 4 === 1) ev.push(_mE(4, 12, 'choir', [R + 24, R + 25], 0.5));
+    return ev;
+  } },
+  march: { bpm: 108, bars: 8, mix: { pad: 0.4, bass: 0.8, stab: 0.8, pluck: 0.8, drums: 0.8 }, send: { pad: 0.3, stab: 0.2, pluck: 0.25 }, bar(b) {                            // a war: a snare roll, a pedal bass, brass stabs
+    const R = 43, P = [0, 0, 5, 4, 0, 0, 5, 3], c = P[b], root = _mNote(R, 'minor', c, 0), ev = [];
+    ev.push(_mE(0, 16, 'pad', _mChord(R, 'minor', c, 0), 0.4));
+    for (const s of [0, 2, 3, 4, 6, 8, 10, 11, 12, 14]) ev.push(_mE(s, 1, 'snare', null, s % 4 === 0 ? 0.55 : 0.35));
+    for (const s of [0, 8]) ev.push(_mE(s, 1, 'kick', null, 0.85)); ev.push(_mE(11, 1, 'kick', null, 0.5));
+    for (const s of [0, 4, 8, 12]) ev.push(_mE(s, 2, 'bass', [root - 12], 0.75));
+    for (const s of [0, 6]) ev.push(_mE(s, 2.5, 'stab', [root + 12, root + 15, root + 19], 0.55));
+    if (b >= 4) for (const [s, deg, d] of [[0, 4, 3], [4, 3, 2], [6, 4, 2], [8, 6, 4], [12, 4, 3]]) ev.push(Object.assign(_mE(s, d, 'pluck', [_mNote(R, 'minor', deg + c, 2)], 0.45), { w: 'square' }));
+    if (b === 3 || b === 7) ev.push(_mE(0, 15, 'riser', null, 0.45));
+    return ev;
+  } },
+  circus: { bpm: 132, bars: 8, mix: { bass: 0.9, pluck: 1.0, bell: 0.9, drums: 0.7, pad: 0.3 }, send: { pluck: 0.25, bell: 0.4, pad: 0.2 }, bar(b) {                           // a fairground: an oom-pah and a tune that cannot stop smiling
+    const R = 60, P = [0, 3, 4, 0, 0, 3, 4, 0], c = P[b], ch = _mChord(R, 'major', c, 0), root = _mNote(R, 'major', c, -1), ev = [];
+    ev.push(_mE(0, 16, 'pad', ch, 0.28));
+    for (const s of [0, 8]) ev.push(Object.assign(_mE(s, 3, 'bass', [root], 0.8), { w: 'square', cut: 700 }));
+    for (const s of [4, 12]) ev.push(Object.assign(_mE(s, 2, 'pluck', [ch[0] + 12, ch[1] + 12, ch[2] + 12], 0.34), { w: 'square' }));
+    const M = [[0, 4], [1, 5], [2, 4], [4, 2], [6, 4], [8, 5], [9, 6], [10, 5], [12, 4], [14, 2]];
+    for (const [s, deg] of M) ev.push(Object.assign(_mE(s, 1.4, 'pluck', [_mNote(R, 'major', deg + (b % 4 === 1 ? 3 : b % 4 === 2 ? 4 : 0), 1)], 0.5), { w: 'square' }));
+    for (let s = 0; s < 16; s += 2) ev.push(_mE(s, 1, 'hat', null, 0.2));
+    for (const s of [0, 8]) ev.push(_mE(s, 1, 'kick', null, 0.55)); for (const s of [4, 12]) ev.push(_mE(s, 1, 'snare', null, 0.3));
+    if (b % 2 === 0) ev.push(_mE(0, 8, 'bell', [_mNote(R, 'major', c + 4, 2)], 0.3));
+    return ev;
+  } },
+  lounge: { bpm: 76, bars: 8, mix: { pad: 0.9, bass: 0.9, bell: 1.0, pluck: 0.7, drums: 0.6 }, send: { pad: 0.5, bell: 0.7, pluck: 0.4 }, bar(b) {                                // a hotel bar: seventh chords, a walking bass, a vibraphone
+    const R = 48, P = [1, 4, 0, 5, 1, 4, 0, 3], c = P[b], ch = _mChord(R, 'major', c, 0), sev = _mNote(R, 'major', c + 6, 0), ev = [];
+    ev.push(_mE(0, 16, 'pad', ch.concat([sev]), 0.55));
+    const W = [0, 4, 7, 4]; for (let k = 0; k < 4; k++) ev.push(Object.assign(_mE(k * 4, 3.4, 'bass', [_mNote(R, 'major', c, -1) + W[(k + b) % 4] * (k % 2 ? 1 : 0)], 0.6), { w: 'triangle', cut: 500 }));
+    const V = [[2, 6], [5, 8], [8, 7], [11, 9], [14, 6]]; for (const [s, deg] of V) if ((s + b) % 3 !== 1) ev.push(_mE(s, 5, 'bell', [_mNote(R, 'major', c + deg - 6, 1)], 0.42));
+    for (const s of [4, 12]) ev.push(_mE(s, 1, 'hat', null, 0.3)); for (const s of [2, 6, 10, 14]) ev.push(_mE(s, 1, 'hat', null, 0.14));
+    for (const s of [0, 10]) ev.push(_mE(s, 1, 'kick', null, 0.4));
+    return ev;
+  } },
+  storm: { bpm: 128, bars: 8, mix: { pad: 0.6, choir: 0.8, bass: 0.8, stab: 0.65, drums: 0.8, pluck: 0.6 }, send: { choir: 0.6, stab: 0.2, pluck: 0.4, pad: 0.4 }, bar(b) {      // weather coming in: a driving bass, thunder in the drums, a choir over it
+    const R = 41, P = [0, 0, 5, 3, 0, 0, 6, 4], c = P[b], root = _mNote(R, 'minor', c, 0), ev = [];
+    ev.push(_mE(0, 16, 'choir', _mChord(R, 'minor', c, 1), 0.55)); ev.push(_mE(0, 16, 'pad', _mChord(R, 'minor', c, 0), 0.4));
+    for (let s = 0; s < 16; s += 2) ev.push(_mE(s, 1.7, 'bass', [root + (s % 8 === 6 ? 7 : 0)], s % 4 === 0 ? 0.9 : 0.65));
+    for (const s of [0, 4, 8, 12]) ev.push(_mE(s, 1, 'kick', null, 0.85)); for (const s of [4, 12]) ev.push(_mE(s, 1, 'snare', null, 0.7));
+    for (const s of [14, 15]) ev.push(_mE(s, 1, 'tim', null, 0.5)); ev.push(_mE(7, 1, 'tim', null, 0.35));
+    for (let s = 1; s < 16; s += 2) ev.push(_mE(s, 1, 'hat', null, 0.2)); ev.push(_mE(2, 1, 'hiss', null, 0.5)); ev.push(_mE(10, 1, 'hiss', null, 0.4));
+    for (const s of [0, 3, 6, 10]) ev.push(_mE(s, 2, 'stab', [root + 12, root + 19], 0.45));
+    if (b % 4 === 3) ev.push(_mE(0, 15, 'riser', null, 0.5));
+    return ev;
+  } },
+  forge: { bpm: 72, bars: 8, mix: { pad: 0.6, bass: 0.8, stab: 0.65, drums: 0.7, drone: 0.8 }, send: { pad: 0.3, stab: 0.1, drone: 0.2 }, bar(b) {                                // a furnace: a slow, heavy beat, steam, hammer blows
+    const R = 36, P = [0, 0, 1, 0, 0, 0, 4, 1], c = P[b], root = _mNote(R, 'phrygian', c, 0), ev = [];
+    ev.push(_mE(0, 16, 'drone', [R - 12, R], 0.8)); ev.push(_mE(0, 16, 'pad', _mChord(R, 'phrygian', c, 0), 0.45));
+    for (const [s, k] of [[0, 0], [6, 0], [8, 0], [14, 1]]) ev.push(_mE(s, 3, 'bass', [root + k], 0.95));
+    for (const s of [0, 8]) ev.push(_mE(s, 1, 'kick', null, 0.95)); ev.push(_mE(10, 1, 'kick', null, 0.55));
+    for (const s of [4, 12]) { ev.push(_mE(s, 1, 'clank', [root], 0.6)); ev.push(_mE(s, 1, 'snare', null, 0.4)); }
+    for (const s of [0, 8]) ev.push(_mE(s, 1, 'hiss', null, 0.6)); for (const s of [2, 6, 10, 14]) ev.push(_mE(s, 1, 'hat', null, 0.16));
+    if (b % 2 === 0) ev.push(_mE(0, 3, 'stab', [root + 12, root + 13, root + 19], 0.5));
+    if (b === 7) ev.push(_mE(0, 15, 'riser', null, 0.45));
+    return ev;
+  } },
+  groove: { bpm: 100, bars: 8, mix: { pad: 0.6, bass: 0.9, pluck: 0.9, drums: 0.9, bell: 0.7 }, send: { pad: 0.4, pluck: 0.3, bell: 0.5 }, bar(b) {                            // anywhere else: an easy, steady beat that stays out of the way
+    const R = 52, P = [0, 6, 3, 4, 0, 6, 3, 5], c = P[b], ch = _mChord(R, 'dorian', c, 0), root = _mNote(R, 'dorian', c, -1), ev = [];
+    ev.push(_mE(0, 16, 'pad', ch, 0.5));
+    for (const [s, k] of [[0, 0], [3, 0], [6, 12], [8, 0], [11, 7], [14, 0]]) ev.push(Object.assign(_mE(s, 2.2, 'bass', [root + k], 0.75), { w: 'triangle' }));
+    const arp = [ch[0] + 12, ch[1] + 12, ch[2] + 12, ch[1] + 12, ch[0] + 24, ch[2] + 12, ch[1] + 12, ch[0] + 12];
+    for (let k = 0; k < 8; k++) ev.push(_mE(k * 2, 1.8, 'pluck', [arp[k]], 0.34));
+    for (const s of [0, 8]) ev.push(_mE(s, 1, 'kick', null, 0.7)); if (b % 2) ev.push(_mE(10, 1, 'kick', null, 0.45));
+    for (const s of [4, 12]) ev.push(_mE(s, 1, 'clap', null, 0.4));
+    for (let s = 0; s < 16; s += 2) ev.push(_mE(s, 1, 'hat', null, 0.2));
+    if (b >= 4) ev.push(_mE(4, 8, 'bell', [_mNote(R, 'dorian', c + 4, 2)], 0.35));
+    return ev;
+  } },
   drift: { bpm: 58, bars: 8, mix: { choir: 1.5, drone: 1.4, bell: 1.2, pad: 1.2 }, send: { choir: 0.9, bell: 0.9, pad: 0.7 }, bar(b) {
     const R = 48, P = [0, 3, 4, 5, 0, 3, 1, 4], c = P[b], ev = [];
     ev.push(_mE(0, 16, 'pad', _mChord(R, 'lydian', c, 0), 0.7)); ev.push(_mE(0, 16, 'choir', [_mNote(R, 'lydian', c + 4, 1)], 0.5)); ev.push(_mE(0, 16, 'drone', [_mNote(R, 'lydian', c, -2)], 0.8));
@@ -15089,6 +15401,7 @@ function _musicBar(ctx, id, bar, t0) {
 function updateMusic(dt) {
   const ctx = (typeof audioCtx !== 'undefined') ? audioCtx : null, M = MUSIC;
   if (!ctx || ctx.state !== 'running') return;
+  weaponSamplesPreload(ctx);                                          // (the recorded shots: fetched once, here, as soon as sound is running)
   const vol = (typeof GAMEPLAY_SETTINGS !== 'undefined' && GAMEPLAY_SETTINGS.music != null) ? GAMEPLAY_SETTINGS.music : 0.5;
   const want = vol > 0.01 ? musicWanted() : null;
   if (M.ctx !== ctx) { M.ctx = ctx; M.bus = null; M.out = null; M.track = undefined; }
@@ -32228,7 +32541,7 @@ const TRASHCAN_POSITIONS = [
   { x:  6, z:  3 },
   { x: -6, z: -3 },
 ];
-const trashcanMeshes = [];
+const trashcanMeshes = [];       // (the bins and their glow rings: they stand in the lobby only; inside a match there is nothing to swap weapons at)
 let nearTrashcan = false;
 
 function placeTrashcans() {
@@ -32238,6 +32551,7 @@ function placeTrashcans() {
     // Slightly rotate each for variety
     tc.rotation.y = Math.random() * Math.PI * 2;
     scene.add(tc);
+    tc.visible = false;
     trashcanMeshes.push(tc);
     // Subtle glow ring on ground under it
     const glow = new THREE.Mesh(
@@ -32246,7 +32560,8 @@ function placeTrashcans() {
     );
     glow.rotation.x = -Math.PI / 2;
     glow.position.set(pos.x, 0.02, pos.z);
-    scene.add(glow);
+    glow.visible = false;
+    scene.add(glow); trashcanMeshes.push(glow);
   });
 }
 placeTrashcans();
@@ -42220,7 +42535,7 @@ document.addEventListener('keydown', e => {
   if (e.code==='KeyF' && !e.repeat && !isDead && match && match.zombie && zombieTakeNearby()) { e.preventDefault(); return; }   // 🧟 a weapon the dead dropped (or the radio) is yours when you press F
   if (e.code==='KeyF' && inLobby && !nearTrashcan && !e.repeat) { e.preventDefault(); lobbyInteract(); return; }
   if(e.code==='KeyF' && rangeExitNearby() && !e.repeat){e.preventDefault();returnFromRange();return;}
-  if (e.code==='KeyF' && nearTrashcan && !isDead && !fixedKitModeActive()) { showLoadoutScreen('swap'); }
+  if (e.code==='KeyF' && inLobby && nearTrashcan && !isDead && !fixedKitModeActive()) { showLoadoutScreen('swap'); }   // (a weapon swap is for the lobby: never in a match)
   // F = enter/exit a mortar (trench map)
   if (e.code==='KeyF' && !nearTrashcan && !isDead && activeMapName === 'trenches' && !e.repeat) {
     e.preventDefault();
@@ -61397,7 +61712,10 @@ setInterval(() => {
 
 // ── Trashcan proximity check ──────────────────────────────────────────────
 function updateTrashcanProximity() {
-  if (!gameStarted || isDead) {
+  // The bins are for the lobby: in a match they are not even there, so nobody can change weapons mid-game.
+  const show = !!inLobby;
+  for (const m of trashcanMeshes) if (m.visible !== show) m.visible = show;
+  if (!gameStarted || isDead || !show) {
     if (nearTrashcan) { nearTrashcan = false; setInteractVisible(false); }
     return;
   }
@@ -66487,10 +66805,31 @@ function towerEnterFloor(fl) {
     showAnnouncement('🏢 ' + tag, Z.phase === 'horde' ? 'Keep going down' : (fl > before ? 'Find the ladder up' : ''), '#aaccff', 1200);
   }
 }
+// The hatches: while the climb is on, a floor's ladder is shut (a hatch over the hole, a red light round it, and the ladder will not take hold of you)
+// until every one of that floor's dead is down. Once the horde is loose they are all open: the way out is down.
+function towerSyncLocks(unlockAll) {
+  const Z = match && match.zombie, T = Z && Z.tower;
+  for (let k = 0; k < TOWER_FLOORS - 1; k++) {
+    const F = MAP_TOWER.floors[k]; if (!F || !F.ladder) continue;
+    const locked = !unlockAll && !!T && Z.phase === 'climb' && !(T.packs[k] && T.packs[k].cleared);
+    if (F.ladder.locked === locked && F.ladder.onBlocked === (locked ? towerLadderBlocked : null)) continue;
+    F.ladder.locked = locked; F.ladder.onBlocked = locked ? towerLadderBlocked : null;
+    if (F.ring) F.ring.color.setHex(locked ? 0xff3a2a : 0x39ff88);
+    if (F.hatch) F.hatch.visible = locked;
+  }
+}
+function towerLadderBlocked() {
+  const now = performance.now(); if (now - (towerLadderBlocked._t || 0) < 2200) return; towerLadderBlocked._t = now;
+  const Z = match && match.zombie, T = Z && Z.tower; if (!T) return;
+  const left = towerHere(T.floor).length + ((T.packs[T.floor] && T.packs[T.floor].toSpawn) || 0);
+  showAnnouncement('🔒 THE HATCH IS SHUT', left ? `Clear the floor first · ${left} of the dead left` : 'Clear the floor first', '#ff7766', 1800);
+  playSoundEvent('hitmarker', { volume: 0.5, minGap: 0, tier: 'white' });
+}
 function towerFloorCleared() {
   const T = match.zombie.tower, me = players[myId];
   if (me && me.hp > 0) { const to = Math.min(matchMaxHp(), me.hp + ZOMBIE_HEAL); socket.emit('healSelf', { amount: to - me.hp }); me.hp = to; updateHealthHUD(to); }
-  showAnnouncement(T.floor === 0 ? 'LOBBY CLEAR' : `FLOOR ${T.floor} CLEAR`, `+${ZOMBIE_HEAL} HP · the ladder is in the ${towerP(T.floor)[0] < 0 ? 'north-west' : 'south-east'} corner`, '#aaffaa', 1800);
+  showAnnouncement(T.floor === 0 ? 'LOBBY CLEAR' : `FLOOR ${T.floor} CLEAR`, `+${ZOMBIE_HEAL} HP · the hatch is open: the ladder is in the ${towerP(T.floor)[0] < 0 ? 'north-west' : 'south-east'} corner`, '#aaffaa', 2200);
+  playSoundEvent('hitmarker', { volume: 0.8, minGap: 0, tier: 'blue' });
 }
 function towerStartHorde() {
   const Z = match.zombie, T = Z.tower;
@@ -66507,6 +66846,7 @@ function updateZombieTower(dt, now) {
     if (c !== T.floor) { T.candT = (T.cand === c ? T.candT : 0) + dt; T.cand = c; if (T.candT > 0.25) { towerEnterFloor(c); T.candT = 0; } }
     else { T.candT = 0; T.cand = c; }
   }
+  towerSyncLocks();
   const here = towerHere(T.floor), fy = towerFloorTop(T.floor);
   if (Z.phase === 'climb') {
     let pack = T.packs[T.floor];
@@ -66517,7 +66857,12 @@ function updateZombieTower(dt, now) {
         zombieSpawn({ floor: T.floor, floorY: fy, hp: st.hp, speed: st.speed, at: towerSpawnPoint() }); pack.toSpawn--;
         pack.next = now + Math.max(350, 1100 - T.floor * 28);
       }
-      if (pack.toSpawn === 0 && here.length === 0) { pack.cleared = true; towerFloorCleared(); }
+      if (pack.toSpawn === 0 && here.length === 0) { pack.cleared = true; towerFloorCleared(); towerSyncLocks(); }
+      // the hatch only opens when they are all down, so a straggler that cannot get to you must not hold the floor shut: after a while the last few are brought to you
+      if (pack.toSpawn === 0 && here.length > 0 && here.length <= 3) {
+        if (pack.lastCount !== here.length) { pack.lastCount = here.length; pack.sinceAt = now; }
+        else if (now - pack.sinceAt > 45000) { for (const b of here) { const sp = towerSpawnPoint(10); b.x = sp.x; b.z = sp.z; syncBotMesh(b); } pack.sinceAt = now; showAnnouncement('THE LAST ONES', 'They are coming for you', '#ffaa66', 1400); }
+      } else pack.lastCount = -1;
     }
     if (T.floor === TOWER_FLOORS - 1 && !T.hordeStarted) towerStartHorde();
   } else if (Z.phase === 'horde') {
@@ -66621,6 +66966,7 @@ function zombieRemovePickup(i) {
 function zombieClearPickups() { while (zombiePickups.length) zombieRemovePickup(zombiePickups.length - 1); }
 function zombieCleanup() {
   _zombieNear = null; zombiePrompt(null);
+  towerSyncLocks(true);                                  // every hatch open again for whoever uses the map next
   zombieStoryCleanup();
   zombieDarken(false);
   zombieClearPickups();
@@ -73745,7 +74091,7 @@ if (btnInteract) {
     if (match && match.zombie && zombieTakeNearby()) return;
     const pilot = pilotableHere();
     if (pilot === 'exit') { if (pilotedVehicle) exitVehicle(); else exitMortar(); }
-    else if (nearTrashcan && !isDead && gameStarted && !fixedKitModeActive()) showLoadoutScreen('swap');
+    else if (inLobby && nearTrashcan && !isDead && gameStarted && !fixedKitModeActive()) showLoadoutScreen('swap');
     else if (pilot === 'vehicle') tryEnterVehicle();
     else if (pilot === 'mortar') tryEnterMortar();
     else if (rangeExitNearby()) returnFromRange();

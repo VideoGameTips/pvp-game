@@ -3077,6 +3077,13 @@ if (ok && process.argv.includes('--zombietower')) {
     let T = 1.8e12; Date.now = () => T;
     const on = (k, x, z) => { camera.position.set(x, towerFloorTop(k) + PLAYER_EYE_HEIGHT, z); playerYVel = 0; slamState = null; window._crouchEye = PLAYER_EYE_HEIGHT; window._mapLadder = null; };
     const step = (n, dt = 0.1) => { for (let i = 0; i < n; i++) { T += dt * 1000; updateZombieMode(dt); } };
+    const grab = (k) => {                                                  // walk up to ladder k from the floor below and push on it: does it take hold?
+      const L = MAP_LADDERS.zombie_tower[k], pose = mapLadderPose(L), n = pose.normal, keepPos = camera.position.clone();
+      window._mapLadder = null; window._ladderDetachUntil = 0; playerYVel = 0; window._crouchEye = PLAYER_EYE_HEIGHT;
+      camera.position.set(pose.x + n.x * 0.7, towerFloorTop(k) + PLAYER_EYE_HEIGHT, pose.z + n.z * 0.7); keys.KeyW = true;
+      const input = new THREE.Vector3(-n.x, 0, -n.z); let got = false; for (let f = 0; f < 20 && !got; f++) { updateMapLadderMove(1 / 60, input); got = !!window._mapLadder; }
+      keys.KeyW = false; window._mapLadder = null; camera.position.copy(keepPos); return got;
+    };
     try {
       myId = 'me_tower_test'; inLobby = false; gameStarted = true; isDead = false; gameBots.length = 0;
       activateMap('zombie_tower'); players[myId] = { id: myId, hp: 300, team: 'ally', dead: false };
@@ -3094,6 +3101,9 @@ if (ok && process.argv.includes('--zombietower')) {
       on(0, camera.position.x, camera.position.z);
       step(40);
       let here = towerHere(0);
+      { const L0 = MAP_LADDERS.zombie_tower[0], F0 = MAP_TOWER.floors[0];
+        if (!L0.locked || !F0.hatch.visible || F0.ring.color.getHex() !== 0xff3a2a) issues.push('with the lobby not clear, its hatch should be shut (locked, the hatch there, the ring red)');
+        if (grab(0)) issues.push('a ladder with a shut hatch must not take hold of you'); }
       if (!Tw.packs[0] || here.length < 1) issues.push('the lobby should have a pack: ' + JSON.stringify(Tw.packs[0]) + ' here ' + here.length);
       if (here.some(b => b.floorY !== 0 || Math.abs(b.y) > 0.01 || b.team !== 'enemy' || !remoteMeshes[b.id])) issues.push('a zombie of the lobby is not standing on its floor');
       if (here.some(b => Math.hypot(b.x - camera.position.x, b.z - camera.position.z) < 12 && b._age == null && false)) issues.push('spawned on top of you');
@@ -3136,11 +3146,24 @@ if (ok && process.argv.includes('--zombietower')) {
         zombieDropPickup('ammo', px, pz, null, null, towerFloorTop(3)); updateZombiePickups(0.016);
         if (zombiePickups.length || weaponAmmo[ai].ammo !== WEAPONS[ai].mag) issues.push('ammo is taken as you pass'); }
       // ── clearing a floor: its dead all down, none left to come: a breather and a few HP
-      { const pk = { toSpawn: 0, next: 0, cleared: false }; Tw.packs[3] = pk; players[myId].hp = 200; step(3);
-        if (!pk.cleared || players[myId].hp !== 225) issues.push('an empty, finished floor should count as cleared and heal 25: ' + pk.cleared + ' ' + players[myId].hp); }
+      { if (!MAP_LADDERS.zombie_tower[3].locked) issues.push('floor 3 still has its pack: the hatch should be shut'); if (grab(3)) issues.push('floor 3 is not clear: the ladder must not take hold');
+        const pk = { toSpawn: 0, next: 0, cleared: false }; Tw.packs[3] = pk; players[myId].hp = 200; step(3);
+        if (!pk.cleared || players[myId].hp !== 225) issues.push('an empty, finished floor should count as cleared and heal 25: ' + pk.cleared + ' ' + players[myId].hp);
+        const L3 = MAP_LADDERS.zombie_tower[3], F3 = MAP_TOWER.floors[3];
+        if (L3.locked || F3.hatch.visible || F3.ring.color.getHex() !== 0x39ff88) issues.push('a cleared floor opens its hatch (unlocked, hatch gone, ring green)');
+        if (!grab(3)) issues.push('once the floor is clear the ladder takes hold again');
+        if (MAP_LADDERS.zombie_tower[4].locked !== true) issues.push('clearing floor 3 must not open the hatch of floor 4'); }
+      // the stragglers: the last of a floor that cannot get to you are brought to you, so the hatch is never held shut for good
+      { Tw.floor = 5; on(5, 0, 8); const pk5 = Tw.packs[5] = { toSpawn: 0, next: 0, cleared: false };
+        const zz = zombieSpawn({ floor: 5, floorY: towerFloorTop(5), hp: 50, speed: 0.01, at: { x: 28, z: -28, y: towerFloorTop(5) } }); step(2);
+        if (pk5.cleared) issues.push('a floor with a zombie alive is not clear');
+        const t0 = T; for (let i = 0; i < 520 && Math.hypot(zz.x - 28, zz.z + 28) < 1; i++) step(1, 0.1);
+        if (Math.hypot(zz.x - 28, zz.z + 28) < 1) issues.push('after a while the last zombie of a floor should be brought to you');
+        zombieRemove(zz); step(3); if (!pk5.cleared) issues.push('and when it is gone the floor is clear'); }
       // ── the roof: the horde, the way down, the swarm follows, the radio
       on(TOWER_FLOORS - 1, towerP(23)[0] + 2, towerP(23)[1] - 2); step(8);
       if (Z.phase !== 'horde' || !Tw.hordeStarted) issues.push('reaching the roof should start the horde: ' + Z.phase);
+      if (MAP_LADDERS.zombie_tower.some(L => L.locked) || MAP_TOWER.floors.some(F => F.hatch && F.hatch.visible)) issues.push('once the horde is loose every hatch should be open');
       step(120);
       let alive = gameBots.filter(b => b.zombie && !b.dead);
       if (alive.length < 20 || alive.length > TOWER_HORDE_CAP) issues.push('the horde should be a crowd within its cap: ' + alive.length);
@@ -3177,6 +3200,8 @@ if (ok && process.argv.includes('--zombietower')) {
       if (!ended || ended.w !== 'enemy' || !/floor 7/.test(ended.why || '')) issues.push('dying should end it, naming the floor: ' + JSON.stringify(ended));
       zombieSpawn({ floor: 7, floorY: towerFloorTop(7), at: { x: 0, z: 0, y: towerFloorTop(7) } }); zombieDropPickup('weapon', 3, 3, 'ak20', 'B', 0); zombieCleanup();
       if (gameBots.some(b => b.zombie) || zombiePickups.length) issues.push('zombies and pickups should be cleared at the end');
+      Tw.packs = {}; Z.phase = 'climb'; towerSyncLocks(); if (!MAP_LADDERS.zombie_tower[0].locked) issues.push('(setup) a fresh climb shuts the hatches');
+      zombieCleanup(); if (MAP_LADDERS.zombie_tower.some(L => L.locked) || MAP_TOWER.floors.some(F => F.hatch && F.hatch.visible)) issues.push('the hatches should all be open again when the match is over');
       if (_zombiePromptEl && _zombiePromptEl.style.display !== 'none') issues.push('the prompt should be gone');
     } finally {
       Math.random = saved.rnd; endMatch = saved.end; zombieClearPickups(); Date.now = saved.now; botHitsMe = saved.bhm; myId = saved.id; inLobby = saved.lobby;
@@ -3192,6 +3217,76 @@ if (ok && process.argv.includes('--zombietower')) {
   })()`);
   console.log('zombie tower checks: the story then the climb, a pack on every floor at that floor\'s height, the dead left behind, weapons wait for F (ammo does not), a floor cleared heals, the roof starts the horde, it follows you down, the last of it drops a radio, the radio is the win, dying ends it');
   if (out.length) { ok = false; console.log(out.join('\n')); }
+}
+
+if (ok && process.argv.includes('--sample')) {
+  // A recorded shot: the Vector plays its own sample (a real file, shipped in the itch bundle) once it is loaded, through a path of its own; before that, or if the file never
+  // comes, the made-up shot plays exactly as before; other guns are not touched; a skin's own sound is kept.
+  const file = path.join(__dirname, '..', 'public', 'sounds', 'vector-shot.mp3'), itch = fs.readFileSync(path.join(__dirname, 'build-itch.sh'), 'utf8');
+  const more = [];
+  if (!fs.existsSync(file) || fs.statSync(file).size < 5000) more.push('public/sounds/vector-shot.mp3 should be there');
+  if (!/FILES=\([^)]*sounds\/vector-shot\.mp3/.test(itch)) more.push('the itch bundle should carry the Vector sample (FILES in tools/build-itch.sh)');
+  const out = vm.runInThisContext(`(() => {
+    const issues = [];
+    const node = () => { const t = { connect: x => x, disconnect() {}, start() {}, stop() {}, setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {}, setTargetAtTime() {}, cancelScheduledValues() {}, value: 0 };
+      return new Proxy(t, { get: (o, k) => (k in o ? o[k] : (typeof k === 'string' ? node() : undefined)), set: (o, k, v) => { o[k] = v; return true; } }); };
+    let sources = 0, lastSrc = null, sampleHits = 0; const SAMPLE = { duration: 3, numberOfChannels: 2 };
+    const ctx = new Proxy({ currentTime: 1, sampleRate: 48000, state: 'running', destination: node(), createBufferSource() { sources++; const n = node(); lastSrc = new Proxy(n, { get: (o, k) => o[k], set: (o, k, v) => { if (k === 'buffer' && v === SAMPLE) sampleHits++; o[k] = v; return true; } }); return lastSrc; }, createBuffer(ch, len) { return { numberOfChannels: ch, length: len, duration: len / 48000, getChannelData: () => new Float32Array(len) }; } },
+                          { get: (o, k) => (k in o ? o[k] : (typeof k === 'string' && k.startsWith('create') ? (() => node()) : undefined)) });
+    const saved = { ctx: getAudioCtx, blast: playMuzzleBlast, st: _sampleState.vector, voices: _sampleVoices, last: { ...weaponSoundLastAt } };
+    let blasts = 0; getAudioCtx = () => ctx; playMuzzleBlast = () => { blasts++; };
+    const clear = () => { for (const k of Object.keys(weaponSoundLastAt)) delete weaponSoundLastAt[k]; };
+    try {
+      if (!WEAPON_SAMPLES.vector || !/vector-shot\\.mp3$/.test(WEAPON_SAMPLES.vector.url)) issues.push('the Vector should have a sample');
+      if (/^\\//.test(WEAPON_SAMPLES.vector.url) || /^https?:/.test(WEAPON_SAMPLES.vector.url)) issues.push('the sample path has to be relative (the game is not served from a root)');
+      // not loaded yet: the made-up shot
+      _sampleState.vector = { buf: null, loading: true, failed: false }; clear(); blasts = 0; sampleHits = 0; playWeaponSound('vector', {});
+      if (!blasts || sampleHits) issues.push('until the file is there the made-up shot plays (blasts ' + blasts + ', samples ' + sampleHits + ')');
+      // failed to load: the same
+      _sampleState.vector = { buf: null, loading: false, failed: true }; clear(); blasts = 0; sampleHits = 0; playWeaponSound('vector', {});
+      if (!blasts || sampleHits) issues.push('if the file never comes the made-up shot plays');
+      // loaded: the sample, none of the made-up layers, cut to its length, pitched about a little
+      _sampleState.vector = { buf: SAMPLE, loading: false, failed: false }; clear(); blasts = 0; sampleHits = 0; _sampleVoices = 0; playWeaponSound('vector', {});
+      if (sampleHits !== 1 || blasts) issues.push('once loaded the Vector should play its sample and not the made-up shot (samples ' + sampleHits + ', blasts ' + blasts + ')');
+      // someone else's gun in the distance is the sample too
+      clear(); sampleHits = 0; _sampleVoices = 0; playWeaponSound('vector', { remote: true, position: new THREE.Vector3(30, 1, 0) }); if (sampleHits !== 1) issues.push('a distant Vector is the recording too');
+      // a burst does not pile up without end
+      clear(); sampleHits = 0; _sampleVoices = 0; for (let i = 0; i < 40; i++) { clear(); playWeaponSound('vector', {}); } if (sampleHits > 12 || sampleHits < 8) issues.push('a long burst should be capped near ten voices, played ' + sampleHits);
+      _sampleVoices = 0;
+      // other guns are untouched
+      clear(); sampleHits = 0; _sampleVoices = 0; playWeaponSound('ak20', {}); if (sampleHits) issues.push('the AK20 must keep its own sound');
+      // a skin that has its own sound keeps it on your own shots
+      const keepFx = _skinFxFor; _skinFxFor = (i) => i === 'vector' ? { sound: weaponAudioProfile('ak20', null) } : keepFx(i);
+      clear(); sampleHits = 0; _sampleVoices = 0; playWeaponSound('vector', {}); _skinFxFor = keepFx; if (sampleHits) issues.push('a skin with a sound of its own keeps it');
+    } finally { getAudioCtx = saved.ctx; playMuzzleBlast = saved.blast; _sampleState.vector = saved.st; _sampleVoices = saved.voices; for (const k of Object.keys(weaponSoundLastAt)) delete weaponSoundLastAt[k]; Object.assign(weaponSoundLastAt, saved.last); }
+    return issues;
+  })()`);
+  console.log('sample checks: the Vector plays its recording when it is loaded, the made-up shot before that or if it never comes, other guns and skins keep theirs, bursts are capped, the file is in the itch bundle');
+  if (out.length || more.length) { ok = false; console.log([...more, ...out].join('\n')); }
+}
+
+if (ok && process.argv.includes('--bins')) {
+  // The weapon-swap trashcans are for the lobby: in a match they are not on the map and cannot be used, so nobody changes weapons mid-game.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'public', 'game.js'), 'utf8');
+  const out = vm.runInThisContext(`(() => {
+    const issues = [];
+    const save = { started: gameStarted, lobby: inLobby, dead: isDead, pos: camera.position.clone(), near: nearTrashcan };
+    try {
+      gameStarted = true; isDead = false; const p = TRASHCAN_POSITIONS[0];
+      if (trashcanMeshes.length < TRASHCAN_POSITIONS.length * 2) issues.push('the bins and their glow rings should all be tracked: ' + trashcanMeshes.length);
+      camera.position.set(p.x, 1.65, p.z);
+      inLobby = true; updateTrashcanProximity();
+      if (!nearTrashcan || trashcanMeshes.some(m => !m.visible)) issues.push('in the lobby the bins are there and you can use them');
+      inLobby = false; updateTrashcanProximity();
+      if (nearTrashcan) issues.push('in a match, standing where a bin was must not offer a weapon swap');
+      if (trashcanMeshes.some(m => m.visible)) issues.push('in a match the bins should not be on the map');
+    } finally { gameStarted = save.started; inLobby = save.lobby; isDead = save.dead; camera.position.copy(save.pos); nearTrashcan = save.near; }
+    return issues;
+  })()`);
+  const swaps = (src.match(/showLoadoutScreen\('swap'\)/g) || []).length, guarded = (src.match(/inLobby && nearTrashcan[^\n]*showLoadoutScreen\('swap'\)/g) || []).length;
+  const more = swaps === guarded ? [] : ['every weapon swap should need the lobby (' + guarded + ' of ' + swaps + ' do)'];
+  console.log('bin checks: the swap trashcans stand in the lobby only, none in a match, and every way to swap weapons needs the lobby');
+  if (out.length || more.length) { ok = false; console.log([...out, ...more].join('\n')); }
 }
 
 if (ok && process.argv.includes('--tower')) {
@@ -3935,6 +4030,15 @@ if (ok && process.argv.includes('--irregular')) {
         for (const [label] of walkable) if (!(MAP_POIS.atoll || []).some(p => p[0] === label)) issues.push('atoll: no point of interest for the ' + label);
         if (!MUSIC_TRACKS[MUSIC_FOR_MAP.atoll]) issues.push('atoll: no music');
       }
+      // Battleground: an arena with a crowd (it does the wave), banners, flames, spots, a trophy
+      {
+        const B = _IRR.battle;
+        if (!B || B.crowd.length !== 32 || B.crowd.some(c => !c.grp.children.length && Math.abs(c.z) < 99 && false)) issues.push('battleground: the crowd should be thirty-two slots of the stands');
+        if (B && B.crowd.filter(c => c.grp.children.length).length < 28) issues.push('battleground: the stands should be full of people');
+        if (B && (B.flames.length < 8 || B.beams.length !== 6 || !B.confetti)) issues.push('battleground: flames, moving spots and confetti are missing');
+        activeMapName = 'battleground'; const cols = MAP_COLLIDERS.battleground;
+        if (!cols.some(b => Math.abs(b.min.x + b.max.x) < 0.1 && Math.abs(b.min.z + b.max.z) < 0.1 && b.min.y >= 2.9 && b.max.y > 4)) issues.push('battleground: the trophy stands on its pedestal in the middle of the stage');
+      }
       // the sounds the yard makes exist and run without throwing
       for (const ev of ['rivet', 'weld', 'grind', 'crane', 'chain']) if (typeof _AEV[ev] !== 'function') issues.push('missing ambient event ' + ev);
       for (const name of IDS) { const p = ATMO_PROFILES[name]; if (!p || !p.snd) issues.push(name + ': no ambient sound profile'); else for (const e of (p.snd.ev || [])) if (!_AEV[e[0]]) issues.push(name + ': ambient event ' + e[0] + ' does not exist'); }
@@ -3981,13 +4085,20 @@ if (ok && process.argv.includes('--music')) {
     }
     for (const [map, id] of Object.entries(MUSIC_FOR_MAP)) if (!MUSIC_TRACKS[id]) issues.push(map + ' asks for a track that does not exist: ' + id);
     for (const m of ['sky_arena', 'shipyard', 'battleground', 'atoll']) if (!MUSIC_FOR_MAP[m]) issues.push(m + ' should have music of its own');
+    // every map has music, and there is a good deal of variety in what they get
+    { const maps = [...MAP_IDS, 'zombie_tower', 'base_raid', 'obby', 'br_arena', 'm4_tower', 'm4_tower_big', 'm4_tower_super'], none = maps.filter(m => !MUSIC_FOR_MAP[m]);
+      if (none.length) issues.push('maps with no music: ' + none.join(', '));
+      const used = new Set(maps.map(m => MUSIC_FOR_MAP[m])); if (used.size < 15) issues.push('the maps should share out at least fifteen different tracks, they use ' + used.size);
+      for (const [m, pf] of Object.entries(ATMO_PROFILES)) for (const e of ((pf.snd && pf.snd.ev) || [])) if (typeof _AEV[e[0]] !== 'function') issues.push(m + ': ambient event ' + e[0] + ' does not exist');
+      for (const m of ['storm_pier', 'pinball_arcade', 'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise']) if (!(ATMO_PROFILES[m] && ATMO_PROFILES[m].snd)) issues.push(m + ' should have ambient sound');
+      const hog = [...used].map(id => [id, maps.filter(m => MUSIC_FOR_MAP[m] === id).length]).sort((a, b) => b[1] - a[1])[0]; if (hog[1] > 14) issues.push('one track is on too many maps: ' + hog.join(' x ')); }
     // which track
     const save = { started: gameStarted, lobby: inLobby, map: activeMapName, ctx: audioCtx, vol: GAMEPLAY_SETTINGS.music, m: { ...MUSIC } };
     try {
       gameStarted = false; inLobby = false; if (musicWanted() !== 'lobby') issues.push('the menus should have the lobby theme');
       gameStarted = true; inLobby = true; if (musicWanted() !== 'lobby') issues.push('the lobby should have its theme');
       inLobby = false; activeMapName = 'shipyard'; if (musicWanted() !== 'industry') issues.push('the shipyard should have the industry track');
-      activeMapName = 'urban'; if (musicWanted() !== null) issues.push('a map with no music should be quiet');
+      activeMapName = 'urban'; if (musicWanted() !== 'groove') issues.push('urban should have the groove track'); activeMapName = 'no_such_map'; if (musicWanted() !== null) issues.push('a place with no music should be quiet');
       // the scheduler
       MUSIC.ctx = null; MUSIC.bus = null; MUSIC.out = null; MUSIC.track = undefined; MUSIC.master = null; audioCtx = ctx; GAMEPLAY_SETTINGS.music = 0.5;
       gameStarted = false; updateMusic(0.016);
