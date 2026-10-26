@@ -4582,6 +4582,9 @@ const SAMPLE_FILES = {
   ring:      'sounds/ring-shot.mp3',        // a heavy mid-range shot that rings out for a second and a half: a rifle in open ground
   blast:     'sounds/rocket-blast.mp3',     // a roar that holds full level for the first second and dies away over four: something launched
   lightning: 'sounds/lightning-bolt.mp3',   // a crackle that builds, a crack, then the thunder
+  isolated:  'sounds/isolated-shot.mp3',    // one thick low boom, loud for 0.4 s and then gone (a faint click at 1 s that is not played). Its file name is cut off ("A single, isolated s..."): judged from the sound to be a shotgun, so it is on the shotguns
+  heavy:     'sounds/heavy-shot.mp3',       // a thick mid-heavy bang with its echo behind it, then a hiss of room that is not played. File name "A single heavy shot...": judged to be a big rifle, so it is on the lever and the garand
+  rocket:    'sounds/rpg-rocket.mp3',       // a deep roar, 95% of it below 250 Hz, holding for four seconds: a rocket motor
 };
 const WEAPON_SAMPLES = {
   vector:           { file: 'vector',    gain: 0.20, from: 0.00, len: 1.2, fade: 0.4, rate: [1, 1] },   // (the clip as it was made: the same sound every shot, at its own pitch; only the last 1.8 s of silence is not played)
@@ -4592,10 +4595,17 @@ const WEAPON_SAMPLES = {
   // big-bore pistols: the thud
   hand_cannon:      { file: 'thump',     gain: 0.43, from: 0.02, len: 1.6, fade: 0.6, rate: [1, 1] },
   desert_eagle:     { file: 'thump',     gain: 0.62, from: 0.02, len: 1.6, fade: 0.6, rate: [1.08, 1.08] },
-  // things that are launched: the blast
+  // things that are launched: the blast (the RPG-7 has a recording of its own)
   bazooka:          { file: 'blast',     gain: 0.17, from: 0.00, len: 3.2, fade: 1.2, rate: [1, 1] },
-  rpg:              { file: 'blast',     gain: 0.16, from: 0.00, len: 2.6, fade: 1.0, rate: [1.1, 1.1] },
+  rpg:              { file: 'rocket',    gain: 0.19, from: 0.00, len: 2.6, fade: 1.2, rate: [1, 1] },                   // (its own recording: "A heavy RPG rocket...")
   grenade_launcher: { file: 'blast',     gain: 0.14, from: 0.00, len: 1.4, fade: 0.6, rate: [1.25, 1.25] },
+  // shotguns: the boom, cut before the faint click that follows it at 1 s (a bigger bore plays it lower, a smaller one higher)
+  sg8:              { file: 'isolated',  gain: 0.24, from: 0.00, len: 0.95, fade: 0.35, rate: [1, 1] },
+  sawed_off:        { file: 'isolated',  gain: 0.22, from: 0.00, len: 0.95, fade: 0.35, rate: [0.92, 0.92] },
+  shorty:           { file: 'isolated',  gain: 0.21, from: 0.00, len: 0.95, fade: 0.35, rate: [1.12, 1.12] },
+  // big rifles: the heavy shot, cut before the hiss of room that sits under it from 1.8 s
+  lever:            { file: 'heavy',     gain: 0.31, from: 0.04, len: 1.7, fade: 0.7, rate: [0.95, 0.95] },
+  m1_garand:        { file: 'heavy',     gain: 0.31, from: 0.04, len: 1.7, fade: 0.7, rate: [1, 1] },
   // lightning: the bolt, cut to the weapon (a shotgun of it, a rifle that fires it as fast as it can)
   storm_bloom:      { file: 'lightning', gain: 0.40, from: 0.02, len: 2.2, fade: 0.6, rate: [1, 1] },
   arc_rifle:        { file: 'lightning', gain: 0.16, from: 0.02, len: 0.5, fade: 0.25, rate: [1, 1] },
