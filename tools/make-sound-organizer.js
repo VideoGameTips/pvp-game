@@ -74,6 +74,7 @@ const guns = grabArray(gameText, 'const WEAPONS = [');
 const melee = grabArray(gameText, 'const MELEE_ITEMS = [', { MELEE_COMBO_MODE: true, Object, console });
 const swingOf = grabObject(gameText, 'MELEE_SWING_SOUND');
 const mid = (r) => r ? (r[0] + r[1]) / 2 : 1;
+const isAdmin = (w) => /^Admin/i.test(w.type || '') || !!w.adminItem;       // admin weapons can not be obtained
 
 // --- the clips
 const clips = [];
@@ -101,20 +102,20 @@ for (const g of GUN_GROUPS) {
   for (const id of g.ids) {
     const w = gunById[id]; if (!w || seen.has(id)) continue;                                           // a gun that was removed, or listed twice
     seen.add(id); rows.push(id);
-    weapons.push({ id, name: w.name, type: w.type, archived: !!w.archived, kind: 'gun', fireMs: w.fireRate || 300, cur: cur(id) });
+    weapons.push({ id, name: w.name, type: w.type, archived: !!w.archived, admin: isAdmin(w), kind: 'gun', fireMs: w.fireRate || 300, cur: cur(id) });
   }
   groups.push({ title: g.title, ids: rows });
 }
 const lost = guns.filter(g => !seen.has(g.id));
 if (lost.length) {
   groups.push({ title: 'Not sorted yet', ids: lost.map(w => w.id) });
-  for (const w of lost) weapons.push({ id: w.id, name: w.name, type: w.type, archived: !!w.archived, kind: 'gun', fireMs: w.fireRate || 300, cur: cur(w.id) });
+  for (const w of lost) weapons.push({ id: w.id, name: w.name, type: w.type, archived: !!w.archived, admin: isAdmin(w), kind: 'gun', fireMs: w.fireRate || 300, cur: cur(w.id) });
 }
 const swordIds = { blade: [], heavy: [], generic: [] };
 for (const m of melee) {
   if (m.skinFor) continue;
   const sw = swingOf[m.id] || 'blade'; swordIds[sw].push(m.id);
-  weapons.push({ id: m.id, name: m.name, type: m.type, archived: !!m.archived, kind: 'melee', swing: sw, fireMs: m.cooldown || 500, cur: cur(m.id) });
+  weapons.push({ id: m.id, name: m.name, type: m.type, archived: !!m.archived, admin: isAdmin(m), kind: 'melee', swing: sw, fireMs: m.cooldown || 500, cur: cur(m.id) });
 }
 for (const sw of Object.keys(MELEE_GROUPS)) groups.push({ title: MELEE_GROUPS[sw], ids: swordIds[sw] });
 

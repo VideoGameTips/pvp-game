@@ -53,6 +53,13 @@
   .row .nums input { width: 62px; }
   .row .play { display: flex; gap: 4px; }
   .row select { width: 100%; }
+  .clashing { color: var(--bad); }
+  .clip.bad { border-color: var(--bad); }
+  .row.clash { box-shadow: inset 0 0 0 1px var(--bad); }
+  #rules { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 12px; font-size: 12.5px; }
+  #rules .ok { color: var(--good); font-weight: 600; }
+  #rules .no { color: var(--bad); font-weight: 600; }
+  #rules p { margin: 4px 0; }
   .badge { font-size: 10.5px; border: 1px solid var(--line); border-radius: 10px; padding: 0 6px; color: var(--dim); margin-left: 4px; white-space: nowrap; }
   .row.empty .none { color: var(--dim); }
   @media (max-width: 700px) {
@@ -73,6 +80,7 @@
   <input id="search" type="search" placeholder="Find a weapon…" size="16">
   <label><input id="onlyEmpty" type="checkbox"> only weapons with no recording</label>
   <label><input id="hideOld" type="checkbox"> hide weapons that are not in the shop</label>
+  <label><input id="onlyClash" type="checkbox"> only guns that share a sound</label>
   <span class="grow"></span>
   <span id="changes"></span>
   <button id="copy" class="primary" title="Copy only what you changed, ready to paste into the chat">Copy my changes</button>
@@ -84,6 +92,7 @@
 </header>
 <main>
   <aside>
+    <div id="rules"></div>
     <h2>Sounds</h2>
     <p class="help">▶ to listen. Click a sound to pick it up, then click weapons to give it to them (or drag it onto a weapon or a whole group). Rename a sound if you know better than my guess.</p>
     <div id="clips"></div>
@@ -139,6 +148,21 @@
     if (S.ambient.length) n.push('ambient');
     return n;
   }
+
+  // ---------- the rule: one sound per gun. Guns you can get never share a sound with each other; admin guns (and guns that are out of the shop) can not be got, so one of them may share
+  // a sound with ONE gun you can get, but not two of them with each other.
+  const canGet = (w) => !w.admin && !w.archived;
+  function sharing() {
+    const m = {};
+    for (const w of D.weapons) { const k = S.weapons[w.id].clip; if (!k) continue; const e = m[k] || (m[k] = { can: [], cant: [] }); (canGet(w) ? e.can : e.cant).push(w.id); }
+    return m;
+  }
+  function clashesOf(id, m) {                                         // the other guns this one is not allowed to share its sound with
+    const w = weaponBy[id], k = S.weapons[id].clip; if (!k) return [];
+    const e = (m || sharing())[k], same = canGet(w) ? e.can : e.cant;
+    return same.filter(x => x !== id);
+  }
+  const clashingIds = () => { const m = sharing(); return D.weapons.filter(w => clashesOf(w.id, m).length).map(w => w.id); };
 
   // ---------- sound (Web Audio: decodes the clips that are already inside this page, so it works opened as a file)
   const AC = new (window.AudioContext || window.webkitAudioContext)();
@@ -196,7 +220,20 @@
   window.addEventListener('resize', fitHeader);
 
   // ---------- the sounds column
+  function renderRules() {
+    const m = sharing(), bad = clashingIds(), tooMuch = Object.entries(m).filter(([k, e]) => e.can.length > 1 || e.cant.length > 1);
+    const count = (kind) => { const ws = D.weapons.filter(w => w.kind === kind && canGet(w)); return [ws.filter(w => S.weapons[w.id].clip).length, ws.length]; };
+    const [gn, gt] = count('gun'), [mn, mt] = count('melee');
+    const free = D.clips.filter(c => c.kind !== 'ambient' && c.kind !== 'boom' && !(m[c.key] && m[c.key].can.length)).map(c => label(c.key));
+    $('#rules').replaceChildren(
+      h('p', {}, h('b', {}, 'The rule: '), 'one sound per gun. A gun you can get may share a sound with one admin gun, never with another gun you can get.'),
+      tooMuch.length ? h('p', { class: 'no' }, '⚠ ' + bad.length + ' guns share a sound they should not (' + tooMuch.length + ' sounds)') : h('p', { class: 'ok' }, '✓ nobody shares a sound they should not'),
+      h('p', {}, 'Guns you can get with a sound: ' + gn + ' of ' + gt + (gn < gt ? ' (' + (gt - gn) + ' have the old made-up sound)' : '')),
+      mt ? h('p', {}, 'Melee you can get with a sound: ' + mn + ' of ' + mt) : null,
+      h('p', {}, free.length ? 'Sounds nobody you can get is using: ' + free.join(', ') : 'Every gun sound is taken by a gun you can get.'));
+  }
   function renderClips() {
+    renderRules();
     const box = $('#clips'); box.replaceChildren();
     const section = (title, kind, help) => {
       const list = D.clips.filter(c => c.kind === kind); if (!list.length) return;
@@ -212,10 +249,11 @@
     }
   }
   function clipCard(c) {
-    const n = used(c.key).length, pooled = S.pool.includes(c.key);
+    const n = used(c.key).length, pooled = S.pool.includes(c.key), sh = sharing()[c.key] || { can: [], cant: [] };
+    const warn = sh.can.length > 1 ? sh.can.length + ' guns you can get share this' : sh.cant.length > 1 ? sh.cant.length + ' admin guns share this' : '';
     const nameInput = h('input', { type: 'text', value: label(c.key), 'aria-label': 'Name of this sound',
       oninput: (e) => { S.labels[c.key] = e.target.value; save(); relabel(c.key); updateCount(); }, onclick: (e) => e.stopPropagation() });
-    const card = h('div', { class: 'clip' + (ui.picked === c.key ? ' sel' : ''), style: '--hue:' + color(c.key), draggable: true,
+    const card = h('div', { class: 'clip' + (ui.picked === c.key ? ' sel' : '') + (warn ? ' bad' : ''), style: '--hue:' + color(c.key), draggable: true,
         ondragstart: (e) => { e.dataTransfer.setData('text/plain', c.key); e.dataTransfer.effectAllowed = 'copy'; },
         onclick: () => { if (c.kind !== 'ambient') pick(c.key); } },
       h('div', { class: 'top' },
@@ -225,6 +263,7 @@
         c.seconds + ' s',
         c.kind === 'ambient' ? null : h('button', { class: 'linklike', title: 'Show only the weapons that use this sound', onclick: (e) => { e.stopPropagation(); ui.onlyClip = ui.onlyClip === c.key ? null : c.key; renderClips(); renderWeapons(); } }, ui.onlyClip === c.key ? 'showing ' + n + ' weapons (click to show all)' : 'used by ' + n),
         c.kind === 'ambient' ? null : h('label', { onclick: (e) => e.stopPropagation() }, h('input', { type: 'checkbox', checked: pooled, onchange: (e) => { S.pool = e.target.checked ? [...S.pool, c.key] : S.pool.filter(k => k !== c.key); save(); updateCount(); } }), ' 💥 in explosion pool')),
+      warn ? h('div', { class: 'meta clashing' }, '⚠ ' + warn) : null,
       h('div', { class: 'meta' }, h('span', { title: 'the name of the file you downloaded' }, c.orig), c.note ? h('span', { class: 'note' }, c.note) : null));
     card.dataset.key = c.key;
     return card;
@@ -249,22 +288,23 @@
       h('option', { value: '' }, '— old made-up sound —'),
       ...D.clips.filter(c => c.kind !== 'ambient').map(c => { const o = h('option', { value: c.key, 'data-key': c.key }, label(c.key)); if (a.clip === c.key) o.selected = true; return o; }));
     const tag = w.kind === 'melee' ? 'swing' : w.kind === 'gun' && /thrown/i.test(w.type) ? 'throw' : 'shot';
-    const r = h('div', { class: 'row' + (isChanged(id) ? ' changed' : '') + (a.clip ? '' : ' empty'), style: '--hue:' + color(a.clip), 'data-id': id,
+    const clash = clashesOf(id).map(x => weaponBy[x].name);
+    const r = h('div', { class: 'row' + (isChanged(id) ? ' changed' : '') + (a.clip ? '' : ' empty') + (clash.length ? ' clash' : ''), style: '--hue:' + color(a.clip), 'data-id': id,
         ondragover: (e) => { e.preventDefault(); r.classList.add('drop'); }, ondragleave: () => r.classList.remove('drop'),
         ondrop: (e) => { e.preventDefault(); r.classList.remove('drop'); const k = e.dataTransfer.getData('text/plain'); if (clipBy[k] && clipBy[k].kind !== 'ambient') { give(id, k); save(); refreshRow(id); } } },
       h('div', { class: 'play' },
         h('button', { title: 'Hear one ' + tag, onclick: () => playWeapon(id, 1) }, '▶'),
         h('button', { title: 'Hear it at this weapon\'s fire rate', onclick: () => playWeapon(id, w.fireMs >= 600 ? 3 : 8) }, '▶▶')),
       h('div', { class: 'who', onclick: () => { if (ui.picked) { give(id, ui.picked); save(); refreshRow(id); } } },
-        w.name, w.archived ? h('span', { class: 'badge', title: 'not sold in the shop right now' }, 'not in shop') : null, h('small', {}, w.type + ' · ' + id)),
+        w.name, w.archived ? h('span', { class: 'badge', title: 'not sold in the shop right now' }, 'not in shop') : null, h('small', {}, w.type + ' · ' + id),
+        clash.length ? h('small', { class: 'clashing' }, '⚠ same sound as ' + clash.join(', ')) : null),
       sel,
       h('label', { class: 'nums', title: 'Pitch: 1 = as recorded, lower = deeper' }, 'pitch', h('input', { type: 'number', min: '0.5', max: '1.6', step: '0.05', value: a.pitch, onchange: (e) => { a.pitch = Math.min(1.6, Math.max(0.5, +e.target.value || 1)); save(); refreshRow(id); } })),
       h('label', { class: 'nums', title: 'Volume: 1 = as the game plays it' }, 'vol', h('input', { type: 'number', min: '0.1', max: '3', step: '0.1', value: a.vol, onchange: (e) => { a.vol = Math.min(3, Math.max(0.1, +e.target.value || 1)); save(); refreshRow(id); } })));
     return r;
   }
-  function refreshRow(id) {
-    const old = document.querySelector('.row[data-id="' + id + '"]'); if (old) old.replaceWith(row(id));
-    renderClips(); updateCount();
+  function refreshRow(id) {                                           // (every row: giving a sound to one gun can make another gun's row a clash, or end one)
+    renderWeapons(); renderClips(); updateCount();
   }
   function visible(w) {
     const q = $('#search').value.trim().toLowerCase();
@@ -272,6 +312,7 @@
     if ($('#onlyEmpty').checked && S.weapons[w.id].clip) return false;
     if ($('#hideOld').checked && w.archived) return false;
     if (ui.onlyClip && S.weapons[w.id].clip !== ui.onlyClip) return false;
+    if ($('#onlyClash').checked && !clashesOf(w.id).length) return false;
     return true;
   }
   function renderWeapons() {
@@ -301,8 +342,10 @@
     for (const c of D.clips) { const lab = label(c.key); if (full || lab !== c.label) clips[c.key] = { label: lab, file: c.file, original: c.orig }; }
     const out = { format: 'pvp-sound-arrangement-1', full: !!full, weapons, clips, explosionPool: S.pool };
     if (S.ambient.length) out.ambientPlaysOn = S.ambient;
+    const sh = sharing(), tooMuch = Object.entries(sh).filter(([k, e]) => e.can.length > 1 || e.cant.length > 1);
+    if (tooMuch.length) out.stillShared = Object.fromEntries(tooMuch.map(([k, e]) => [k, [...(e.can.length > 1 ? e.can : []), ...(e.cant.length > 1 ? e.cant : [])]]));
     const lines = Object.entries(weapons).map(([id, v]) => '    ' + JSON.stringify(id) + ': ' + JSON.stringify(v));
-    const head = JSON.stringify({ format: out.format, full: out.full, clips: out.clips, explosionPool: out.explosionPool, ambientPlaysOn: out.ambientPlaysOn }, null, 1).replace(/\n}$/, ',');
+    const head = JSON.stringify({ format: out.format, full: out.full, clips: out.clips, explosionPool: out.explosionPool, ambientPlaysOn: out.ambientPlaysOn, stillShared: out.stillShared }, null, 1).replace(/\n}$/, ',');
     return head + '\n "weapons": {\n' + lines.join(',\n') + '\n }\n}';
   }
   async function copyText(text) {
@@ -310,7 +353,7 @@
     const ta = h('textarea', { style: 'position:fixed;left:-999px' }); ta.value = text; document.body.append(ta); ta.select();
     let ok = false; try { ok = document.execCommand('copy'); } catch (e) {} ta.remove(); return ok;
   }
-  $('#copy').onclick = async () => { const n = changeList().length; (await copyText(arrangement(false))) ? toast('Copied ' + n + ' changed weapon' + (n === 1 ? '' : 's') + '. Paste it in the chat.') : toast('Could not copy. Use "Save as file" instead.', true); };
+  $('#copy').onclick = async () => { const n = changeList().length, bad = clashingIds().length; (await copyText(arrangement(false))) ? toast('Copied ' + n + ' changed weapon' + (n === 1 ? '' : 's') + '. Paste it in the chat.' + (bad ? ' (' + bad + ' guns still share a sound.)' : ''), !!bad) : toast('Could not copy. Use "Save as file" instead.', true); };
   $('#save').onclick = () => {
     const blob = new Blob([arrangement(true)], { type: 'application/json' }), a = h('a', { href: URL.createObjectURL(blob), download: 'sound-arrangement.json' });
     document.body.append(a); a.click(); a.remove(); toast('Saved sound-arrangement.json (in your Downloads). Attach it in the chat.');
@@ -333,7 +376,7 @@
   $('#reset').onclick = () => { if (!confirm('Throw away your changes and go back to what the game plays now?')) return; S = fresh(); ui = { picked: null, onlyClip: null, mapsOpen: false }; document.body.classList.remove('picking'); save(); renderAll(); };
   $('#stop').onclick = stopAll;
   $('#vol').oninput = (e) => { master.gain.value = +e.target.value; };
-  for (const id of ['#search', '#onlyEmpty', '#hideOld']) $(id).addEventListener('input', renderWeapons);
+  for (const id of ['#search', '#onlyEmpty', '#hideOld', '#onlyClash']) $(id).addEventListener('input', renderWeapons);
   function renderAll() { renderBanner(); renderClips(); renderWeapons(); updateCount(); }
   renderAll();
   window.__organizer = { state: () => S, give, changeList, arrangement, paramsFor, decode, play, ui: () => ui };

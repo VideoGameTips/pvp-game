@@ -3260,6 +3260,15 @@ if (ok && process.argv.includes('--sample')) {
     else if (LENGTH[d.file] && d.from + d.len * d.rate[1] > LENGTH[d.file] + 0.01) more.push(id + ' plays past the end of its file (from ' + d.from + ' + ' + d.len + ' x ' + d.rate[1] + ' > ' + LENGTH[d.file] + ')');
     if (!(d.gain > 0) || !(d.len > 0.2) || !(d.fade > 0 && d.fade <= d.len) || !(d.rate[0] > 0.5 && d.rate[1] < 2 && d.rate[0] <= d.rate[1])) more.push(id + ' has a setting that makes no sense: ' + JSON.stringify(d));
   }
+  // One recording, one gun (Andy's rule): no two guns you can get play the same recording, no two admin guns do; one admin gun may share with one gun you can get (admin guns are not obtainable).
+  // A gun that is not in the shop any more can not be got either, so it counts on the admin side.
+  { const kinds = JSON.parse(vm.runInThisContext('JSON.stringify([...WEAPONS, ...MELEE_ITEMS].map(w => ({ id: w.id, admin: /^Admin/i.test(w.type || "") || !!w.adminItem, archived: !!w.archived })))')), kindOf = Object.fromEntries(kinds.map(k => [k.id, k]));
+    const byFile = {}; for (const id of Object.keys(tbl.samples)) (byFile[tbl.samples[id].file] = byFile[tbl.samples[id].file] || []).push(id);
+    for (const [file, ids] of Object.entries(byFile)) {
+      const can = ids.filter(id => kindOf[id] && !kindOf[id].admin && !kindOf[id].archived), cant = ids.filter(id => !can.includes(id));
+      if (can.length > 1) more.push('one recording, one gun: ' + can.join(' and ') + ' can all be got and all play ' + file + ' (give all but one of them another recording, or the made-up sound)');
+      if (cant.length > 1) more.push('one recording, one gun: ' + cant.join(' and ') + ' can not be got (admin or out of the shop) and all play ' + file + ': only one of them may');
+    } }
   const out = vm.runInThisContext(`(() => {
     const issues = [];
     const node = () => { const t = { connect: x => x, disconnect() {}, start() {}, stop() {}, setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {}, setTargetAtTime() {}, cancelScheduledValues() {}, value: 0 };
@@ -3276,8 +3285,6 @@ if (ok && process.argv.includes('--sample')) {
       if (!WEAPON_SAMPLES.vector) issues.push('the Vector should have a sample');
       { const D = WEAPON_SAMPLES.vector; if (D.rate[0] !== 1 || D.rate[1] !== 1) issues.push('the Vector recording should play at its own pitch (rate 1): it is the sound that was sent'); if (D.from !== 0 || D.len < 1) issues.push('the Vector recording should play from its start, and all of its audible length'); }
       for (const id of ids) if (!WEAPONS.some(w => w.id === id)) issues.push(id + ' has a recording but is not a weapon');
-      // the heavier the gun, the lower the shared recording plays
-      { const R = (i) => WEAPON_SAMPLES[i].rate[0]; if (!(R('amr') < R('srx') && R('barrett') <= R('amr'))) issues.push('the bigger snipers should play the ring lower: srx ' + R('srx') + ', amr ' + R('amr') + ', barrett ' + R('barrett')); }
       // a big shot's own ability keeps its own sound
       for (const ab of ['hand_cannon_ab', 'barrett_ab', 'desert_eagle_ab']) { if (WEAPON_SAMPLES[ab]) issues.push(ab + ' is a powershot: it keeps its own sound'); }
       // not loaded yet: the made-up shot, for each of them
@@ -3349,14 +3356,14 @@ if (ok && process.argv.includes('--sample')) {
         // no data (or broken data): the file is fetched instead, one fetch per file however many weapons use it
         for (const bad of [undefined, { 'sounds/vector-shot.mp3': 'not base64 !!' }]) {
           window.SOUND_DATA = bad; for (const k of Object.keys(_sampleState)) delete _sampleState[k]; urls.length = 0;
-          weaponSamplesPreload(ctx); const want = new Set(Object.values(SAMPLE_FILES));
+          weaponSamplesPreload(ctx); const want = new Set([...Object.values(WEAPON_SAMPLES), ...Object.values(EVENT_SAMPLES).flatMap(E => E.clips)].map(d => SAMPLE_FILES[d.file]));   // (a clip nobody plays yet is not fetched)
           if (urls.length !== want.size || new Set(urls).size !== want.size) issues.push('without usable data each file should be fetched once, however many weapons use it: ' + urls.length + ' fetches for ' + want.size + ' files (' + (bad ? 'broken data' : 'no data') + ')');
         }
         window.SOUND_DATA = keepData; }
     } finally { getAudioCtx = saved.ctx; playMuzzleBlast = saved.blast; globalThis.fetch = saved.fetch; window.SOUND_DATA = saved.data; for (const k of Object.keys(_eventSampleState)) delete _eventSampleState[k]; for (const k of Object.keys(soundEventLastAt)) delete soundEventLastAt[k]; for (const k of Object.keys(_sampleState)) delete _sampleState[k]; Object.assign(_sampleState, saved.st); _sampleVoices = saved.voices; for (const k of Object.keys(weaponSoundLastAt)) delete weaponSoundLastAt[k]; Object.assign(weaponSoundLastAt, saved.last); }
     return issues;
   })()`);
-  console.log('sample checks: every recording plays when it is loaded (and for someone far away), the big explosions are recordings (the small ones are not, one roar per rocket, never the same clip twice running), the made-up shot before that or if it never comes, guns without one keep theirs, powershots keep their own, no skin changes it, heavier snipers play lower, bursts are capped, each file is fetched once (never, when the page carries it), the page carries the played start of every file as data (the file bytes themselves, long enough for every cut), the zip carries that, every cut fits its clip');
+  console.log('sample checks: every recording plays when it is loaded (and for someone far away), the big explosions are recordings (the small ones are not, one roar per rocket, never the same clip twice running), the made-up shot before that or if it never comes, guns without one keep theirs, powershots keep their own, no skin changes it, one recording per gun (one gun you can get and one admin gun at most), bursts are capped, each file is fetched once (never, when the page carries it), the page carries the played start of every file as data (the file bytes themselves, long enough for every cut), the zip carries that, every cut fits its clip');
   if (out.length || more.length) { ok = false; console.log([...more, ...out].join('\n')); }
 }
 
