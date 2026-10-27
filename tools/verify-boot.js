@@ -3260,15 +3260,19 @@ if (ok && process.argv.includes('--sample')) {
     else if (LENGTH[d.file] && d.from + d.len * d.rate[1] > LENGTH[d.file] + 0.01) more.push(id + ' plays past the end of its file (from ' + d.from + ' + ' + d.len + ' x ' + d.rate[1] + ' > ' + LENGTH[d.file] + ')');
     if (!(d.gain > 0) || !(d.len > 0.2) || !(d.fade > 0 && d.fade <= d.len) || !(d.rate[0] > 0.5 && d.rate[1] < 2 && d.rate[0] <= d.rate[1])) more.push(id + ' has a setting that makes no sense: ' + JSON.stringify(d));
   }
-  // One recording, one gun (Andy's rule): no two guns you can get play the same recording, no two admin guns do; one admin gun may share with one gun you can get (admin guns are not obtainable).
-  // A gun that is not in the shop any more can not be got either, so it counts on the admin side.
+  // One recording, one gun, unless they are really alike (Andy's rule). Two guns you can get may share a recording only if it is tweaked enough to be two sounds: pitch at least 12 % apart,
+  // and no pitch outside 0.8 to 1.25 (less sounds identical, more distorts). A gun that can not be got (admin, or out of the shop) may play the very same sound as one you can get; two of
+  // those follow the same rule as two you can get. (Whether guns are "really alike" is a call made in the table; this checks what can be measured.)
   { const kinds = JSON.parse(vm.runInThisContext('JSON.stringify([...WEAPONS, ...MELEE_ITEMS].map(w => ({ id: w.id, admin: /^Admin/i.test(w.type || "") || !!w.adminItem, archived: !!w.archived })))')), kindOf = Object.fromEntries(kinds.map(k => [k.id, k]));
+    const MIN_RATIO = 1.12, LO = 0.8, HI = 1.25, pitch = (id) => (tbl.samples[id].rate[0] + tbl.samples[id].rate[1]) / 2;
+    for (const id of Object.keys(tbl.samples)) if (pitch(id) < LO || pitch(id) > HI) more.push(id + ' plays its recording at pitch ' + pitch(id) + ': outside ' + LO + ' to ' + HI + ' it distorts');
     const byFile = {}; for (const id of Object.keys(tbl.samples)) (byFile[tbl.samples[id].file] = byFile[tbl.samples[id].file] || []).push(id);
     for (const [file, ids] of Object.entries(byFile)) {
       const can = ids.filter(id => kindOf[id] && !kindOf[id].admin && !kindOf[id].archived), cant = ids.filter(id => !can.includes(id));
-      if (can.length > 1) more.push('one recording, one gun: ' + can.join(' and ') + ' can all be got and all play ' + file + ' (give all but one of them another recording, or the made-up sound)');
-      if (cant.length > 1) more.push('one recording, one gun: ' + cant.join(' and ') + ' can not be got (admin or out of the shop) and all play ' + file + ': only one of them may');
-    } }
+      for (const group of [can, cant]) for (let i = 0; i < group.length; i++) for (let j = i + 1; j < group.length; j++) {
+        const r = Math.max(pitch(group[i]), pitch(group[j])) / Math.min(pitch(group[i]), pitch(group[j]));
+        if (r < MIN_RATIO) more.push('one recording, one gun: ' + group[i] + ' and ' + group[j] + ' both play ' + file + ' at pitches ' + pitch(group[i]) + ' and ' + pitch(group[j]) + ' (' + r.toFixed(2) + ' apart): too alike, make them at least ' + MIN_RATIO + ' apart or give one another sound' + (group === cant ? ' (both can not be got: only a gun you can get may share a sound untouched)' : ''));
+      } } }
   const out = vm.runInThisContext(`(() => {
     const issues = [];
     const node = () => { const t = { connect: x => x, disconnect() {}, start() {}, stop() {}, setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {}, setTargetAtTime() {}, cancelScheduledValues() {}, value: 0 };
@@ -3363,7 +3367,7 @@ if (ok && process.argv.includes('--sample')) {
     } finally { getAudioCtx = saved.ctx; playMuzzleBlast = saved.blast; globalThis.fetch = saved.fetch; window.SOUND_DATA = saved.data; for (const k of Object.keys(_eventSampleState)) delete _eventSampleState[k]; for (const k of Object.keys(soundEventLastAt)) delete soundEventLastAt[k]; for (const k of Object.keys(_sampleState)) delete _sampleState[k]; Object.assign(_sampleState, saved.st); _sampleVoices = saved.voices; for (const k of Object.keys(weaponSoundLastAt)) delete weaponSoundLastAt[k]; Object.assign(weaponSoundLastAt, saved.last); }
     return issues;
   })()`);
-  console.log('sample checks: every recording plays when it is loaded (and for someone far away), the big explosions are recordings (the small ones are not, one roar per rocket, never the same clip twice running), the made-up shot before that or if it never comes, guns without one keep theirs, powershots keep their own, no skin changes it, one recording per gun (one gun you can get and one admin gun at most), bursts are capped, each file is fetched once (never, when the page carries it), the page carries the played start of every file as data (the file bytes themselves, long enough for every cut), the zip carries that, every cut fits its clip');
+  console.log('sample checks: every recording plays when it is loaded (and for someone far away), the big explosions are recordings (the small ones are not, one roar per rocket, never the same clip twice running), the made-up shot before that or if it never comes, guns without one keep theirs, powershots keep their own, no skin changes it, one recording per gun (guns that share one differ in pitch by 12 % or more; an admin gun may match one gun you can get), bursts are capped, each file is fetched once (never, when the page carries it), the page carries the played start of every file as data (the file bytes themselves, long enough for every cut), the zip carries that, every cut fits its clip');
   if (out.length || more.length) { ok = false; console.log([...more, ...out].join('\n')); }
 }
 

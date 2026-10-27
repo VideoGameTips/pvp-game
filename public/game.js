@@ -4611,44 +4611,62 @@ const SAMPLE_FILES = {
   boomTwin:  'sounds/boom-twin.mp3',        // a blast, a lull, and a second blast at 2.7 s (that one is not played)
   boomCrack: 'sounds/boom-crack.mp3',       // a very sudden start with a real crack in it
 };
-// One recording, one gun. No two guns you can get play the same recording, and no two admin guns do (admin guns can not be obtained, so an admin gun may share a recording with ONE gun you can get).
-// Where there is no recording left a gun keeps its made-up sound. Who got which was decided from what the clips sound like, and Andy moves them in dist/sound-organizer.html
-// (tools/make-sound-organizer.js); `verify-boot --sample` fails if two guns of a kind share a recording. The `lightning` clip is on nobody: it is the katana's (melee swings do not play recordings yet).
+// One recording, one gun, unless they are really alike. Two guns you can get may share a recording only if it is tweaked enough to sound like two sounds: the pitch (`rate`) at least 12 % apart, and
+// nowhere outside 0.8 to 1.25 (less than that sounds identical, more distorts: Andy). An admin gun can not be obtained, so it may play the very same sound as one gun you can get; two admin guns
+// follow the rule of two guns you can get. Where there is no recording a gun keeps its made-up sound. Who got which was decided from what the clips sound like, and Andy moves them in
+// dist/sound-organizer.html (tools/make-sound-organizer.js); `verify-boot --sample` fails if the rule is broken. The `lightning` clip is on nobody: it is the katana's (melee swings do not play recordings yet).
+// Where a clip has a lead-in the start (`from`) is moved a little too, the "delay": the ring, the heavy shot, the second quick shot.
 const WEAPON_SAMPLES = {
   vector:           { file: 'vector',    gain: 0.20, from: 0.00, len: 1.2, fade: 0.4, rate: [1, 1] },   // (the clip as it was made: the same sound every shot, at its own pitch; only the last 1.8 s of silence is not played)
   p90_spec:         { file: 'vector',    gain: 0.20, from: 0.00, len: 0.50, fade: 0.25, rate: [1.1, 1.1] },
-  // snipers: the ring
+  // snipers: the ring. The bigger the gun the lower it plays
   srx:              { file: 'ring',      gain: 1.16, from: 0.10, len: 2.0, fade: 0.7, rate: [1, 1] },
+  amr:              { file: 'ring',      gain: 1.11, from: 0.12, len: 2.0, fade: 0.7, rate: [0.88, 0.88] },
   barrett:          { file: 'ring',      gain: 1.18, from: 0.10, len: 2.0, fade: 0.7, rate: [0.85, 0.85] },
   // big-bore pistols: the thud
   hand_cannon:      { file: 'thump',     gain: 0.43, from: 0.02, len: 1.6, fade: 0.6, rate: [1, 1] },
   desert_eagle:     { file: 'thump',     gain: 0.62, from: 0.02, len: 1.6, fade: 0.6, rate: [1.08, 1.08] },
-  // things that are launched: the blast, and the RPG-7's rocket (a recording of its own: "A heavy RPG rocket...")
+  // things that are launched: the blast (the Bazooka at its own pitch, the grenade launcher high), and the RPG-7's rocket (a recording of its own: "A heavy RPG rocket...")
+  bazooka:          { file: 'blast',     gain: 0.17, from: 0.00, len: 3.2, fade: 1.2, rate: [1, 1] },
   grenade_launcher: { file: 'blast',     gain: 0.14, from: 0.00, len: 1.4, fade: 0.6, rate: [1.25, 1.25] },
   rpg:              { file: 'rocket',    gain: 0.19, from: 0.00, len: 2.6, fade: 1.2, rate: [1, 1] },
-  // the shotgun: the boom, cut before the faint click that follows it at 1 s
+  // shotguns: the boom, cut before the faint click that follows it at 1 s (a bigger bore plays it lower, a smaller one higher)
   sg8:              { file: 'isolated',  gain: 0.24, from: 0.00, len: 0.95, fade: 0.35, rate: [1, 1] },
-  // the big rifle: the heavy shot, cut before the hiss of room that sits under it from 1.8 s (the chain gun plays a short piece of it)
+  sawed_off:        { file: 'isolated',  gain: 0.22, from: 0.00, len: 0.95, fade: 0.35, rate: [0.87, 0.87] },
+  shorty:           { file: 'isolated',  gain: 0.21, from: 0.00, len: 0.95, fade: 0.35, rate: [1.14, 1.14] },
+  // big rifles: the heavy shot, cut before the hiss of room that sits under it from 1.8 s (the chain gun plays a short piece of it)
   lever:            { file: 'heavy',     gain: 0.31, from: 0.04, len: 1.7, fade: 0.7, rate: [0.95, 0.95] },
+  m1_garand:        { file: 'heavy',     gain: 0.31, from: 0.06, len: 1.7, fade: 0.7, rate: [1.12, 1.12] },
   mk44:             { file: 'heavy',     gain: 0.31, from: 0.04, len: 0.50, fade: 0.25, rate: [0.9, 0.9] },
-  // the rapid-fire guns get the shortest clips, cut to half a second or less: the SMG and the PDW, the LMG and the Gatling
+  // the rapid-fire guns get the shortest clips, cut to half a second or less (the heavier the gun, the lower it plays): SMGs
   p90:              { file: 'quick1',    gain: 0.76, from: 0.01, len: 0.38, fade: 0.20, rate: [1.15, 1.15] },
+  mp40:             { file: 'quick1',    gain: 0.62, from: 0.01, len: 0.40, fade: 0.20, rate: [1.0, 1.0] },
+  machine_pistol:   { file: 'quick1',    gain: 0.69, from: 0.01, len: 0.40, fade: 0.20, rate: [0.87, 0.87] },
   hkmp7:            { file: 'quick1',    gain: 0.61, from: 0.01, len: 0.40, fade: 0.20, rate: [0.98, 0.98] },
-  rpd:              { file: 'quick2',    gain: 0.85, from: 0.08, len: 0.38, fade: 0.20, rate: [1.0, 1.0] },
+  // machine guns
+  rpd:              { file: 'quick2',    gain: 0.85, from: 0.08, len: 0.36, fade: 0.20, rate: [1.14, 1.14] },
+  mg42:             { file: 'quick2',    gain: 0.81, from: 0.09, len: 0.38, fade: 0.20, rate: [1.0, 1.0] },
+  minigun:          { file: 'quick2',    gain: 0.75, from: 0.10, len: 0.38, fade: 0.20, rate: [0.87, 0.87] },
   m134:             { file: 'quick2',    gain: 0.68, from: 0.08, len: 0.38, fade: 0.20, rate: [0.85, 0.85] },
-  // assault rifles, the battle rifle's and the arena rifle's: a take each (the dry ones), the AK20's own, and the full-auto pistol shares the arena rifle's
+  // assault rifles: a take each (the dry ones: the burst rifle and the XM7 share the first, the arena rifle and the full-auto pistol the second), the AK20's own
   burst:            { file: 'dry1',      gain: 0.27, from: 0.01, len: 0.70, fade: 0.35, rate: [0.95, 0.95] },
   xm7:              { file: 'dry1',      gain: 0.27, from: 0.01, len: 0.70, fade: 0.35, rate: [1.02, 1.02] },
   m4a1_arena:       { file: 'dry4',      gain: 0.25, from: 0.02, len: 0.70, fade: 0.35, rate: [1.0, 1.0] },
   glock18:          { file: 'dry4',      gain: 0.25, from: 0.02, len: 0.50, fade: 0.25, rate: [1.1, 1.1] },
   ak20:             { file: 'single',    gain: 0.31, from: 0.00, len: 0.70, fade: 0.35, rate: [1.0, 1.0] },
-  // pistols, then revolvers
+  // pistols, then revolvers (the clips start with the shot itself: nothing at the start can be moved without cutting into it, so these differ in pitch only)
   pistol:           { file: 'sharp3',    gain: 0.86, from: 0.00, len: 0.80, fade: 0.40, rate: [1.0, 1.0] },
+  mauser:           { file: 'sharp3',    gain: 0.83, from: 0.00, len: 0.80, fade: 0.40, rate: [0.88, 0.88] },
+  akimbo:           { file: 'sharp3',    gain: 0.90, from: 0.00, len: 0.70, fade: 0.40, rate: [1.14, 1.14] },
   m1911:            { file: 'sharp3',    gain: 0.92, from: 0.00, len: 0.70, fade: 0.40, rate: [1.06, 1.06] },
-  revolver:         { file: 'sharp1',    gain: 0.35, from: 0.00, len: 1.00, fade: 0.45, rate: [0.92, 0.92] },
+  auto_revolver:    { file: 'sharp1',    gain: 0.35, from: 0.00, len: 0.60, fade: 0.45, rate: [0.82, 0.82] },
+  revolver:         { file: 'sharp1',    gain: 0.35, from: 0.00, len: 1.00, fade: 0.45, rate: [0.93, 0.93] },
+  duelist_pistol:   { file: 'sharp1',    gain: 0.38, from: 0.00, len: 1.00, fade: 0.45, rate: [1.05, 1.05] },
+  snub_revolver:    { file: 'sharp1',    gain: 0.36, from: 0.00, len: 0.90, fade: 0.45, rate: [1.19, 1.19] },
   five_seven:       { file: 'sharp1',    gain: 0.34, from: 0.00, len: 0.70, fade: 0.45, rate: [1.1, 1.1] },
-  // the heavy launcher: a big low boom (the mounted MG plays a short piece of it)
+  // the heavy launchers: a big low boom (the mounted MG plays a short piece of it)
   mortar_rifle:     { file: 'heavy3',    gain: 0.17, from: 0.00, len: 1.80, fade: 0.70, rate: [0.9, 0.9] },
+  javelin_launcher: { file: 'heavy3',    gain: 0.18, from: 0.00, len: 1.60, fade: 0.70, rate: [1.05, 1.05] },
   gau19:            { file: 'heavy3',    gain: 0.17, from: 0.00, len: 0.50, fade: 0.25, rate: [0.85, 0.85] },
   // the other shotgun-like gun: a tighter take of the isolated boom
   gunslinger:       { file: 'isolatedB', gain: 0.26, from: 0.00, len: 0.80, fade: 0.35, rate: [1.0, 1.0] },

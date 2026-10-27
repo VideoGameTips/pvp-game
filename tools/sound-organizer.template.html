@@ -80,7 +80,7 @@
   <input id="search" type="search" placeholder="Find a weapon…" size="16">
   <label><input id="onlyEmpty" type="checkbox"> only weapons with no recording</label>
   <label><input id="hideOld" type="checkbox"> hide weapons that are not in the shop</label>
-  <label><input id="onlyClash" type="checkbox"> only guns that share a sound</label>
+  <label><input id="onlyClash" type="checkbox"> only guns that sound too alike</label>
   <span class="grow"></span>
   <span id="changes"></span>
   <button id="copy" class="primary" title="Copy only what you changed, ready to paste into the chat">Copy my changes</button>
@@ -149,20 +149,29 @@
     return n;
   }
 
-  // ---------- the rule: one sound per gun. Guns you can get never share a sound with each other; admin guns (and guns that are out of the shop) can not be got, so one of them may share
-  // a sound with ONE gun you can get, but not two of them with each other.
+  // ---------- the rule: one sound per gun, unless they are really alike. Two guns you can get may share a sound only if its pitch is tweaked at least 12 % apart (less sounds identical),
+  // and no pitch outside 0.8 to 1.25 (more distorts). An admin gun (or one that is out of the shop) can not be got, so it may play the very same sound as one gun you can get; two of those
+  // follow the same rule as two guns you can get. (The same rule is checked in tools/verify-boot.js --sample.)
+  const MIN_RATIO = 1.12, LO = 0.8, HI = 1.25;
   const canGet = (w) => !w.admin && !w.archived;
   function sharing() {
     const m = {};
     for (const w of D.weapons) { const k = S.weapons[w.id].clip; if (!k) continue; const e = m[k] || (m[k] = { can: [], cant: [] }); (canGet(w) ? e.can : e.cant).push(w.id); }
     return m;
   }
-  function clashesOf(id, m) {                                         // the other guns this one is not allowed to share its sound with
+  const apart = (a, b) => Math.max(a, b) / Math.min(a, b);
+  function clashesOf(id, m) {                                         // the guns this one sounds too much like: same kind, same sound, pitch less than 12 % apart
     const w = weaponBy[id], k = S.weapons[id].clip; if (!k) return [];
-    const e = (m || sharing())[k], same = canGet(w) ? e.can : e.cant;
-    return same.filter(x => x !== id);
+    const e = (m || sharing())[k], same = canGet(w) ? e.can : e.cant, p = S.weapons[id].pitch;
+    return same.filter(x => x !== id && apart(p, S.weapons[x].pitch) < MIN_RATIO - 1e-9);
+  }
+  const outOfRange = (id) => S.weapons[id].clip && (S.weapons[id].pitch < LO - 1e-9 || S.weapons[id].pitch > HI + 1e-9);
+  function freePitch(id) {                                             // a pitch for this gun that sounds apart from the guns it shares the sound with (or 1 if nothing is in the way)
+    for (const c of [1, 0.88, 1.14, 0.82, 1.2, 0.94, 1.07]) { S.weapons[id].pitch = c; if (!clashesOf(id).length) return c; }
+    S.weapons[id].pitch = 1; return 1;
   }
   const clashingIds = () => { const m = sharing(); return D.weapons.filter(w => clashesOf(w.id, m).length).map(w => w.id); };
+  const needsWork = (id) => clashesOf(id).length || outOfRange(id);
 
   // ---------- sound (Web Audio: decodes the clips that are already inside this page, so it works opened as a file)
   const AC = new (window.AudioContext || window.webkitAudioContext)();
@@ -209,7 +218,12 @@
   let toastT = 0;
   function toast(msg, bad) { const t = $('#toast'); t.textContent = msg; t.style.background = bad ? 'var(--bad)' : 'var(--good)'; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2400); }
   const used = (key) => D.weapons.filter(w => S.weapons[w.id].clip === key);
-  function give(id, key) { const a = S.weapons[id]; if (a.clip === key) return; a.clip = key; if (key && key !== weaponBy[id].cur.clip) { /* a new clip starts at its normal pitch */ a.pitch = 1; } else if (key === weaponBy[id].cur.clip) a.pitch = weaponBy[id].cur.pitch; }
+  function give(id, key) {
+    const a = S.weapons[id]; if (a.clip === key) return;
+    a.clip = key;
+    if (key === weaponBy[id].cur.clip) a.pitch = weaponBy[id].cur.pitch;                // back to the clip it had: its old pitch
+    else { a.pitch = 1; if (key) freePitch(id); }                                         // a new clip: its own pitch, moved off any gun it would sound identical to
+  }
   function pick(key) { ui.picked = ui.picked === key ? null : key; document.body.classList.toggle('picking', !!ui.picked); renderBanner(); renderClips(); renderWeapons(); }
   function renderBanner() {
     const b = $('#banner'); b.className = ui.picked ? 'on' : '';
@@ -221,13 +235,14 @@
 
   // ---------- the sounds column
   function renderRules() {
-    const m = sharing(), bad = clashingIds(), tooMuch = Object.entries(m).filter(([k, e]) => e.can.length > 1 || e.cant.length > 1);
+    const m = sharing(), bad = clashingIds(), far = D.weapons.filter(w => outOfRange(w.id)), tooMuch = Object.entries(m).filter(([k]) => D.weapons.some(w => S.weapons[w.id].clip === k && clashesOf(w.id, m).length));
     const count = (kind) => { const ws = D.weapons.filter(w => w.kind === kind && canGet(w)); return [ws.filter(w => S.weapons[w.id].clip).length, ws.length]; };
     const [gn, gt] = count('gun'), [mn, mt] = count('melee');
     const free = D.clips.filter(c => c.kind !== 'ambient' && c.kind !== 'boom' && !(m[c.key] && m[c.key].can.length)).map(c => label(c.key));
     $('#rules').replaceChildren(
-      h('p', {}, h('b', {}, 'The rule: '), 'one sound per gun. A gun you can get may share a sound with one admin gun, never with another gun you can get.'),
-      tooMuch.length ? h('p', { class: 'no' }, '⚠ ' + bad.length + ' guns share a sound they should not (' + tooMuch.length + ' sounds)') : h('p', { class: 'ok' }, '✓ nobody shares a sound they should not'),
+      h('p', {}, h('b', {}, 'The rule: '), 'one sound per gun. Guns that are really alike may share a sound if their pitch is 12% or more apart (less sounds the same, outside ' + LO + ' to ' + HI + ' it distorts). An admin gun may be identical to one gun you can get.'),
+      tooMuch.length ? h('p', { class: 'no' }, '⚠ ' + bad.length + ' guns sound too much alike (' + tooMuch.length + ' sounds)') : h('p', { class: 'ok' }, '✓ nobody sounds too much like another gun'),
+      far.length ? h('p', { class: 'no' }, '⚠ ' + far.length + ' guns have a pitch outside ' + LO + ' to ' + HI) : null,
       h('p', {}, 'Guns you can get with a sound: ' + gn + ' of ' + gt + (gn < gt ? ' (' + (gt - gn) + ' have the old made-up sound)' : '')),
       mt ? h('p', {}, 'Melee you can get with a sound: ' + mn + ' of ' + mt) : null,
       h('p', {}, free.length ? 'Sounds nobody you can get is using: ' + free.join(', ') : 'Every gun sound is taken by a gun you can get.'));
@@ -249,8 +264,9 @@
     }
   }
   function clipCard(c) {
-    const n = used(c.key).length, pooled = S.pool.includes(c.key), sh = sharing()[c.key] || { can: [], cant: [] };
-    const warn = sh.can.length > 1 ? sh.can.length + ' guns you can get share this' : sh.cant.length > 1 ? sh.cant.length + ' admin guns share this' : '';
+    const n = used(c.key).length, pooled = S.pool.includes(c.key), m = sharing();
+    const tooAlike = used(c.key).filter(w => clashesOf(w.id, m).length).length;
+    const warn = tooAlike ? tooAlike + ' guns on this sound are too alike: tweak a pitch by 12% or more, or move one' : '';
     const nameInput = h('input', { type: 'text', value: label(c.key), 'aria-label': 'Name of this sound',
       oninput: (e) => { S.labels[c.key] = e.target.value; save(); relabel(c.key); updateCount(); }, onclick: (e) => e.stopPropagation() });
     const card = h('div', { class: 'clip' + (ui.picked === c.key ? ' sel' : '') + (warn ? ' bad' : ''), style: '--hue:' + color(c.key), draggable: true,
@@ -288,8 +304,8 @@
       h('option', { value: '' }, '— old made-up sound —'),
       ...D.clips.filter(c => c.kind !== 'ambient').map(c => { const o = h('option', { value: c.key, 'data-key': c.key }, label(c.key)); if (a.clip === c.key) o.selected = true; return o; }));
     const tag = w.kind === 'melee' ? 'swing' : w.kind === 'gun' && /thrown/i.test(w.type) ? 'throw' : 'shot';
-    const clash = clashesOf(id).map(x => weaponBy[x].name);
-    const r = h('div', { class: 'row' + (isChanged(id) ? ' changed' : '') + (a.clip ? '' : ' empty') + (clash.length ? ' clash' : ''), style: '--hue:' + color(a.clip), 'data-id': id,
+    const clash = clashesOf(id).map(x => weaponBy[x].name), far = outOfRange(id);
+    const r = h('div', { class: 'row' + (isChanged(id) ? ' changed' : '') + (a.clip ? '' : ' empty') + (clash.length || far ? ' clash' : ''), style: '--hue:' + color(a.clip), 'data-id': id,
         ondragover: (e) => { e.preventDefault(); r.classList.add('drop'); }, ondragleave: () => r.classList.remove('drop'),
         ondrop: (e) => { e.preventDefault(); r.classList.remove('drop'); const k = e.dataTransfer.getData('text/plain'); if (clipBy[k] && clipBy[k].kind !== 'ambient') { give(id, k); save(); refreshRow(id); } } },
       h('div', { class: 'play' },
@@ -297,7 +313,8 @@
         h('button', { title: 'Hear it at this weapon\'s fire rate', onclick: () => playWeapon(id, w.fireMs >= 600 ? 3 : 8) }, '▶▶')),
       h('div', { class: 'who', onclick: () => { if (ui.picked) { give(id, ui.picked); save(); refreshRow(id); } } },
         w.name, w.archived ? h('span', { class: 'badge', title: 'not sold in the shop right now' }, 'not in shop') : null, h('small', {}, w.type + ' · ' + id),
-        clash.length ? h('small', { class: 'clashing' }, '⚠ same sound as ' + clash.join(', ')) : null),
+        clash.length ? h('small', { class: 'clashing' }, '⚠ too much like ' + clash.join(', ') + ': move one pitch 12% or more') : null,
+        far ? h('small', { class: 'clashing' }, '⚠ pitch outside ' + LO + ' to ' + HI + ' distorts') : null),
       sel,
       h('label', { class: 'nums', title: 'Pitch: 1 = as recorded, lower = deeper' }, 'pitch', h('input', { type: 'number', min: '0.5', max: '1.6', step: '0.05', value: a.pitch, onchange: (e) => { a.pitch = Math.min(1.6, Math.max(0.5, +e.target.value || 1)); save(); refreshRow(id); } })),
       h('label', { class: 'nums', title: 'Volume: 1 = as the game plays it' }, 'vol', h('input', { type: 'number', min: '0.1', max: '3', step: '0.1', value: a.vol, onchange: (e) => { a.vol = Math.min(3, Math.max(0.1, +e.target.value || 1)); save(); refreshRow(id); } })));
@@ -312,7 +329,7 @@
     if ($('#onlyEmpty').checked && S.weapons[w.id].clip) return false;
     if ($('#hideOld').checked && w.archived) return false;
     if (ui.onlyClip && S.weapons[w.id].clip !== ui.onlyClip) return false;
-    if ($('#onlyClash').checked && !clashesOf(w.id).length) return false;
+    if ($('#onlyClash').checked && !needsWork(w.id)) return false;
     return true;
   }
   function renderWeapons() {
@@ -342,10 +359,11 @@
     for (const c of D.clips) { const lab = label(c.key); if (full || lab !== c.label) clips[c.key] = { label: lab, file: c.file, original: c.orig }; }
     const out = { format: 'pvp-sound-arrangement-1', full: !!full, weapons, clips, explosionPool: S.pool };
     if (S.ambient.length) out.ambientPlaysOn = S.ambient;
-    const sh = sharing(), tooMuch = Object.entries(sh).filter(([k, e]) => e.can.length > 1 || e.cant.length > 1);
-    if (tooMuch.length) out.stillShared = Object.fromEntries(tooMuch.map(([k, e]) => [k, [...(e.can.length > 1 ? e.can : []), ...(e.cant.length > 1 ? e.cant : [])]]));
+    const sh = sharing(), alike = {};
+    for (const w of D.weapons) if (clashesOf(w.id, sh).length) (alike[S.weapons[w.id].clip] = alike[S.weapons[w.id].clip] || []).push(w.id);
+    if (Object.keys(alike).length) out.tooAlike = alike;
     const lines = Object.entries(weapons).map(([id, v]) => '    ' + JSON.stringify(id) + ': ' + JSON.stringify(v));
-    const head = JSON.stringify({ format: out.format, full: out.full, clips: out.clips, explosionPool: out.explosionPool, ambientPlaysOn: out.ambientPlaysOn, stillShared: out.stillShared }, null, 1).replace(/\n}$/, ',');
+    const head = JSON.stringify({ format: out.format, full: out.full, clips: out.clips, explosionPool: out.explosionPool, ambientPlaysOn: out.ambientPlaysOn, tooAlike: out.tooAlike }, null, 1).replace(/\n}$/, ',');
     return head + '\n "weapons": {\n' + lines.join(',\n') + '\n }\n}';
   }
   async function copyText(text) {
@@ -353,7 +371,7 @@
     const ta = h('textarea', { style: 'position:fixed;left:-999px' }); ta.value = text; document.body.append(ta); ta.select();
     let ok = false; try { ok = document.execCommand('copy'); } catch (e) {} ta.remove(); return ok;
   }
-  $('#copy').onclick = async () => { const n = changeList().length, bad = clashingIds().length; (await copyText(arrangement(false))) ? toast('Copied ' + n + ' changed weapon' + (n === 1 ? '' : 's') + '. Paste it in the chat.' + (bad ? ' (' + bad + ' guns still share a sound.)' : ''), !!bad) : toast('Could not copy. Use "Save as file" instead.', true); };
+  $('#copy').onclick = async () => { const n = changeList().length, bad = clashingIds().length; (await copyText(arrangement(false))) ? toast('Copied ' + n + ' changed weapon' + (n === 1 ? '' : 's') + '. Paste it in the chat.' + (bad ? ' (' + bad + ' guns still sound too much alike.)' : ''), !!bad) : toast('Could not copy. Use "Save as file" instead.', true); };
   $('#save').onclick = () => {
     const blob = new Blob([arrangement(true)], { type: 'application/json' }), a = h('a', { href: URL.createObjectURL(blob), download: 'sound-arrangement.json' });
     document.body.append(a); a.click(); a.remove(); toast('Saved sound-arrangement.json (in your Downloads). Attach it in the chat.');
