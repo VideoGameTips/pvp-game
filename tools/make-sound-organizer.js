@@ -33,6 +33,9 @@ const CLIPS = {
   single:     { label: 'Single isolated shot',     orig: 'One_single_isolated__#1-1793057430709', kind: 'shot' },
   heavy3:     { label: 'Heavy shot 3',             orig: 'One_singular_heavy_s_#3-1793057399811', kind: 'shot' },
   isolatedB:  { label: 'Isolated shot B',          orig: 'A_single,_isolated_s_#2-1793057362745', kind: 'shot' },
+  ak1:        { label: 'AK-47 boom (realistic skins)', orig: 'A_crisp,_loud_AK-47__#1-1793144543539', kind: 'shot' },
+  ak2:        { label: 'AK-47 crack',              orig: 'A_crisp,_loud_AK-47__#2-1793144359586', kind: 'shot' },
+  ak4:        { label: 'AK-47 boom',               orig: 'A_crisp,_loud_AK-47__#4-1793144365268', kind: 'shot' },
   boomRoll:   { label: 'Boom: roll',               orig: 'The_exact_moment_of__#2-1793057644904', kind: 'boom' },
   boomTwin:   { label: 'Boom: twin',               orig: 'The_exact_moment_of__#3-1793057649450', kind: 'boom' },
   boomCrack:  { label: 'Boom: crack',              orig: 'The_exact_moment_of__#4-1793057652613', kind: 'boom' },
@@ -85,7 +88,9 @@ for (const [key, file] of Object.entries(tables.files)) {
   const uses = [...Object.values(tables.samples), ...Object.values(tables.events || {}).flatMap(e => e.clips)].filter(d => d.file === key);
   const gains = uses.map(d => d.gain).sort((a, b) => a - b);
   const play = uses.length ? { gain: +gains[gains.length >> 1].toFixed(3), from: Math.min(...uses.map(d => d.from || 0)), len: Math.max(...uses.map(d => d.len)), fade: Math.max(...uses.map(d => d.fade || 0.05)) } : null;
-  clips.push({ key, ...meta, file, seconds: +mp3Seconds(buf).toFixed(2), play, b64: buf.toString('base64') });
+  // the realistic skins that play this clip when you hold them (SKIN_SAMPLES): they are not in the weapon list, so the page only says so
+  const skins = Object.entries(tables.skins || {}).filter(([, d]) => d.file === key).map(([id]) => { const m = gameText.match(new RegExp("id: '" + id + "', weapon: '[^']+', name: '([^']+)'")); return m ? m[1] + ' skin' : id; });
+  clips.push({ key, ...meta, file, seconds: +mp3Seconds(buf).toFixed(2), play, skins, b64: buf.toString('base64') });
 }
 const ambientFile = arg('--ambient');
 if (ambientFile) {

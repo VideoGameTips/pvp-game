@@ -238,7 +238,7 @@
     const m = sharing(), bad = clashingIds(), far = D.weapons.filter(w => outOfRange(w.id)), tooMuch = Object.entries(m).filter(([k]) => D.weapons.some(w => S.weapons[w.id].clip === k && clashesOf(w.id, m).length));
     const count = (kind) => { const ws = D.weapons.filter(w => w.kind === kind && canGet(w)); return [ws.filter(w => S.weapons[w.id].clip).length, ws.length]; };
     const [gn, gt] = count('gun'), [mn, mt] = count('melee');
-    const free = D.clips.filter(c => c.kind !== 'ambient' && c.kind !== 'boom' && !(m[c.key] && m[c.key].can.length)).map(c => label(c.key));
+    const free = D.clips.filter(c => c.kind !== 'ambient' && c.kind !== 'boom' && !(m[c.key] && m[c.key].can.length) && !(c.skins && c.skins.length)).map(c => label(c.key));
     $('#rules').replaceChildren(
       h('p', {}, h('b', {}, 'The rule: '), 'one sound per gun. Guns that are really alike may share a sound if their pitch is 12% or more apart (less sounds the same, outside ' + LO + ' to ' + HI + ' it distorts). An admin gun may be identical to one gun you can get.'),
       tooMuch.length ? h('p', { class: 'no' }, '⚠ ' + bad.length + ' guns sound too much alike (' + tooMuch.length + ' sounds)') : h('p', { class: 'ok' }, '✓ nobody sounds too much like another gun'),
@@ -280,6 +280,7 @@
         c.kind === 'ambient' ? null : h('button', { class: 'linklike', title: 'Show only the weapons that use this sound', onclick: (e) => { e.stopPropagation(); ui.onlyClip = ui.onlyClip === c.key ? null : c.key; renderClips(); renderWeapons(); } }, ui.onlyClip === c.key ? 'showing ' + n + ' weapons (click to show all)' : 'used by ' + n),
         c.kind === 'ambient' ? null : h('label', { onclick: (e) => e.stopPropagation() }, h('input', { type: 'checkbox', checked: pooled, onchange: (e) => { S.pool = e.target.checked ? [...S.pool, c.key] : S.pool.filter(k => k !== c.key); save(); updateCount(); } }), ' 💥 in explosion pool')),
       warn ? h('div', { class: 'meta clashing' }, '⚠ ' + warn) : null,
+      c.skins && c.skins.length ? h('div', { class: 'meta note' }, 'also plays on: ' + c.skins.join(', ')) : null,
       h('div', { class: 'meta' }, h('span', { title: 'the name of the file you downloaded' }, c.orig), c.note ? h('span', { class: 'note' }, c.note) : null));
     card.dataset.key = c.key;
     return card;

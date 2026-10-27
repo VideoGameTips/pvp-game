@@ -4606,6 +4606,10 @@ const SAMPLE_FILES = {
   single:    'sounds/single-shot.mp3',      // "One single isolated ...": the most mid-range of the guns (a third of it is above 250 Hz): an assault rifle
   heavy3:    'sounds/heavy-shot-3.mp3',     // "One singular heavy s...": a big low boom
   isolatedB: 'sounds/isolated-shot-b.mp3',  // "A single, isolated s..." again, a tighter take than the first
+  // "A crisp, loud AK-47 ..." (3 s each; the shot starts 95 ms and 60 ms in, a lead-in that is not played: it would be a lag on every shot; each has a second, quieter bang near 0.45 s that is cut off too)
+  ak1:       'sounds/ak-shot-1.mp3',        // the realistic skins' (AK-47, M4A1): starts at once (10 ms in), 88 % of its first 150 ms below 250 Hz; a slapback echo at 0.3 s that is cut off
+  ak2:       'sounds/ak-shot-2.mp3',        // the crack: nearly three quarters of its first 150 ms is between 250 Hz and 2 kHz: the AK20
+  ak4:       'sounds/ak-shot-4.mp3',        // the boom: almost all of its first 150 ms is below 250 Hz: the twin-barrel rifle
   // "The exact moment of ..." (8 s each: they start at the bang, so there is no lead-in to skip)
   boomRoll:  'sounds/boom-roll.mp3',        // holds full level for 3.4 s, a long rolling blast
   boomTwin:  'sounds/boom-twin.mp3',        // a blast, a lull, and a second blast at 2.7 s (that one is not played)
@@ -4653,7 +4657,9 @@ const WEAPON_SAMPLES = {
   xm7:              { file: 'dry1',      gain: 0.27, from: 0.01, len: 0.70, fade: 0.35, rate: [1.02, 1.02] },
   m4a1_arena:       { file: 'dry4',      gain: 0.25, from: 0.02, len: 0.70, fade: 0.35, rate: [1.0, 1.0] },
   glock18:          { file: 'dry4',      gain: 0.25, from: 0.02, len: 0.50, fade: 0.25, rate: [1.1, 1.1] },
-  ak20:             { file: 'single',    gain: 0.31, from: 0.00, len: 0.70, fade: 0.35, rate: [1.0, 1.0] },
+  ak20:             { file: 'ak2',       gain: 0.817, from: 0.085, len: 0.36, fade: 0.15, rate: [1.0, 1.0] },    // ("A crisp, loud AK-47 ...": cut before its second bang at 0.45 s)
+  twin_ar:          { file: 'ak4',       gain: 1.105, from: 0.05, len: 0.33, fade: 0.12, rate: [1.0, 1.0] },
+  swarm_rifle:      { file: 'single',    gain: 0.338, from: 0.00, len: 0.70, fade: 0.35, rate: [1.0, 1.0] },    // (the clip the AK20 had before the AK-47 ones)
   // pistols, then revolvers (the clips start with the shot itself: nothing at the start can be moved without cutting into it, so these differ in pitch only)
   pistol:           { file: 'sharp3',    gain: 0.86, from: 0.00, len: 0.80, fade: 0.40, rate: [1.0, 1.0] },
   mauser:           { file: 'sharp3',    gain: 0.83, from: 0.00, len: 0.80, fade: 0.40, rate: [0.88, 0.88] },
@@ -4670,6 +4676,13 @@ const WEAPON_SAMPLES = {
   gau19:            { file: 'heavy3',    gain: 0.17, from: 0.00, len: 0.50, fade: 0.25, rate: [0.85, 0.85] },
   // the other shotgun-like gun: a tighter take of the isolated boom
   gunslinger:       { file: 'isolatedB', gain: 0.26, from: 0.00, len: 0.80, fade: 0.35, rate: [1.0, 1.0] },
+};
+// The realistic skins (the military set, "AK-47 through M2 Flamethrower") play a recording of their own when YOU hold them, by skin id: the AK-47 and the M4A1 get the AK-47 one ("A crisp, loud AK-47 ... #1"),
+// the M4A1 pitched up. Someone else's shot has no skin (what they hold is not yours to know), so it is the gun's own recording. The other realistic skins (pistol, shotgun, revolver, MG...) are other
+// guns: they keep the gun's recording until there is one that fits them. Same rule as the guns for two on one clip: pitch 12 % apart.
+const SKIN_SAMPLES = {
+  ak20_ak47_wood: { file: 'ak1', gain: 0.776, from: 0.005, len: 0.34, fade: 0.14, rate: [1.0, 1.0] },
+  burst_m4a1:     { file: 'ak1', gain: 1.182, from: 0.005, len: 0.34, fade: 0.14, rate: [1.14, 1.14] },
 };
 const _sampleState = {};                                            // by file (so the Vector's is _sampleState.vector), not by weapon
 let _sampleVoices = 0;
@@ -4700,9 +4713,14 @@ function sampleFor(ctx, def) {                                      // the decod
   return null;
 }
 function weaponSampleFor(ctx, id) { const def = WEAPON_SAMPLES[id]; return def ? sampleFor(ctx, def) : null; }
+function skinSampleFor(ctx, id) {                                   // the recording of the realistic skin this gun wears, if it has one (null while it is still loading: the gun's own plays)
+  try { const sk = _activeModelSkin[id], def = sk && SKIN_SAMPLES[sk.id]; return def ? sampleFor(ctx, def) : null; }   // (_activeModelSkin is declared far below: a sound before the script has loaded must not throw)
+  catch (e) { return null; }
+}
 function weaponSamplesPreload(ctx) {                                // (one fetch per file: the rest find it loading)
   sampleFor(ctx, { file: 'stealth' });
   for (const id of Object.keys(WEAPON_SAMPLES)) weaponSampleFor(ctx, id);
+  for (const d of Object.values(SKIN_SAMPLES)) sampleFor(ctx, d);
   for (const E of Object.values(EVENT_SAMPLES)) for (const c of E.clips) sampleFor(ctx, c);
 }
 // 💥 Events that are recordings too: the big explosions (rockets, grenades, the heavy blasts of a map). `min` is the loudness a blast has to ask for to get a recording: the little
@@ -4771,7 +4789,7 @@ function playWeaponSound(idOrWeapon, opts = {}) {
   // A recorded shot (see WEAPON_SAMPLES): the gun is the gun whatever skin is on it, so every skin plays the recording too (the skins' own made-up sounds are not used for a weapon that has one). Its own path, none of the made-up layers
   if (id) {
     const stealth = !opts.remote && _activeModelSkin[id]?.series === 'stealth';
-    const smp = stealth ? sampleFor(ctx, { file: 'stealth', gain: .6, from: .085, len: 1.75, fade: .04, rate: [1, 1] }) : weaponSampleFor(ctx, id);
+    const smp = stealth ? sampleFor(ctx, { file: 'stealth', gain: .6, from: .085, len: 1.75, fade: .04, rate: [1, 1] }) : ((!opts.remote && skinSampleFor(ctx, id)) || weaponSampleFor(ctx, id));
     if (smp) { playWeaponSample(ctx, start, smp, mult, distGain, !!opts.remote); return; }
   }
   const mainGain = ctx.createGain();

@@ -50,10 +50,10 @@ function readTables(gameText) {
     if (!m) throw new Error('no ' + name + ' table in public/game.js');
     return vm.runInNewContext('(' + m[1] + ')', {});
   };
-  return { files: grab('SAMPLE_FILES'), samples: grab('WEAPON_SAMPLES'), events: grab('EVENT_SAMPLES') };
+  return { files: grab('SAMPLE_FILES'), samples: grab('WEAPON_SAMPLES'), events: grab('EVENT_SAMPLES'), skins: gameText.includes('const SKIN_SAMPLES = ') ? grab('SKIN_SAMPLES') : {} };
 }
-// every cut of a recording the game can make: one per weapon, and every clip of every event
-function allCuts(tables) { return [...Object.values(tables.samples), ...Object.values(tables.events || {}).flatMap(e => e.clips)]; }
+// every cut of a recording the game can make: one per weapon, one per realistic skin, and every clip of every event
+function allCuts(tables) { return [...Object.values(tables.samples), ...Object.values(tables.skins || {}), ...Object.values(tables.events || {}).flatMap(e => e.clips)]; }
 // seconds of each file (by url) that has to be kept: the furthest into the file any weapon plays, plus MARGIN. null = nobody plays it: keep it whole
 function neededSeconds(tables) {
   const need = {};

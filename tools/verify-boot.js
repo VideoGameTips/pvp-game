@@ -3222,10 +3222,10 @@ if (ok && process.argv.includes('--zombietower')) {
 if (ok && process.argv.includes('--sample')) {
   // Recorded shots: a weapon in WEAPON_SAMPLES plays its own recording (real files, shipped in the itch bundle) once it is loaded, through a path of its own; before that, or if the
   // file never comes, the made-up shot plays exactly as before; guns without one are not touched; no skin changes it; weapons sharing a file fetch it once.
-  const tbl = JSON.parse(vm.runInThisContext('JSON.stringify({ files: SAMPLE_FILES, samples: WEAPON_SAMPLES, events: EVENT_SAMPLES })'));
+  const tbl = JSON.parse(vm.runInThisContext('JSON.stringify({ files: SAMPLE_FILES, samples: WEAPON_SAMPLES, skins: SKIN_SAMPLES, events: EVENT_SAMPLES })'));
   const itch = fs.readFileSync(path.join(__dirname, 'build-itch.sh'), 'utf8'), filesLine = (itch.match(/^FILES=\(([^)]*)\)/m) || [])[1] || '';
-  const LENGTH = { stealth: 3.0, vector: 3.0, thump: 3.0, ring: 3.0, blast: 4.0, lightning: 3.0, isolated: 3.0, heavy: 4.0, rocket: 8.0, quick1: 0.5, quick2: 0.5, dry1: 3.0, dry4: 3.0, sharp1: 3.0, sharp3: 3.0, single: 3.0, heavy3: 3.0, isolatedB: 3.0, boomRoll: 8.0, boomTwin: 8.0, boomCrack: 8.0 };       // seconds in each file as it was made
-  const more = [], cuts = [...Object.entries(tbl.samples), ...Object.entries(tbl.events).flatMap(([n, E]) => E.clips.map((c, i) => ['event ' + n + ' #' + (i + 1), c]))];
+  const LENGTH = { stealth: 3.0, vector: 3.0, thump: 3.0, ring: 3.0, blast: 4.0, lightning: 3.0, isolated: 3.0, heavy: 4.0, rocket: 8.0, quick1: 0.5, quick2: 0.5, dry1: 3.0, dry4: 3.0, sharp1: 3.0, sharp3: 3.0, single: 3.0, heavy3: 3.0, isolatedB: 3.0, ak1: 3.0, ak2: 3.0, ak4: 3.0, boomRoll: 8.0, boomTwin: 8.0, boomCrack: 8.0 };       // seconds in each file as it was made
+  const more = [], cuts = [...Object.entries(tbl.samples), ...Object.entries(tbl.skins).map(([k, c]) => ['skin ' + k, c]), ...Object.entries(tbl.events).flatMap(([n, E]) => E.clips.map((c, i) => ['event ' + n + ' #' + (i + 1), c]))];
   for (const [k, u] of Object.entries(tbl.files)) {
     const f = path.join(__dirname, '..', 'public', u);
     if (!fs.existsSync(f) || fs.statSync(f).size < 5000) more.push('public/' + u + ' should be there');
@@ -3266,6 +3266,10 @@ if (ok && process.argv.includes('--sample')) {
   { const kinds = JSON.parse(vm.runInThisContext('JSON.stringify([...WEAPONS, ...MELEE_ITEMS].map(w => ({ id: w.id, admin: /^Admin/i.test(w.type || "") || !!w.adminItem, archived: !!w.archived })))')), kindOf = Object.fromEntries(kinds.map(k => [k.id, k]));
     const MIN_RATIO = 1.12, LO = 0.8, HI = 1.25, pitch = (id) => (tbl.samples[id].rate[0] + tbl.samples[id].rate[1]) / 2;
     for (const id of Object.keys(tbl.samples)) if (pitch(id) < LO || pitch(id) > HI) more.push(id + ' plays its recording at pitch ' + pitch(id) + ': outside ' + LO + ' to ' + HI + ' it distorts');
+    // the realistic skins that play a recording of their own: they have to be real skins, and two of them on one clip follow the same rule as two guns you can get
+    { const skinIds = JSON.parse(vm.runInThisContext('JSON.stringify(MODEL_SKINS.map(m => m.id))')), sk = Object.keys(tbl.skins), p = (k) => (tbl.skins[k].rate[0] + tbl.skins[k].rate[1]) / 2;
+      for (const k of sk) { if (!skinIds.includes(k)) more.push('SKIN_SAMPLES has "' + k + '": there is no such model skin'); if (p(k) < LO || p(k) > HI) more.push('the ' + k + ' skin plays its recording at pitch ' + p(k) + ': outside ' + LO + ' to ' + HI + ' it distorts'); }
+      for (let i = 0; i < sk.length; i++) for (let j = i + 1; j < sk.length; j++) if (tbl.skins[sk[i]].file === tbl.skins[sk[j]].file && Math.max(p(sk[i]), p(sk[j])) / Math.min(p(sk[i]), p(sk[j])) < MIN_RATIO) more.push('the ' + sk[i] + ' and ' + sk[j] + ' skins play the same recording at pitches too close (' + p(sk[i]) + ', ' + p(sk[j]) + '): at least ' + MIN_RATIO + ' apart'); }
     const byFile = {}; for (const id of Object.keys(tbl.samples)) (byFile[tbl.samples[id].file] = byFile[tbl.samples[id].file] || []).push(id);
     for (const [file, ids] of Object.entries(byFile)) {
       const can = ids.filter(id => kindOf[id] && !kindOf[id].admin && !kindOf[id].archived), cant = ids.filter(id => !can.includes(id));
@@ -3345,6 +3349,26 @@ if (ok && process.argv.includes('--sample')) {
         clear(); sampleHits = 0; _sampleVoices = 0; playWeaponSound(who, {}); if (sampleHits !== 1) issues.push('a ' + who + ' skin (' + snd.kind + ') should play the recording too');
       }
       _skinFxFor = keepFx;
+      // the realistic skins that have a recording of their own (SKIN_SAMPLES): YOUR shot with the skin on plays it, someone else's shot (no skin known) and a skin without one play the gun's own
+      { const tag = {}; for (const k of Object.keys(SAMPLE_FILES)) tag[k] = { duration: 3, numberOfChannels: 2, tag: k };
+        const withTags = () => { for (const k of Object.keys(SAMPLE_FILES)) _sampleState[k] = { buf: tag[k], loading: false, failed: false }; };
+        const played = (id, o) => { clear(); seen.length = 0; _sampleVoices = 0; playWeaponSound(id, o || {}); return seen.slice(); };
+        const weaponOf = (skinId) => (MODEL_SKINS.find(m => m.id === skinId) || {}).weapon;
+        withTags();
+        for (const [skinId, d] of Object.entries(SKIN_SAMPLES)) {
+          const gun = weaponOf(skinId); if (!gun) continue; delete _activeModelSkin[gun];            // (a skin that does not exist is reported above)
+          const plain = played(gun); if (plain.join() !== WEAPON_SAMPLES[gun].file) issues.push(gun + ' without its skin should play its own recording, played ' + plain.join());
+          _activeModelSkin[gun] = { id: skinId };
+          const mine = played(gun); if (mine.join() !== d.file) issues.push('your ' + gun + ' wearing the ' + skinId + ' skin should play the skin recording (' + d.file + '), played ' + mine.join());
+          const theirs = played(gun, { remote: true, position: new THREE.Vector3(20, 1, 0) }); if (theirs.join() !== WEAPON_SAMPLES[gun].file) issues.push('someone else shot with a ' + skinId + ' has no skin you can know of: it is the gun, ' + WEAPON_SAMPLES[gun].file + ', played ' + theirs.join());
+          // the skin recording is not loaded yet: the gun's own plays (never silence)
+          _sampleState[d.file] = { buf: null, loading: true, failed: false }; const early = played(gun); if (WEAPON_SAMPLES[gun].file !== d.file && early.join() !== WEAPON_SAMPLES[gun].file) issues.push('until the ' + skinId + ' recording is there the gun own recording plays, played ' + early.join());
+          withTags(); delete _activeModelSkin[gun];
+        }
+        // a realistic skin with no recording of its own: the gun's
+        { const other = MODEL_SKINS.find(m => !SKIN_SAMPLES[m.id] && WEAPON_SAMPLES[m.weapon]); if (other) { _activeModelSkin[other.weapon] = { id: other.id }; const got = played(other.weapon); if (got.join() !== WEAPON_SAMPLES[other.weapon].file) issues.push('the ' + other.id + ' skin has no recording of its own: ' + other.weapon + ' should play its own, played ' + got.join()); delete _activeModelSkin[other.weapon]; } }
+        for (const w of Object.keys(_activeModelSkin)) delete _activeModelSkin[w];
+        setAll(() => ({ buf: SAMPLE, loading: false, failed: false })); }
       // the page carries the recordings as data (sound-data.js): decoded from that, byte for byte, and nothing is fetched
       { const keepData = window.SOUND_DATA, urls = []; globalThis.fetch = (u) => { urls.push(u); return new Promise(() => {}); };
         window.SOUND_DATA = globalThis.__soundData;
@@ -3360,7 +3384,7 @@ if (ok && process.argv.includes('--sample')) {
         // no data (or broken data): the file is fetched instead, one fetch per file however many weapons use it
         for (const bad of [undefined, { 'sounds/vector-shot.mp3': 'not base64 !!' }]) {
           window.SOUND_DATA = bad; for (const k of Object.keys(_sampleState)) delete _sampleState[k]; urls.length = 0;
-          weaponSamplesPreload(ctx); const want = new Set([SAMPLE_FILES.stealth, ...[...Object.values(WEAPON_SAMPLES), ...Object.values(EVENT_SAMPLES).flatMap(E => E.clips)].map(d => SAMPLE_FILES[d.file])]);
+          weaponSamplesPreload(ctx); const want = new Set([SAMPLE_FILES.stealth, ...[...Object.values(WEAPON_SAMPLES), ...Object.values(SKIN_SAMPLES), ...Object.values(EVENT_SAMPLES).flatMap(E => E.clips)].map(d => SAMPLE_FILES[d.file])]);   // (a clip nobody plays yet is not fetched; the Stealth shot is always loaded)
           if (urls.length !== want.size || new Set(urls).size !== want.size) issues.push('without usable data each file should be fetched once, however many weapons use it: ' + urls.length + ' fetches for ' + want.size + ' files (' + (bad ? 'broken data' : 'no data') + ')');
         }
         window.SOUND_DATA = keepData; }
