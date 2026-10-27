@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PVP Arena Sound Organizer</title>
+<style>
+  :root {
+    --bg: #12151c; --panel: #1b2029; --panel2: #232a36; --line: #323b4b; --text: #e8ecf3; --dim: #9aa6b8;
+    --accent: #ffb23e; --good: #5ad19a; --bad: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 -apple-system, "Segoe UI", Roboto, sans-serif; }
+  button, select, input { font: inherit; color: inherit; }
+  button { background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #1a1205; border-color: var(--accent); font-weight: 600; }
+  select, input[type=text], input[type=number], input[type=search] { background: #0f131a; border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; }
+  header { position: sticky; top: 0; z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line); padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+  header h1 { font-size: 16px; margin: 0 8px 0 0; }
+  header .grow { flex: 1; }
+  #changes { color: var(--accent); font-weight: 600; }
+  #banner { flex-basis: 100%; background: #3a2d10; border: 1px solid var(--accent); border-radius: 6px; padding: 4px 10px; display: none; }
+  #banner.on { display: block; }
+  main { display: grid; grid-template-columns: 340px 1fr; gap: 16px; padding: 16px; align-items: start; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+  aside { position: sticky; top: calc(var(--hh, 56px) + 8px); max-height: calc(100vh - var(--hh, 56px) - 24px); overflow: auto; padding-right: 4px; }
+  @media (max-width: 860px) { aside { position: static; max-height: none; } }
+  h2 { font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); margin: 18px 0 8px; }
+  aside h2:first-child { margin-top: 0; }
+  .help { color: var(--dim); font-size: 12.5px; margin: 0 0 10px; }
+
+  .clip { background: var(--panel); border: 1px solid var(--line); border-left: 6px solid var(--hue); border-radius: 8px; padding: 8px; margin-bottom: 8px; cursor: grab; }
+  .clip.sel { outline: 2px solid var(--accent); background: #2a2415; }
+  .clip .top { display: flex; gap: 6px; align-items: center; }
+  .clip .top input[type=text] { flex: 1; min-width: 0; font-weight: 600; }
+  .clip .meta { color: var(--dim); font-size: 12px; margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+  .clip .meta label { cursor: pointer; }
+  .linklike { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; cursor: pointer; font-size: 12px; }
+  .note { color: #e9c46a; font-size: 12px; }
+
+  .group { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .group.drop { outline: 2px dashed var(--accent); }
+  .group > .head { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: var(--panel2); border-bottom: 1px solid var(--line); }
+  .group > .head b { flex: 1; }
+  .row { display: grid; grid-template-columns: 74px minmax(120px, 1.2fr) minmax(150px, 1.4fr) 84px 84px; gap: 8px; align-items: center; padding: 6px 12px; border-bottom: 1px solid #262d3a; border-left: 6px solid var(--hue, transparent); }
+  .row:last-child { border-bottom: 0; }
+  .row.changed { background: #2a2415; }
+  .row.drop { outline: 2px dashed var(--accent); outline-offset: -2px; }
+  body.picking .row .who { cursor: copy; background: #33290f; border-radius: 6px; }
+  .row .who small { color: var(--dim); display: block; font-size: 11.5px; }
+  .row .nums { display: flex; align-items: center; gap: 4px; color: var(--dim); font-size: 12px; }
+  .row .nums input { width: 62px; }
+  .row .play { display: flex; gap: 4px; }
+  .row select { width: 100%; }
+  .badge { font-size: 10.5px; border: 1px solid var(--line); border-radius: 10px; padding: 0 6px; color: var(--dim); margin-left: 4px; white-space: nowrap; }
+  .row.empty .none { color: var(--dim); }
+  @media (max-width: 700px) {
+    .row { grid-template-columns: 74px 1fr; }
+    .row .nums { grid-column: 2; }
+  }
+  details.maps { margin-top: 8px; }
+  details.maps .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; font-size: 12.5px; margin-top: 6px; max-height: 220px; overflow: auto; }
+  #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--good); color: #052014; padding: 8px 14px; border-radius: 8px; font-weight: 600; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 20; }
+  #toast.on { opacity: 1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>PVP Arena Sound Organizer</h1>
+  <button id="stop" title="Stop everything that is playing">■ Stop</button>
+  <label>Volume <input id="vol" type="range" min="0" max="1" step="0.05" value="0.7"></label>
+  <input id="search" type="search" placeholder="Find a weapon…" size="16">
+  <label><input id="onlyEmpty" type="checkbox"> only weapons with no recording</label>
+  <label><input id="hideOld" type="checkbox"> hide weapons that are not in the shop</label>
+  <span class="grow"></span>
+  <span id="changes"></span>
+  <button id="copy" class="primary" title="Copy only what you changed, ready to paste into the chat">Copy my changes</button>
+  <button id="save" title="Download everything as a file you can attach in the chat">Save as file</button>
+  <button id="load" title="Open a file you saved earlier">Open saved file</button>
+  <button id="reset" title="Throw away your changes and show what the game plays now">Start over</button>
+  <input id="file" type="file" accept=".json,application/json" hidden>
+  <div id="banner"></div>
+</header>
+<main>
+  <aside>
+    <h2>Sounds</h2>
+    <p class="help">▶ to listen. Click a sound to pick it up, then click weapons to give it to them (or drag it onto a weapon or a whole group). Rename a sound if you know better than my guess.</p>
+    <div id="clips"></div>
+    <div id="ambient"></div>
+  </aside>
+  <section id="weapons"></section>
+</main>
+<div id="toast"></div>
+
+<script type="application/json" id="data">/*DATA*/</script>
+<script>
+(function () {
+  'use strict';
+  const D = JSON.parse(document.getElementById('data').textContent);
+  const $ = (s) => document.querySelector(s);
+  const clipBy = Object.fromEntries(D.clips.map(c => [c.key, c]));
+  const weaponBy = Object.fromEntries(D.weapons.map(w => [w.id, w]));
+  const hue = (key) => { const i = D.clips.findIndex(c => c.key === key); return Math.round((i * 137.5) % 360); };
+  const color = (key) => key ? 'hsl(' + hue(key) + ' 62% 52%)' : 'transparent';
+  function h(tag, props, ...kids) {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(props || {})) {
+      if (k === 'class') e.className = v;
+      else if (k === 'style') e.style.cssText = v;
+      else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+      else if (k === 'value' || k === 'checked' || k === 'draggable') e[k] = v;
+      else if (v !== false && v != null) e.setAttribute(k, v === true ? '' : v);
+    }
+    for (const kid of kids.flat()) e.append(kid && kid.nodeType ? kid : document.createTextNode(kid == null ? '' : kid));
+    return e;
+  }
+
+  // ---------- state: what the game plays today, then what Andy changed
+  const fresh = () => ({
+    labels: {}, pool: D.explosionPool.slice(), ambient: [],
+    weapons: Object.fromEntries(D.weapons.map(w => [w.id, { clip: w.cur.clip, pitch: w.cur.pitch, vol: 1 }])),
+  });
+  const fp = (() => { let s = JSON.stringify([D.built, D.clips.map(c => c.key), D.weapons.map(w => [w.id, w.cur.clip, w.cur.pitch])]), x = 0; for (let i = 0; i < s.length; i++) x = (x * 31 + s.charCodeAt(i)) | 0; return String(x); })();
+  const KEY = 'pvp-sound-organizer';
+  let S = fresh(), ui = { picked: null, onlyClip: null, mapsOpen: false };
+  try { const saved = JSON.parse(localStorage.getItem(KEY)); if (saved && saved.fp === fp) S = saved.state; } catch (e) {}
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify({ fp, state: S })); } catch (e) {} };
+  const label = (key) => S.labels[key] || clipBy[key].label;
+  const isChanged = (id) => { const a = S.weapons[id], w = weaponBy[id]; return a.clip !== w.cur.clip || a.pitch !== w.cur.pitch || a.vol !== 1; };
+  function changeList() {
+    const out = D.weapons.filter(w => isChanged(w.id)).map(w => w.id);
+    return out;
+  }
+  function otherChanges() {
+    const f = fresh(), n = [];
+    for (const c of D.clips) if (S.labels[c.key] && S.labels[c.key] !== c.label) n.push('name:' + c.key);
+    if (JSON.stringify([...S.pool].sort()) !== JSON.stringify([...f.pool].sort())) n.push('pool');
+    if (S.ambient.length) n.push('ambient');
+    return n;
+  }
+
+  // ---------- sound (Web Audio: decodes the clips that are already inside this page, so it works opened as a file)
+  const AC = new (window.AudioContext || window.webkitAudioContext)();
+  const master = AC.createGain(); master.gain.value = 0.7;
+  const limiter = AC.createDynamicsCompressor(); limiter.threshold.value = -8; limiter.knee.value = 0; limiter.ratio.value = 20; limiter.attack.value = 0.002; limiter.release.value = 0.1;
+  master.connect(limiter); limiter.connect(AC.destination);
+  const bufs = {}, live = new Set();
+  const decode = (key) => bufs[key] || (bufs[key] = (async () => {
+    const bin = atob(clipBy[key].b64), u = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+    return AC.decodeAudioData(u.buffer);
+  })());
+  async function play(key, p) {
+    if (AC.state === 'suspended') await AC.resume();
+    const b = await decode(key), t = AC.currentTime + 0.01;
+    const from = Math.min(p.from || 0, b.duration - 0.05), len = Math.min(p.len || b.duration, b.duration - from), wall = len / p.rate;
+    const src = AC.createBufferSource(), g = AC.createGain(), fade = Math.min(p.fade || 0.05, wall);
+    src.buffer = b; src.playbackRate.value = p.rate;
+    g.gain.setValueAtTime(p.gain, t); g.gain.setValueAtTime(p.gain, t + wall - fade); g.gain.linearRampToValueAtTime(0, t + wall);
+    src.connect(g); g.connect(master); src.start(t, from, len);
+    live.add(src); src.onended = () => live.delete(src);
+  }
+  const stopAll = () => { for (const s of live) { try { s.stop(); } catch (e) {} } live.clear(); clearTimeout(rep); };
+  // how a weapon sounds with its current pick: the game's own settings when the clip is the one it already has, else the clip's usual settings
+  function paramsFor(id) {
+    const a = S.weapons[id], w = weaponBy[id]; if (!a.clip) return null;
+    const base = a.clip === w.cur.clip ? w.cur : (clipBy[a.clip].play || { gain: 0.5, from: 0, len: 0, fade: 0.05 });
+    return { key: a.clip, gain: base.gain * a.vol, from: base.from, len: base.len || 0, fade: base.fade, rate: a.pitch };
+  }
+  let rep = 0;
+  function playWeapon(id, times) {
+    clearTimeout(rep);
+    const p = paramsFor(id); if (!p) return toast('No recording on this weapon yet (it uses the old made-up sound)', true);
+    const ms = Math.max(70, weaponBy[id].fireMs); let n = times;
+    const step = () => { play(p.key, p); if (--n > 0) rep = setTimeout(step, ms); };
+    step();
+  }
+  function playClip(key) {
+    const c = clipBy[key]; stopAll();
+    play(key, c.play ? { ...c.play, rate: 1 } : { gain: 0.6, from: 0, len: 0, fade: 1.5, rate: 1 });
+  }
+
+  // ---------- small helpers
+  let toastT = 0;
+  function toast(msg, bad) { const t = $('#toast'); t.textContent = msg; t.style.background = bad ? 'var(--bad)' : 'var(--good)'; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2400); }
+  const used = (key) => D.weapons.filter(w => S.weapons[w.id].clip === key);
+  function give(id, key) { const a = S.weapons[id]; if (a.clip === key) return; a.clip = key; if (key && key !== weaponBy[id].cur.clip) { /* a new clip starts at its normal pitch */ a.pitch = 1; } else if (key === weaponBy[id].cur.clip) a.pitch = weaponBy[id].cur.pitch; }
+  function pick(key) { ui.picked = ui.picked === key ? null : key; document.body.classList.toggle('picking', !!ui.picked); renderBanner(); renderClips(); renderWeapons(); }
+  function renderBanner() {
+    const b = $('#banner'); b.className = ui.picked ? 'on' : '';
+    b.replaceChildren(...(ui.picked ? ['Picked up: ', h('b', {}, label(ui.picked)), ' — click a weapon to give it this sound. ', h('button', { onclick: () => pick(ui.picked) }, 'Put it down')] : []));
+    fitHeader();
+  }
+  function fitHeader() { document.documentElement.style.setProperty('--hh', $('header').offsetHeight + 'px'); }
+  window.addEventListener('resize', fitHeader);
+
+  // ---------- the sounds column
+  function renderClips() {
+    const box = $('#clips'); box.replaceChildren();
+    const section = (title, kind, help) => {
+      const list = D.clips.filter(c => c.kind === kind); if (!list.length) return;
+      box.append(h('h2', {}, title)); if (help) box.append(h('p', { class: 'help' }, help));
+      for (const c of list) box.append(clipCard(c));
+    };
+    section('Gun shots', 'shot');
+    section('Explosions', 'boom', 'Rocket and grenade blasts play one clip from the "explosion pool" (tick the 💥 box on any sound to put it in the pool). A random one each time, never the same twice in a row.');
+    $('#ambient').replaceChildren();
+    const amb = D.clips.filter(c => c.kind === 'ambient');
+    if (amb.length) {
+      $('#ambient').append(h('h2', {}, 'Ambient'), h('p', { class: 'help' }, 'A long background loop. Tell me where it should play.'), ...amb.map(c => clipCard(c)), mapPicker());
+    }
+  }
+  function clipCard(c) {
+    const n = used(c.key).length, pooled = S.pool.includes(c.key);
+    const nameInput = h('input', { type: 'text', value: label(c.key), 'aria-label': 'Name of this sound',
+      oninput: (e) => { S.labels[c.key] = e.target.value; save(); relabel(c.key); updateCount(); }, onclick: (e) => e.stopPropagation() });
+    const card = h('div', { class: 'clip' + (ui.picked === c.key ? ' sel' : ''), style: '--hue:' + color(c.key), draggable: true,
+        ondragstart: (e) => { e.dataTransfer.setData('text/plain', c.key); e.dataTransfer.effectAllowed = 'copy'; },
+        onclick: () => { if (c.kind !== 'ambient') pick(c.key); } },
+      h('div', { class: 'top' },
+        h('button', { title: 'Listen', onclick: (e) => { e.stopPropagation(); playClip(c.key); } }, '▶'),
+        nameInput),
+      h('div', { class: 'meta' },
+        c.seconds + ' s',
+        c.kind === 'ambient' ? null : h('button', { class: 'linklike', title: 'Show only the weapons that use this sound', onclick: (e) => { e.stopPropagation(); ui.onlyClip = ui.onlyClip === c.key ? null : c.key; renderClips(); renderWeapons(); } }, ui.onlyClip === c.key ? 'showing ' + n + ' weapons (click to show all)' : 'used by ' + n),
+        c.kind === 'ambient' ? null : h('label', { onclick: (e) => e.stopPropagation() }, h('input', { type: 'checkbox', checked: pooled, onchange: (e) => { S.pool = e.target.checked ? [...S.pool, c.key] : S.pool.filter(k => k !== c.key); save(); updateCount(); } }), ' 💥 in explosion pool')),
+      h('div', { class: 'meta' }, h('span', { title: 'the name of the file you downloaded' }, c.orig), c.note ? h('span', { class: 'note' }, c.note) : null));
+    card.dataset.key = c.key;
+    return card;
+  }
+  function relabel(key) {
+    for (const o of document.querySelectorAll('option[data-key="' + key + '"]')) o.textContent = label(key);
+    const b = $('#banner b'); if (b && ui.picked === key) b.textContent = label(key);
+  }
+  function mapPicker() {
+    const pretty = (id) => id.replace(/_/g, ' ');
+    const where = () => 'Plays on: ' + (S.ambient.length ? S.ambient.length + (S.ambient.length === 1 ? ' place' : ' places') : 'nowhere yet');
+    const sum = h('summary', {}, where());
+    const chk = (id, text) => h('label', {}, h('input', { type: 'checkbox', checked: S.ambient.includes(id), onchange: (e) => { S.ambient = e.target.checked ? [...S.ambient, id] : S.ambient.filter(x => x !== id); save(); updateCount(); sum.textContent = where(); } }), ' ' + text);
+    return h('details', { class: 'maps', open: ui.mapsOpen || S.ambient.length > 0, ontoggle: (e) => { ui.mapsOpen = e.target.open; } }, sum,
+      h('div', { class: 'grid' }, chk('lobby', 'the lobby / menu'), chk('all_maps', 'every map'), ...D.maps.map(id => chk(id, pretty(id)))));
+  }
+
+  // ---------- the weapons column
+  function row(id) {
+    const w = weaponBy[id], a = S.weapons[id];
+    const sel = h('select', { 'aria-label': 'Sound for ' + w.name, onchange: (e) => { give(id, e.target.value || null); save(); refreshRow(id); } },
+      h('option', { value: '' }, '— old made-up sound —'),
+      ...D.clips.filter(c => c.kind !== 'ambient').map(c => { const o = h('option', { value: c.key, 'data-key': c.key }, label(c.key)); if (a.clip === c.key) o.selected = true; return o; }));
+    const tag = w.kind === 'melee' ? 'swing' : w.kind === 'gun' && /thrown/i.test(w.type) ? 'throw' : 'shot';
+    const r = h('div', { class: 'row' + (isChanged(id) ? ' changed' : '') + (a.clip ? '' : ' empty'), style: '--hue:' + color(a.clip), 'data-id': id,
+        ondragover: (e) => { e.preventDefault(); r.classList.add('drop'); }, ondragleave: () => r.classList.remove('drop'),
+        ondrop: (e) => { e.preventDefault(); r.classList.remove('drop'); const k = e.dataTransfer.getData('text/plain'); if (clipBy[k] && clipBy[k].kind !== 'ambient') { give(id, k); save(); refreshRow(id); } } },
+      h('div', { class: 'play' },
+        h('button', { title: 'Hear one ' + tag, onclick: () => playWeapon(id, 1) }, '▶'),
+        h('button', { title: 'Hear it at this weapon\'s fire rate', onclick: () => playWeapon(id, w.fireMs >= 600 ? 3 : 8) }, '▶▶')),
+      h('div', { class: 'who', onclick: () => { if (ui.picked) { give(id, ui.picked); save(); refreshRow(id); } } },
+        w.name, w.archived ? h('span', { class: 'badge', title: 'not sold in the shop right now' }, 'not in shop') : null, h('small', {}, w.type + ' · ' + id)),
+      sel,
+      h('label', { class: 'nums', title: 'Pitch: 1 = as recorded, lower = deeper' }, 'pitch', h('input', { type: 'number', min: '0.5', max: '1.6', step: '0.05', value: a.pitch, onchange: (e) => { a.pitch = Math.min(1.6, Math.max(0.5, +e.target.value || 1)); save(); refreshRow(id); } })),
+      h('label', { class: 'nums', title: 'Volume: 1 = as the game plays it' }, 'vol', h('input', { type: 'number', min: '0.1', max: '3', step: '0.1', value: a.vol, onchange: (e) => { a.vol = Math.min(3, Math.max(0.1, +e.target.value || 1)); save(); refreshRow(id); } })));
+    return r;
+  }
+  function refreshRow(id) {
+    const old = document.querySelector('.row[data-id="' + id + '"]'); if (old) old.replaceWith(row(id));
+    renderClips(); updateCount();
+  }
+  function visible(w) {
+    const q = $('#search').value.trim().toLowerCase();
+    if (q && !(w.name + ' ' + w.id + ' ' + w.type).toLowerCase().includes(q)) return false;
+    if ($('#onlyEmpty').checked && S.weapons[w.id].clip) return false;
+    if ($('#hideOld').checked && w.archived) return false;
+    if (ui.onlyClip && S.weapons[w.id].clip !== ui.onlyClip) return false;
+    return true;
+  }
+  function renderWeapons() {
+    const box = $('#weapons'); box.replaceChildren();
+    for (const g of D.groups) {
+      const ids = g.ids.filter(id => visible(weaponBy[id])); if (!ids.length) continue;
+      const head = h('div', { class: 'head' }, h('b', {}, g.title + ' (' + ids.length + ')'),
+        ui.picked ? h('button', { onclick: () => { for (const id of ids) give(id, ui.picked); save(); renderWeapons(); renderClips(); updateCount(); } }, 'Give “' + label(ui.picked) + '” to all ' + ids.length) : null);
+      const grp = h('div', { class: 'group',
+        ondragover: (e) => { if (e.target.closest('.row')) return; e.preventDefault(); grp.classList.add('drop'); }, ondragleave: (e) => { if (!e.relatedTarget || !grp.contains(e.relatedTarget)) grp.classList.remove('drop'); },
+        ondrop: (e) => { if (e.target.closest('.row')) return; e.preventDefault(); grp.classList.remove('drop'); const k = e.dataTransfer.getData('text/plain'); if (clipBy[k] && clipBy[k].kind !== 'ambient') { for (const id of ids) give(id, k); save(); renderWeapons(); renderClips(); updateCount(); } } },
+        head, ...ids.map(row));
+      box.append(grp);
+    }
+    if (!box.children.length) box.append(h('p', { class: 'help' }, 'No weapon matches.'));
+  }
+  function updateCount() {
+    const n = changeList().length, o = otherChanges().length;
+    $('#changes').textContent = n || o ? n + ' weapon' + (n === 1 ? '' : 's') + ' changed' + (o ? ' + other changes' : '') : 'nothing changed yet';
+  }
+
+  // ---------- sending it back
+  function arrangement(full) {
+    const weapons = {}, ids = full ? D.weapons.map(w => w.id) : changeList();
+    for (const id of ids) { const a = S.weapons[id], w = weaponBy[id]; weapons[id] = { clip: a.clip, pitch: a.pitch, volume: a.vol, was: w.cur.clip, name: w.name }; }
+    const clips = {};
+    for (const c of D.clips) { const lab = label(c.key); if (full || lab !== c.label) clips[c.key] = { label: lab, file: c.file, original: c.orig }; }
+    const out = { format: 'pvp-sound-arrangement-1', full: !!full, weapons, clips, explosionPool: S.pool };
+    if (S.ambient.length) out.ambientPlaysOn = S.ambient;
+    const lines = Object.entries(weapons).map(([id, v]) => '    ' + JSON.stringify(id) + ': ' + JSON.stringify(v));
+    const head = JSON.stringify({ format: out.format, full: out.full, clips: out.clips, explosionPool: out.explosionPool, ambientPlaysOn: out.ambientPlaysOn }, null, 1).replace(/\n}$/, ',');
+    return head + '\n "weapons": {\n' + lines.join(',\n') + '\n }\n}';
+  }
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); return true; } catch (e) {}
+    const ta = h('textarea', { style: 'position:fixed;left:-999px' }); ta.value = text; document.body.append(ta); ta.select();
+    let ok = false; try { ok = document.execCommand('copy'); } catch (e) {} ta.remove(); return ok;
+  }
+  $('#copy').onclick = async () => { const n = changeList().length; (await copyText(arrangement(false))) ? toast('Copied ' + n + ' changed weapon' + (n === 1 ? '' : 's') + '. Paste it in the chat.') : toast('Could not copy. Use "Save as file" instead.', true); };
+  $('#save').onclick = () => {
+    const blob = new Blob([arrangement(true)], { type: 'application/json' }), a = h('a', { href: URL.createObjectURL(blob), download: 'sound-arrangement.json' });
+    document.body.append(a); a.click(); a.remove(); toast('Saved sound-arrangement.json (in your Downloads). Attach it in the chat.');
+  };
+  $('#load').onclick = () => $('#file').click();
+  $('#file').onchange = (e) => {
+    const f = e.target.files[0]; if (!f) return; const rd = new FileReader();
+    rd.onload = () => {
+      try {
+        const j = JSON.parse(rd.result); if (j.format !== 'pvp-sound-arrangement-1') throw new Error('not a sound arrangement');
+        for (const [id, v] of Object.entries(j.weapons || {})) if (S.weapons[id] && (v.clip === null || clipBy[v.clip])) S.weapons[id] = { clip: v.clip, pitch: v.pitch || 1, vol: v.volume || 1 };
+        for (const [k, v] of Object.entries(j.clips || {})) if (clipBy[k] && v.label) S.labels[k] = v.label;
+        if (Array.isArray(j.explosionPool)) S.pool = j.explosionPool.filter(k => clipBy[k]);
+        if (Array.isArray(j.ambientPlaysOn)) S.ambient = j.ambientPlaysOn;
+        save(); renderAll(); toast('Opened ' + f.name);
+      } catch (err) { toast('That file did not open: ' + err.message, true); }
+    };
+    rd.readAsText(f); e.target.value = '';
+  };
+  $('#reset').onclick = () => { if (!confirm('Throw away your changes and go back to what the game plays now?')) return; S = fresh(); ui = { picked: null, onlyClip: null, mapsOpen: false }; document.body.classList.remove('picking'); save(); renderAll(); };
+  $('#stop').onclick = stopAll;
+  $('#vol').oninput = (e) => { master.gain.value = +e.target.value; };
+  for (const id of ['#search', '#onlyEmpty', '#hideOld']) $(id).addEventListener('input', renderWeapons);
+  function renderAll() { renderBanner(); renderClips(); renderWeapons(); updateCount(); }
+  renderAll();
+  window.__organizer = { state: () => S, give, changeList, arrangement, paramsFor, decode, play, ui: () => ui };
+})();
+</script>
+</body>
+</html>
