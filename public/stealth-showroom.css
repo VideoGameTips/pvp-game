@@ -1,0 +1,24 @@
+#stealth-panel{position:fixed;inset:0;z-index:9950;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(4,9,12,.88);font:14px/1.4 system-ui,sans-serif;color:#e8eeee;letter-spacing:0}
+#stealth-panel .st-window{width:min(860px,100%);max-height:calc(100dvh - 32px);overflow:auto;background:#162024;border:1px solid #738789;border-radius:6px;box-shadow:0 16px 70px #0009}
+#stealth-panel header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #394a4f}
+#stealth-panel h2{font-size:22px;line-height:1.1;margin:0;letter-spacing:0}
+#stealth-panel button{font:inherit;letter-spacing:0;cursor:pointer}
+#stealth-panel .st-close{width:36px;height:36px;border:1px solid #52666b;border-radius:4px;background:#202e32;color:#fff;font-size:25px}
+#stealth-panel nav{display:flex;gap:0;border-bottom:1px solid #394a4f;overflow-x:auto}
+#stealth-panel nav button{flex:1;min-width:100px;min-height:44px;padding:10px 12px;background:transparent;border:0;border-bottom:2px solid transparent;color:#aebfc1;white-space:nowrap}
+#stealth-panel nav button[aria-selected=true]{background:#223235;color:#fff;border-bottom-color:#e36b72}
+#stealth-panel .st-stage{height:310px;position:relative;background:#d0dcda;touch-action:none;overflow:hidden}
+#stealth-panel .st-stage img{width:100%;height:100%;object-fit:contain;display:block;pointer-events:none;user-select:none}
+#stealth-panel .st-meta{padding:16px 20px;display:grid;grid-template-columns:1fr auto;gap:8px 20px;align-items:center}
+#stealth-panel h3{font-size:20px;margin:0;letter-spacing:0}
+#stealth-panel .st-base{font-size:12px;color:#b1c3c6;margin-top:3px}
+#stealth-panel .st-state{font-size:12px;color:#9ed3b4}
+#stealth-panel .st-rotation{grid-column:1/-1;display:flex;align-items:center;gap:16px;font-size:12px;color:#b1c3c6;margin-top:6px}
+#stealth-panel input{flex:1;min-width:0;accent-color:#e36b72}
+#stealth-panel footer{padding:14px 20px;border-top:1px solid #394a4f;display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
+#stealth-panel footer button{min-height:42px;padding:9px 18px;border:1px solid #7e9b9b;border-radius:4px;background:#283d41;color:#eaf4f2}
+#stealth-panel footer .st-equip{background:#c4d4cf;color:#122326}
+#stealth-panel button:focus-visible,#stealth-panel input:focus-visible{outline:2px solid #f2b8bc;outline-offset:2px}
+#stealth-open-btn{color:#ffd1d4!important;border-color:#a45a62!important}
+#stealth-login-btn{margin-top:12px;min-height:42px;padding:8px 18px;background:#22363a;color:#dcece7;border:1px solid #799e9d;border-radius:4px;font:13px system-ui,sans-serif;letter-spacing:0;cursor:pointer}
+@media(max-width:600px){#stealth-panel{padding:8px}#stealth-panel .st-window{max-height:calc(100dvh - 16px)}#stealth-panel header{padding:12px}#stealth-panel h2{font-size:20px}#stealth-panel .st-stage{height:230px}#stealth-panel .st-meta{padding:12px;gap:8px}#stealth-panel h3{font-size:18px}#stealth-panel footer{padding:12px;justify-content:stretch}#stealth-panel footer button{flex:1;padding:9px 10px}}

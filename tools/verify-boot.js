@@ -3224,7 +3224,7 @@ if (ok && process.argv.includes('--sample')) {
   // file never comes, the made-up shot plays exactly as before; guns without one are not touched; no skin changes it; weapons sharing a file fetch it once.
   const tbl = JSON.parse(vm.runInThisContext('JSON.stringify({ files: SAMPLE_FILES, samples: WEAPON_SAMPLES, events: EVENT_SAMPLES })'));
   const itch = fs.readFileSync(path.join(__dirname, 'build-itch.sh'), 'utf8'), filesLine = (itch.match(/^FILES=\(([^)]*)\)/m) || [])[1] || '';
-  const LENGTH = { vector: 3.0, thump: 3.0, ring: 3.0, blast: 4.0, lightning: 3.0, isolated: 3.0, heavy: 4.0, rocket: 8.0, quick1: 0.5, quick2: 0.5, dry1: 3.0, dry4: 3.0, sharp1: 3.0, sharp3: 3.0, single: 3.0, heavy3: 3.0, isolatedB: 3.0, boomRoll: 8.0, boomTwin: 8.0, boomCrack: 8.0 };       // seconds in each file as it was made
+  const LENGTH = { stealth: 3.0, vector: 3.0, thump: 3.0, ring: 3.0, blast: 4.0, lightning: 3.0, isolated: 3.0, heavy: 4.0, rocket: 8.0, quick1: 0.5, quick2: 0.5, dry1: 3.0, dry4: 3.0, sharp1: 3.0, sharp3: 3.0, single: 3.0, heavy3: 3.0, isolatedB: 3.0, boomRoll: 8.0, boomTwin: 8.0, boomCrack: 8.0 };       // seconds in each file as it was made
   const more = [], cuts = [...Object.entries(tbl.samples), ...Object.entries(tbl.events).flatMap(([n, E]) => E.clips.map((c, i) => ['event ' + n + ' #' + (i + 1), c]))];
   for (const [k, u] of Object.entries(tbl.files)) {
     const f = path.join(__dirname, '..', 'public', u);
@@ -3356,7 +3356,7 @@ if (ok && process.argv.includes('--sample')) {
         // no data (or broken data): the file is fetched instead, one fetch per file however many weapons use it
         for (const bad of [undefined, { 'sounds/vector-shot.mp3': 'not base64 !!' }]) {
           window.SOUND_DATA = bad; for (const k of Object.keys(_sampleState)) delete _sampleState[k]; urls.length = 0;
-          weaponSamplesPreload(ctx); const want = new Set([...Object.values(WEAPON_SAMPLES), ...Object.values(EVENT_SAMPLES).flatMap(E => E.clips)].map(d => SAMPLE_FILES[d.file]));   // (a clip nobody plays yet is not fetched)
+          weaponSamplesPreload(ctx); const want = new Set([SAMPLE_FILES.stealth, ...[...Object.values(WEAPON_SAMPLES), ...Object.values(EVENT_SAMPLES).flatMap(E => E.clips)].map(d => SAMPLE_FILES[d.file])]);
           if (urls.length !== want.size || new Set(urls).size !== want.size) issues.push('without usable data each file should be fetched once, however many weapons use it: ' + urls.length + ' fetches for ' + want.size + ' files (' + (bad ? 'broken data' : 'no data') + ')');
         }
         window.SOUND_DATA = keepData; }

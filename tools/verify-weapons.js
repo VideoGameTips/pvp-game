@@ -61,7 +61,7 @@ const constBlock = n => { const b = blockAt(new RegExp('^const ' + n + ' = \\{',
 
 function load() {
   let code = '';
-  for (const n of ['gpBox', 'gpCyl', 'gpPlate', 'gpPart', 'addBeltAndCover', 'makeMuzzleFlash',
+  for (const n of ['gpBox', 'gpCyl', 'gpPlate', 'gpPart', 'gpFinish', 'gpContouredPart', 'gpOpenMuzzle', 'gpOptic', 'smoothManufacturedBevels', 'addBeltAndCover', 'makeMuzzleFlash',
                    '_skM', '_skGlass', '_skGrip', '_skFinish',
                    // PBR plumbing the hands and the legend materials now sit on
                    '_rng', '_grain', '_weave', '_blotches', '_shade', 'surfTex', 'pbrMat',
@@ -163,6 +163,7 @@ function load() {
         + ' VM_GUN_SCALE, fitRestDistance, INSPECT_DEFAULT, inspectOpenPose, assemblyBeats,'
         + ' MODEL_SKINS, prepViewModel, MELEE_MODEL_SKINS, meleeStock, blendProudSteps, SKIN_FX,'
         + ' builders: ' + JSON.stringify(rows.map(r => r.fn)) + '.map(n => eval(n)) };';
+  code = 'const PVE_STEALTH = (() => { const window = {};\n' + fs.readFileSync(path.join(__dirname, '../public/stealth-series.js'), 'utf8') + '\nreturn window.PVE_STEALTH; })();\n' + code;
   return { api: new Function('THREE', code)(THREE), rows };
 }
 
@@ -351,7 +352,7 @@ built.forEach((g, i) => {
   }
   let worst = 0;
   g.traverse(o => {
-    if (!o.isMesh || o.geometry.type !== 'ExtrudeGeometry' || o.userData.vmHand) return;
+    if (!o.isMesh || o.geometry.type !== 'ExtrudeGeometry' || o.userData.vmHand || o.userData.contouredFurniture) return;
     const b = new THREE.Box3().setFromObject(o);
     const cx = (b.min.x + b.max.x) / 2;
     if (Math.abs(cx) > Math.abs(worst)) worst = cx;
