@@ -108,7 +108,7 @@ while read -r src; do
     echo "index.html loads '$src' but it is NOT in the bundle" >&2
     missing=1
   fi
-done < <(grep -oE '<script[^>]+src="[^"]+"' "$STAGE/index.html" | sed -E 's/.*src="([^"]+)".*/\1/')
+done < <(grep -oE '<script[^>]+src="[^"]+"' "$STAGE/index.html" | sed -E 's/.*src="([^"?]+)(\?[^"]*)?".*/\1/')   # (a cache-busting ?v=... after the name is not part of the file name)
 [ "$missing" = 0 ] || { echo "^^ add it to FILES in this script" >&2; exit 1; }
 
 # The recordings travel inside sound-data.js (a page opened as a file cannot fetch the mp3s): it has to be what the mp3s in public/sounds say.
