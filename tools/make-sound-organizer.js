@@ -19,7 +19,7 @@ const CLIPS = {
   vector:     { label: 'Vector shot',              orig: 'A_single_shot_from_a_#1-1792981281450', kind: 'shot' },
   thump:      { label: 'Thump (big pistol)',       orig: 'A_single_shot_from_a_#1-1792981380400', kind: 'shot' },
   ring:       { label: 'Ring (sniper)',            orig: 'A_single_shot_from_a_#3-1792981451433', kind: 'shot' },
-  blast:      { label: 'Launcher blast',           orig: 'A_single_blast_from__#4-1792981401343', kind: 'shot' },
+  blast:      { label: 'Blast (Storm Bloom)',           orig: 'A_single_blast_from__#4-1792981401343', kind: 'shot' },
   lightning:  { label: 'Lightning?',               orig: 'A_single,_lightning-_#1-1792981771691', kind: 'shot', note: 'the name was cut off after "lightning-"' },
   isolated:   { label: 'Isolated shot',            orig: 'A_single,_isolated_s_#2-1793055313374', kind: 'shot' },
   heavy:      { label: 'Heavy shot',               orig: 'A_single_heavy_shot__#4-1793055526042', kind: 'shot' },

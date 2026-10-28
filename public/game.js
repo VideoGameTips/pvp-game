@@ -4640,9 +4640,9 @@ const WEAPON_SAMPLES = {
   hand_cannon:      { file: 'thump',     gain: 0.43, from: 0.02, len: 1.6, fade: 0.6, rate: [1, 1] },
   desert_eagle:     { file: 'thump',     gain: 0.62, from: 0.02, len: 1.6, fade: 0.6, rate: [1.08, 1.08] },
   // things that are launched: the blast (the Bazooka at its own pitch, the grenade launcher high), and the RPG-7's rocket (a recording of its own: "A heavy RPG rocket...")
-  bazooka:          { file: 'blast',     gain: 0.17, from: 0.00, len: 3.2, fade: 1.2, rate: [1, 1] },
-  grenade_launcher: { file: 'blast',     gain: 0.14, from: 0.00, len: 1.4, fade: 0.6, rate: [1.25, 1.25] },
   rpg:              { file: 'rocket',    gain: 0.19, from: 0.00, len: 2.6, fade: 1.2, rate: [1, 1] },
+  bazooka:          { file: 'rocket',    gain: 0.243, from: 0.00, len: 2.6, fade: 1.2, rate: [0.88, 0.88] },       // (the RPG-7's rocket, lower: the launcher is the same kind of gun; the blast clip is Storm Bloom's alone, Andy)
+  grenade_launcher: { file: 'heavy3',    gain: 0.21, from: 0.00, len: 1.20, fade: 0.50, rate: [1.19, 1.19] },
   // shotguns: the boom, cut before the faint click that follows it at 1 s (a bigger bore plays it lower, a smaller one higher)
   sg8:              { file: 'isolated',  gain: 0.24, from: 0.00, len: 0.95, fade: 0.35, rate: [1, 1] },
   sawed_off:        { file: 'isolated',  gain: 0.22, from: 0.00, len: 0.95, fade: 0.35, rate: [0.87, 0.87] },
@@ -4686,6 +4686,10 @@ const WEAPON_SAMPLES = {
   gau19:            { file: 'heavy3',    gain: 0.17, from: 0.00, len: 0.50, fade: 0.25, rate: [0.85, 0.85] },
   // the other shotgun-like gun: a tighter take of the isolated boom
   gunslinger:       { file: 'isolatedB', gain: 0.26, from: 0.00, len: 0.80, fade: 0.35, rate: [1.0, 1.0] },
+  // the blast ("A single blast from ..." #4) is Storm Bloom's sound, and nobody's else but the hyper-elemental guns (Andy): the Storm Cannon, a slow lightning gun that is out of the shop, plays it lower. The fast elemental
+  // guns (Cyroclasm, Freeze Gun, Frost Blaster, Flamethrower, Hellfire) fire every 35-110 ms: a 2 s blast on each shot would pile up, so they keep their own sound until a short cut of it is wanted.
+  storm_bloom:      { file: 'blast',     gain: 0.221, from: 0.00, len: 1.80, fade: 0.80, rate: [1.0, 1.0] },
+  storm_cannon:     { file: 'blast',     gain: 0.192, from: 0.00, len: 2.00, fade: 0.90, rate: [0.88, 0.88] },
   // the Railgun: the low laser (the laser skins have the three lasers, see SKIN_SAMPLES)
   railgun:          { file: 'laser2',    gain: 0.248, from: 0.00, len: 0.90, fade: 0.40, rate: [1.0, 1.0] },
 };
