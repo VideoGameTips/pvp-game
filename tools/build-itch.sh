@@ -45,7 +45,7 @@ fi
 # Files the game actually needs. Listed explicitly rather than globbing public/,
 # so a stray file (a scratch map, an editor backup) can never ride along into a
 # public upload.
-FILES=(index.html game.js chat.js i18n.js three.min.js socket.io.min.js wiki.html stats.html weapon-stats.json equipment-models.js shop-catalog.js underworld-data.js underworld.js underworld-adapter.js underworld.css backrooms-data.js backrooms.js backrooms.css ragdoll.js sound-data.js weapon-finish.js stealth-series.js stealth-showroom.js stealth-showroom.css vendor/cannon-es.js vendor/cannon-es.LICENSE)
+FILES=(index.html game.js chat.js i18n.js three.min.js socket.io.min.js wiki.html stats.html weapon-stats.json equipment-models.js shop-catalog.js underworld-data.js underworld.js underworld-adapter.js underworld.css backrooms-data.js backrooms.js backrooms.css ragdoll.js sound-data.js weapon-finish.js stealth-series.js stealth-showroom.js stealth-showroom.css loadout-hub.js player-record.js loadout-hub.css vendor/cannon-es.js vendor/cannon-es.LICENSE)
 
 echo "==> staging"
 rm -rf "$STAGE" "$ZIP"

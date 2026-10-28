@@ -45270,6 +45270,7 @@ function applyKillReload(weaponId) {
 }
 function creditWeaponKill(weaponId) {
   if (!weaponId) return;
+  window.PVP_PLAYER_RECORD?.kill(weaponId);
   applyKillReload(weaponId);
   const before = weaponKills[weaponId] || 0;
   const after  = before + 1;
@@ -70651,6 +70652,7 @@ function showLoadoutScreen(mode) {
     if (w.skinOnly) return; // generated as a skin now, not a standalone weapon
     if (w.archived) return; // pulled from the shop/loadout; still owned by whoever had it
     if (w.adminItem && !isUnlocked(w.id)) return; // hide locked admin weapons
+    if (inLiveMatch() && !isOwned(w.id)) return;
     const isPrimary = w.slot !== 'secondary';
     const dw = effectiveGunStats(w);
     const card = document.createElement('div');
@@ -70666,10 +70668,8 @@ function showLoadoutScreen(mode) {
       <div class="lc-stats">DMG ${w.damageLabel||dw.damage}${w.pellets > 1 ? '×' + w.pellets : ''} · MAG ${w.mag} · ${fireTag} · ${rateTag}</div>
     </div>`;
     const usable = decorateOwnedBadge(card, w.id, !!w.adminItem);
-    if(usable)addGunSkinChips(card, w);
     const handler = () => { if (usable) pickLoadoutWeapon(i, isPrimary, card);else openShopWeaponPreview(w.id); };
     card.addEventListener('click',      handler);
-    card.addEventListener('touchstart', e => { e.stopPropagation(); e.preventDefault(); handler(); }, { passive: false });
     (isPrimary ? pList : sList).appendChild(card);
     cardEls[i] = card;
   });
@@ -70677,6 +70677,7 @@ function showLoadoutScreen(mode) {
     if (m.skinOnly) return; // generated as a skin now, not a standalone melee
     if (m.archived) return; // pulled from the shop/loadout; still owned by whoever had it
     if (m.adminItem && !isUnlocked(m.id)) return;
+    if (inLiveMatch() && !isOwned(m.id)) return;
     const dm = effectiveMeleeItem(m);
     const card = document.createElement('div');
     card.className = 'loadout-card';
@@ -70689,16 +70690,15 @@ function showLoadoutScreen(mode) {
       <div class="lc-stats">DMG ${dm.damage} · RANGE ${dm.range} · ${Math.round(1000/dm.cooldown)}/s</div>
     </div>`;
     const usable = decorateOwnedBadge(card, m.id, !!m.adminItem);
-    if(usable)addMeleeSkinChips(card, m);
     const handler = () => { if (usable) pickMelee(i, card);else openShopWeaponPreview(m.id); };
     card.addEventListener('click',      handler);
-    card.addEventListener('touchstart', e => { e.stopPropagation(); e.preventDefault(); handler(); }, { passive: false });
     mList.appendChild(card);
     meleeEls[i] = card;
   });
   SUPPORT_ITEMS.forEach((s, i) => {
     if (s.archived) return; // pulled from the shop/loadout; still owned by whoever had it
     if (s.adminItem && !isUnlocked(s.id)) return;
+    if (inLiveMatch() && !isOwned(s.id)) return;
     const card = document.createElement('div');
     card.className = 'loadout-card';
     card.dataset.idx = i;
@@ -70713,7 +70713,6 @@ function showLoadoutScreen(mode) {
     const usable = decorateOwnedBadge(card, s.id, !!s.adminItem);
     const handler = () => { if (usable) pickSupport(i, card);else openShopWeaponPreview(s.id); };
     card.addEventListener('click',      handler);
-    card.addEventListener('touchstart', e => { e.stopPropagation(); e.preventDefault(); handler(); }, { passive: false });
     uList.appendChild(card);
     supportEls[i] = card;
   });
@@ -70732,6 +70731,12 @@ function showLoadoutScreen(mode) {
     selectedMeleeIdx = findMeleeIdx(r.id);
     if (r.skin) setMeleeSkin(r.id, r.skin);
   }
+  // An old kit must not silently keep a retired, locked or mode-only item.
+  const usableGun = (idx, secondary) => cardEls[idx] && isOwned(WEAPONS[idx]?.id) && (WEAPONS[idx].slot === 'secondary') === secondary;
+  if (!usableGun(selectedPrimaryIdx, false)) selectedPrimaryIdx = Object.keys(cardEls).map(Number).find(i => usableGun(i, false)) ?? null;
+  if (!usableGun(selectedSecondaryIdx, true)) selectedSecondaryIdx = Object.keys(cardEls).map(Number).find(i => usableGun(i, true)) ?? null;
+  if (!meleeEls[selectedMeleeIdx] || !isOwned(MELEE_ITEMS[selectedMeleeIdx]?.id)) selectedMeleeIdx = Object.keys(meleeEls).map(Number).find(i => isOwned(MELEE_ITEMS[i].id)) ?? null;
+  if (!supportEls[selectedSupportIdx] || !isOwned(SUPPORT_ITEMS[selectedSupportIdx]?.id)) selectedSupportIdx = Object.keys(supportEls).map(Number).find(i => isOwned(SUPPORT_ITEMS[i].id)) ?? null;
   if (loadoutReady()) {
     // We've equipped a loadout before → keep it pre-selected
     cardEls[selectedPrimaryIdx]   && cardEls[selectedPrimaryIdx].classList.add('selected');
@@ -70758,6 +70763,7 @@ function showLoadoutScreen(mode) {
   if (title) title.textContent = loadoutMode === 'swap' ? 'SWAP LOADOUT' : 'SELECT LOADOUT';
 
   screen.style.display = 'flex';
+  window.PVP_LOADOUT_HUB?.mount(screen);
   hydrateLoadoutPreviews(screen);
   if (loadoutMode === 'death' && gameStarted && match && !match.over && loadoutReady()) startAutoRespawn();
 }
@@ -71988,6 +71994,7 @@ function rematchSameMode() {
 }
 // Floating "MODES" button — only visible while you're chilling in Lobby 13.
 function showLobbyModesButton(show) {
+  window.PVP_PLAYER_RECORD?.showLobbyButton(show);
   let btn = document.getElementById('lobby-modes-btn');
   if (!btn) {
     btn = document.createElement('button');
@@ -72240,7 +72247,7 @@ document.addEventListener('langchange', () => {
 // One dialog at a time (#21): each of these used to open on top of whatever was already open, all in
 // different sizes. Closing is only hiding — every dialog rebuilds from current state when it opens.
 // index.html gives them one shared frame.
-const DIALOG_IDS = ['stealth-panel', 'settings-hub-panel', 'controls-panel', 'touch-controls-panel', 'crosshair-panel', 'shoot-fx-panel', 'aim-assist-panel', 'weapon-skins-panel',
+const DIALOG_IDS = ['player-record-panel', 'stealth-panel', 'settings-hub-panel', 'controls-panel', 'touch-controls-panel', 'crosshair-panel', 'shoot-fx-panel', 'aim-assist-panel', 'weapon-skins-panel',
                     'skins-panel', 'kill-log-panel', 'char-chat-panel', 'map-dialog', 'diff-dialog', 'duel-panel', 'lobby-service-panel','weapon-inspect-panel'];
 function anyDialogOpen() {
   return DIALOG_IDS.some(id => { const el = document.getElementById(id); return el && getComputedStyle(el).display !== 'none'; });
@@ -72923,6 +72930,7 @@ function applyProgress(u, r) {
   u.winStreak = r.winStreak || 0; u.bestStreak = r.bestStreak || 0;
 }
 async function awardMatchCredits(kills, won, draw) {
+  window.PVP_PLAYER_RECORD?.result(match, won, draw);
   if (!currentUser || currentUser.isAdmin) return;
   try {
     const r = await authRequest('/shop/award', { username: currentUser.username, password: currentUser.password, kills, won: !!won, draw: !!draw });

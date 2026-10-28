@@ -1,0 +1,123 @@
+#loadout-screen { padding: 14px 20px; background: #101419; gap: 12px; font-family: system-ui, sans-serif; letter-spacing: 0; }
+#loadout-screen *, #player-record-panel * { box-sizing: border-box; letter-spacing: 0; }
+#loadout-screen [hidden], #player-record-panel [hidden], #lobby-record-btn[hidden] { display: none !important; }
+#loadout-screen .fun-fact { display: none; }
+#loadout-screen .lh-header { width: 100%; max-width: 1200px; display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: center; flex: 0 0 auto; }
+#loadout-screen .lh-header h2 { grid-column: 2; grid-row: 1; margin: 0; font-size: 18px; letter-spacing: 0; color: #edf1f4; }
+#loadout-screen .lh-header button { position: static !important; margin: 0 !important; min-height: 44px; padding: 8px 12px !important; font: 600 12px system-ui,sans-serif !important; letter-spacing: 0 !important; }
+#loadout-screen #loadout-exit-btn { grid-column: 1; grid-row: 1; justify-self: start; }
+#loadout-screen #best-loadouts-btn { grid-column: 3; grid-row: 1; justify-self: end; }
+#loadout-steps { width: 100%; max-width: 1200px; display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 8px; flex: 0 0 auto; }
+#loadout-steps button { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 68px; padding: 10px 12px; background: #1c242c; color: #d0d7de; border: 1px solid #39434e; border-radius: 4px; text-align: left; font: 13px system-ui,sans-serif; cursor: pointer; }
+#loadout-steps button[aria-selected="true"] { border-color: #e96e5e; background: #382822; color: #fff; box-shadow: inset 0 -3px #e96e5e; }
+#loadout-steps button > span:last-child { min-width: 0; }
+#loadout-steps strong { display: block; font-size: 14px; }
+.lh-step-number { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; background: #3b4650; color: #fff; flex: 0 0 auto; font-weight: 700; }
+.lh-slot-name { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; margin-top: 3px; color: #acb6be; font-size: 11px; }
+#loadout-screen .lh-tools { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; max-width: 1200px; flex: 0 0 auto; }
+#loadout-search, #player-record-panel .pr-search { width: min(100%,360px); min-height: 44px; padding: 10px 12px; font: 14px system-ui,sans-serif; background: #080d12; color: #f0f3f6; border: 1px solid #475462; border-radius: 4px; touch-action: manipulation; }
+#loadout-count { font-size: 12px; color: #9baab5; white-space: nowrap; }
+#loadout-screen #loadout-cols { display: block; width: 100%; max-width: 1200px; min-height: 0; flex: 1 1 0; overflow: hidden; }
+#loadout-screen .loadout-col { height: 100%; min-height: 0; }
+#loadout-screen .loadout-col-title { display: none; }
+#loadout-screen #loadout-primary-list, #loadout-screen #loadout-secondary-list, #loadout-screen #loadout-melee-list, #loadout-screen #loadout-support-list { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); grid-auto-rows: 204px; gap: 12px; height: 100%; padding: 2px 6px 16px 2px; overflow-y: auto; align-content: start; overscroll-behavior-y: contain; touch-action: pan-y; -webkit-overflow-scrolling: touch; scrollbar-gutter: stable; }
+#loadout-screen .loadout-card { display: grid; grid-template-columns: minmax(0,1fr); grid-template-rows: 98px minmax(0,1fr); align-items: start; gap: 10px; padding: 10px; border-radius: 4px; border: 1px solid #46525c; background: #1b232b; min-width: 0; min-height: 0; overflow: hidden; touch-action: pan-y; }
+#loadout-screen .loadout-card.selected { border: 2px solid #6bd8b2; padding: 9px; background: #18332d; }
+#loadout-screen .loadout-card.catalog-card-locked { opacity: .68; }
+#loadout-screen .lc-preview { width: 100%; height: 98px; border: 0; border-radius: 2px; background: #c6d0d5; position: relative; }
+#loadout-screen .lc-preview img { filter: drop-shadow(0 3px 3px #1a232355); }
+#loadout-screen .lc-name { font-size: 14px; line-height: 1.2; color: #f5f6f8; }
+#loadout-screen .lc-type { font-size: 11px; line-height: 1.25; color: #a5b4c0; margin: 3px 0; }
+#loadout-screen .lc-stats { font-size: 10px; line-height: 1.3; color: #c2ccd4; }
+#loadout-screen .lc-copy > div:nth-child(n+4) { display: none; }
+#loadout-screen .catalog-status { display: block !important; }
+.lh-empty { color: #b2bdc6; text-align: center; padding: 30px; }
+#loadout-screen .lh-footer { width: 100%; max-width: 1200px; display: flex; align-items: center; gap: 12px; flex: 0 0 auto; }
+#loadout-screen .lh-footer button { min-height: 48px; border: 1px solid #4d5b67; border-radius: 4px; background: #28333e; color: #ecf2f6; font: 600 14px system-ui,sans-serif; padding: 10px 16px; cursor: pointer; margin: 0; }
+#loadout-screen .lh-footer #loadout-ready-btn { margin-left: auto; width: auto; background: #be463a; border-color: #e47061; color: #fff; }
+#loadout-screen .lh-footer #loadout-ready-btn:disabled { background: #3d444b; border-color: #59636c; color: #a9b0b6; }
+#loadout-screen .lh-footer button:disabled { opacity: .5; cursor: default; }
+#loadout-screen .lh-footer #loadout-next { min-width: 0; white-space: normal; }
+#loadout-screen .auto-respawn-sub { max-width: 138px; white-space: normal; overflow-wrap: anywhere; }
+#loadout-screen :focus-visible, #player-record-panel :focus-visible { outline: 2px solid #97e9dc; outline-offset: 2px; }
+#lobby-record-btn { position: fixed; top: 14px; left: 290px; z-index: 60; min-height: 42px; padding: 8px 18px; color: #d1e4f8; background: #192d3ee8; border: 2px solid #8cb8df; border-radius: 6px; font: 700 13px system-ui,sans-serif; cursor: pointer; }
+body.touch-ui #lobby-record-btn { top: 6px; left: 222px; min-height: 36px; padding: 6px 12px; }
+#player-record-panel { position: fixed; inset: 0; z-index: 102; padding: 16px; display: none; align-items: center; justify-content: center; background: #000b; color: #e6edf3; font: 14px/1.45 system-ui,sans-serif; }
+#player-record-panel .pr-window { width: min(1180px,100%); height: min(850px,calc(100dvh - 32px)); display: flex; flex-direction: column; min-height: 0; background: #141c24; border: 1px solid #5e707f; border-radius: 6px; overflow: hidden; }
+#player-record-panel button { min-height: 44px; padding: 8px 12px; border: 1px solid #52616f; background: #26323e; color: #e2ebf3; border-radius: 4px; font: 600 13px system-ui,sans-serif; cursor: pointer; touch-action: manipulation; }
+#player-record-panel .pr-header { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 12px 18px; border-bottom: 1px solid #384754; flex: 0 0 auto; }
+#player-record-panel h1 { font-size: 20px; margin: 0; }
+#player-record-panel h2 { font-size: 22px; margin: 0 0 8px; overflow-wrap: anywhere; }
+#player-record-panel h3 { font-size: 14px; margin: 0 0 10px; color: #b6d7e8; }
+#player-record-panel .pr-close { width: 44px; font-size: 24px; line-height: 1; }
+#player-record-panel .pr-tabs { display: flex; border-bottom: 1px solid #384754; padding: 8px 18px; gap: 8px; flex: 0 0 auto; }
+#player-record-panel button[aria-selected="true"], #player-record-panel button[aria-pressed="true"] { border-color: #7ad9bc; background: #214439; }
+#player-record-panel .pr-content { min-height: 0; flex: 1; overflow: auto; overscroll-behavior: contain; touch-action: pan-y; }
+#player-record-panel .pr-overview { max-width: 920px; margin: 0 auto; padding: 24px; }
+#player-record-panel .pr-provenance { font-size: 12px; color: #a2b0be; margin: 0 0 20px; }
+#player-record-panel .pr-section { padding: 18px 0; border-top: 1px solid #3a4652; }
+#player-record-panel .pr-facts { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); column-gap: 24px; row-gap: 0; margin: 0; }
+#player-record-panel .pr-facts > div { display: flex; gap: 12px; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid #ffffff0c; min-width: 0; }
+#player-record-panel dt { font-size: 12px; color: #acbbc8; min-width: 0; overflow-wrap: anywhere; }
+#player-record-panel dd { font-size: 13px; margin: 0; text-align: right; font-variant-numeric: tabular-nums; min-width: 0; overflow-wrap: anywhere; }
+#player-record-panel .pr-favourite { display: flex; align-items: center; gap: 16px; padding: 12px 0; border-bottom: 1px solid #ffffff12; }
+#player-record-panel .pr-favourite .lc-preview { width: 130px; height: 55px; background: #c6d0d5; flex: 0 0 auto; }
+#player-record-panel small { display: block; font-size: 11px; color: #a5b9c8; }
+#player-record-panel .pr-muted { color: #a4b2be; font-size: 13px; }
+#player-record-panel .pr-weapons { display: grid; grid-template-columns: minmax(260px,340px) minmax(0,1fr); min-height: 100%; }
+#player-record-panel .pr-browser { border-right: 1px solid #3a4652; padding: 16px; min-width: 0; }
+#player-record-panel .pr-categories { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+#player-record-panel .pr-categories button { font-size: 11px; padding: 6px 8px; }
+#player-record-panel .pr-search { width: 100%; margin-bottom: 12px; }
+#player-record-panel .pr-owned-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+#player-record-panel .pr-weapon { text-align: left; min-width: 0; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+#player-record-panel .pr-weapon strong { font-size: 12px; overflow-wrap: anywhere; }
+#player-record-panel .pr-weapon .lc-preview { width: 100%; height: 65px; background: #c6d0d5; border: 0; }
+#player-record-panel .pr-weapon-details { min-width: 0; padding: 20px; }
+#player-record-panel .pr-weapon-heading { display: flex; align-items: center; gap: 16px; margin: 16px 0; }
+#player-record-panel .pr-weapon-heading .lc-preview { width: 170px; height: 90px; background: #c6d0d5; flex: 0 0 auto; }
+#player-record-panel .pr-weapon-heading span { color: #abbac8; font-size: 12px; }
+#player-record-panel .pr-weapon-details .pr-facts { grid-template-columns: minmax(0,1fr); }
+#player-record-panel table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+#player-record-panel caption { text-align: left; padding: 0 0 10px; color: #b6d7e8; font-size: 13px; }
+#player-record-panel th, #player-record-panel td { text-align: left; padding: 9px 6px; border-bottom: 1px solid #3a4652; font-size: 12px; }
+#player-record-panel summary { min-height: 44px; padding: 12px 0; cursor: pointer; font-weight: 600; }
+@media (max-width: 900px) {
+  #loadout-screen #loadout-primary-list, #loadout-screen #loadout-secondary-list, #loadout-screen #loadout-melee-list, #loadout-screen #loadout-support-list { grid-template-columns: repeat(3,minmax(0,1fr)); }
+}
+@media (max-width: 650px) {
+  #loadout-screen { padding: 10px 10px max(10px,env(safe-area-inset-bottom)); gap: 8px; }
+  #loadout-screen .lh-header { gap: 6px; }
+  #loadout-screen .lh-header h2 { font-size: 14px; }
+  #loadout-screen .lh-header button { padding: 6px 8px !important; font-size: 10px !important; }
+  #loadout-steps { gap: 4px; }
+  #loadout-steps button { min-height: 64px; gap: 0; padding: 8px 6px; }
+  #loadout-steps .lh-step-number { display: none; }
+  #loadout-steps strong { font-size: 12px; }
+  #loadout-steps .lh-slot-name { font-size: 10px; }
+  #loadout-screen #loadout-primary-list, #loadout-screen #loadout-secondary-list, #loadout-screen #loadout-melee-list, #loadout-screen #loadout-support-list { grid-template-columns: repeat(2,minmax(0,1fr)); grid-auto-rows: 192px; gap: 8px; }
+  #loadout-screen .loadout-card { grid-template-rows: 86px minmax(0,1fr); padding: 8px; gap: 8px; }
+  #loadout-screen .loadout-card.selected { padding: 7px; }
+  #loadout-screen .lc-preview { height: 86px; }
+  #loadout-screen .lc-name { font-size: 13px; }
+  #loadout-screen .lh-footer { gap: 6px; }
+  #loadout-screen .lh-footer button { font-size: 12px; padding: 10px; }
+  #loadout-search { min-width: 0; width: 70%; }
+  #player-record-panel { padding: 6px; }
+  #player-record-panel .pr-window { height: calc(100dvh - 12px); }
+  #player-record-panel .pr-overview, #player-record-panel .pr-weapon-details { padding: 16px; }
+  #player-record-panel .pr-facts { grid-template-columns: minmax(0,1fr); }
+  #player-record-panel .pr-weapons { display: block; }
+  #player-record-panel .pr-browser { border-right: 0; }
+  #player-record-panel .pr-weapon-details { display: none; }
+  #player-record-panel [data-inspecting] .pr-browser { display: none; }
+  #player-record-panel [data-inspecting] .pr-weapon-details { display: block; }
+  #player-record-panel .pr-weapon-heading { flex-direction: column; align-items: start; }
+  #player-record-panel .pr-weapon-heading .lc-preview { width: 100%; height: 130px; }
+}
+@media (max-height: 500px) and (min-width: 651px) {
+  #loadout-screen { gap: 6px; padding-top: 6px; padding-bottom: 6px; }
+  #loadout-steps button { min-height: 44px; padding: 5px 10px; }
+  #loadout-steps .lh-slot-name { display: none; }
+  #loadout-screen .lh-header button, #loadout-search { min-height: 36px; }
+}
