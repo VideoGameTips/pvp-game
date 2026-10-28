@@ -4607,6 +4607,16 @@ const SAMPLE_FILES = {
   heavy3:    'sounds/heavy-shot-3.mp3',     // "One singular heavy s...": a big low boom
   isolatedB: 'sounds/isolated-shot-b.mp3',  // "A single, isolated s..." again, a tighter take than the first
   // "A crisp, loud AK-47 ..." (3 s each; the shot starts 95 ms and 60 ms in, a lead-in that is not played: it would be a lag on every shot; each has a second, quieter bang near 0.45 s that is cut off too)
+  // "A single stylized vi..." (1 s each): three lasers (the Railgun and the laser skins) and one more of the same prompt that Andy wanted for an SMG
+  laser1:    'sounds/laser-shot-1.mp3',     // the brightest laser: half of its first 150 ms is above 250 Hz, a third of it from 250 Hz to 2 kHz: pistols
+  laser2:    'sounds/laser-shot-2.mp3',     // the low, slow one (94 % of its first 150 ms below 250 Hz, takes 0.42 s to fall 20 dB): the Railgun, the sniper and the shotgun skins
+  laser4:    'sounds/laser-shot-4.mp3',     // the short one (down 20 dB after 0.24 s): the rapid-fire skins
+  smgV3:     'sounds/smg-shot-v3.mp3',      // "A single stylized vi... #3": a low zap, nearly nothing above 250 Hz
+  // "A snappy single gun..." (2 s) and "A single stylized ac..." (3 s each): the SMGs. The ac ones have a long room tail: only the first 0.3 s is played
+  snappy2:   'sounds/smg-snappy-2.mp3',     // starts at once, most of it above 250 Hz after the first 100 ms: the machine pistol
+  smgA1:     'sounds/smg-shot-a1.mp3',      // starts at once, falls fastest of the three: the P90 (29 ms between shots)
+  smgA3:     'sounds/smg-shot-a3.mp3',      // the shot starts 70 ms in (a lead-in that is not played): the MP-40
+  smgA4:     'sounds/smg-shot-a4.mp3',      // the longest tail, 91 % below 250 Hz: the HK-MP7
   ak1:       'sounds/ak-shot-1.mp3',        // the realistic skins' (AK-47, M4A1): starts at once (10 ms in), 88 % of its first 150 ms below 250 Hz; a slapback echo at 0.3 s that is cut off
   ak2:       'sounds/ak-shot-2.mp3',        // the crack: nearly three quarters of its first 150 ms is between 250 Hz and 2 kHz: the AK20
   ak4:       'sounds/ak-shot-4.mp3',        // the boom: almost all of its first 150 ms is below 250 Hz: the twin-barrel rifle
@@ -4622,7 +4632,6 @@ const SAMPLE_FILES = {
 // Where a clip has a lead-in the start (`from`) is moved a little too, the "delay": the ring, the heavy shot, the second quick shot.
 const WEAPON_SAMPLES = {
   vector:           { file: 'vector',    gain: 0.20, from: 0.00, len: 1.2, fade: 0.4, rate: [1, 1] },   // (the clip as it was made: the same sound every shot, at its own pitch; only the last 1.8 s of silence is not played)
-  p90_spec:         { file: 'vector',    gain: 0.20, from: 0.00, len: 0.50, fade: 0.25, rate: [1.1, 1.1] },
   // snipers: the ring. The bigger the gun the lower it plays
   srx:              { file: 'ring',      gain: 1.16, from: 0.10, len: 2.0, fade: 0.7, rate: [1, 1] },
   amr:              { file: 'ring',      gain: 1.11, from: 0.12, len: 2.0, fade: 0.7, rate: [0.88, 0.88] },
@@ -4643,10 +4652,11 @@ const WEAPON_SAMPLES = {
   m1_garand:        { file: 'heavy',     gain: 0.31, from: 0.06, len: 1.7, fade: 0.7, rate: [1.12, 1.12] },
   mk44:             { file: 'heavy',     gain: 0.31, from: 0.04, len: 0.50, fade: 0.25, rate: [0.9, 0.9] },
   // the rapid-fire guns get the shortest clips, cut to half a second or less (the heavier the gun, the lower it plays): SMGs
-  p90:              { file: 'quick1',    gain: 0.76, from: 0.01, len: 0.38, fade: 0.20, rate: [1.15, 1.15] },
-  mp40:             { file: 'quick1',    gain: 0.62, from: 0.01, len: 0.40, fade: 0.20, rate: [1.0, 1.0] },
-  machine_pistol:   { file: 'quick1',    gain: 0.69, from: 0.01, len: 0.40, fade: 0.20, rate: [0.87, 0.87] },
-  hkmp7:            { file: 'quick1',    gain: 0.61, from: 0.01, len: 0.40, fade: 0.20, rate: [0.98, 0.98] },
+  machine_pistol:   { file: 'snappy2',   gain: 0.278, from: 0.00, len: 0.30, fade: 0.15, rate: [1.0, 1.0] },     // (Andy: the machine pistol first)
+  mp40:             { file: 'smgA3',     gain: 0.189, from: 0.06, len: 0.32, fade: 0.15, rate: [1.0, 1.0] },
+  p90:              { file: 'smgA1',     gain: 0.187, from: 0.00, len: 0.25, fade: 0.12, rate: [1.0, 1.0] },
+  hkmp7:            { file: 'smgA4',     gain: 0.194, from: 0.01, len: 0.30, fade: 0.14, rate: [1.0, 1.0] },
+  p90_spec:         { file: 'smgV3',     gain: 0.315, from: 0.00, len: 0.30, fade: 0.14, rate: [1.0, 1.0] },
   // machine guns
   rpd:              { file: 'quick2',    gain: 0.85, from: 0.08, len: 0.36, fade: 0.20, rate: [1.14, 1.14] },
   mg42:             { file: 'quick2',    gain: 0.81, from: 0.09, len: 0.38, fade: 0.20, rate: [1.0, 1.0] },
@@ -4676,13 +4686,28 @@ const WEAPON_SAMPLES = {
   gau19:            { file: 'heavy3',    gain: 0.17, from: 0.00, len: 0.50, fade: 0.25, rate: [0.85, 0.85] },
   // the other shotgun-like gun: a tighter take of the isolated boom
   gunslinger:       { file: 'isolatedB', gain: 0.26, from: 0.00, len: 0.80, fade: 0.35, rate: [1.0, 1.0] },
+  // the Railgun: the low laser (the laser skins have the three lasers, see SKIN_SAMPLES)
+  railgun:          { file: 'laser2',    gain: 0.248, from: 0.00, len: 0.90, fade: 0.40, rate: [1.0, 1.0] },
 };
 // The realistic skins (the military set, "AK-47 through M2 Flamethrower") play a recording of their own when YOU hold them, by skin id: the AK-47 and the M4A1 get the AK-47 one ("A crisp, loud AK-47 ... #1"),
 // the M4A1 pitched up. Someone else's shot has no skin (what they hold is not yours to know), so it is the gun's own recording. The other realistic skins (pistol, shotgun, revolver, MG...) are other
 // guns: they keep the gun's recording until there is one that fits them. Same rule as the guns for two on one clip: pitch 12 % apart.
+// The skins whose made-up sound was a laser (SKIN_FX kind 'laser': Neon Rift, the Blaster, the Ray Gun, the Neon P90) play the three laser recordings, four to a clip at most, every one 12 % or
+// more apart in pitch: the rapid-fire ones the short laser, the pistols the bright one, the sniper and the shotgun the low one (the Railgun itself plays that one at pitch 1). The Neon SMG is the skin of
+// a gun that is out of the shop: it keeps its made-up laser.
 const SKIN_SAMPLES = {
   ak20_ak47_wood: { file: 'ak1', gain: 0.776, from: 0.005, len: 0.34, fade: 0.14, rate: [1.0, 1.0] },
   burst_m4a1:     { file: 'ak1', gain: 1.182, from: 0.005, len: 0.34, fade: 0.14, rate: [1.14, 1.14] },
+  p90_neon_sign:      { file: 'laser4', gain: 0.388, from: 0.00, len: 0.30, fade: 0.14, rate: [1.19, 1.19] },
+  vector_cyberpunk:   { file: 'laser4', gain: 0.412, from: 0.00, len: 0.30, fade: 0.14, rate: [1.05, 1.05] },
+  ak20_cyberpunk:     { file: 'laser4', gain: 0.468, from: 0.00, len: 0.30, fade: 0.14, rate: [0.93, 0.93] },
+  mp40_cyberpunk:     { file: 'laser4', gain: 0.342, from: 0.00, len: 0.30, fade: 0.14, rate: [0.82, 0.82] },
+  pistol_blaster:     { file: 'laser1', gain: 0.478, from: 0.00, len: 0.50, fade: 0.25, rate: [1.19, 1.19] },
+  pistol_cyberpunk:   { file: 'laser1', gain: 0.439, from: 0.00, len: 0.50, fade: 0.25, rate: [1.05, 1.05] },
+  revolver_cyberpunk: { file: 'laser1', gain: 0.388, from: 0.00, len: 0.50, fade: 0.25, rate: [0.93, 0.93] },
+  continuum_ray_gun:  { file: 'laser1', gain: 0.351, from: 0.00, len: 0.50, fade: 0.25, rate: [0.82, 0.82] },
+  srx_cyberpunk:      { file: 'laser2', gain: 1.02, from: 0.00, len: 0.90, fade: 0.40, rate: [0.88, 0.88] },
+  sg8_cyberpunk:      { file: 'laser2', gain: 0.887, from: 0.00, len: 0.85, fade: 0.40, rate: [1.14, 1.14] },
 };
 const _sampleState = {};                                            // by file (so the Vector's is _sampleState.vector), not by weapon
 let _sampleVoices = 0;

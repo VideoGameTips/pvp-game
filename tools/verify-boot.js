@@ -3224,7 +3224,7 @@ if (ok && process.argv.includes('--sample')) {
   // file never comes, the made-up shot plays exactly as before; guns without one are not touched; no skin changes it; weapons sharing a file fetch it once.
   const tbl = JSON.parse(vm.runInThisContext('JSON.stringify({ files: SAMPLE_FILES, samples: WEAPON_SAMPLES, skins: SKIN_SAMPLES, events: EVENT_SAMPLES })'));
   const itch = fs.readFileSync(path.join(__dirname, 'build-itch.sh'), 'utf8'), filesLine = (itch.match(/^FILES=\(([^)]*)\)/m) || [])[1] || '';
-  const LENGTH = { stealth: 3.0, vector: 3.0, thump: 3.0, ring: 3.0, blast: 4.0, lightning: 3.0, isolated: 3.0, heavy: 4.0, rocket: 8.0, quick1: 0.5, quick2: 0.5, dry1: 3.0, dry4: 3.0, sharp1: 3.0, sharp3: 3.0, single: 3.0, heavy3: 3.0, isolatedB: 3.0, ak1: 3.0, ak2: 3.0, ak4: 3.0, boomRoll: 8.0, boomTwin: 8.0, boomCrack: 8.0 };       // seconds in each file as it was made
+  const LENGTH = { stealth: 3.0, vector: 3.0, thump: 3.0, ring: 3.0, blast: 4.0, lightning: 3.0, isolated: 3.0, heavy: 4.0, rocket: 8.0, quick1: 0.5, quick2: 0.5, dry1: 3.0, dry4: 3.0, sharp1: 3.0, sharp3: 3.0, single: 3.0, heavy3: 3.0, isolatedB: 3.0, ak1: 3.0, ak2: 3.0, ak4: 3.0, laser1: 1.0, laser2: 1.0, laser4: 1.0, smgV3: 1.0, snappy2: 2.0, smgA1: 3.0, smgA3: 3.0, smgA4: 3.0, boomRoll: 8.0, boomTwin: 8.0, boomCrack: 8.0 };       // seconds in each file as it was made
   const more = [], cuts = [...Object.entries(tbl.samples), ...Object.entries(tbl.skins).map(([k, c]) => ['skin ' + k, c]), ...Object.entries(tbl.events).flatMap(([n, E]) => E.clips.map((c, i) => ['event ' + n + ' #' + (i + 1), c]))];
   for (const [k, u] of Object.entries(tbl.files)) {
     const f = path.join(__dirname, '..', 'public', u);
@@ -3314,7 +3314,7 @@ if (ok && process.argv.includes('--sample')) {
       clear(); sampleHits = 0; _sampleVoices = 0; for (let i = 0; i < 90; i++) { clear(); playWeaponSound('vector', {}); } if (sampleHits > 52 || sampleHits < 44) issues.push('a runaway burst should be capped near fifty voices, played ' + sampleHits);
       _sampleVoices = 0;
       // other guns are untouched
-      for (const id of ['flamethrower', 'freeze_gun', 'crossbow', 'railgun', 'taser', 'paintball']) { clear(); sampleHits = 0; _sampleVoices = 0; playWeaponSound(id, {}); if (sampleHits) issues.push('the ' + id + ' must keep its own sound'); }
+      for (const id of ['flamethrower', 'freeze_gun', 'crossbow', 'dart_gun', 'taser', 'paintball']) { clear(); sampleHits = 0; _sampleVoices = 0; playWeaponSound(id, {}); if (sampleHits) issues.push('the ' + id + ' must keep its own sound'); }
       // 💥 events: the big explosions are recordings (one of several, never the same one twice running; one roar per rocket), the little pops of a map keep the made-up boom
       { const E = EVENT_SAMPLES.explosion;
         if (!E || E.clips.length < 2) issues.push('the explosion should have several recordings to pick from');
@@ -3357,12 +3357,13 @@ if (ok && process.argv.includes('--sample')) {
         withTags();
         for (const [skinId, d] of Object.entries(SKIN_SAMPLES)) {
           const gun = weaponOf(skinId); if (!gun) continue; delete _activeModelSkin[gun];            // (a skin that does not exist is reported above)
-          const plain = played(gun); if (plain.join() !== WEAPON_SAMPLES[gun].file) issues.push(gun + ' without its skin should play its own recording, played ' + plain.join());
+          const own = WEAPON_SAMPLES[gun] ? WEAPON_SAMPLES[gun].file : '';                          // (a gun with no recording of its own: the skin still has one, the gun without it is the made-up sound)
+          const plain = played(gun); if (plain.join() !== own) issues.push(gun + ' without its skin should play its own recording, played ' + plain.join());
           _activeModelSkin[gun] = { id: skinId };
           const mine = played(gun); if (mine.join() !== d.file) issues.push('your ' + gun + ' wearing the ' + skinId + ' skin should play the skin recording (' + d.file + '), played ' + mine.join());
-          const theirs = played(gun, { remote: true, position: new THREE.Vector3(20, 1, 0) }); if (theirs.join() !== WEAPON_SAMPLES[gun].file) issues.push('someone else shot with a ' + skinId + ' has no skin you can know of: it is the gun, ' + WEAPON_SAMPLES[gun].file + ', played ' + theirs.join());
+          const theirs = played(gun, { remote: true, position: new THREE.Vector3(20, 1, 0) }); if (theirs.join() !== own) issues.push('someone else shot with a ' + skinId + ' has no skin you can know of: it is the gun, ' + own + ', played ' + theirs.join());
           // the skin recording is not loaded yet: the gun's own plays (never silence)
-          _sampleState[d.file] = { buf: null, loading: true, failed: false }; const early = played(gun); if (WEAPON_SAMPLES[gun].file !== d.file && early.join() !== WEAPON_SAMPLES[gun].file) issues.push('until the ' + skinId + ' recording is there the gun own recording plays, played ' + early.join());
+          _sampleState[d.file] = { buf: null, loading: true, failed: false }; const early = played(gun); if (own !== d.file && early.join() !== own) issues.push('until the ' + skinId + ' recording is there the gun own recording plays, played ' + early.join());
           withTags(); delete _activeModelSkin[gun];
         }
         // a realistic skin with no recording of its own: the gun's
