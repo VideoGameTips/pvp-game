@@ -13441,10 +13441,10 @@ var _AEV = {
   honk(c, t, o) { const n = Math.random() < 0.5 ? 1 : 2; for (let j = 0; j < n; j++) { _aTone(c, t + j * 0.35, 0.25, o, 'sawtooth', 410, 410, 0.4, 0.01, 0.6); _aTone(c, t + j * 0.35, 0.25, o, 'sawtooth', 510, 510, 0.3, 0.01, 0.6); } },
   horn(c, t, o) { _aTone(c, t, 2.4, o, 'sawtooth', 110, 108, 0.5, 0.25, 0.7); _aTone(c, t, 2.4, o, 'sawtooth', 138, 136, 0.4, 0.25, 0.7); },
   jet(c, t, o) { playFilteredNoise(c, t, 8, o, 0.5, 'bandpass', 500, 0.8, 3.5, 0); playFilteredNoise(c, t, 8, o, 0.3, 'lowpass', 260, 0.8, 3.5, 0); },
-  heli(c, t, o) { for (let k = 0; k < 64; k++) playFilteredNoise(c, t + k * 0.078, 0.05, o, 0.8 * Math.pow(Math.sin(Math.PI * k / 64), 1.5) + 0.02, 'lowpass', 200, 0.7, 0.004, 1.2); },
+  heli(c, t, o) { for (let k = 0; k < 28; k++) playFilteredNoise(c, t + k * 0.09, 0.05, o, 0.8 * Math.pow(Math.sin(Math.PI * k / 28), 1.5) + 0.02, 'lowpass', 200, 0.7, 0.004, 1.2); },
   thunder(c, t, o) { playFilteredNoise(c, t, 4, o, 0.9, 'lowpass', 260, 0.7, 0.2, 1.2); playFilteredNoise(c, t + 0.8, 2.5, o, 0.5, 'lowpass', 180, 0.7, 0.1, 1.5); playTone(c, t, 2, o, 60, 30, 0.6, 'sine'); },
   cheer(c, t, o) { playFilteredNoise(c, t, 3.6, o, 0.6, 'bandpass', 900, 0.7, 1.2, 0); playFilteredNoise(c, t, 3.6, o, 0.25, 'bandpass', 2200, 0.9, 1.0, 0); },
-  applause(c, t, o) { for (let k = 0; k < 70; k++) playFilteredNoise(c, t + k * 0.045 + Math.random() * 0.03, 0.03, o, (0.2 + Math.random() * 0.5) * Math.sin(Math.PI * k / 70), 'bandpass', 2200 + Math.random() * 1500, 0.8, 0.001, 1); },
+  applause(c, t, o) { for (let k = 0; k < 30; k++) playFilteredNoise(c, t + k * 0.09 + Math.random() * 0.05, 0.03, o, (0.2 + Math.random() * 0.5) * Math.sin(Math.PI * k / 30), 'bandpass', 2200 + Math.random() * 1500, 0.8, 0.001, 1); },
   bells(c, t, o) { for (let k = 0; k < 8; k++) playTone(c, t + k * (0.07 + Math.random() * 0.05), 0.3, o, 3200 + Math.random() * 1200, 3000, 0.3, 'sine'); },
   chime(c, t, o) { const P = [523, 587, 659, 784, 880, 1047, 1175, 1319], n = 1 + ((Math.random() * 3) | 0); for (let k = 0; k < n; k++) { const f = P[(Math.random() * P.length) | 0], at = t + k * 0.35; playTone(c, at, 2.2, o, f, f, 0.35, 'sine'); playTone(c, at, 1.0, o, f * 2.76, f * 2.76, 0.08, 'sine'); } },
   ding(c, t, o) { playTone(c, t, 1.4, o, 659, 659, 0.35, 'sine'); playTone(c, t + 0.5, 1.6, o, 523, 523, 0.35, 'sine'); playTone(c, t, 0.5, o, 1318, 1318, 0.06, 'sine'); },
@@ -13509,7 +13509,7 @@ function _atmoAudio(dt) {
   const vol = (typeof GAMEPLAY_SETTINGS !== 'undefined' && GAMEPLAY_SETTINGS.ambient != null) ? GAMEPLAY_SETTINGS.ambient : 1;
   if (!ctx || ctx.state !== 'running') return;
   if (A.ctx !== ctx || A.map !== ATMO.name) _aBuild(ctx, ATMO.name);
-  A.master.gain.setTargetAtTime(0.6 * vol, ctx.currentTime, 0.15);
+  A.master.gain.setTargetAtTime(0.12 * vol, ctx.currentTime, 0.15);   // was 0.6: the wind and hum buried the gunfire
   if (vol <= 0.01) return;
   A.next -= dt;
   if (A.next <= 0) {   // the wind follows the gusts, a few times a second is plenty
@@ -15589,7 +15589,7 @@ function updateMusic(dt) {
   const want = vol > 0.01 ? musicWanted() : null;
   if (M.ctx !== ctx) { M.ctx = ctx; M.bus = null; M.out = null; M.track = undefined; }
   if (want !== M.track) _musicSwitch(ctx, want);
-  if (M.master) M.master.gain.setTargetAtTime(0.5 * Math.max(0, Math.min(1.5, vol)), ctx.currentTime, 0.2);
+  if (M.master) M.master.gain.setTargetAtTime(0.1 * Math.max(0, Math.min(1.5, vol)), ctx.currentTime, 0.2);   // was 0.5: music sat on top of the guns
   if (!M.track || !M.out) return;
   const T = MUSIC_TRACKS[M.track], barDur = 60 / T.bpm * 4;
   if (M.nextT < ctx.currentTime - 0.5) M.nextT = ctx.currentTime + 0.1;     // the tab was asleep: do not play the bars it missed
@@ -34467,6 +34467,10 @@ const WEAPON_SKINS = [
   { id: 'superstar', name: 'Superstar',     body: 0x14206a, accent: 0xffd23a, flag: null, sw: ['#14206a', '#ffd23a'] },
   { id: 'bubbles',   name: 'Bubbles',       body: 0x0a5a7a, accent: 0xbff6ff, flag: null, sw: ['#0a5a7a', '#bff6ff'] },
   { id: 'error',     name: 'Error',         body: 0x040000, accent: 0xff2a2a, flag: null, sw: ['#040000', '#ff2a2a'] },
+  // ── 🪞 Metal that moves, and one thing that should not be ──
+  { id: 'mercury',    name: 'Liquid Mercury',  body: 0xd6dce4, accent: 0x6a7482, flag: null, sw: ['#d6dce4', '#6a7482'] },
+  { id: 'titanium',   name: 'Torched Titanium', body: 0xe0b85a, accent: 0x2f6fe3, flag: null, sw: ['#e0b85a', '#2f6fe3'] },
+  { id: 'tesseract',  name: 'Tesseract',       body: 0x03050c, accent: 0x9ff2ff, flag: null, sw: ['#03050c', '#9ff2ff'] },
   // ── 🎖 Contract wraps: not in the shop, each earned by a contract (CONTRACTS, below) ──
   { id: 'darkmatter',   name: 'Dark Matter',   body: 0x05030f, accent: 0xb36bff, flag: null, contract: true, sw: ['#05030f', '#b36bff'] },
   { id: 'singularity',  name: 'Singularity',   body: 0x000000, accent: 0xffd9a0, flag: null, contract: true, sw: ['#000000', '#ff8a2a'] },
@@ -35190,6 +35194,71 @@ Object.assign(WS_PATTERNS, {
   },
 });
 
+// ── 🪞 Metal that moves, and one thing that should not be ──────────────────────────────────────────────
+// Two finishes that are meant to read as ultra-polished metal (mirror chrome, heat-tinted titanium) and one that is
+// not a material at all. They move in ways the older wraps do not: see the `bump`, `sway`, `spin` and `pulse` notes
+// on WS_LOOKS.
+const _wsRgba = (css, a) => { const n = parseInt(css.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; };
+Object.assign(WS_PATTERNS, {
+  mercury(g, N, c, r) {   // pooled liquid metal: a bright silver ground, soft dark and light pools, and fine bright threads of flow
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N);
+    const pools = [];
+    for (let i = 0; i < 18; i++) pools.push({ x: r() * N, y: r() * N, R: 34 + r() * 60, sx: 1.5 + r() * 1.8, rot: r() * 3.14, dark: i % 2 === 0 });
+    const threads = [];
+    for (let k = 0; k < 7; k++) threads.push({ y: (k + 0.5) * N / 7, ph: r() * 6.283, am: 5 + r() * 12, f: 1 + (r() * 2 | 0) });
+    _wsTile(g, N, () => {
+      for (const p of pools) {
+        g.save(); g.translate(p.x, p.y); g.rotate(p.rot); g.scale(p.sx, 1);
+        const col = p.dark ? c[2] : c[1], gr = g.createRadialGradient(0, 0, 0, 0, 0, p.R);
+        gr.addColorStop(0, _wsRgba(col, p.dark ? 0.95 : 0.9)); gr.addColorStop(0.55, _wsRgba(col, p.dark ? 0.55 : 0.5)); gr.addColorStop(1, _wsRgba(col, 0));
+        g.fillStyle = gr; g.fillRect(-p.R, -p.R, p.R * 2, p.R * 2); g.restore();
+      }
+      g.lineCap = 'round';
+      for (const v of threads) {
+        const path = () => { g.beginPath(); for (let x = 0; x <= N; x += 4) { const y = v.y + Math.sin(x / N * 6.283 * v.f + v.ph) * v.am; x ? g.lineTo(x, y) : g.moveTo(x, y); } };
+        g.strokeStyle = _wsRgba(c[2], 0.5); g.lineWidth = 5; g.save(); g.translate(0, 3); path(); g.stroke(); g.restore();
+        g.strokeStyle = _wsRgba(c[1], 0.95); g.lineWidth = 2.6; path(); g.stroke();
+      }
+    });
+  },
+  heat(g, N, c, r) {   // titanium that has been torched: the oxide colours in order, laid on the diagonal, with the brush marks left in it
+    const STOPS = [[0, 0x7a8089], [0.14, 0xb9a374], [0.26, 0xe3bc5a], [0.38, 0xd9823a], [0.50, 0xb5407e], [0.62, 0x6a46c8], [0.76, 0x2f6fe3], [0.88, 0x47c3e8], [1, 0xa9b2bb]];
+    const lut = [];
+    for (let i = 0; i < 256; i++) {
+      const t = i / 255; let k = 1; while (k < STOPS.length - 1 && STOPS[k][0] < t) k++;
+      const [t0, a] = STOPS[k - 1], [t1, b] = STOPS[k], f = (t - t0) / (t1 - t0);
+      const ch = (s) => Math.round(((a >> s) & 255) * (1 - f) + ((b >> s) & 255) * f);
+      lut.push([ch(16), ch(8), ch(0)]);
+    }
+    const img = g.createImageData(N, N), d = img.data, brush = new Float32Array(N), grain = new Float32Array(N);
+    for (let y = 0; y < N; y++) { brush[y] = r(); grain[y] = r(); }
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const u = (x + y) / N, f = u - Math.floor(u), m = 1 - Math.abs(2 * f - 1);          // there and back: the tile repeats with no seam
+      const mm = Math.min(1, Math.max(0, m + (brush[y] - 0.5) * 0.045)), rgb = lut[(mm * 255) | 0];
+      const k = 0.92 + grain[(y * 7 + x * 3) % N] * 0.14, o = (y * N + x) * 4;
+      d[o] = Math.min(255, rgb[0] * k); d[o + 1] = Math.min(255, rgb[1] * k); d[o + 2] = Math.min(255, rgb[2] * k); d[o + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+  },
+  tesseract(g, N, c, r) {   // a hypercube seen end-on: each cell is a square in a diamond in a square, down and down. c[1] is the light
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N);
+    const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    _wsTile(g, N, () => {
+      let pts = [[0, 0], [N, 0], [N, N], [0, N]];
+      for (let lv = 0; lv < 8; lv++) {
+        const m = pts.map((p, i) => mid(p, pts[(i + 1) % 4]));
+        g.globalAlpha = Math.max(0.15, 0.62 - lv * 0.07); g.fillStyle = lv & 1 ? (c[2] || c[0]) : (c[3] || c[0]);
+        pts.forEach((p, i) => { const a = m[(i + 3) % 4], b = m[i]; g.beginPath(); g.moveTo(p[0], p[1]); g.lineTo(b[0], b[1]); g.lineTo(a[0], a[1]); g.closePath(); g.fill(); });
+        g.globalAlpha = Math.max(0.55, 1 - lv * 0.07); g.strokeStyle = c[1]; g.lineWidth = Math.max(1.3, 4.6 - lv * 0.7); g.lineJoin = 'miter';
+        g.beginPath(); pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.closePath(); g.stroke();
+        pts = m;
+      }
+      g.globalAlpha = 0.4; g.lineWidth = 1.4; g.strokeStyle = c[1];                      // the diagonals that run into the middle of every cell
+      g.beginPath(); g.moveTo(0, 0); g.lineTo(N, N); g.moveTo(N, 0); g.lineTo(0, N); g.stroke();
+      g.globalAlpha = 1;
+    });
+  },
+});
 // id -> how it is painted and finished. `glow`: which of the pattern's colours also lights up (an emissive layer).
 const WS_LOOKS = {
   gold:      { pat: 'filigree', c: [0xc8a020, 0xffe070], metal: 0.95, rough: 0.26 },
@@ -35248,7 +35317,17 @@ const WS_LOOKS = {
   reaper:       { pat: 'runes',      c: [0x060104, 0xff2a3a, 0x3a0610, 0x8a1020], metal: 0.5, rough: 0.35, glow: 1, scroll: [0, -0.05] },
   prismatic:    { pat: 'prism',      c: [0x1a1a22, 0xffffff], sat: 88, metal: 0.85, rough: 0.1, scroll: [0.05, 0.03] },
   warpdrive:    { pat: 'warp',       c: [0x02040e, 0x9fe2ff, 0x1a3a8a, 0xffffff], metal: 0.4, rough: 0.3, glow: 1, scroll: [0.9, 0] },
-  xpert:        { pat: 'xpert',      c: [0x0b0b0e, 0xffc83a, 0x7a5a0c, 0xfff2b0], metal: 1.0, rough: 0.14, glow: 1, scroll: [0.02, 0.02] },
+  xpert:        { pat: 'xpert',      c: [0x0b0b0e, 0xffc83a, 0x7a5a0c, 0xfff2b0], metal: 1.0, rough: 0.14, glow: 1, scroll: [0.02, 0.02] },  // ── metal that moves, and the thing that should not be ──
+  // New kinds of motion, beyond `scroll` (one way, forever) and `flicker` (repaint):
+  //   bump   { amount, du, dv }   a height map made from the pattern's own light and dark, scrolled on its OWN clock, so the
+  //                               reflections ripple against the colour underneath instead of sliding with it
+  //   sway   [du, dv, hz]         the colour swings back and forth about where it is, instead of running one way
+  //   spin   rad/s                the colour and the light turn about the centre of the part's texture
+  //   pulse  [hz, lo, hi]         how bright the light is breathes between lo and hi
+  //   env    n                    how hard it picks up the sky (envMapIntensity): the chrome look is mostly this
+  mercury:   { pat: 'mercury',   c: [0xc4ccd6, 0xffffff, 0x2e3540], metal: 1.0, rough: 0.035, env: 1.7, noSwap: true, scroll: [-0.022, 0.012], bump: { amount: 3, du: 0.06, dv: -0.035 } },
+  titanium:  { pat: 'heat',      c: [0x7a8089, 0xe3bc5a], metal: 1.0, rough: 0.2, env: 1.35, noSwap: true, sway: [0.28, 0, 0.07] },
+  tesseract: { pat: 'tesseract', c: [0x03050c, 0x9ff2ff, 0x2a1a6a, 0x0b1a3a], metal: 0.85, rough: 0.14, env: 1.2, glow: 1, noSwap: true, spin: 0.33, pulse: [0.45, 0.7, 1.55] },
 };
 
 // ── 🎖 Contracts ────────────────────────────────────────────────────────────────────────────────────────
@@ -35429,6 +35508,9 @@ function _wsSwatchURL(id) {
   return u;
 }
 const _wsFlickers = [];   // wraps that repaint themselves: { id, every, t, n, repaint(n) }
+const _wsMovers = [];    // wraps with motion beyond a straight scroll: { look, maps, bump }
+const _wsPulseMats = new Set();   // materials whose light is currently breathing (see look.pulse)
+function _wsGrey(css) { const n = parseInt(css.slice(1), 16), y = Math.round(0.3 * (n >> 16 & 255) + 0.59 * (n >> 8 & 255) + 0.11 * (n & 255)); return '#' + (y * 0x10101).toString(16).padStart(6, '0'); }
 function _wsTextures(id, variant) {
   if (WS_LOOKS[id] && WS_LOOKS[id].noSwap) variant = 0;
   const key = id + ':' + variant;
@@ -35436,10 +35518,11 @@ function _wsTextures(id, variant) {
   const look = WS_LOOKS[id], N = 256;
   // a fresh generator every time, so the glow layer lays its pattern down exactly where the painted one went
   const paint = (cv, colors, frame) => WS_PATTERNS[look.pat](cv.getContext('2d'), N, colors, _wsRng(frame ? key + '#' + frame : key), look);
-  const draw = (colors) => {
+  const draw = (colors, linear) => {
     const c = document.createElement('canvas'); c.width = c.height = N;
     paint(c, colors, 0);
     const tx = new THREE.CanvasTexture(c); tx.wrapS = tx.wrapT = THREE.RepeatWrapping;
+    if (linear) return tx;   // a height map is data, not a picture: no colour space
     if (look.pat === 'pixels') { tx.magFilter = THREE.NearestFilter; tx.minFilter = THREE.NearestFilter; tx.generateMipmaps = false; }
     // painted in sRGB, so it has to say so: left untagged it reads as linear and every colour comes out pale
     if ('colorSpace' in tx && THREE.SRGBColorSpace !== undefined) tx.colorSpace = THREE.SRGBColorSpace;
@@ -35456,7 +35539,13 @@ function _wsTextures(id, variant) {
     t._glowCols = glow;
   }
   t._cols = v;
+  if (look.bump) t.bump = draw(v.map(_wsGrey), true);   // the same picture in greys: bright is high, dark is low
   _wsCache.set(key, t);
+  if (look.bump || look.sway || look.spin) {
+    const maps = [t.map, t.glow].filter(Boolean);
+    if (look.spin) for (const m of maps) m.center.set(0.5, 0.5);
+    _wsMovers.push({ look, maps, bump: t.bump || null });
+  }
   if (look.scroll) _wsScrollers.push({ id, du: look.scroll[0], dv: look.scroll[1], maps: [t.map, t.glow].filter(Boolean) });
   if (look.flicker) _wsFlickers.push({ id, every: look.flicker, t: 0, n: 0, repaint: (n) => {
     paint(t.map.image, t._cols, n); t.map.needsUpdate = true;
@@ -35469,6 +35558,19 @@ function _wsTextures(id, variant) {
 function updateWrapScroll(dt) {
   for (const sc of _wsScrollers) for (const m of sc.maps) {
     m.offset.x = (m.offset.x + sc.du * dt) % 1; m.offset.y = (m.offset.y + sc.dv * dt) % 1;
+  }
+  // sway / spin / the rippling bump layer, and the breathing light
+  const T = performance.now() / 1000;
+  for (const mv of _wsMovers) {
+    const L = mv.look;
+    if (L.sway) { const w = Math.sin(T * 6.2832 * L.sway[2]); for (const m of mv.maps) m.offset.set(L.sway[0] * w, L.sway[1] * w); }
+    if (L.spin) for (const m of mv.maps) m.rotation = (T * L.spin) % 6.2832;
+    if (mv.bump && L.bump) { mv.bump.offset.x = (mv.bump.offset.x + L.bump.du * dt) % 1; mv.bump.offset.y = (mv.bump.offset.y + L.bump.dv * dt) % 1; }
+  }
+  for (const m of _wsPulseMats) {
+    const q = m.userData && m.userData.wsPulse;
+    if (!q) { _wsPulseMats.delete(m); continue; }
+    m.emissiveIntensity = q[1] + (q[2] - q[1]) * (0.5 + 0.5 * Math.sin(T * 6.2832 * q[0]));
   }
   // The ones that repaint: only while somebody is wearing it, since the texture is redrawn from scratch each time.
   for (const f of _wsFlickers) {
@@ -35536,9 +35638,11 @@ function _wsApplyLook(skin, mats, wrapMats = mats) {
     if (!base) {
       base = { map: m.map || null, metalness: m.metalness, roughness: m.roughness, emissive: m.emissive ? m.emissive.getHex() : null,
                emissiveIntensity: m.emissiveIntensity, emissiveMap: m.emissiveMap || null,
-               bumpMap: m.bumpMap, bumpScale: m.bumpScale, roughnessMap: m.roughnessMap };
+               bumpMap: m.bumpMap, bumpScale: m.bumpScale, roughnessMap: m.roughnessMap, env: m.envMapIntensity };
       _wsBase.set(m, base);
     }
+    if (m.userData) delete m.userData.wsPulse;
+    if ('envMapIntensity' in m && base.env !== undefined) m.envMapIntensity = base.env;
     const had = m.map !== base.map || m.emissiveMap !== base.emissiveMap;
     m.map = base.map;
     m.bumpMap = base.bumpMap; m.bumpScale = base.bumpScale; m.roughnessMap = base.roughnessMap;
@@ -35554,6 +35658,9 @@ function _wsApplyLook(skin, mats, wrapMats = mats) {
       m.map = t.map; m.color.setHex(0xffffff);
       if ('metalness' in m) { m.metalness = look.metal; m.roughness = look.rough; }
       if (look.glow && m.emissive && t.glow) { m.emissive.setHex(0xffffff); m.emissiveMap = t.glow; m.emissiveIntensity = 1.1; }
+      if (look.env && 'envMapIntensity' in m) m.envMapIntensity = look.env;
+      if (look.bump && t.bump) { m.bumpMap = t.bump; m.bumpScale = look.bump.amount; }
+      if (look.pulse && m.emissive && t.glow) { (m.userData = m.userData || {}).wsPulse = look.pulse; _wsPulseMats.add(m); }
     }
     if (look || skin?.wrap || had) m.needsUpdate = true;
   });
