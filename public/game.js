@@ -22580,6 +22580,23 @@ function smoothManufacturedBevels(geometry) {
   normals.needsUpdate=true;
   return geometry;
 }
+// A triangular skeleton stock, the shape of the AKS-74's folding stock: two side frames, each a triangle of tube with its point at the hinge (the back of the receiver) and an upright at the butt, a pad
+// across the back and a cross-bar at the top and bottom of it. Everything is [z, y]; z grows toward the butt.
+function gpTriStock(g, mat, pad, o = {}) {
+  const z0 = o.z0 ?? 0.150, z1 = o.z1 ?? 0.395, ay = o.apexY ?? 0.006, ty = o.topR ?? 0.040, by = o.botR ?? -0.060, r = o.r ?? 0.0046, w = o.w ?? 0.017;
+  const joint = (x, z, y) => { const m = new THREE.Mesh(new THREE.SphereGeometry(r * 1.15, 10, 8), mat); m.position.set(x, y, z); m.castShadow = true; g.add(m); };
+  const tube = (x, a, b) => {
+    const dz = b[0] - a[0], dy = b[1] - a[1], m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, Math.hypot(dz, dy), 10), mat);
+    m.position.set(x, (a[1] + b[1]) / 2, (a[0] + b[0]) / 2); m.rotation.x = Math.atan2(dz, dy); m.castShadow = true; g.add(m);
+  };
+  for (const x of [-w, w]) {
+    tube(x, [z0, ay], [z1, ty]); tube(x, [z0, ay], [z1, by]); tube(x, [z1, ty], [z1, by]);
+    joint(x, z0, ay); joint(x, z1, ty); joint(x, z1, by);
+  }
+  for (const y of [ty, by]) gpCyl(g, mat, r * 0.85, r * 0.85, 2 * w, 8, 0, y, z1, 0, Math.PI / 2);
+  gpBox(g, mat, 2 * w + 2 * r, 0.012, 0.016, 0, ay, z0 + 0.004);
+  gpBox(g, pad, 2 * w + 0.010, ty - by + 0.014, 0.012, 0, (ty + by) / 2, z1 + 0.006);
+}
 function gpPlate(g, mat, pts, width, x = 0) {
   const shape = new THREE.Shape();
   pts.forEach((pt, i) => (i ? shape.lineTo(pt[0], pt[1]) : shape.moveTo(pt[0], pt[1])));
@@ -25907,13 +25924,7 @@ function buildAK20() {
   // plates (a "bridge" bolted to a "stock") that read as floating apart from
   // each other where they met. Same silhouette, one continuous outline now.
   box(steel, 0.054, 0.070, 0.026, 0, 0.000, 0.144);                 // stock hinge block
-  gpContouredPart(g,polymer, [
-    [0.142,0.052],[0.170,0.042],[0.200,0.024],[0.222,0.011],
-    [0.326,0.014],[0.392,-0.012],[0.386,-0.030],[0.220,-0.048],[0.166,-0.052],[0.142,-0.046],
-  ], 0.047, 0);
-  gpContouredPart(g,grip,[[.382,.002],[.399,.002],[.408,-.012],[.401,-.037],[.381,-.035]],.050,0,.004);
-  gpContouredPart(g,grip,[[.224,.010],[.240,.026],[.320,.029],[.356,.012],[.330,.006],[.236,.004]],.048,0,.008);
-  for(let i=0;i<4;i++)box(inner,.051,.002,.003,0,-.008-i*.007,.402);
+  gpTriStock(g, steel, grip, { z0: 0.152, z1: 0.392, apexY: 0.004, topR: 0.040, botR: -0.060 });   // the triangle frame (it was a thin wedge with a hump on it)
   for(const side of [-1,1])for(let i=0;i<3;i++)box(polymer,.001,.003,.028,side*.0205,-.105-i*.018,.092+i*.003,.15);
 
   // Handguard, one piece covering the gas tube instead of stacked halves.
@@ -27946,9 +27957,9 @@ function buildSqueegee() {
 
 function buildAK47Wood() {
   // 🪵 AK-20 -> classic AK-47. Where the AK20 is stamped steel with black
-  // polymer furniture, this is the milled-receiver original: birch stock,
-  // handguard and pistol grip, and a plain steel curved magazine instead of
-  // the AK20's smoke-tinted polymer one.
+  // polymer furniture, this is the milled-receiver original: birch handguard
+  // and pistol grip, the triangle frame stock, and a plain steel curved
+  // magazine instead of the AK20's smoke-tinted polymer one.
   const g = new THREE.Group();
   const steel = GUN_MATS.steel(), blued = GUN_MATS.blued(), bright = GUN_MATS.bright();
   const wood = GUN_MATS.wood(), inner = GUN_MATS.inner();
@@ -27980,17 +27991,8 @@ function buildAK47Wood() {
   // Wood stock, AK20's fixed profile (this one used to run its own, slightly
   // older points -- close enough to look right alone, off enough that the comb
   // didn't line up with the wrist bridge below).
-  gpPlate(g, wood, [
-    [0.154,-0.038],[0.214,0.012],[0.326,0.014],[0.392,-0.012],[0.386,-0.030],[0.220,-0.048],[0.166,-0.052],
-  ], 0.047, 0);
-  gpBox(g, inner, 0.048, 0.052, 0.008, 0, -0.002, 0.404, 0.10);        // butt plate
-  gpBox(g, bright, 0.030, 0.006, 0.004, 0, -0.040, 0.250);             // sling loop
-  // The wrist: this piece was missing entirely, which is what left a gap
-  // between the receiver and the stock -- full receiver height where it meets
-  // the receiver, falling to the comb line where the stock picks it up.
-  gpPlate(g, wood, [
-    [0.142,-0.046],[0.142,0.050],[0.170,0.042],[0.200,0.024],[0.222,0.011],[0.224,-0.046],
-  ], 0.046, 0);
+  gpBox(g, steel, 0.050, 0.072, 0.020, 0, 0.002, 0.150);               // stock hinge
+  gpTriStock(g, steel, inner, { z0: 0.152, z1: 0.396, apexY: 0.004, topR: 0.040, botR: -0.060 });   // the triangle frame (it was a thin wooden wedge)
   // Wood handguards, lower and upper.
   gpPlate(g, wood, [
     [-0.336,0.010],[-0.306,0.034],[-0.186,0.034],[-0.164,0.012],[-0.190,-0.008],[-0.320,-0.006],
@@ -28038,10 +28040,7 @@ function buildM4A1() {
   gpBox(g, bright, 0.006, 0.016, 0.006, 0, -0.058, 0.010, 0.22);        // trigger
   // Collapsible buttstock — skeleton frame on a buffer tube.
   gpCyl(g, steel, 0.020, 0.020, 0.130, 12, 0, 0.010, 0.150);
-  gpBox(g, poly, 0.046, 0.056, 0.014, 0, 0.010, 0.230);
-  gpBox(g, poly, 0.046, 0.010, 0.110, 0, 0.036, 0.176);
-  gpBox(g, poly, 0.046, 0.010, 0.110, 0, -0.016, 0.176);
-  gpBox(g, inner, 0.048, 0.050, 0.008, 0, 0.010, 0.238);                // butt plate
+  gpTriStock(g, steel, inner, { z0: 0.205, z1: 0.305, apexY: 0.010, topR: 0.042, botR: -0.030, r: 0.0042 });   // the triangle frame (it was a box frame)
   // Barrel + birdcage flash hider.
   gpCyl(g, steel, 0.0068, 0.0068, 0.190, 16, 0, 0.010, -0.400);
   gpCyl(g, steel, 0.0088, 0.0088, 0.044, 12, 0, 0.010, -0.508);
@@ -28147,7 +28146,7 @@ function _milTrigger(g, M, y, z) {                                   // trigger 
 function buildAKS74U() {
   // 🔫 AK-20 -> AKS-74U "Krinkov". The carbine the AK family shrank into: a stub of a barrel, the
   // bulb-shaped gas expander on its muzzle, a black polymer handguard, a plum magazine and the
-  // wire stock sticking out behind.
+  // triangle frame stock sticking out behind.
   const g = new THREE.Group(), M = _milMats();
   gpBox(g, M.park, 0.046, 0.090, 0.270, 0, 0.004, -0.005);              // stamped receiver
   gpBox(g, M.park, 0.043, 0.012, 0.262, 0, 0.049, -0.008);              // dust cover
@@ -28164,9 +28163,7 @@ function buildAKS74U() {
   gpContouredPart(g, M.black, [[0.074,-0.038],[0.110,-0.064],[0.118,-0.150],[0.094,-0.170],[0.064,-0.088],[0.058,-0.044]], 0.036, 0, 0.005);
   for (let i = 0; i < 5; i++) gpBox(g, M.dark, 0.038, 0.0035, 0.009, 0, -0.072 - i * 0.017, 0.088 + i * 0.005, 0.35);
   gpBox(g, M.park, 0.044, 0.074, 0.018, 0, 0.002, 0.146);               // stock hinge
-  for (const y of [0.030, -0.028]) gpCyl(g, M.steel, 0.0042, 0.0042, 0.250, 10, 0, y, 0.272); // the wire stock
-  gpBox(g, M.steel, 0.040, 0.068, 0.008, 0, 0.001, 0.398);
-  gpBox(g, M.black, 0.044, 0.066, 0.010, 0, 0.001, 0.406);              // butt pad
+  gpTriStock(g, M.steel, M.black, { z0: 0.152, z1: 0.396, apexY: 0.006, topR: 0.040, botR: -0.058, r: 0.0044 });   // the AKS-74's triangle frame
   gpBox(g, M.black, 0.044, 0.056, 0.130, 0, 0.012, -0.208);             // handguard
   for (let i = 0; i < 4; i++) gpBox(g, M.dark, 0.0455, 0.050, 0.003, 0, 0.012, -0.172 - i * 0.022); // its grooves
   gpBox(g, M.steel, 0.020, 0.040, 0.024, 0, 0.040, -0.284);             // front sight block
@@ -51918,14 +51915,14 @@ const MODEL_SKINS = [
     blurb: 'Louvred front, frost on the fins, two knobs and a cord.' },
   { id: 'ak20_ak47_wood', weapon: 'ak20', name: 'AK-47', rarity: 'rare',
     sw: ['#6b4a2c', '#3a3f47'], build: buildAK47Wood,
-    blurb: 'Milled steel, birch furniture. The AK20 in its original wood.' },
+    blurb: 'Milled steel, a birch grip and handguard, and the triangle frame stock.' },
   { id: 'burst_m4a1', weapon: 'burst', name: 'M4A1', rarity: 'rare',
     sw: ['#2b2f35', '#3a3f47'], build: buildM4A1,
     blurb: 'Quad rail, collapsible stock, birdcage flash hider. The platform everyone copies.' },
   // 🎖️ Realistic military rifles, take two (built like the Stealth series: see _milMats). Gen 1 cases, with the rest of the realistic set.
   { id: 'ak20_aks74u', weapon: 'ak20', name: 'AKS-74U', rarity: 'rare',
     sw: ['#2c3034', '#6a2f2c'], build: buildAKS74U,
-    blurb: 'The Krinkov: a stub of a barrel with the bulb-shaped expander, a plum magazine, the wire stock out the back.' },
+    blurb: 'The Krinkov: a stub of a barrel with the bulb-shaped expander, a plum magazine, the triangle frame stock out the back.' },
   { id: 'burst_scar_h', weapon: 'burst', name: 'SCAR-H', rarity: 'rare',
     sw: ['#b39a6b', '#1d2024'], build: buildSCARH,
     blurb: 'Flat dark earth from muzzle to butt: a rail the whole length, M-LOK slots, a slotted hider and a magnified optic.' },
