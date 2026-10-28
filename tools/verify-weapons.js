@@ -61,7 +61,7 @@ const constBlock = n => { const b = blockAt(new RegExp('^const ' + n + ' = \\{',
 
 function load() {
   let code = '';
-  for (const n of ['gpBox', 'gpCyl', 'gpPlate', 'gpPart', 'gpFinish', 'gpContouredPart', 'gpOpenMuzzle', 'gpOptic', 'smoothManufacturedBevels', 'addBeltAndCover', 'makeMuzzleFlash',
+  for (const n of ['gpBox', 'gpCyl', 'gpPlate', 'gpPart', 'gpFinish', 'gpContouredPart', 'gpOpenMuzzle', 'gpOptic', 'smoothManufacturedBevels', '_milMats', '_milPlaque', '_milRecoil', '_milFinish', '_milTrigger', 'addBeltAndCover', 'makeMuzzleFlash',
                    '_skM', '_skGlass', '_skGrip', '_skFinish',
                    // PBR plumbing the hands and the legend materials now sit on
                    '_rng', '_grain', '_weave', '_blotches', '_shade', 'surfTex', 'pbrMat',

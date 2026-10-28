@@ -28098,6 +28098,216 @@ function buildBullpupCarbine() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+// ═══ 🎖️ REALISTIC MILITARY RIFLES, take two ═══════════════════════════════════
+// The first twelve realistic skins (AK-47 ... M2) were built from flat Phong boxes. These five are built the way the Stealth series is: finishes by role (polymer, parkerized steel,
+// wood, shadow), contoured furniture, real open muzzle devices, open-objective optics, stamped markings on the receiver, and a moving part (a charging handle, a bolt) that travels when
+// the rifle fires or is inspected. Same ammunition and reload as the weapon underneath; they come out of Gen 1 cases with the rest of the realistic set.
+function _milMats() {
+  return {
+    fde:    gpFinish(0xb39a6b, .62, .04, 'polymer'),     // flat dark earth
+    black:  gpFinish(0x1d2024, .60, .05, 'polymer'),
+    od:     gpFinish(0x4b5539, .62, .04, 'polymer'),     // olive drab
+    plum:   gpFinish(0x6a2f2c, .50, .05, 'polymer'),     // the AK-74's plum magazine
+    wood:   gpFinish(0x6b4a2c, .55, .05, 'wood'),
+    park:   gpFinish(0x2c3034, .52, .62, 'steel'),       // parkerized
+    steel:  gpFinish(0x3f454a, .42, .72, 'steel'),
+    bright: gpFinish(0x9aa4aa, .20, .95, 'steel'),
+    dark:   gpFinish(0x0b1013, .60, .40, 'shadow'),
+  };
+}
+function _milPlaque(g, line1, line2, w, h, x, y, z) {                 // the maker's stamp, on both sides of the receiver
+  const c = document.createElement('canvas'); c.width = 512; c.height = Math.max(32, Math.round(512 * h / w));
+  const k = c.getContext('2d'); k.fillStyle = '#23282c'; k.fillRect(0, 0, c.width, c.height);
+  k.fillStyle = '#b7c2c4'; k.font = 'bold ' + Math.round(c.height * 0.40) + 'px monospace'; k.fillText(line1, 16, c.height * 0.50, c.width - 32);
+  k.font = Math.round(c.height * 0.22) + 'px monospace'; k.fillStyle = '#7f9092'; k.fillText(line2, 16, c.height * 0.84, c.width - 32);
+  const mat = new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(c), metalness: .6, roughness: .45 });
+  mat.userData.metalDone = true; mat.userData.weaponMaterial = 'steel';
+  for (const s of [-1, 1]) { const p = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat); p.position.set(s * x, y, z); p.rotation.y = s * Math.PI / 2; g.add(p); }
+}
+function _milRecoil(g, part, travel) {                                // `part` travels back by `travel` on every shot, and while the rifle is being inspected
+  const rest = part.position.z; let kick = 0;
+  g._tick = (dt, now, assembling) => {
+    if (assembling) { kick = 0; part.position.z = rest; return; }
+    kick = g._flash && g._flash.visible ? 1 : kick * Math.exp(-dt * 22);
+    part.position.z = rest + (g._inspectMode ? Math.pow(Math.max(0, Math.sin(now * 5)), 3) : kick) * travel;
+  };
+  g._calm = () => { kick = 0; part.position.z = rest; };
+}
+function _milFinish(g, muzzleY, muzzleZ, kick) {
+  const flash = makeMuzzleFlash(); flash.position.set(0, muzzleY, muzzleZ); g.add(flash);
+  g._flash = flash; g._kickZ = kick; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+function _milTrigger(g, M, y, z) {                                   // trigger guard and trigger
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.021, 0.0038, 6, 12, Math.PI * 1.1), M.steel);
+  guard.rotation.set(0, Math.PI / 2, -0.45); guard.position.set(0, y, z); g.add(guard);
+  gpBox(g, M.bright, 0.005, 0.017, 0.006, 0, y + 0.010, z, 0.22);
+}
+
+function buildAKS74U() {
+  // 🔫 AK-20 -> AKS-74U "Krinkov". The carbine the AK family shrank into: a stub of a barrel, the
+  // bulb-shaped gas expander on its muzzle, a black polymer handguard, a plum magazine and the
+  // wire stock sticking out behind.
+  const g = new THREE.Group(), M = _milMats();
+  gpBox(g, M.park, 0.046, 0.090, 0.270, 0, 0.004, -0.005);              // stamped receiver
+  gpBox(g, M.park, 0.043, 0.012, 0.262, 0, 0.049, -0.008);              // dust cover
+  gpBox(g, M.dark, 0.005, 0.022, 0.058, 0.0245, 0.028, -0.030);         // ejection port
+  gpBox(g, M.steel, 0.026, 0.010, 0.034, 0, 0.060, 0.056);              // rear sight base
+  gpBox(g, M.bright, 0.004, 0.012, 0.003, 0, 0.069, 0.060);             // rear sight notch
+  _milTrigger(g, M, -0.078, 0.020);
+  let my = -0.052, mz = -0.055, ang = 0.10;                            // curved magazine, five ribbed segments
+  for (let i = 0; i < 5; i++) {
+    gpBox(g, M.plum, 0.031, 0.034, 0.048, 0, my, mz, ang); gpBox(g, M.dark, 0.032, 0.004, 0.012, 0, my, mz, ang);
+    my -= Math.cos(ang) * 0.028; mz -= Math.sin(ang) * 0.028; ang += 0.085;
+  }
+  gpBox(g, M.plum, 0.033, 0.012, 0.050, 0, my + 0.012, mz - 0.004, ang);
+  gpContouredPart(g, M.black, [[0.074,-0.038],[0.110,-0.064],[0.118,-0.150],[0.094,-0.170],[0.064,-0.088],[0.058,-0.044]], 0.036, 0, 0.005);
+  for (let i = 0; i < 5; i++) gpBox(g, M.dark, 0.038, 0.0035, 0.009, 0, -0.072 - i * 0.017, 0.088 + i * 0.005, 0.35);
+  gpBox(g, M.park, 0.044, 0.074, 0.018, 0, 0.002, 0.146);               // stock hinge
+  for (const y of [0.030, -0.028]) gpCyl(g, M.steel, 0.0042, 0.0042, 0.250, 10, 0, y, 0.272); // the wire stock
+  gpBox(g, M.steel, 0.040, 0.068, 0.008, 0, 0.001, 0.398);
+  gpBox(g, M.black, 0.044, 0.066, 0.010, 0, 0.001, 0.406);              // butt pad
+  gpBox(g, M.black, 0.044, 0.056, 0.130, 0, 0.012, -0.208);             // handguard
+  for (let i = 0; i < 4; i++) gpBox(g, M.dark, 0.0455, 0.050, 0.003, 0, 0.012, -0.172 - i * 0.022); // its grooves
+  gpBox(g, M.steel, 0.020, 0.040, 0.024, 0, 0.040, -0.284);             // front sight block
+  gpBox(g, M.bright, 0.003, 0.014, 0.003, 0, 0.064, -0.284);            // front sight post
+  gpCyl(g, M.park, 0.0066, 0.0066, 0.060, 18, 0, 0.018, -0.300);        // the stub of barrel
+  gpOpenMuzzle(g, 0.0165, 0.0072, 0.064, 0, 0.018, -0.352, M.steel, M.dark, true);   // the expander
+  _milPlaque(g, 'AKS-74U', 'CAL 5.45x39  /  1986', 0.100, 0.026, 0.0233, 0.014, -0.012);
+  const handle = gpBox(g, M.steel, 0.012, 0.014, 0.026, 0.028, 0.034, 0.010);   // charging handle
+  _milRecoil(g, handle, 0.045);
+  return _milFinish(g, 0.018, -0.392, 0.016);
+}
+
+function buildSCARH() {
+  // 🔫 Burst Rifle -> FN SCAR-H. Flat dark earth from muzzle to butt: a monolithic upper with the rail
+  // running its whole length, a free-float handguard with M-LOK slots, a slotted flash hider and the
+  // adjustable stock, with a magnified optic on the rail.
+  const g = new THREE.Group(), M = _milMats();
+  gpContouredPart(g, M.fde, [[0.150,-0.026],[0.150,0.042],[0.060,0.054],[-0.160,0.054],[-0.190,0.040],[-0.190,-0.014],[-0.040,-0.018],[0.060,-0.026]], 0.046, 0, 0.006);
+  gpBox(g, M.steel, 0.036, 0.007, 0.520, 0, 0.0575, -0.040);            // the rail
+  for (let i = 0; i < 20; i++) gpBox(g, M.dark, 0.038, 0.0065, 0.004, 0, 0.0575, 0.200 - i * 0.025);
+  gpBox(g, M.dark, 0.005, 0.022, 0.056, 0.0235, 0.026, -0.010);         // ejection port
+  gpBox(g, M.fde, 0.046, 0.044, 0.090, 0, -0.040, 0.000);               // magwell
+  gpBox(g, M.black, 0.034, 0.165, 0.062, 0, -0.140, 0.004, 0.05);       // 7.62 magazine
+  for (let i = 0; i < 5; i++) gpBox(g, M.dark, 0.0345, 0.004, 0.0625, 0, -0.085 - i * 0.025, 0.002 + i * 0.0012, 0.05);
+  gpContouredPart(g, M.fde, [[0.092,-0.036],[0.130,-0.058],[0.140,-0.150],[0.112,-0.170],[0.080,-0.092],[0.074,-0.044]], 0.040, 0, 0.005);
+  _milTrigger(g, M, -0.060, 0.040);
+  gpBox(g, M.fde, 0.048, 0.050, 0.250, 0, 0.012, -0.315);               // free-float handguard
+  for (let i = 0; i < 9; i++) gpBox(g, M.dark, 0.050, 0.005, 0.004, 0, 0.0395, -0.205 - i * 0.026);
+  gpBox(g, M.steel, 0.020, 0.006, 0.250, 0, -0.016, -0.315);            // the bottom rail
+  for (let i = 0; i < 6; i++) gpBox(g, M.dark, 0.0505, 0.008, 0.016, 0, 0.012, -0.225 - i * 0.034);   // M-LOK slots
+  gpCyl(g, M.park, 0.0075, 0.0075, 0.080, 16, 0, 0.012, -0.470);        // the barrel past the handguard
+  gpOpenMuzzle(g, 0.0105, 0.0062, 0.050, 0, 0.012, -0.535, M.park, M.dark, true);
+  gpContouredPart(g, M.fde, [[0.150,0.030],[0.340,0.040],[0.345,-0.050],[0.150,-0.030]], 0.044, 0, 0.006);   // the stock
+  gpBox(g, M.black, 0.040, 0.010, 0.120, 0, 0.046, 0.260);              // cheek riser
+  gpBox(g, M.steel, 0.050, 0.062, 0.012, 0, 0.004, 0.150);              // hinge
+  gpBox(g, M.black, 0.046, 0.075, 0.012, 0, -0.006, 0.350);             // butt pad
+  gpBox(g, M.black, 0.030, 0.009, 0.080, 0, 0.0665, -0.050);            // optic mount
+  gpOptic(g, 0, 0.1045, -0.050, 0.100, 0.0145, 0.071);
+  _milPlaque(g, 'FN SCAR-H', 'CAL 7.62x51 NATO  /  MK 17', 0.120, 0.028, 0.0233, 0.020, -0.045);
+  const handle = gpBox(g, M.black, 0.012, 0.016, 0.032, 0.0335, 0.030, -0.040);   // reciprocating charging handle
+  _milRecoil(g, handle, 0.045);
+  return _milFinish(g, 0.012, -0.566, 0.015);
+}
+
+function buildHK416() {
+  // 🔫 Arena AR -> HK416. Flat dark earth, the round free-float handguard with a rail at every
+  // quarter, steel magazine, the PEQ laser box on the side rail and a holographic sight.
+  const g = new THREE.Group(), M = _milMats();
+  gpBox(g, M.fde, 0.044, 0.056, 0.210, 0, 0.012, -0.015);               // upper receiver
+  gpBox(g, M.steel, 0.036, 0.007, 0.250, 0, 0.0435, -0.030);            // flat-top rail
+  for (let i = 0; i < 11; i++) gpBox(g, M.dark, 0.038, 0.0065, 0.004, 0, 0.0435, 0.085 - i * 0.022);
+  gpBox(g, M.dark, 0.005, 0.020, 0.052, 0.0225, 0.018, -0.010);         // ejection port
+  gpBox(g, M.fde, 0.042, 0.046, 0.150, 0, -0.030, 0.000);               // lower receiver
+  gpBox(g, M.bright, 0.030, 0.006, 0.020, 0, -0.050, -0.006);           // mag catch
+  gpBox(g, M.park, 0.030, 0.180, 0.050, 0, -0.140, -0.006, 0.04);       // steel magazine
+  for (let i = 0; i < 6; i++) gpBox(g, M.dark, 0.0305, 0.004, 0.0505, 0, -0.080 - i * 0.026, -0.004 + i * 0.0015, 0.04);
+  gpContouredPart(g, M.fde, [[0.080,-0.036],[0.112,-0.058],[0.120,-0.148],[0.094,-0.166],[0.066,-0.088],[0.062,-0.042]], 0.038, 0, 0.005);
+  _milTrigger(g, M, -0.058, 0.014);
+  gpCyl(g, M.fde, 0.031, 0.031, 0.230, 24, 0, 0.012, -0.255);           // the round handguard
+  for (const [rx, ry, w, h] of [[0, 0.045, 0.016, 0.006], [0, -0.021, 0.016, 0.006], [0.033, 0.012, 0.006, 0.016], [-0.033, 0.012, 0.006, 0.016]])
+    gpBox(g, M.steel, w, h, 0.230, rx, ry, -0.255);                     // a rail at 12, 6, 3 and 9
+  for (let i = 0; i < 9; i++) gpBox(g, M.dark, 0.017, 0.0065, 0.004, 0, 0.0455, -0.160 - i * 0.022);
+  for (let i = 0; i < 7; i++) gpBox(g, M.dark, 0.064, 0.012, 0.010, 0, 0.012, -0.175 - i * 0.030);  // slots through the handguard sides
+  gpCyl(g, M.park, 0.0072, 0.0072, 0.100, 16, 0, 0.012, -0.420);
+  gpOpenMuzzle(g, 0.0100, 0.0060, 0.045, 0, 0.012, -0.490, M.park, M.dark, true);
+  gpCyl(g, M.fde, 0.020, 0.020, 0.120, 14, 0, 0.012, 0.150);            // buffer tube
+  gpContouredPart(g, M.fde, [[0.100,0.030],[0.250,0.036],[0.256,-0.046],[0.110,-0.030]], 0.040, 0, 0.006);
+  gpBox(g, M.black, 0.044, 0.066, 0.010, 0, -0.004, 0.260);             // butt pad
+  // holographic sight: a hooded frame round a glass window
+  gpBox(g, M.black, 0.034, 0.008, 0.062, 0, 0.0505, 0.030);
+  for (const s of [-1, 1]) gpBox(g, M.black, 0.004, 0.036, 0.062, s * 0.015, 0.072, 0.030);
+  gpBox(g, M.black, 0.034, 0.006, 0.066, 0, 0.093, 0.030);
+  const glass = new THREE.Mesh(new THREE.PlaneGeometry(0.026, 0.028), new THREE.MeshStandardMaterial({ color: 0x5299ac, metalness: .3, roughness: .12, transparent: true, opacity: .22, depthWrite: false, side: THREE.DoubleSide }));
+  glass.position.set(0, 0.072, 0.0); g.add(glass);
+  // laser box on the right rail
+  gpBox(g, M.black, 0.024, 0.026, 0.076, 0.046, 0.012, -0.300);
+  gpCyl(g, M.bright, 0.0058, 0.0058, 0.006, 20, 0.046, 0.016, -0.341);
+  gpCyl(g, new THREE.MeshBasicMaterial({ color: 0xff334c }), 0.0030, 0.0030, 0.002, 16, 0.046, 0.016, -0.345);
+  _milPlaque(g, 'HK416', 'CAL 5.56x45 NATO  /  D10RS', 0.100, 0.026, 0.0223, 0.012, -0.005);
+  const handle = gpBox(g, M.black, 0.012, 0.018, 0.030, 0.030, 0.030, 0.048);    // charging handle
+  _milRecoil(g, handle, 0.040);
+  return _milFinish(g, 0.012, -0.518, 0.013);
+}
+
+function buildFAL() {
+  // 🔫 M1 Garand -> FN FAL "the right arm of the free world". Slab-sided steel receiver, rear aperture
+  // sight, vented wood handguard over the gas piston, the front sight in its ears and a three-slot
+  // flash hider; walnut stock to the butt.
+  const g = new THREE.Group(), M = _milMats();
+  gpBox(g, M.park, 0.040, 0.074, 0.230, 0, 0.012, -0.020);              // slab receiver
+  gpBox(g, M.steel, 0.034, 0.012, 0.222, 0, 0.055, -0.020);             // top cover
+  gpBox(g, M.dark, 0.005, 0.022, 0.060, 0.0205, 0.030, -0.040);         // ejection port
+  gpBox(g, M.park, 0.020, 0.022, 0.022, 0, 0.070, 0.082);               // rear sight base
+  const peep = new THREE.Mesh(new THREE.TorusGeometry(0.0062, 0.0017, 8, 18), M.bright); peep.position.set(0, 0.086, 0.086); g.add(peep);
+  gpBox(g, M.park, 0.030, 0.150, 0.056, 0, -0.100, -0.010, 0.10);       // 20-round magazine
+  for (let i = 0; i < 5; i++) gpBox(g, M.dark, 0.0305, 0.004, 0.0565, 0, -0.050 - i * 0.026, -0.010 + i * 0.002, 0.10);
+  _milTrigger(g, M, -0.062, 0.030);
+  gpContouredPart(g, M.wood, [[0.082,-0.030],[0.116,-0.052],[0.124,-0.140],[0.098,-0.160],[0.070,-0.086],[0.066,-0.038]], 0.036, 0, 0.005);   // pistol grip
+  gpContouredPart(g, M.wood, [[0.100,-0.040],[0.100,0.044],[0.190,0.030],[0.330,0.024],[0.430,0.004],[0.430,-0.054],[0.200,-0.054]], 0.044, 0, 0.006);   // walnut stock
+  gpBox(g, M.dark, 0.047, 0.062, 0.010, 0, -0.022, 0.438);              // butt plate
+  gpBox(g, M.wood, 0.046, 0.050, 0.190, 0, 0.010, -0.235);              // handguard
+  for (let i = 0; i < 7; i++) gpBox(g, M.dark, 0.0475, 0.012, 0.012, 0, 0.018, -0.160 - i * 0.025);  // its vents
+  gpCyl(g, M.park, 0.0055, 0.0055, 0.200, 14, 0, 0.046, -0.350);        // gas piston
+  gpBox(g, M.park, 0.020, 0.026, 0.030, 0, 0.044, -0.440);              // gas block
+  gpCyl(g, M.park, 0.0074, 0.0074, 0.200, 18, 0, 0.014, -0.440);
+  gpBox(g, M.park, 0.020, 0.030, 0.012, 0, 0.040, -0.520);              // front sight base
+  for (const s of [-1, 1]) gpBox(g, M.park, 0.004, 0.026, 0.012, s * 0.008, 0.062, -0.520);   // the ears
+  gpBox(g, M.bright, 0.003, 0.012, 0.003, 0, 0.070, -0.520);            // the post
+  gpOpenMuzzle(g, 0.0108, 0.0068, 0.062, 0, 0.014, -0.560, M.park, M.dark, true);
+  _milPlaque(g, 'FN FAL', 'CAL 7.62x51 NATO  /  BELGIUM', 0.110, 0.028, 0.0203, 0.012, -0.025);
+  const handle = gpBox(g, M.steel, 0.012, 0.016, 0.034, -0.026, 0.040, 0.000);   // the FAL cocks on the left
+  _milRecoil(g, handle, 0.050);
+  return _milFinish(g, 0.014, -0.596, 0.016);
+}
+
+function buildM24() {
+  // 🔫 SR-X -> M24 SWS. The U.S. Army's bolt-action: olive polymer stock with a pistol grip, the round
+  // parkerized action with its bolt handle out to the right, a heavy barrel with no brake, a 10x scope on
+  // two rings and the bipod folded under the forend.
+  const g = new THREE.Group(), M = _milMats();
+  gpContouredPart(g, M.od, [[-0.300,-0.040],[-0.300,0.002],[0.070,0.010],[0.070,-0.044]], 0.040, 0, 0.005);                      // forend
+  gpContouredPart(g, M.od, [[0.060,-0.030],[0.130,-0.040],[0.140,-0.140],[0.110,-0.165],[0.078,-0.100],[0.060,-0.045]], 0.038, 0, 0.005);   // grip
+  gpContouredPart(g, M.od, [[0.120,0.002],[0.200,0.026],[0.330,0.038],[0.420,0.044],[0.428,-0.048],[0.330,-0.046],[0.250,-0.052],[0.130,-0.036]], 0.042, 0, 0.006);   // buttstock
+  gpBox(g, M.black, 0.044, 0.096, 0.012, 0, -0.002, 0.434);             // recoil pad
+  gpCyl(g, M.park, 0.0200, 0.0200, 0.200, 22, 0, 0.016, -0.040);        // the action
+  gpBox(g, M.dark, 0.006, 0.014, 0.060, 0.0185, 0.022, -0.080);         // ejection port
+  gpCyl(g, M.park, 0.0042, 0.0042, 0.052, 10, 0.040, 0.024, 0.052, 0, Math.PI / 2);   // bolt handle
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.0085, 14, 10), M.black); knob.position.set(0.068, 0.024, 0.052); g.add(knob);
+  gpCyl(g, M.park, 0.0105, 0.0095, 0.390, 24, 0, 0.016, -0.320);        // heavy barrel
+  gpOpenMuzzle(g, 0.0125, 0.0075, 0.040, 0, 0.016, -0.530, M.park, M.dark, false);
+  gpBox(g, M.black, 0.030, 0.014, 0.016, 0, 0.044, 0.044);              // scope rings
+  gpBox(g, M.black, 0.030, 0.014, 0.016, 0, 0.044, -0.112);
+  gpOptic(g, 0, 0.078, -0.034, 0.220, 0.0200, 0.050);
+  gpBox(g, M.black, 0.030, 0.012, 0.060, 0, -0.052, 0.000);             // floorplate
+  _milTrigger(g, M, -0.034, 0.024);
+  for (const s of [-1, 1]) gpCyl(g, M.park, 0.0030, 0.0030, 0.140, 8, s * 0.018, -0.052, -0.230);   // bipod legs, folded
+  gpBox(g, M.park, 0.050, 0.010, 0.030, 0, -0.046, -0.285);
+  _milPlaque(g, 'M24 SWS', 'CAL 7.62x51 NATO  /  REMINGTON 700', 0.110, 0.026, 0.0203, 0.018, -0.040);
+  return _milFinish(g, 0.016, -0.562, 0.014);
+}
+
 function buildMP5() {
   // 🔫 Vector SMG -> MP5. Round roller-delayed receiver tube, ribbed
   // polymer handguard, a curved magazine and the drum rear sight the MP5
@@ -51712,6 +51922,22 @@ const MODEL_SKINS = [
   { id: 'burst_m4a1', weapon: 'burst', name: 'M4A1', rarity: 'rare',
     sw: ['#2b2f35', '#3a3f47'], build: buildM4A1,
     blurb: 'Quad rail, collapsible stock, birdcage flash hider. The platform everyone copies.' },
+  // 🎖️ Realistic military rifles, take two (built like the Stealth series: see _milMats). Gen 1 cases, with the rest of the realistic set.
+  { id: 'ak20_aks74u', weapon: 'ak20', name: 'AKS-74U', rarity: 'rare',
+    sw: ['#2c3034', '#6a2f2c'], build: buildAKS74U,
+    blurb: 'The Krinkov: a stub of a barrel with the bulb-shaped expander, a plum magazine, the wire stock out the back.' },
+  { id: 'burst_scar_h', weapon: 'burst', name: 'SCAR-H', rarity: 'rare',
+    sw: ['#b39a6b', '#1d2024'], build: buildSCARH,
+    blurb: 'Flat dark earth from muzzle to butt: a rail the whole length, M-LOK slots, a slotted hider and a magnified optic.' },
+  { id: 'm4a1_arena_hk416', weapon: 'm4a1_arena', name: 'HK416', rarity: 'rare',
+    sw: ['#b39a6b', '#2c3034'], build: buildHK416,
+    blurb: 'Round free-float handguard with a rail at every quarter, a steel magazine, a laser box and a holographic sight.' },
+  { id: 'm1_garand_fal', weapon: 'm1_garand', name: 'FN FAL', rarity: 'rare',
+    sw: ['#6b4a2c', '#2c3034'], build: buildFAL,
+    blurb: 'The right arm of the free world: slab receiver, aperture sight, vented walnut and a three-slot hider.' },
+  { id: 'srx_m24', weapon: 'srx', name: 'M24 SWS', rarity: 'rare',
+    sw: ['#4b5539', '#2c3034'], build: buildM24,
+    blurb: 'Olive stock, round action, a bolt handle out to the right, a heavy barrel and a 10x scope.' },
   { id: 'flechette_bullpup', weapon: 'flechette', name: 'Bullpup Carbine', rarity: 'rare',
     sw: ['#b8a878', '#3a342a'], build: buildBullpupCarbine,
     blurb: 'Magazine behind the trigger. Same barrel, shorter rifle.' },
@@ -52067,6 +52293,7 @@ const GEN1_GATED_MODEL_SKIN_IDS = new Set([
   'ak20_ak47_wood', 'burst_m4a1', 'flechette_bullpup', 'vector_mp5',
   'rpd_m249', 'lever_winchester94', 'pistol_m9', 'sg8_remington870',
   'srx_dragunov', 'revolver_python', 'grenade_launcher_mgl', 'flamethrower_m2',
+  'ak20_aks74u', 'burst_scar_h', 'm4a1_arena_hk416', 'm1_garand_fal', 'srx_m24',
 ]);
 const DONUT_SKIN_IDS = [
   'revolver_donut', 'katana_donut',
