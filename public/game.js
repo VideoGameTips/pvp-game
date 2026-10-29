@@ -1413,7 +1413,7 @@ const SUPPORT_ITEMS = [
   { id: 'confetti_cannon', name: 'Confetti Cannon', type: 'Chaos', uses: 3, damage: 8, burst: 14, spread: 0.85, cooldown: 520, bulletSpeed: 76, randomBulletColor: true, bulletSize: 0.055 },
   { id: 'moon_mine', name: 'Moon Mine', type: 'Floaty Bomb', uses: 2, damage: 65, cooldown: 800, bulletSpeed: 32, bulletColor: 0xbca7ff, bulletSize: 0.16 },
   { id: 'rubber_duck', name: 'Rubber Duck', type: 'Bouncer', uses: 4, damage: 18, cooldown: 360, bulletSpeed: 68, bulletColor: 0xffe55c, bulletSize: 0.12 },
-  { id: 'black_hole_seed', name: 'Black Hole Seed', type: 'Void', uses: 1, damage: 105, burst: 6, spread: 0.35, cooldown: 1300, bulletSpeed: 36, bulletColor: 0x4b0082, bulletSize: 0.20 },
+  { id: 'black_hole_seed', name: 'Black Hole Seed', type: 'Void', uses: 1, damage: 105, blackHole: true, cooldown: 1300, bulletSpeed: 36, bulletColor: 0x4b0082, bulletSize: 0.20 },
   { id: 'glitch_cube', archived: true, name: 'Glitch Cube', type: 'Wild Card', uses: 2, damage: 42, burst: 5, spread: 0.55, cooldown: 780, bulletSpeed: 92, randomBulletColor: true, bulletSize: 0.10 },
   { id: 'vampire_syringe', archived: true, name: 'Vampire Syringe', type: 'Risk Heal', uses: 2, heal: 35, selfDamage: 10, cooldown: 700 },
   // ── New supports ─────────────────────────────────────────────────────────
@@ -62964,6 +62964,7 @@ function explodeSupport(g) {
     spawnAbilityAOEFX(pos,3.2,0xff5a18);
     spawnBurnZone(pos,3.2,10,5000,{hellfire:true,ownerId:g.ownerId,tickMs:200});return;
   }
+  if (item.blackHole) { openBlackHole(pos, g.isOwn); return; }   // the seed does not explode: it opens (see BLACK HOLE SEED)
   if(g.isOwn && item.damage>0)damageStructuresInBlast(pos,item.id,item.explosionRadius || item.radius || 5.5);
 
   // 🪖 Admin stun grenade — flash + temporarily stop bot AI in radius
@@ -63065,6 +63066,177 @@ function explodeSupport(g) {
     }
   }
 }
+
+// ── 🕳️ BLACK HOLE SEED ──────────────────────────────────────────────────────────────────────────────────────────────────
+// The seed used to burst into six purple bolts. Now it lands and a real singularity opens: it swells for under a second,
+// pulls everything within eleven metres toward its middle -- gently at the rim, hard at the core -- for about five more,
+// then collapses on itself and goes off. Standing at the edge costs you nothing but ground; the core takes you apart.
+// The thrower is pulled like everyone else but is never hurt by their own hole. Damage is dealt by the thrower's client
+// (like every area weapon here); every other client just draws it and is pulled, which is why the server relays a
+// 'blackHole' event.
+const blackHoles = [];
+const BH = { grow: 0.8, life: 7.0, collapse: 0.7, pullR: 11, dmgR: 4.5, tickMs: 250, tickMin: 8, tickMax: 30, finaleR: 7, finaleDmg: 105 };
+let _bhDiscTex = null;
+function _blackHoleDiscTex() {
+  if (_bhDiscTex) return _bhDiscTex;
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const g = c.getContext('2d'), gr = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+  gr.addColorStop(0.00, 'rgba(255,255,255,0)'); gr.addColorStop(0.30, 'rgba(255,240,200,0)');
+  gr.addColorStop(0.34, 'rgba(255,236,190,0.95)'); gr.addColorStop(0.46, 'rgba(255,150,60,0.85)');
+  gr.addColorStop(0.64, 'rgba(190,70,230,0.55)'); gr.addColorStop(0.84, 'rgba(90,40,200,0.22)'); gr.addColorStop(1.00, 'rgba(60,20,160,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
+  g.globalCompositeOperation = 'destination-out';      // dark streaks, so the disc reads as spinning rather than a flat ring
+  for (let i = 0; i < 26; i++) { const a = i * 0.9, r0 = 40 + (i * 37) % 80; g.strokeStyle = 'rgba(0,0,0,' + (0.18 + (i % 3) * 0.1) + ')'; g.lineWidth = 2 + i % 4; g.beginPath(); g.arc(128, 128, r0, a, a + 0.7 + (i % 5) * 0.2); g.stroke(); }
+  _bhDiscTex = new THREE.CanvasTexture(c);
+  return _bhDiscTex;
+}
+
+let _bhDustTex = null;
+function _blackHoleDustTex() {                      // a soft round dot: a Points sprite is a square without one
+  if (_bhDustTex) return _bhDustTex;
+  const c = document.createElement('canvas'); c.width = c.height = 32;
+  const g = c.getContext('2d'), gr = g.createRadialGradient(16, 16, 0, 16, 16, 16);
+  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.4, 'rgba(255,255,255,0.45)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 32, 32);
+  return (_bhDustTex = new THREE.CanvasTexture(c));
+}
+
+function openBlackHole(pos, own, ownerId) {
+  if (own) { try { socket.emit('blackHole', { x: pos.x, y: pos.y, z: pos.z }); } catch (e) {} }
+  spawnBlackHole(pos, own, ownerId || (own ? myId : null));
+}
+
+function spawnBlackHole(pos, own, ownerId) {
+  const floorY = pos.y, cy = floorY + 1.5;
+  const g = new THREE.Group(); g.position.set(pos.x, cy, pos.z); g.scale.setScalar(0.001); scene.add(g);
+  const additive = (color, opacity, extra) => new THREE.MeshBasicMaterial(Object.assign({ color, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending }, extra || {}));
+  const mesh = (geo, mat) => { const m = new THREE.Mesh(geo, mat); g.add(m); return m; };
+  mesh(new THREE.SphereGeometry(0.85, 22, 16), new THREE.MeshBasicMaterial({ color: 0x000000 }));                                  // the hole itself
+  const halo = mesh(new THREE.SphereGeometry(1.7, 18, 12), additive(0x6a30ff, 0.20, { side: THREE.BackSide }));
+  const tilt = new THREE.Group(); tilt.rotation.x = 0.34; tilt.rotation.z = 0.18; g.add(tilt);                                       // the accretion disc, tipped so you see it from the side
+  const disc = new THREE.Mesh(new THREE.RingGeometry(0.9, 4.2, 56, 1), additive(0xffffff, 1, { map: _blackHoleDiscTex(), side: THREE.DoubleSide }));
+  disc.rotation.x = -Math.PI / 2; tilt.add(disc);
+  const lens = mesh(new THREE.TorusGeometry(1.02, 0.045, 8, 48), additive(0xfff0d0, 0.9));                                           // the photon ring, always facing you
+  const floorRing = new THREE.Mesh(new THREE.RingGeometry(BH.pullR - 0.25, BH.pullR, 64), additive(0x8a4cff, 0.28, { side: THREE.DoubleSide }));
+  const floorCore = new THREE.Mesh(new THREE.CircleGeometry(BH.dmgR, 40), additive(0x5a1cc8, 0.16, { side: THREE.DoubleSide }));
+  for (const f of [floorRing, floorCore]) { f.rotation.x = -Math.PI / 2; f.position.set(pos.x, floorY + 0.06, pos.z); f.scale.setScalar(0.001); scene.add(f); }
+  // dust falling in along spirals
+  const N = 70, arr = new Float32Array(N * 3), P = [];
+  for (let i = 0; i < N; i++) P.push({ a: Math.random() * 6.283, r: 1.2 + Math.random() * 9, y: (Math.random() - 0.5) * 1.6, sp: 0.8 + Math.random() * 1.2 });
+  const pgeo = new THREE.BufferGeometry(); pgeo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+  const pts = new THREE.Points(pgeo, new THREE.PointsMaterial({ color: 0xd2b0ff, size: 0.2, map: _blackHoleDustTex(), alphaTest: 0.02, transparent: true, opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true }));
+  pts.frustumCulled = false; g.add(pts);
+  const h = { g, halo, tilt, disc, lens, floorRing, floorCore, pgeo, pts, P, arr, t: 0, x: pos.x, y: cy, z: pos.z, floorY, own, ownerId, nextTick: 0, tickN: 0, mats: [halo.material, disc.material, lens.material, floorRing.material, floorCore.material, pts.material] };
+  blackHoles.push(h);
+  playSoundEvent('blackhole_activate', { position: new THREE.Vector3(pos.x, cy, pos.z), remote: !own, volume: own ? 0.9 : 0.8, minGap: 0 });
+  return h;
+}
+
+function _disposeBlackHole(h) {
+  scene.remove(h.g); scene.remove(h.floorRing); scene.remove(h.floorCore);
+  h.g.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+  h.floorRing.geometry.dispose(); h.floorCore.geometry.dispose();
+  for (const m of h.mats) m.dispose();   // (the shared textures stay)
+}
+function clearBlackHoles() { for (const h of blackHoles) _disposeBlackHole(h); blackHoles.length = 0; }
+
+function updateBlackHoles(dt) {
+  if (!blackHoles.length) return;
+  dt = Math.min(dt, 0.1);
+  const tNow = performance.now() / 1000;
+  for (let i = blackHoles.length - 1; i >= 0; i--) {
+    const h = blackHoles[i]; h.t += dt;
+    const left = BH.life - h.t;
+    if (left <= 0) { _blackHoleFinale(h); _disposeBlackHole(h); blackHoles.splice(i, 1); continue; }
+    const gk = Math.min(1, h.t / BH.grow), grow = gk * gk * (3 - 2 * gk);
+    const shr = left < BH.collapse ? left / BH.collapse : 1;                          // 1 -> 0 over the last 0.7 s
+    const size = grow * shr * shr;                                                    // the whole thing swells, then is crushed to a point
+    const strength = grow * (1 + (1 - shr) * 1.2);                                    // and pulls hardest as it dies
+    h.g.scale.setScalar(Math.max(0.001, size)); h.floorRing.scale.setScalar(Math.max(0.001, grow * (0.4 + 0.6 * shr))); h.floorCore.scale.setScalar(Math.max(0.001, grow * shr));
+    h.disc.rotation.z += dt * (2.0 + (1 - shr) * 9);
+    h.lens.lookAt(camera.position);
+    h.halo.material.opacity = 0.2 + 0.07 * Math.sin(tNow * 5 + h.x);
+    h.floorRing.material.opacity = 0.2 + 0.1 * Math.sin(tNow * 3);
+    for (let k = 0; k < h.P.length; k++) {                                            // dust: spiral inward, faster as it nears, then start again at the rim
+      const p = h.P[k];
+      p.r -= dt * (0.9 + 7 / (p.r + 0.4)) * p.sp; p.a += dt * (1.6 + 5 / (p.r + 0.6));
+      if (p.r < 0.9) { p.r = 6 + Math.random() * 5; p.a = Math.random() * 6.283; p.y = (Math.random() - 0.5) * 1.8; }
+      h.arr[k * 3] = Math.cos(p.a) * p.r; h.arr[k * 3 + 1] = p.y * (p.r / 8) + Math.sin(p.a) * p.r * 0.1; h.arr[k * 3 + 2] = Math.sin(p.a) * p.r;
+    }
+    h.pgeo.attributes.position.needsUpdate = true;
+
+    // you, and every real player on their own screen: dragged toward the middle. (Only the thrower's client can hurt anyone.)
+    if (!isDead && !pilotedVehicle && !pilotedMortar && !inLobby) {
+      const dx = h.x - camera.position.x, dz = h.z - camera.position.z, d = Math.hypot(dx, dz);
+      if (d < BH.pullR && d > 0.2 && Math.abs(h.y - camera.position.y) < 8) {
+        const f = 1 - d / BH.pullR, acc = (3 + 24 * f * f) * strength;
+        _extVel.x += dx / d * acc * dt; _extVel.z += dz / d * acc * dt;
+        const sp = Math.hypot(_extVel.x, _extVel.z); if (sp > 14) { _extVel.x *= 14 / sp; _extVel.z *= 14 / sp; }
+        window._blastCarry = false;
+      }
+    }
+    if (!h.own) continue;
+    // bots are dragged in the same way
+    for (const bot of gameBots) {
+      if (bot.dead) continue;
+      const dx = h.x - bot.x, dz = h.z - bot.z, d = Math.hypot(dx, dz);
+      if (d > BH.pullR || d < 0.3) continue;
+      const f = 1 - d / BH.pullR, acc = (18 + 150 * f * f) * strength * 0.5;
+      bot.kbVX = Math.max(-16, Math.min(16, (bot.kbVX || 0) + dx / d * acc * dt));
+      bot.kbVZ = Math.max(-16, Math.min(16, (bot.kbVZ || 0) + dz / d * acc * dt));
+    }
+    // ...and what is near the middle is hurt, four times a second, harder the closer it is
+    h.nextTick -= dt;
+    if (h.nextTick <= 0 && grow >= 1 && shr >= 1) {
+      h.nextTick = BH.tickMs / 1000; h.tickN++;
+      for (const [pid, m] of Object.entries(remoteMeshes)) {
+        if (!m.visible || players[pid]?.dead) continue;
+        const at = m.position.clone(); at.y += 1.0;
+        const d = Math.hypot(at.x - h.x, at.z - h.z);
+        if (d > BH.dmgR || Math.abs(at.y - h.y) > BH.dmgR) continue;
+        if (!hasLineOfSight(h.x, h.z, at.x, at.z, h.y, at.y)) continue;
+        const dmg = Math.round(BH.tickMin + (BH.tickMax - BH.tickMin) * (1 - d / BH.dmgR));
+        const dummy = TRAINING_DUMMIES.find(x => x.id === pid);
+        if (dummy) handleDummyHit(dummy, m, { damage: dmg }, at);
+        else { emitHit(pid, `bh_${myId}_${h.tickN}_${pid}`, 'black_hole_seed', at, false, { damageOverride: dmg }); }
+        spawnHitParticle(at);
+      }
+    }
+  }
+}
+
+// The end: the hole folds in on itself, and everything near it is thrown outward.
+function _blackHoleFinale(h) {
+  const c = new THREE.Vector3(h.x, h.y, h.z);
+  playSoundEvent('blackhole_collapse', { position: c, remote: !h.own, volume: 1.15, minGap: 0 });
+  window.PVP_RAGDOLL?.blast(c);
+  applyBlastImpulse(c, { radius: BH.finaleR + 1 });
+  spawnAbilityAOEFX(c, BH.finaleR, 0xb78cff); spawnAbilityAOEFX(c, BH.finaleR * 0.55, 0xffffff);
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.5, 14, 10), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, depthWrite: false, blending: THREE.AdditiveBlending }));
+  flash.position.copy(c); scene.add(flash);
+  let k = 0; const tick = () => { k += 0.045; flash.scale.setScalar(1 + k * 9); flash.material.opacity = 0.95 * (1 - k); if (k < 1) requestAnimationFrame(tick); else { scene.remove(flash); flash.geometry.dispose(); flash.material.dispose(); } };
+  requestAnimationFrame(tick);
+  if (camera.position.distanceTo(c) < BH.finaleR + 3) flashScreen('rgba(190,150,255,0.35)', 350);
+  if (!h.own) return;
+  damageStructuresInBlast(c, 'black_hole_seed', BH.finaleR);
+  for (const [pid, m] of Object.entries(remoteMeshes)) {
+    if (!m.visible || players[pid]?.dead) continue;
+    const at = m.position.clone(); at.y += 1.0;
+    const d = c.distanceTo(at);
+    if (d > BH.finaleR || !hasLineOfSight(h.x, h.z, at.x, at.z, h.y, at.y)) continue;
+    const dmg = Math.round(BH.finaleDmg * (1 - 0.6 * d / BH.finaleR));
+    const dummy = TRAINING_DUMMIES.find(x => x.id === pid);
+    if (dummy) handleDummyHit(dummy, m, { damage: dmg }, at);
+    else emitHit(pid, `bh_end_${myId}_${pid}`, 'black_hole_seed', at, false, { damageOverride: dmg });
+    const bot = resolveBot(pid);
+    if (bot && !bot.dead) { const dx = bot.x - h.x, dz = bot.z - h.z, l = Math.hypot(dx, dz) || 1; bot.kbVX = dx / l * 16; bot.kbVZ = dz / l * 16; }
+    spawnHitParticle(at);
+  }
+}
+socket.on('blackHole', data => {
+  if (!data || data.ownerId === myId || inLobby) return;
+  spawnBlackHole(new THREE.Vector3(data.x, data.y, data.z), false, data.ownerId);
+});
 
 function getSupportRadius(item) {
   const radii = { smoke: 9, confetti_cannon: 3, moon_mine: 5.5, rubber_duck: 3.5, black_hole_seed: 7, glitch_cube: 4 };
@@ -69995,7 +70167,8 @@ function loop() {
   safeLoopStep('characters', () => animateCharacters(dt)); // walk-cycle + slide pose for bots & remote players
   safeLoopStep('team-arrows', () => updateTeamArrows());    // blue arrows over teammates only
   safeLoopStep('king-crown', () => updateKingCrown(dt));   // crown the current top fragger
-  safeLoopStep('burn-zones', () => updateBurnZones(dt)); // firework launcher DOT fields
+  safeLoopStep('burn-zones', () => updateBurnZones(dt));
+  safeLoopStep('black-holes', () => updateBlackHoles(dt)); // firework launcher DOT fields
   safeLoopStep('ground-flares', () => updateGroundFlares(dt)); // flares burning where they landed
   safeLoopStep('traps', () => updateTraps(dt)); // tripwires, magnet mines, bounce pads, hologram decoys
   safeLoopStep('p2w-systems', () => updateP2WSystems(dt)); // orbital strikes, guardian drones, nano shield

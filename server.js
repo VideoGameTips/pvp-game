@@ -2689,6 +2689,18 @@ io.on('connection', (socket) => {
       x:data.x,y:data.y,z:data.z,dx:data.dx/length,dy:data.dy/length,dz:data.dz/length});
   });
 
+  // 🕳️ Black Hole Seed: the thrower's client simulates and damages; everyone else only needs to see it and be pulled.
+  socket.on('blackHole', data => {
+    const p = players[socket.id];
+    if (!p || p.dead || !p.matchId || !data) return;
+    const v = [data.x, data.y, data.z];
+    if (!v.every(Number.isFinite) || v.some(n => Math.abs(n) > 10000)) return;
+    const now = Date.now();
+    if (now - (p._blackHoleAt || 0) < 3000) return;
+    p._blackHoleAt = now;
+    emitToMatch(p.matchId, 'blackHole', { ownerId: p.id, x: data.x, y: data.y, z: data.z });
+  });
+
   // Destructible identities are deterministic; relay only inside the shooter's match.
   socket.on('mapPropDestroyed', (data) => {
     const p = players[socket.id];
