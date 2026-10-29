@@ -22115,7 +22115,7 @@ function _gunDetails(g, o) {
     const fBase = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.010, 0.014), mMat);
     fBase.position.set(ox, deck + 0.002, sz); g.add(fBase);
     const post = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.018, 0.006), dark);
-    post.position.set(ox, deck + 0.014, sz); g.add(post);
+    post.position.set(ox, deck + 0.0085, sz); g.add(post);
     const rz = o.rearSightZ ?? bodyD * 0.34;
     const rBase = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.009, 0.016), mMat);
     rBase.position.set(ox, deck + 0.002, rz); g.add(rBase);
@@ -22123,6 +22123,7 @@ function _gunDetails(g, o) {
       const ear = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.013, 0.006), dark);
       ear.position.set(ox + x, deck + 0.011, rz); g.add(ear);
     });
+    g._sightLine = { space: g, rear: new THREE.Vector3(ox, deck + .0175, rz), front: new THREE.Vector3(ox, deck + .0175, sz) };
   }
   // Muzzle device at the business end.
   if (o.muzzleZ !== undefined) {
@@ -22527,7 +22528,9 @@ function gpOpenMuzzle(g,outer,inner,length,x,y,z,metal,dark,slotted=false) {
   g.add(group);return group;
 }
 function gpOptic(g, x, y, z, length, radius, deckY) {
+  y = Math.min(y, deckY + radius * 1.55 + .002);
   const optic = new THREE.Group();optic.position.set(x,y,z);optic.userData.weaponOptic=true;
+  g._sightLine = { space: optic, rear: new THREE.Vector3(0, 0, length * .5), front: new THREE.Vector3(0, 0, -length * .52) };
   const shell=new THREE.MeshPhongMaterial({color:0x222931,shininess:95,specular:0x9bacbb});
   const rubber=new THREE.MeshPhongMaterial({color:0x15191e,shininess:24});
   const steel=new THREE.MeshPhongMaterial({color:0x687987,shininess:145,specular:0xc6dfeb});
@@ -25902,7 +25905,7 @@ function buildAK20() {
   box(steel, 0.032, 0.016, 0.026, 0, 0.070, -0.082);
   const rearRing = new THREE.Mesh(new THREE.TorusGeometry(0.013, 0.0026, 7, 16), bright);
   rearRing.position.set(0, 0.083, -0.082); rearRing.castShadow = true; g.add(rearRing);
-  box(inner, 0.007, 0.006, 0.006, 0, 0.083, -0.082);                 // peep hole shadow
+  g._sightLine = { space: g, rear: new THREE.Vector3(0, .083, -.082), front: new THREE.Vector3(0, .083, -.505) };
 
   gpPart(g, 'main', () => { box(bright, 0.014, 0.011, 0.030, 0.030, 0.046, -0.030); });
   g._parts.main.userData.chargingHandle=true;
@@ -25953,8 +25956,9 @@ function buildAK20() {
   cyl(blued, 0.0064, 0.0064, 0.330, 20, 0, 0.018, -0.396);
   box(steel, 0.022, 0.040, 0.024, 0, 0.040, -0.505);                 // front sight block
   const frontHood = new THREE.Mesh(new THREE.TorusGeometry(0.013, 0.0024, 7, 14), steel);
-  frontHood.position.set(0, 0.063, -0.505); frontHood.castShadow = true; g.add(frontHood);
-  box(bright, 0.0035, 0.024, 0.0035, 0, 0.058, -0.505);              // post
+  frontHood.position.set(0, 0.083, -0.505); frontHood.castShadow = true; g.add(frontHood);
+  box(steel, .018, .022, .018, 0, .065, -.505);                    // connected hood pedestal
+  box(bright, 0.0035, 0.024, 0.0035, 0, 0.071, -0.505);              // post tip on rear aperture axis
   const brake = gpOpenMuzzle(g,.0118,.0056,.046,0,.018,-.556,blued,inner,true);
   brake.rotation.x = -0.13;
   // Right-side operating controls and restrained wear at exposed edges.
@@ -31358,10 +31362,9 @@ function buildP90() {
   gpBox(g, mag, 0.040, 0.020, 0.170, 0, 0.056, -0.010);
   for (let i = 0; i < 7; i++) gpCyl(g, bright, 0.0055, 0.0055, 0.034, 8, 0, 0.056, -0.078 + i * 0.023, 0, Math.PI/2);
   gpBox(g, poly, 0.042, 0.008, 0.024, 0, 0.056, 0.082);                // mag rear catch
-  // Integral optic housing.
-  gpBox(g, poly, 0.034, 0.020, 0.062, 0, 0.076, 0.052);
-  gpCyl(g, inner, 0.0105, 0.0105, 0.008, 14, 0, 0.078, 0.022);         // objective
-  gpBox(g, inner, 0.026, 0.012, 0.006, 0, 0.078, 0.082);               // eyepiece
+  // A real open optic, not a solid housing blocking the aiming axis.
+  gpOptic(g, 0, .081, .052, .062, .008, .066);
+  g._hasDefaultAimer = true;
   // Barrel, sling loop, ejection port, controls.
   gpCyl(g, blued, 0.0068, 0.0068, 0.070, 14, 0, 0.006, -0.216);
   gpCyl(g, steel, 0.0098, 0.0098, 0.016, 14, 0, 0.006, -0.244);        // muzzle nut
@@ -31616,8 +31619,9 @@ function buildPistol() {
   gpCyl(g,blued,.0025,.0025,.002,20,-.014,-.020,.020,0,Math.PI/2); // magazine release
   gpBox(g,inner,.0006,.001,.022,-.017,-.095,.038,.30); // floorplate seam
   for(const side of [-1,1])for(let i=0;i<3;i++)gpBox(g,bright,.0004,.0005,.006,side*.0144,.032,-.089+i*.018);
-  gpBox(g, inner, 0.010, 0.008, 0.006, 0, 0.040, 0.026);               // rear sight
-  gpBox(g, bright, 0.004, 0.007, 0.004, 0, 0.040, -0.104);             // front sight
+  for (const x of [-.007,.007]) gpBox(g, inner, .004, .008, .006, x, .049, .026); // open rear notch
+  gpBox(g, bright, .004, .014, .004, 0, .046, -.104);                 // matching front tip
+  g._sightLine = { space:g, rear:new THREE.Vector3(0,.053,.026), front:new THREE.Vector3(0,.053,-.104) };
   const flash = makeMuzzleFlash(); flash.position.set(0, 0.020, -0.135); g.add(flash);
   g._flash = flash; g._kickZ = 0.018; g._greebled = true; g._handDetailed = true;
   g._anchorOverride={mag:{x:0,y:-.078,z:.035},breech:{x:.014,y:.026,z:-.054}};
@@ -38007,6 +38011,9 @@ function addFlankStripes(model, colour) {
 }
 function addDefaultAutoAimer(model, weapon) {
   if (!model || !weapon?.auto || model._hasDefaultAimer) return 0;
+  let hasOptic = false;
+  model.traverse(o => { if (o.userData.weaponOptic) hasOptic = true; });
+  if (hasOptic) return 0;
   const skip = new Set();
   if (model._flash) model._flash.traverse(o => skip.add(o));
   let body = null, best = 0;
@@ -38041,21 +38048,34 @@ function addDefaultAutoAimer(model, weapon) {
 
   const rearZ = Math.min(bb.max.z - sz * 0.12, cz + sz * 0.32);
   const frontZ = Math.max(bb.min.z + sz * 0.12, cz - sz * 0.36);
-  const deckY = topY + railH * 0.80;
-  const rearBase = new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.018, sx * 0.42), railH, Math.max(0.012, sz * 0.06)), railMat);
-  rearBase.position.set(cx, deckY, rearZ);
+  // The largest part can be a stock, not the receiver. Clear the actual spine
+  // in that part's coordinates so a carry handle cannot plug the aperture.
+  const parts = _localPartBoxes(model), bodyMatrix = parts.find(p => p.obj === body)?.m;
+  const inverse = (bodyMatrix || new THREE.Matrix4()).clone().invert();
+  let spineY = topY;
+  for (const p of parts) {
+    const mat = Array.isArray(p.obj.material) ? p.obj.material[0] : p.obj.material;
+    if (skip.has(p.obj) || !mat || mat.transparent || mat.isMeshBasicMaterial) continue;
+    const bounds = p.box.clone().applyMatrix4(inverse);
+    if (bounds.min.x <= cx + .003 && bounds.max.x >= cx - .003) spineY = Math.max(spineY, bounds.max.y);
+  }
+  const deckY = Math.max(topY + railH * .8, spineY + .002);
+  const pedestalH = deckY - topY + railH;
+  const rearBase = new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.018, sx * 0.42), pedestalH, Math.max(0.012, sz * 0.06)), railMat);
+  rearBase.position.set(cx, topY + (deckY - topY) / 2, rearZ);
   body.add(rearBase);
   const ringR = Math.max(0.008, Math.min(0.015, sy * 0.17));
   const ring = new THREE.Mesh(new THREE.TorusGeometry(ringR, Math.max(0.0018, ringR * 0.22), 7, 16), sightMat);
   ring.position.set(cx, deckY + ringR * 0.95, rearZ);
   ring.castShadow = true;
   body.add(ring);
-  const frontBase = new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.016, sx * 0.34), railH, Math.max(0.010, sz * 0.05)), railMat);
-  frontBase.position.set(cx, deckY, frontZ);
+  const frontBase = new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.016, sx * 0.34), pedestalH, Math.max(0.010, sz * 0.05)), railMat);
+  frontBase.position.set(cx, topY + (deckY - topY) / 2, frontZ);
   body.add(frontBase);
   const post = new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.003, sx * 0.08), ringR * 1.55, Math.max(0.003, sx * 0.08)), sightMat);
-  post.position.set(cx, deckY + ringR * 0.78, frontZ);
+  post.position.set(cx, deckY + ringR * .175, frontZ);
   body.add(post);
+  model._sightLine = { space: body, rear: ring.position.clone(), front: new THREE.Vector3(cx, deckY + ringR * .95, frontZ) };
 
   // Same readability language as the AK pass: one long stripe, two broken
   // middle stripes, one long lower stripe per flank, sunk into the side faces.
@@ -42081,21 +42101,22 @@ function updateRealismFeedback(dt) {
   }
   if (model && model.visible && model._homePos && !reloading && activeSlot !== 'melee' && activeSlot !== 'support') {
     const t = performance.now() * 0.001;
-    const ads = isADS ? 0.34 : 1;
+    const ads = isADS ? 0.06 : 1;
     const crouch = (window._crouchEye || 1.65) < 1.4 ? 0.55 : 1;
     const amp = 0.0035 * ads * crouch;
     const ready = heldWeaponReady();
-    const walk = heldWalkPose(t), walkScale = (ready ? 0.12 : 1) * crouch;
+    const walk = heldWalkPose(t), walkScale = (isADS ? 0.008 : ready ? 0.12 : 1) * crouch;
     const readyBlend = 1-Math.exp(-Math.max(0,dt)*38);
+    const aimRotation = isADS ? weaponSightPose(model).rotation : _ZERO3;
     const targetX = model._homePos.x + Math.sin(t * 1.8) * amp + walk.x * walkScale + _gunKick.x;
     const targetY = model._homePos.y + Math.cos(t * 2.2) * amp * 0.65 + walk.y * walkScale - _realismLandKick * 0.035 + _gunKick.y;
     const targetZ = model._homePos.z + walk.z * walkScale + _gunKick.z;
     model.position.x += (targetX - model.position.x) * (ready?readyBlend:Math.min(1, dt * 7));
     model.position.y += (targetY - model.position.y) * (ready?readyBlend:Math.min(1, dt * 7));
     model.position.z += (targetZ - model.position.z) * (ready?readyBlend:Math.min(1, dt * 18));
-    model.rotation.x += (_gunKick.rx + walk.rx * walkScale - model.rotation.x) * (ready?readyBlend:Math.min(1, dt * 22));
-    model.rotation.y += (_gunKick.ry + walk.ry * walkScale - model.rotation.y) * (ready?readyBlend:Math.min(1, dt * 18));
-    model.rotation.z += (_gunKick.rz + walk.rz * walkScale - model.rotation.z) * (ready?readyBlend:Math.min(1, dt * 18));
+    model.rotation.x += (aimRotation.x + _gunKick.rx + walk.rx * walkScale - model.rotation.x) * (ready?readyBlend:Math.min(1, dt * 22));
+    model.rotation.y += (aimRotation.y + _gunKick.ry + walk.ry * walkScale - model.rotation.y) * (ready?readyBlend:Math.min(1, dt * 18));
+    model.rotation.z += (aimRotation.z + _gunKick.rz + walk.rz * walkScale - model.rotation.z) * (ready?readyBlend:Math.min(1, dt * 18));
     if (model._spinFx && !isADS && !_equip) { const sa = gunSpinAngle(model); if (sa) { model.rotation.x += sa; model._spinApplied = sa; } }
   }
   const settle = Math.pow(0.018, dt);
@@ -45228,15 +45249,46 @@ window.addEventListener('resize', () => {
   if (isADS && isScopedWeapon(currentWeapon)) drawScope();
 });
 
+function weaponSightPose(model) {
+  if (model._adsSightPose) return model._adsSightPose;
+  let line = model._sightLine;
+  // Older cosmetic builders may have an optic but no explicit sight anchors.
+  if (!line) model.traverse(o => {
+    if (!line && o.userData.weaponOptic) line = { space: o, rear: new THREE.Vector3(0,0,.03), front: new THREE.Vector3(0,0,-.03) };
+  });
+  let rear, front;
+  if (line) {
+    const matrix = new THREE.Matrix4(), chain = [];
+    for (let p=line.space;p && p!==model;p=p.parent) chain.unshift(p);
+    for (const p of chain) { p.updateMatrix(); matrix.multiply(p.matrix); }
+    rear = line.rear.clone().applyMatrix4(matrix).multiply(model.scale);
+    front = line.front.clone().applyMatrix4(matrix).multiply(model.scale);
+  } else {
+    // No authored sights: keep the actual upper silhouette BELOW the reticle,
+    // not the arbitrary model origin (hands, flashes and particles are excluded).
+    let top = -.02;
+    for (const part of _localPartBoxes(model)) {
+      const o=part.obj, mat=Array.isArray(o.material)?o.material[0]:o.material;
+      let skip=false;
+      for(let p=o;p && p!==model;p=p.parent) if(p.userData.vmHand || p.userData.eqFx || p===model._flash) skip=true;
+      if(skip || !mat || mat.transparent || mat.isMeshBasicMaterial || part.box.min.x>.012 || part.box.max.x<-.012) continue;
+      top=Math.max(top,part.box.max.y);
+    }
+    rear=new THREE.Vector3(0,(top+.002)*model.scale.y,0);
+    front=rear.clone().add(new THREE.Vector3(0,0,-.2));
+  }
+  const direction=front.clone().sub(rear).normalize();
+  const rotation=new THREE.Quaternion().setFromUnitVectors(direction,new THREE.Vector3(0,0,-1));
+  const point=rear.clone().applyQuaternion(rotation);
+  return model._adsSightPose={ position:new THREE.Vector3(-point.x,-point.y,Math.min(-.25,-.18-point.z)), rotation:new THREE.Euler().setFromQuaternion(rotation), rear, front };
+}
 function setWeaponADSPos(ads) {
   const model = weaponModels[currentWeaponIdx];
-  const x = ads ? 0 : 0.12;
-  model.position.set(x, -0.1, -0.25);
-  // updateRealismFeedback() lerps sway/kick back toward _homePos every frame —
-  // it's captured once at model-build time and never followed ADS, so the gun
-  // would snap back to the hip pose the instant that ran. Move the anchor with
-  // it so ADS actually holds its centered position.
-  if (model._homePos) model._homePos.set(x, -0.1, -0.25);
+  if (!model) return;
+  if (!model._hipPosition) model._hipPosition = (model._homePos || model.position).clone();
+  const position = ads ? weaponSightPose(model).position : model._hipPosition;
+  if (!model._homePos) model._homePos = position.clone();
+  else model._homePos.copy(position);
 }
 
 // ── Movement ───────────────────────────────────────────────────────────────
@@ -51442,6 +51494,7 @@ function prepViewModel(m, weaponId) {
   if (!m) return m;
   m.scale.setScalar(VM_GUN_SCALE);
   fitRestDistance(m);                          // before hands: attachViewHands captures _homePos
+  m._hipPosition = m.position.clone();
   try { attachViewHands(m); } catch (e) { console.warn('[hands]', e); }
   if (typeof addViewArms === 'function') { try { addViewArms(m); } catch (e) { console.warn('[arms]', e); } }
   // A bullpup puts its magazine behind the grip, so the generic magwell anchor
@@ -52508,6 +52561,7 @@ function applyModelSkin(weaponId) {
   cur.visible = false;
   next.visible = wasVisible;
   weaponModels[idx] = next;
+  if (idx === currentWeaponIdx && isADS) setWeaponADSPos(true);
 }
 function setModelSkin(weaponId, skinId) {
   if (skinId) equippedModelSkins[weaponId] = skinId;
@@ -57102,7 +57156,8 @@ function updateReloadAnim() {
   }
   const home = model._homePos;
   model.position.set(home.x + P.px, home.y + P.py, home.z + P.pz);
-  model.rotation.set(P.rx, P.ry, P.rz);
+  const sightRotation = isADS && !inspecting ? weaponSightPose(model).rotation : _ZERO3;
+  model.rotation.set(sightRotation.x + P.rx, sightRotation.y + P.ry, sightRotation.z + P.rz);
 
   // The gun opens: a cylinder swings out, a drum drops away, a pump slides
   // back, a top cover lifts, a magazine falls out of the well.
