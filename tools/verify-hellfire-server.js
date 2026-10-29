@@ -5,7 +5,7 @@ const handlers={},events=[],p={id:'self',account:'regular',matchId:'test',hp:300
 const context={users:{regular:{isAdmin:false},admin:{isAdmin:true}},players:{self:p},
   socket:{id:'self',on:(name,fn)=>handlers[name]=fn},Date,Math,Number,String,
   emitToMatch:(room,event,data)=>events.push({room,event,data}),shielded:()=>false,blocksFriendlyFire:()=>false,
-  creditFfaDamage:()=>{},cleanKillTags:()=>[],nextSpawn:()=>({x:0,y:1,z:0}),maxHpForMode:()=>300,SPAWN_SHIELD_MS:1500,
+  creditFfaDamage:()=>{},cleanKillTags:()=>[],nextSpawn:()=>({x:0,y:1,z:0}),maxHpForMode:()=>300,maxHpFor:()=>300,SPAWN_SHIELD_MS:1500,
   WEAPON_DAMAGE:{hellfire:8,hellfire_burn:7,hellfire_pool:10},WEAPON_HS_MULT:{},DAMAGE_OVERRIDE_CAPS:{},
   falloffMultiplier:()=>1,dist3:()=>5};
 vm.createContext(context);

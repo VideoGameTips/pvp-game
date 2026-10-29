@@ -60,6 +60,7 @@
     MAP_BOT_BOUNDS[name]={halfX:64,halfZ:76};
     MAP_VOID[name]={halfX:64,halfZ:76,rects:footprint.map(r=>({...r})),killY:-12,far:30};
     G.userData.authoredVolcano=true;G.userData.footprint=footprint;G.userData.safeRoutes=safe;
+    G.userData.identityRefined=true;   // authored detail is its identity pass, like the other custom layouts (refineMapIdentity skips customDetail maps)
     G.userData.ventSpots=[{x:-53,z:0},{x:53,z:0}];
     G._skyColor=0x39414d;
     const basalt=rockMaterial(0x30363d),cut=rockMaterial(0x414953),dark=rockMaterial(0x20262b),lip=rockMaterial(0x59606a);

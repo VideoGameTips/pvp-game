@@ -36,11 +36,18 @@ const VERSIONED = ['game.js', 'i18n.js', 'chat.js', 'equipment-models.js', 'soun
 // index.html is cached in memory below, so it has to be able to invalidate
 // itself: without it in here, editing only index.html changed nothing until the
 // process restarted.
-const TOKEN_INPUTS = VERSIONED.concat(['index.html']);
+// Every OTHER local script in index.html is versioned too (#81). Only five used to be: seven more had no version at
+// all (shop-catalog, underworld*, backrooms*, ragdoll) and seven a ?v= written by hand in index.html, so a deploy
+// paired a new game.js with up to four hours of yesterday's backrooms.js or shop-catalog.js from the browser's own
+// cache (max-age=14400). The list is read from index.html on every rebuild, so a script added tomorrow is covered;
+// a hand-written ?v= is replaced. VERSIONED is the seed for the first request.
+const VENDOR_JS = ['three.min.js', 'socket.io.min.js'];
+const SCRIPT_SRC = /(<script\s+src=")([^"?:]+\.js)(?:\?v=[^"]*)?(")/g;
+let _scriptInputs = VERSIONED.slice();
 const PUBLIC_DIR = path.join(__dirname, 'public');
-function buildToken() {
+function buildToken(files = _scriptInputs) {
   let h = 2166136261;
-  for (const f of TOKEN_INPUTS) {
+  for (const f of files.concat(['index.html'])) {
     try {
       const st = fs.statSync(path.join(PUBLIC_DIR, f));
       h = (Math.imul(h ^ st.size, 16777619) ^ Math.floor(st.mtimeMs)) >>> 0;
@@ -51,17 +58,18 @@ function buildToken() {
 let _indexToken = null, _indexHtml = null;
 app.get(['/', '/index.html'], (req, res, next) => {
   try {
-    const tok = buildToken();
+    let tok = buildToken();
     if (tok !== _indexToken || _indexHtml === null) {
       // Build first, publish after. Claiming the token BEFORE the read meant one
       // transient failure — index.html mid-rsync, a momentary EACCES — left
       // _indexHtml at null while the token already matched, so every later
       // request skipped the rebuild and answered 200 with an empty body: a white
       // page for every visitor until a file's mtime moved or the process died.
-      const html = fs.readFileSync(path.join(PUBLIC_DIR, 'index.html'), 'utf8')
-        .replace(/(<script\s+src=")([^"?]+\.js)(")/g,
-                 (m, a, src, b) => VERSIONED.includes(src) ? `${a}${src}?v=${tok}${b}` : m);
-      _indexHtml = html; _indexToken = tok;
+      const page = fs.readFileSync(path.join(PUBLIC_DIR, 'index.html'), 'utf8');
+      const files = [...new Set([...page.matchAll(SCRIPT_SRC)].map(m => m[2]).filter(f => !VENDOR_JS.includes(f)))];
+      tok = buildToken(files);                       // (made of the scripts this index.html actually loads)
+      const html = page.replace(SCRIPT_SRC, (m, a, src, b) => VENDOR_JS.includes(src) ? m : `${a}${src}?v=${tok}${b}`);
+      _indexHtml = html; _indexToken = tok; _scriptInputs = files;
     }
     res.setHeader('Cache-Control', 'no-cache');
     res.type('html').send(_indexHtml);

@@ -1,7 +1,7 @@
 // Finds map scenery that hangs in the air touching nothing at all.
 //
 //   PLAYWRIGHT_MODULE=/path/to/playwright-core [PW_CHROME=/path/to/chrome] \
-//   [PVP_TEST_URL=http://localhost:3961/] node tools/verify-map-floaters.js [id ...]
+//   [PVP_TEST_URL=http://localhost:3001/] node tools/verify-map-floaters.js [id ...]
 //
 // It drives a running game, builds every map and tests each piece of scenery
 // against every other one: a piece is fine if it touches ANYTHING on any side
@@ -14,7 +14,8 @@
 //   · anything starting above 20 m — clouds, backdrop ridges, station rings
 //   · near-transparent things — haze, water film
 //   · ground planes and sky domes (over 150 m across), and decals
-// Without those four rules this reported 116 pieces and every one was intended,
+//   · hidden things (a gimmick's train waits invisible) and _eggFloatingChain's platforms
+// Without those rules this reported 116 pieces and every one was intended,
 // which is the same as reporting nothing.
 //
 // BASELINE is what each map is known to hang on purpose (asteroids in space,
@@ -24,7 +25,8 @@
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 
 const BASELINE = {
-  space: 7, volcano: 5, dreamscape: 5, big_harbor: 4, skydock: 2, flying_moai: 1,
+  space: 11, volcano: 5,   // (space: 4 more asteroids since its LOOK pass -- counted now that the check sees upgraded maps)
+  dreamscape: 5, big_harbor: 4, skydock: 2, flying_moai: 1,
 };
 
 (async () => {
@@ -33,7 +35,7 @@ const BASELINE = {
   const page = await browser.newPage({ viewport: { width: 400, height: 300 } });
   const errs = [];
   page.on('pageerror', e => errs.push(e.message));
-  await page.goto(process.env.PVP_TEST_URL || 'http://localhost:3961/', { waitUntil: 'domcontentloaded' });
+  await page.goto(process.env.PVP_TEST_URL || 'http://localhost:3001/', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => typeof MAP_GROUPS !== 'undefined' && typeof MAP_IDS !== 'undefined',
                              null, { timeout: 90000 });
   const wanted = process.argv.slice(2);
@@ -43,10 +45,15 @@ const BASELINE = {
     for (const id of ids) {
       const G = MAP_GROUPS[id];
       if (!G) { out.push({ id, missing: true }); continue; }
+      // as it is played: the depth, eggs, outskirts and gimmicks are added the first time a map is played, and
+      // without this the check never saw any of them (#82)
+      try { _upgradeMap(id); } catch (e) { out.push({ id, upgradeError: String(e.message || e) }); continue; }
       G.updateMatrixWorld(true);
       const parts = [];
+      const shown = o => { for (let p = o; p && p !== G; p = p.parent) if (p.visible === false) return false; return true; };
       G.traverse(o => {
-        if (!o.isMesh || !o.geometry) return;
+        if (!o.isMesh || !o.geometry || !shown(o)) return;          // (a gimmick's train waits hidden)
+        if (o.userData && o.userData.egg === 'chain') return;          // _eggFloatingChain: floating on purpose
         const m = Array.isArray(o.material) ? o.material[0] : o.material;
         if (m && m.transparent && m.opacity < 0.5) return;
         if (m && (m.type === 'MeshBasicMaterial' || (m.emissive && m.emissive.getHex() !== 0))) return;
@@ -85,6 +92,7 @@ const BASELINE = {
   let bad = 0;
   for (const r of report) {
     if (r.missing) { console.log(r.id.padEnd(22) + 'NO MAP GROUP'); bad++; continue; }
+    if (r.upgradeError) { console.log(r.id.padEnd(22) + 'UPGRADE THREW ' + r.upgradeError); bad++; continue; }
     const base = BASELINE[r.id] || 0;
     if (r.found.length <= base) continue;
     bad++;

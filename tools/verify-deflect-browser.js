@@ -35,7 +35,10 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         if (model.position.distanceTo(before) > .00001) throw Error('Deflect pose teleports on impact');
         now += 60; applyMeleeDeflectPose(model);
         const target = meleeDeflectKick.target;
-        if (!target.every(Number.isFinite) || Math.abs(target[0]) > .20 || target[2] > -.30 || Math.abs(target[5]) > 1.46) throw Error('Unbounded pose');
+        // the guard it chose plus the jitter triggerDeflectImpact adds: +-0.07, half that on y, none on z (#82; the
+        // fixed box this used was the one-guard deflect's, and the eight guards of 5e06916 reach past it by design)
+        const P = DEFLECT_POSES[meleeDeflectKick.sector], J = [.07, .035, 0, .07, .07, .07];
+        if (!P || !target.every(Number.isFinite) || target.some((t, k) => Math.abs(t - P[k]) > J[k] + 1e-6)) throw Error('Unbounded pose');
         poses.add(target.map(x => x.toFixed(3)).join(','));
         now += 240; applyMeleeDeflectPose(model);
         if (model.position.distanceTo(base) > .00001 || Math.abs(model.rotation.z - Math.PI / 4) > .00001) throw Error('Guard stance changed');

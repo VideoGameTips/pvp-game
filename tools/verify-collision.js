@@ -50,7 +50,10 @@ function constsNeededBy(code, depth = 0) {
       if (taken.has(name)) continue;
       taken.add(name);
       // a one-line `const NAME = ...;` at top level — not a function, not a block
-      const m = src.match(new RegExp('^const ' + name + ' = .*$', 'm'));
+      // `let` too: PLAYER_RADIUS became `let` when body scale arrived (it is
+      // rescaled per character), and a const-only pattern killed this harness
+      // again — the same way, two weeks after the first time.
+      const m = src.match(new RegExp('^(?:const|let|var) ' + name + ' = .*$', 'm'));
       if (!m) continue;
       out.push(m[0]);
       for (const dep of m[0].match(/\b[A-Z][A-Z0-9_]{2,}\b/g) || []) if (!taken.has(dep)) next.push(dep);
