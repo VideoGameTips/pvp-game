@@ -19200,67 +19200,6 @@ GIM.blank = (X) => {
   });
 };
 
-// ── 🚗 URBAN · RUSH HOUR ────────────────────────────────────────────────────────────────────────────────────────────────
-// The plaza had cars as low cover and nothing ever moved. Two one-way lanes run down the avenue either side of the
-// fountain and the traffic does not stop for you. Cross it, don't fight in it.
-GIM_LABELS.roadkill = 'was run over';
-GIM.urban = (X) => {
-  const find = (sx, dir) => {
-    for (const ax of [11, 10, 12, 9.5, 12.5, 13]) {
-      const x = sx * ax, ln = dir > 0 ? X.lane(x, -68, x, 68, 34, { w: 1.9 }) : X.lane(x, 68, x, -68, 34, { w: 1.9 });
-      if (ln) return ln;
-    }
-    return null;
-  };
-  const lanes = [find(1, 1), find(-1, -1)].filter(Boolean);
-  if (!lanes.length) return;
-  X.dbg(lanes.map(l => ({ x: (l.x0 + l.x1) / 2, z: (l.z0 + l.z1) / 2 })));
-  const colors = [0xb83a2a, 0x2a5aa8, 0xd8c8a0, 0x3a8a4a, 0xd88a2a, 0x5a5f66, 0x7a3a8a];
-  const cars = [];
-  lanes.forEach((ln, li) => {
-    const dx = (ln.x1 - ln.x0) / ln.len, dz = (ln.z1 - ln.z0) / ln.len, yaw = Math.atan2(dx, dz);
-    // road paint: a dashed line down the middle of the lane, so it reads as a road and not as a gap between buildings
-    for (let s = 2; s < ln.len - 1; s += 5) {
-      const d = X.mesh(new THREE.BoxGeometry(0.18, 0.02, 2.2), _gimBasic(0xe9e6d8, 0.85), ln.x0 + dx * s, 0.045, ln.z0 + dz * s); d.rotation.y = yaw;
-    }
-    const n = Math.max(2, Math.min(5, Math.round(ln.len / 20)));
-    for (let i = 0; i < n; i++) {
-      const bus = li === 0 && i === 0 && ln.len > 44;
-      const g = _gimVehicle(bus ? 0xd8b030 : colors[(li * 3 + i) % colors.length], bus ? { len: 9.5, wid: 2.5, h: 2.1, bus: true } : {});
-      g.rotation.y = yaw; X.G.add(g);
-      cars.push({ g, ln, dx, dz, s: (i / n) * ln.len, v: bus ? 8.5 : 12 + li * 1.5, half: bus ? 4.75 : 2.3, hw: bus ? 1.25 : 1.0, bus });
-    }
-  });
-  const cd = new Map();
-  X.hint('🚗 RUSH HOUR', 'Cars run the avenue both ways. Do not stand in the road.', '#ffd24a');
-  X.onReset(() => { cd.clear(); cars.forEach((c, i) => { c.s = (i % 3) * 14; }); });
-  X.on((dt, A) => {
-    for (const c of cars) {
-      c.s += c.v * dt;
-      if (c.s > c.ln.len + c.half) c.s = -c.half - 6 - Math.random() * 14;
-      const vis = c.s > -c.half && c.s < c.ln.len + c.half;
-      c.g.visible = vis;
-      const cx = c.ln.x0 + c.dx * c.s, cz = c.ln.z0 + c.dz * c.s;
-      c.g.position.set(cx, 0, cz);
-      if (!vis) continue;
-      for (const a of A) {
-        if (a.y > 1.7) continue;
-        const rx = a.x - cx, rz = a.z - cz, along = rx * c.dx + rz * c.dz, side = rx * c.dz - rz * c.dx;
-        if (Math.abs(along) > c.half + 0.45 || Math.abs(side) > c.hw + 0.45) continue;
-        const key = a.id + ':' + (c.bus ? 'b' : 'c');
-        if ((cd.get(key) || 0) > 0) continue;
-        cd.set(key, 1.0);
-        a.hurt(c.bus ? 140 : 90, 'roadkill');
-        a.push(side >= 0 ? c.dz * 3.2 : -c.dz * 3.2, side >= 0 ? -c.dx * 3.2 : c.dx * 3.2);
-        a.lift(6);
-        if (a.me) X.flash('rgba(255,60,40,0.3)', 200);
-        X.sound('melee_heavy', cx, cz, 0.8);
-      }
-    }
-    for (const k of cd.keys()) { const v = cd.get(k) - dt; if (v <= 0) cd.delete(k); else cd.set(k, v); }
-  });
-};
-
 // ── 🏗️ WAREHOUSE · CRANE DROP ───────────────────────────────────────────────────────────────────────────────────────────
 // A warehouse has an overhead crane. This one works: every so often it rolls to a spot on the floor, a red ring marks it,
 // and it puts a crate there from 8 metres up. It hurts if you are under it -- and it stays, so the floor you fought over
@@ -19765,40 +19704,6 @@ GIM.skydock = (X) => {
   });
 };
 
-// ── 🚽 SEWER · FLUSH ────────────────────────────────────────────────────────────────────────────────────────────────────
-// The pools are acid and they sit still. Every half minute the main drain lets go: a wave the width of the tunnel, knee
-// to chest high, runs the whole length of the sewer and takes with it everything on the floor. Bridges, ledges and stairs
-// are above it. Three and a half seconds' warning -- a gurgle and a brown surge at the inlet end.
-GIM_LABELS.flush = 'was swept away by the flush';
-GIM.sewer = (X) => {
-  const b = X.arena(), W = b.halfX * 2 - 3, Z0 = -b.halfZ + 5, Z1 = b.halfZ - 5, H = 1.9;
-  const wave = new THREE.Group(); X.G.add(wave); wave.visible = false;
-  const body = new THREE.Mesh(new THREE.BoxGeometry(W, H, 3.4), _gimBasic(0x5e6e34, 0.78)); body.position.y = H / 2; wave.add(body);
-  const foam = new THREE.Mesh(new THREE.BoxGeometry(W, 0.35, 4.2), _gimBasic(0xe8f0d0, 0.9)); foam.position.y = H + 0.1; wave.add(foam);
-  const gate = []; for (const z of [Z0 - 1, Z1 + 1]) { const m = X.mesh(new THREE.BoxGeometry(W, 0.12, 2.6), _gimBasic(0xff3322, 0.0), 0, 0.09, z); gate.push(m); }
-  X.dbg([{ x: 0, z: 0 }]);
-  let S = { t: 14, phase: 'idle', dir: 1, z: 0, hit: new Set(), n: 0 };
-  X.hint('🚽 FLUSH', 'A wave runs the sewer every half minute. Get above the floor.', '#b8d060');
-  X.onReset(() => { S = { t: 14, phase: 'idle', dir: 1, z: 0, hit: new Set(), n: 0 }; wave.visible = false; gate.forEach(g => { g.material.opacity = 0; }); });
-  X.on((dt, A, t) => {
-    S.t -= dt;
-    if (S.phase === 'idle') {
-      if (S.t <= 0) { S.phase = 'warn'; S.t = 3.5; S.dir = S.n++ % 2 ? -1 : 1; X.announce('🚽 FLUSH', 'Get up off the floor!', '#b8d060'); X.sound('blackhole_collapse', 0, S.dir > 0 ? Z0 : Z1, 0.7); }
-    } else if (S.phase === 'warn') {
-      const g = gate[S.dir > 0 ? 0 : 1]; g.material.opacity = 0.35 + 0.45 * Math.abs(Math.sin(t * 10));
-      if (S.t <= 0) { S.phase = 'run'; S.z = S.dir > 0 ? Z0 : Z1; S.hit.clear(); wave.visible = true; gate.forEach(q => { q.material.opacity = 0; }); }
-    } else if (S.phase === 'run') {
-      S.z += S.dir * 11 * dt; wave.position.z = S.z; foam.position.y = H + 0.1 + Math.sin(t * 9) * 0.06;
-      for (const a of A) {
-        if (a.y > H - 0.2 || Math.abs(a.z - S.z) > 2.4) continue;
-        a.push(0, S.dir * 14 * dt);
-        if (!S.hit.has(a.id)) { S.hit.add(a.id); a.hurt(65, 'flush'); if (a.me) X.flash('rgba(110,130,60,0.45)', 300); }
-      }
-      if ((S.dir > 0 && S.z > Z1) || (S.dir < 0 && S.z < Z0)) { S.phase = 'idle'; S.t = 15 + Math.random() * 5; wave.visible = false; }
-    }
-  });
-};
-
 // ── 🌀 GRAVITY LAB · WELLS ──────────────────────────────────────────────────────────────────────────────────────────────
 // Three singularities hang in the lab. Come within eighteen metres of one and it starts to pull -- gently at the edge,
 // hard at the middle, and every dozen seconds it surges. Get to the core and it takes you apart. Use them: a well pulls a
@@ -19938,51 +19843,6 @@ GIM.overgrowth = (X) => {
   });
 };
 
-// ── 🏭 FOUNDRY · STAMPING PRESSES ───────────────────────────────────────────────────────────────────────────────────────
-// A foundry floor has presses on it, and these keep time. A yellow ring flashes on the floor, the plate drops half way
-// and hovers, then it comes down. Underneath is the last place to be. Six of them, on a beat that is not quite the same.
-GIM_LABELS.press = 'was flattened by a press';
-GIM.foundry = (X) => {
-  const spots = X.spots(6, { r: 3.4, pairs: true, sep: 16, maxR: 85, edge: 9 });
-  if (!spots.length) return;
-  X.dbg(spots);
-  const steel = _gimLam(0x6c747c), hazard = _gimLam(0xe6b422), dark = _gimLam(0x23262a);
-  const PER = 5.4, HALF = 2.4;
-  const presses = spots.map((s, i) => {
-    X.disc(s.x, s.z, 3.0, 0x1a1c1f, 0.9, 0.05);
-    const ring = X.ring(s.x, s.z, 3.1, 0xffcc22, 0.9, 0.35, 0.07); ring.visible = false;
-    const ram = new THREE.Group(); ram.position.set(s.x, 7.5, s.z); X.G.add(ram);
-    const add = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); ram.add(m); return m; };
-    add(new THREE.BoxGeometry(4.6, 0.9, 4.6), steel, 0, 0, 0);
-    add(new THREE.BoxGeometry(4.7, 0.18, 4.7), hazard, 0, -0.34, 0);
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) add(new THREE.CylinderGeometry(0.22, 0.22, 11, 8), dark, sx * 1.6, 5.5, sz * 1.6);
-    add(new THREE.BoxGeometry(5.2, 1.0, 5.2), dark, 0, 11.2, 0);
-    return { x: s.x, z: s.z, ring, ram, off: (i * 0.9) % PER, hit: false };
-  });
-  X.hint('🏭 PRESSES', 'The ring flashes, the plate drops, then it comes down.', '#ffcc22');
-  X.on((dt, A, t) => {
-    for (const p of presses) {
-      const u = (t + p.off) % PER;
-      let y = 7.5, warn = false;
-      if (u < 2.6) y = 7.5;
-      else if (u < 3.5) { y = 7.5 - (u - 2.6) / 0.9 * 2.6; warn = true; }
-      else if (u < 3.62) { y = 4.9 - (u - 3.5) / 0.12 * 4.45; }
-      else if (u < 4.4) y = 0.45;
-      else y = 0.45 + (u - 4.4) / 1.0 * 7.05;
-      p.ram.position.y = y;
-      p.ring.visible = warn || (u >= 3.5 && u < 4.4);
-      if (p.ring.visible) p.ring.material.opacity = warn ? 0.35 + 0.55 * Math.abs(Math.sin(t * 16)) : 0.95;
-      if (u >= 3.5 && u < 3.62 && !p.hit) {
-        p.hit = true;
-        X.sound('melee_heavy', p.x, p.z, 0.9); X.fx(p.x, 0.3, p.z, 3.4, 0xd8c8a0);
-        for (const a of A) if (a.y < 2.5 && Math.abs(a.x - p.x) < HALF && Math.abs(a.z - p.z) < HALF) {
-          a.hurt(180, 'press'); a.push(a.x - p.x || 0.2, a.z - p.z || 0.2); if (a.me) X.flash('rgba(255,200,80,0.4)', 220);
-        }
-      } else if (u < 3.4) p.hit = false;
-    }
-  });
-};
-
 // ── 🎠 CARNIVAL · CAROUSEL ──────────────────────────────────────────────────────────────────────────────────────────────
 // The carousel in the middle of the fair turns, and it takes everyone standing on it round with it -- sightlines sliding
 // past, the fair going by -- for about four seconds. Then it throws you off, which is what carousels do.
@@ -20057,57 +19917,6 @@ GIM.studio = (X) => {
         const k = Math.max(0.02, v.k);
         v.puffs.forEach((p, n) => { const s = p.userData.r0 * k * (1 + Math.sin(t * 0.8 + n) * 0.06); p.scale.setScalar(s); p.material.opacity = 0.78 * Math.min(1, k * 1.4); });
       }
-    }
-  });
-};
-
-// ── 🪨 TEMPLE · ROLLING BOULDER ─────────────────────────────────────────────────────────────────────────────────────────
-// There is exactly one thing a temple with a giant idol and trap pits has to have. Every twenty-odd seconds the stone
-// grinds, the dust comes off the ceiling, and a boulder the size of a car runs the longest clear corridor in the place.
-// Stay out of the lane or get to the end of it before it does. It runs both ways.
-GIM_LABELS.boulder = 'was flattened by the boulder';
-GIM.temple = (X) => {
-  const b = X.arena();
-  let best = null;
-  for (const off of [0, 7, -7, 14, -14, 22, -22, 30, -30]) for (const ax of ['z', 'x']) {
-    const ln = ax === 'z' ? X.lane(off, -b.halfZ + 4, off, b.halfZ - 4, 30, { w: 2.8 }) : X.lane(-b.halfX + 4, off, b.halfX - 4, off, 30, { w: 2.8 });
-    if (ln && (!best || ln.len > best.len)) best = ln;
-  }
-  if (!best) return;
-  X.dbg([{ x: (best.x0 + best.x1) / 2, z: (best.z0 + best.z1) / 2 }]);
-  const L = best.len, dx = (best.x1 - best.x0) / L, dz = (best.z1 - best.z0) / L;
-  // the lane, marked on the floor: worn flagstones, so it reads as a path before anything has ever rolled down it
-  const mark = [];
-  for (let s = 1; s < L; s += 2.2) {
-    const m = X.mesh(new THREE.BoxGeometry(2.6, 0.02, 0.5), _gimBasic(0x6a5a3a, 0.6), best.x0 + dx * s, 0.05, best.z0 + dz * s);
-    m.rotation.y = Math.atan2(dx, dz) + 1.5708; mark.push(m);
-  }
-  const boulder = new THREE.Mesh(new THREE.IcosahedronGeometry(2.3, 1), _gimLam(0x8a8478)); boulder.visible = false; X.G.add(boulder);
-  for (let k = 0; k < 3; k++) { const m = new THREE.Mesh(new THREE.IcosahedronGeometry(0.9, 0), _gimLam(0x6a645a)); m.position.set(Math.cos(k * 2.1) * 1.7, Math.sin(k * 1.3) * 1.4, Math.sin(k * 2.1) * 1.7); boulder.add(m); }
-  let S = { phase: 'idle', t: 10, dir: 1, s: 0, n: 0, cd: new Map() };
-  X.hint('🪨 ROLLING BOULDER', 'When the stone grinds, clear the long corridor.', '#c8b890');
-  X.onReset(() => { S = { phase: 'idle', t: 10, dir: 1, s: 0, n: 0, cd: new Map() }; boulder.visible = false; mark.forEach(m => { m.material.opacity = 0.6; m.material.color.setHex(0x6a5a3a); }); });
-  X.on((dt, A, t) => {
-    S.t -= dt;
-    if (S.phase === 'idle') {
-      if (S.t <= 0) { S.phase = 'warn'; S.t = 3.2; S.dir = S.n++ % 2 ? -1 : 1; X.announce('🪨 BOULDER', 'The stone is moving — leave the corridor!', '#c8b890'); X.sound('blackhole_collapse', S.dir > 0 ? best.x0 : best.x1, S.dir > 0 ? best.z0 : best.z1, 0.8); }
-    } else if (S.phase === 'warn') {
-      const f = Math.abs(Math.sin(t * 9));
-      mark.forEach(m => { m.material.color.setHex(f > 0.5 ? 0xff4a2a : 0x6a5a3a); m.material.opacity = 0.9; });
-      if (S.t <= 0) { S.phase = 'roll'; S.s = S.dir > 0 ? -2 : L + 2; boulder.visible = true; S.cd.clear(); mark.forEach(m => { m.material.opacity = 0.6; m.material.color.setHex(0x6a5a3a); }); }
-    } else if (S.phase === 'roll') {
-      S.s += S.dir * 15 * dt;
-      const bx = best.x0 + dx * S.s, bz = best.z0 + dz * S.s;
-      boulder.position.set(bx, 2.3, bz); boulder.rotation.x += S.dir * 15 / 2.3 * dt * dz; boulder.rotation.z -= S.dir * 15 / 2.3 * dt * dx;
-      for (const a of A) {
-        if (a.y > 3.4 || Math.hypot(a.x - bx, a.z - bz) > 3.0 || (S.cd.get(a.id) || 0) > t) continue;
-        S.cd.set(a.id, t + 1.6);
-        a.hurt(210, 'boulder');
-        const nx = -dz, nz = dx, side = ((a.x - bx) * nx + (a.z - bz) * nz) >= 0 ? 1 : -1;
-        a.push(nx * side * 5, nz * side * 5); a.lift(7);
-        if (a.me) X.flash('rgba(200,180,140,0.45)', 260);
-      }
-      if ((S.dir > 0 && S.s > L + 3) || (S.dir < 0 && S.s < -3)) { S.phase = 'idle'; S.t = 12 + Math.random() * 6; boulder.visible = false; }
     }
   });
 };
@@ -20560,46 +20369,6 @@ GIM.traffic_cone_republic = (X) => {
         if (a.me) { X.flash('rgba(255,210,70,0.25)', 200); }
         X.sound('click', G.x, G.z, 0.8);
       }
-    }
-  });
-};
-
-// ── 🗿 FLYING MOAI · ROAR ───────────────────────────────────────────────────────────────────────────────────────────────
-// A stone head on a stone pedestal in the middle of the plateau. Its eyes go white, there is a breath of quiet, and a ring
-// of stone dust goes out across the ground at eighteen metres a second. It is knee high. It is a jump.
-GIM_LABELS.roar = 'was knocked down by the roar';
-GIM.flying_moai = (X) => {
-  const s = X.spots(1, { r: 2.6, near: [0, 0], edge: 12, sep: 1 })[0];
-  if (!s) return;
-  X.dbg([{ x: s.x + 8, z: s.z }]);
-  const stone = _gimLam(0x7d756a), dark = _gimLam(0x5a564c);
-  X.mesh(new THREE.BoxGeometry(3.6, 0.9, 3.6), dark, s.x, 0.45, s.z);
-  X.mesh(new THREE.BoxGeometry(2.0, 4.6, 1.8), stone, s.x, 3.2, s.z);
-  X.mesh(new THREE.BoxGeometry(2.4, 0.9, 1.2), dark, s.x, 4.3, s.z + 0.5);
-  const eyeM = _gimBasic(0x6a645a), eyes = [-0.5, 0.5].map(sx => X.mesh(new THREE.BoxGeometry(0.4, 0.3, 0.2), eyeM, s.x + sx, 3.9, s.z + 1.0));
-  const wave = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.0, 40), _gimBasic(0xd8cfb8, 0.8)); wave.rotation.x = -Math.PI / 2; wave.position.set(s.x, 0.12, s.z); wave.visible = false; X.G.add(wave);
-  const band = new THREE.Mesh(new THREE.TorusGeometry(1, 0.35, 5, 40), _gimBasic(0xd8cfb8, 0.55)); band.rotation.x = Math.PI / 2; band.position.set(s.x, 0.35, s.z); band.visible = false; X.G.add(band);
-  let S = { phase: 'idle', t: 8, r: 0, hit: new Set() };
-  X.hint('🗿 ROAR', 'When its eyes go white a ring of dust crosses the ground. Jump it.', '#d8cfb8');
-  X.onReset(() => { S = { phase: 'idle', t: 8, r: 0, hit: new Set() }; wave.visible = false; band.visible = false; eyes.forEach(e => e.material.color.setHex(0x6a645a)); });
-  X.on((dt, A, t) => {
-    S.t -= dt;
-    if (S.phase === 'idle') { if (S.t <= 0) { S.phase = 'warn'; S.t = 1.3; X.sound('blackhole_collapse', s.x, s.z, 0.7); } }
-    else if (S.phase === 'warn') {
-      const f = Math.abs(Math.sin(t * 14)); eyes.forEach(e => e.material.color.setHex(f > 0.5 ? 0xffffff : 0x6a645a));
-      if (S.t <= 0) { S.phase = 'wave'; S.r = 1.5; S.hit.clear(); wave.visible = true; band.visible = true; eyes.forEach(e => e.material.color.setHex(0xffffff)); X.sound('explosion', s.x, s.z, 0.8); }
-    } else if (S.phase === 'wave') {
-      S.r += 18 * dt;
-      wave.scale.setScalar(S.r); band.scale.set(S.r, S.r, 1);
-      wave.material.opacity = Math.max(0, 0.8 - S.r / 120); band.material.opacity = Math.max(0, 0.55 - S.r / 120);
-      for (const a of A) {
-        if (a.y > 0.9 || S.hit.has(a.id)) continue;
-        const d = Math.hypot(a.x - s.x, a.z - s.z);
-        if (Math.abs(d - S.r) > 1.5) continue;
-        S.hit.add(a.id); a.hurt(80, 'roar'); a.push((a.x - s.x) / (d || 1) * 6, (a.z - s.z) / (d || 1) * 6); a.lift(7);
-        if (a.me) X.flash('rgba(216,207,184,0.4)', 220);
-      }
-      if (S.r > 90) { S.phase = 'idle'; S.t = 9 + Math.random() * 4; wave.visible = false; band.visible = false; eyes.forEach(e => e.material.color.setHex(0x6a645a)); }
     }
   });
 };
@@ -74628,7 +74397,7 @@ const MAP_DESCS = {
   blank:      'Classic Arena — wide lanes, wall-walks, ramps · a HOT SEAT ring heals you and moves every 40 s',
   m4_tower:   'M4 Tower — tight two-story arena with climbable corners and upper catwalks',
   base_raid:  'Base Raid — storm a guarded compound with allied bots',
-  urban:      'Urban Plaza — corner buildings, cars as low cover · RUSH HOUR traffic runs the avenue',
+  urban:      'Urban Plaza — corner buildings, cars as low cover',
   warehouse:  'Warehouse — stacked crates, pipes, narrow lanes · the overhead CRANE drops crates on red rings',
   forest:     'Forest — dense pine routes, sheltered clearings, a timber bridge · WILDFIRE spreads through the pines',
   vietnam:    '🇻🇳 Vietnam — huge dense jungle, tight sightlines · hidden PUNJI PITS',
@@ -74642,18 +74411,18 @@ const MAP_DESCS = {
   chernobyl:  'Chernobyl — radiation vents with periodic toxic leaks',
   refinery:   'Oil Refinery — oil slicks make you slide + explosive barrels · shoot a slick and it BURNS',
   skydock:    'Skydock Launch — jump pads up to the gantries · a LAUNCH COUNTDOWN turns the pad into a furnace',
-  sewer:      'Acid Sewer — toxic pools force bridge fights · a FLUSH wave sweeps the floor',
+  sewer:      'Acid Sewer — toxic pools force bridge fights',
   gravity_lab:'Gravity Lab — low gravity domes + launch pads',
   glassworks: 'Glassworks — glass sheets shatter into cutting shards · barrel traps',
   carrier:    '🚢 Carrier — flat deck that ROLLS with the sea · hangars + control tower',
   overgrowth: '🌲 Overgrowth — abandoned city reclaimed by nature · STRANGLER VINES root you',
   orbital_station: 'Orbital Station — modular pods and cycling decompression vents',
-  foundry:    '🏭 Foundry — conveyor belts, molten pools · PRESSES slam on a beat',
+  foundry:    '🏭 Foundry — conveyor belts, molten pools',
   carnival:   '🎪 Carnival — ferris wheel, tents · the CAROUSEL carries you round and throws you off',
   biosphere:  'Biosphere — changing climates: growth, wind, frost and thermals',
   lockdown:   'Lockdown — prison blocks and timed security scanners',
   studio:     '🎥 Studio — western, sci-fi and castle sets · FOG MACHINES whiteout the stage',
-  temple:     '🕍 Temple — stone columns, giant idol · a ROLLING BOULDER runs the long corridor',
+  temple:     '🕍 Temple — stone columns, giant idol',
   holiday:    '🎄 Holiday — snowy village + giant tree · a SLEIGH drops presents (and coal)',
   labyrinth:  '🧪 Labyrinth — a stone maze whose walls SHIFT and rise out of the floor',
   arena:      '🏟️ Arena — green pitch inside stadium stands · SPRINKLERS soak the grass and shove you',
@@ -74676,7 +74445,7 @@ const MAP_DESCS = {
   supermarket: '🛒 Supermarket — aisles, checkouts, freezer · loose TROLLEYS run the aisles',
   pyongyang: 'Pyongyang — monuments, squares and wide-sweeping live-fire searchlights',
   traffic_cone_republic: '🚧 Traffic Cone Republic — giant cones, a roundabout, a flyover · TOLL LANES charge health for speed',
-  flying_moai: '🗿 Flying Moai — a plateau of stone heads · a ROAR shockwave crosses the ground',
+  flying_moai: '🗿 Flying Moai — a plateau of stone heads',
   duel_grid:      '⚔️ Duel Grid — 1v1 and 2v2 · 144 × 224 m grid arena: high walls make rooms with doors, windowed walls, L bunkers, crates, and galleries up ramps',
   duel_crossroads:'⚔️ Crossroads — 1v1 and 2v2 · 144 × 224 m · long high walls stagger into an S through the field; ramps take you over the middle on bridges',
   duel_pillars:   '⚔️ Pillar Hall — 1v1 and 2v2 · 144 × 224 m · colonnades with arches, high aisle walls with doors, and raised stages up broad ramps',
