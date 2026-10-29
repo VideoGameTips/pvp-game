@@ -34533,6 +34533,13 @@ const WEAPON_SKINS = [
   { id: 'mercury',    name: 'Liquid Mercury',  body: 0xd6dce4, accent: 0x6a7482, flag: null, sw: ['#d6dce4', '#6a7482'] },
   { id: 'titanium',   name: 'Torched Titanium', body: 0xe0b85a, accent: 0x2f6fe3, flag: null, sw: ['#e0b85a', '#2f6fe3'] },
   { id: 'tesseract',  name: 'Tesseract',       body: 0x03050c, accent: 0x9ff2ff, flag: null, sw: ['#03050c', '#9ff2ff'] },
+  // ── 🏛 Stone, nights, plans and camo ──
+  { id: 'marble',       name: 'Marble',          body: 0xeceae4, accent: 0xc9a24a, flag: null, sw: ['#eceae4', '#8b8f98'] },
+  { id: 'terrazzo',     name: 'Terrazzo',        body: 0xe3dccf, accent: 0xc8553d, flag: null, sw: ['#e3dccf', '#c8553d'] },
+  { id: 'synthwave',    name: 'Synthwave',       body: 0x120626, accent: 0xff3da6, flag: null, sw: ['#120626', '#ff3da6'] },
+  { id: 'blueprint',    name: 'Blueprint',       body: 0x1b4a8c, accent: 0xe6f1ff, flag: null, sw: ['#1b4a8c', '#e6f1ff'] },
+  { id: 'desertstorm',  name: 'Desert Storm',    body: 0xc9b48a, accent: 0x6e5a3a, flag: null, sw: ['#c9b48a', '#6e5a3a'] },
+  { id: 'midnightdigi', name: 'Midnight Digital', body: 0x1c2638, accent: 0x0a0f1a, flag: null, sw: ['#1c2638', '#0a0f1a'] },
   // ── 🎖 Contract wraps: not in the shop, each earned by a contract (CONTRACTS, below) ──
   { id: 'darkmatter',   name: 'Dark Matter',   body: 0x05030f, accent: 0xb36bff, flag: null, contract: true, sw: ['#05030f', '#b36bff'] },
   { id: 'singularity',  name: 'Singularity',   body: 0x000000, accent: 0xffd9a0, flag: null, contract: true, sw: ['#000000', '#ff8a2a'] },
@@ -35321,6 +35328,121 @@ Object.assign(WS_PATTERNS, {
     });
   },
 });
+// ── 🪨 Stone, a night drive, a drawing board and a kitchen floor ────────────────────────────────────────────────
+// Four more patterns. Anything that repeats is drawn through _wsTile with its random numbers drawn FIRST, so every copy
+// is the same and the seams meet.
+Object.assign(WS_PATTERNS, {
+  marble(g, N, c, r) {   // pale stone with clouds in it, grey veins that wander across and fork, and (c[3]) a thread of gold
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N);
+    const clouds = [];
+    for (let i = 0; i < 28; i++) clouds.push({ x: r() * N, y: r() * N, R: 30 + r() * 70, a: 0.08 + r() * 0.12 });
+    const veins = [];
+    for (let k = 0; k < 7; k++) {
+      const main = k < 2;
+      veins.push({
+        y: (k + 0.1 + r() * 0.8) * N / 7, main, w: main ? 3.4 + r() * 1.6 : 1.0 + r() * 1.1,
+        terms: [[1 + (r() * 2 | 0), 16 + r() * 30, r() * 6.283], [3 + (r() * 3 | 0), 5 + r() * 12, r() * 6.283], [8 + (r() * 4 | 0), 1.2 + r() * 2.6, r() * 6.283]],
+        forks: Array.from({ length: main ? 4 : 1 }, () => ({ x: r() * N, dy: (r() < 0.5 ? -1 : 1) * (22 + r() * 46), len: 70 + r() * 130 })),
+      });
+    }
+    const yAt = (v, x) => { let y = v.y; for (const [f, A, ph] of v.terms) y += A * Math.sin(x / N * 6.283 * f + ph); return y; };
+    _wsTile(g, N, () => {
+      for (const o of clouds) {
+        const gr = g.createRadialGradient(o.x, o.y, 0, o.x, o.y, o.R);
+        gr.addColorStop(0, _wsRgba(c[1], o.a)); gr.addColorStop(1, _wsRgba(c[1], 0));
+        g.fillStyle = gr; g.fillRect(o.x - o.R, o.y - o.R, o.R * 2, o.R * 2);
+      }
+      g.lineCap = 'round'; g.lineJoin = 'round';
+      for (const v of veins) {
+        const trace = (dy = 0) => { g.beginPath(); for (let x = 0; x <= N; x += 4) { const y = yAt(v, x) + dy; x ? g.lineTo(x, y) : g.moveTo(x, y); } };
+        g.strokeStyle = _wsRgba(c[1], 0.22); g.lineWidth = v.w * 4.5; trace(); g.stroke();      // the blur of it under the stone
+        g.strokeStyle = _wsRgba(c[2] || c[1], v.main ? 0.92 : 0.7); g.lineWidth = v.w; trace(); g.stroke();
+        if (v.main && c[3]) { g.strokeStyle = _wsRgba(c[3], 0.9); g.lineWidth = Math.max(1, v.w * 0.36); trace(-v.w * 0.55); g.stroke(); }
+        for (const f of v.forks) {                                                           // a vein splits and thins
+          const y0 = yAt(v, f.x); g.strokeStyle = _wsRgba(c[2] || c[1], 0.62); g.lineWidth = Math.max(0.8, v.w * 0.55);
+          g.beginPath(); for (let t = 0; t <= 1.001; t += 0.05) { const x = f.x + t * f.len, y = y0 + f.dy * (1 - (1 - t) * (1 - t)) + Math.sin(t * 9 + f.x) * 2.2; t ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke();
+        }
+      }
+    });
+  },
+  terrazzo(g, N, c, r) {   // chips of coloured stone set in pale cement: c[0] is the cement, the rest are the chips
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N);
+    const chips = [];
+    for (let i = 0; i < 170; i++) {
+      const big = r() < 0.12, sides = 5 + (r() * 3 | 0), R = big ? 14 + r() * 14 : 4 + r() * 8;
+      chips.push({ x: r() * N, y: r() * N, rot: r() * 6.283, sq: 0.55 + r() * 0.45, col: 1 + (r() * (c.length - 1) | 0),
+        pts: Array.from({ length: sides }, (_, j) => [j / sides * 6.283, R * (0.62 + r() * 0.5)]) });
+    }
+    _wsTile(g, N, () => {
+      for (const o of chips) {
+        g.save(); g.translate(o.x, o.y); g.rotate(o.rot); g.scale(1, o.sq);
+        g.beginPath(); o.pts.forEach(([a, rr], j) => { const x = Math.cos(a) * rr, y = Math.sin(a) * rr; j ? g.lineTo(x, y) : g.moveTo(x, y); }); g.closePath();
+        g.fillStyle = c[o.col]; g.fill(); g.strokeStyle = 'rgba(0,0,0,0.22)'; g.lineWidth = 1; g.stroke();
+        g.restore();
+      }
+    });
+  },
+  blueprint(g, N, c, r) {   // c[0] paper blue, c[1] the line, c[2] the faint grid, c[3] the red-pencil marks. Circles, dimension lines, a title block
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N);
+    const marks = [];
+    for (let i = 0; i < 6; i++) marks.push({ k: 'circle', x: r() * N, y: r() * N, R: 16 + r() * 32 });
+    for (let i = 0; i < 5; i++) marks.push({ k: 'dim', x: r() * N, y: r() * N, len: 50 + r() * 90, v: r() < 0.4, txt: (2 + r() * 98).toFixed(1) });
+    for (let i = 0; i < 4; i++) marks.push({ k: 'angle', x: r() * N, y: r() * N, a: r() * 6.283, len: 40 + r() * 60 });
+    for (let i = 0; i < 3; i++) marks.push({ k: 'hatch', x: r() * N, y: r() * N, w: 26 + r() * 40, h: 18 + r() * 30 });
+    _wsTile(g, N, () => {
+      g.lineWidth = 1; g.strokeStyle = _wsRgba(c[2], 0.5);
+      for (let i = 0; i <= 32; i++) { const p = i * N / 32; g.beginPath(); g.moveTo(p, 0); g.lineTo(p, N); g.moveTo(0, p); g.lineTo(N, p); g.stroke(); }
+      g.strokeStyle = _wsRgba(c[1], 0.5); g.lineWidth = 1.5;
+      for (let i = 0; i <= 8; i++) { const p = i * N / 8; g.beginPath(); g.moveTo(p, 0); g.lineTo(p, N); g.moveTo(0, p); g.lineTo(N, p); g.stroke(); }
+      g.font = '11px monospace'; g.textBaseline = 'middle';
+      for (const m of marks) {
+        g.strokeStyle = c[1]; g.fillStyle = c[1]; g.lineWidth = 1.6;
+        if (m.k === 'circle') {
+          g.beginPath(); g.arc(m.x, m.y, m.R, 0, 6.283); g.stroke();
+          g.beginPath(); g.arc(m.x, m.y, m.R * 0.45, 0, 6.283); g.stroke();
+          g.lineWidth = 1; g.beginPath(); g.moveTo(m.x - m.R - 8, m.y); g.lineTo(m.x + m.R + 8, m.y); g.moveTo(m.x, m.y - m.R - 8); g.lineTo(m.x, m.y + m.R + 8); g.stroke();
+        } else if (m.k === 'dim') {
+          g.save(); g.translate(m.x, m.y); if (m.v) g.rotate(1.5708);
+          g.beginPath(); g.moveTo(0, 0); g.lineTo(m.len, 0); g.moveTo(0, -7); g.lineTo(0, 7); g.moveTo(m.len, -7); g.lineTo(m.len, 7); g.stroke();
+          g.beginPath(); g.moveTo(0, 0); g.lineTo(8, -3); g.lineTo(8, 3); g.closePath(); g.moveTo(m.len, 0); g.lineTo(m.len - 8, -3); g.lineTo(m.len - 8, 3); g.closePath(); g.fill();
+          g.fillStyle = c[0]; g.fillRect(m.len / 2 - 17, -7, 34, 14); g.fillStyle = c[1]; g.textAlign = 'center'; g.fillText(m.txt, m.len / 2, 0);
+          g.restore();
+        } else if (m.k === 'angle') {
+          g.strokeStyle = c[3] || c[1]; g.lineWidth = 1.4; g.beginPath(); g.moveTo(m.x, m.y); g.lineTo(m.x + Math.cos(m.a) * m.len, m.y + Math.sin(m.a) * m.len);
+          g.moveTo(m.x, m.y); g.lineTo(m.x + m.len, m.y); g.stroke(); g.beginPath(); g.arc(m.x, m.y, 18, 0, m.a); g.stroke();
+        } else {
+          g.save(); g.beginPath(); g.rect(m.x, m.y, m.w, m.h); g.stroke(); g.clip(); g.lineWidth = 1;
+          for (let k = -m.h; k < m.w; k += 6) { g.beginPath(); g.moveTo(m.x + k, m.y + m.h); g.lineTo(m.x + k + m.h, m.y); g.stroke(); } g.restore();
+        }
+      }
+    });
+  },
+  synthwave(g, N, c, r) {   // c[0] night, c[1] magenta (it glows), c[2] cyan, c[3] sun. A striped sun on a horizon over a perspective grid; dark at top and bottom so it repeats
+    const H = N * 0.54;
+    const sky = g.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, c[0]); sky.addColorStop(0.72, _wsRgba(c[1], 0.30)); sky.addColorStop(1, _wsRgba(c[3], 0.42));
+    g.fillStyle = c[0]; g.fillRect(0, 0, N, N); g.fillStyle = sky; g.fillRect(0, 0, N, H);
+    const cx = N / 2, cy = H - N * 0.04, R = N * 0.2;
+    const sun = g.createLinearGradient(0, cy - R, 0, cy + R * 0.2);
+    sun.addColorStop(0, c[3]); sun.addColorStop(1, c[1]);
+    g.save(); g.beginPath(); g.rect(0, 0, N, H); g.clip();
+    g.fillStyle = sun; g.beginPath(); g.arc(cx, cy, R, 0, 6.283); g.fill();
+    g.fillStyle = c[0];
+    for (let i = 0; i < 6; i++) { const y = cy - R * 0.1 + i * R * 0.19, h = 1.5 + i * 2.4; g.fillRect(cx - R - 2, y, R * 2 + 4, h); }   // the slits widen toward the horizon
+    g.restore();
+    g.strokeStyle = c[1]; g.lineWidth = 3; g.beginPath(); g.moveTo(0, H); g.lineTo(N, H); g.stroke();
+    g.fillStyle = c[0]; g.fillRect(0, H + 1.5, N, N - H);
+    g.lineWidth = 1.6;
+    for (let i = -16; i <= 16; i++) {   // the lines converging on the horizon
+      g.strokeStyle = _wsRgba(c[2], 0.85); g.beginPath(); g.moveTo(cx + i * N * 0.03, H + 2); g.lineTo(cx + i * N * 0.19, N); g.stroke();
+    }
+    for (let k = 1; k <= 9; k++) {      // and the rungs, spaced wider the nearer they come
+      const y = H + (N - H) * Math.pow(k / 9, 2.1); g.strokeStyle = _wsRgba(c[2], 0.85); g.beginPath(); g.moveTo(0, y); g.lineTo(N, y); g.stroke();
+    }
+    const fade = g.createLinearGradient(0, N * 0.82, 0, N); fade.addColorStop(0, _wsRgba(c[0], 0)); fade.addColorStop(1, c[0]);
+    g.fillStyle = fade; g.fillRect(0, N * 0.82, N, N * 0.18);
+  },
+});
 // id -> how it is painted and finished. `glow`: which of the pattern's colours also lights up (an emissive layer).
 const WS_LOOKS = {
   gold:      { pat: 'filigree', c: [0xc8a020, 0xffe070], metal: 0.95, rough: 0.26 },
@@ -35390,6 +35512,12 @@ const WS_LOOKS = {
   mercury:   { pat: 'mercury',   c: [0xc4ccd6, 0xffffff, 0x2e3540], metal: 1.0, rough: 0.035, env: 1.7, noSwap: true, scroll: [-0.022, 0.012], bump: { amount: 3, du: 0.06, dv: -0.035 } },
   titanium:  { pat: 'heat',      c: [0x7a8089, 0xe3bc5a], metal: 1.0, rough: 0.2, env: 1.35, noSwap: true, sway: [0.28, 0, 0.07] },
   tesseract: { pat: 'tesseract', c: [0x03050c, 0x9ff2ff, 0x2a1a6a, 0x0b1a3a], metal: 0.85, rough: 0.14, env: 1.2, glow: 1, noSwap: true, spin: 0.33, pulse: [0.45, 0.7, 1.55] },
+  marble:       { pat: 'marble',     c: [0xeceae4, 0x9aa0aa, 0x5a5f69, 0xc9a24a], metal: 0.25, rough: 0.12, env: 1.2, noSwap: true },
+  terrazzo:     { pat: 'terrazzo',   c: [0xe3dccf, 0xc8553d, 0x3d6b8c, 0x2f2a28, 0xd9b04a, 0x7f9a6b], metal: 0.08, rough: 0.5, noSwap: true },
+  synthwave:    { pat: 'synthwave',  c: [0x120626, 0xff3da6, 0x2ad4ff, 0xffb347], metal: 0.5, rough: 0.28, glow: 1, noSwap: true, scroll: [0.04, 0], pulse: [0.3, 0.8, 1.25] },
+  blueprint:    { pat: 'blueprint',  c: [0x1b4a8c, 0xe6f1ff, 0x5d8fd0, 0xff8a7a], metal: 0.1, rough: 0.55, noSwap: true, scroll: [0, 0.03] },
+  desertstorm:  { pat: 'camo',       c: [0xc9b48a, 0x9a7f52, 0x6e5a3a, 0xe0d2a8], metal: 0.08, rough: 0.85 },
+  midnightdigi: { pat: 'digicam',    c: [0x1c2638, 0x0a0f1a, 0x3a4a68, 0x05080f], metal: 0.12, rough: 0.8 },
 };
 
 // ── 🎖 Contracts ────────────────────────────────────────────────────────────────────────────────────────
