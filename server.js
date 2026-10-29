@@ -152,6 +152,11 @@ const FRIENDLY_FIRE_FREE_FOR_ALL_MODES = new Set([
   'dice_duel', 'roulette', 'rocket_rumble', 'zombies',
 ]);
 const FFA_WIN_MIN_MS = 30000;
+// 🧟 Skins that only the Zombie Tower gives out: the first time an account calls for the way out. Mirrors
+// TOWER_MODEL_SKIN_IDS in public/game.js (gotcha #4). Not in any case pool or bundle. A real run is twenty-four floors up, a
+// horde of 130 on the roof and twenty-four floors back down, so anything under five minutes did not happen.
+const ZOMBIE_TOWER_SKIN_IDS = ['ak20_field_radio'];
+const TOWER_WIN_MIN_MS = Number(process.env.TOWER_WIN_MIN_MS) || 5 * 60 * 1000;   // (the env override is for the test harness only)
 let _saveSoonTimer = null;
 function saveUsersSoon() {            // damage lands many times a second; the file need not
   if (_saveSoonTimer) return;
@@ -1551,6 +1556,7 @@ app.post('/auth/login', (req, res) => {
       for (const id of GEN1_SKIN_IDS) if (!users[username].skinInventory.includes(id)) users[username].skinInventory.push(id);
       for (const id of DONUT_SKIN_IDS) if (!users[username].skinInventory.includes(id)) users[username].skinInventory.push(id);
       for (const id of GEN2_SKIN_IDS) if (!users[username].skinInventory.includes(id)) users[username].skinInventory.push(id);
+      for (const id of ZOMBIE_TOWER_SKIN_IDS) if (!users[username].skinInventory.includes(id)) users[username].skinInventory.push(id);
     }
     saveUsers();
     return res.json({ ok: true, username, unlocks: users[username].unlocks, purchased: users[username].purchased, credits: users[username].credits, fragments: users[username].fragments || 999999, chests: users[username].chests || { common: 99, rare: 99 }, upgrades: users[username].upgrades || {}, skinCases: users[username].skinCases || [], skinCasePacks: users[username].skinCasePacks || { gen1_basic: 99, gen2_entrances: 99 }, skinInventory: users[username].skinInventory || [...GEN1_SKIN_IDS, ...DONUT_SKIN_IDS, ...GEN2_SKIN_IDS], freeSpinAvailable: users[username].lastFreeSpinDate !== todayUTC(), kills: users[username].kills || 0, deaths: users[username].deaths || 0, ...ffaProgressOf(users[username]), ffaLegend: true, isAdmin: true });
@@ -3092,7 +3098,7 @@ io.on('connection', (socket) => {
     // The mode, for FFA Legend progress. Only known modes; anything else counts as none.
     const mode = String(data?.mode || '');
     p.matchMode = MODE_TEAM_SIZES[mode] ? mode : null;
-    p.matchStart = Date.now(); p.matchKills = 0; p.ffaWinClaimed = false; p.bossMax = 0;   // (no juggernaut health carried in from the last match)
+    p.matchStart = Date.now(); p.matchKills = 0; p.ffaWinClaimed = false; p.towerWinClaimed = false; p.bossMax = 0;   // (no juggernaut health carried in from the last match)
   });
   socket.on('ffaWin', () => {
     const p = players[socket.id];
@@ -3105,6 +3111,20 @@ io.on('connection', (socket) => {
     saveUsers();
     socket.emit('ffaProgress', ffaProgressOf(u));
     checkFfaLegend(u, socket.id);
+  });
+  socket.on('zombieTowerWin', () => {
+    const p = players[socket.id];
+    if (!p || !p.account || p.towerWinClaimed || p.matchMode !== 'zombies') return;
+    if (Date.now() - (p.matchStart || 0) < TOWER_WIN_MIN_MS) return;
+    const u = users[p.account];
+    if (!u) return;
+    p.towerWinClaimed = true;
+    if (!Array.isArray(u.skinInventory)) u.skinInventory = [];
+    u.zombieTowerWins = (u.zombieTowerWins || 0) + 1;
+    let isNew = false;
+    for (const id of ZOMBIE_TOWER_SKIN_IDS) if (!u.skinInventory.includes(id)) { u.skinInventory.push(id); isNew = true; }
+    saveUsers();
+    socket.emit('towerSkinUnlocked', { skinId: ZOMBIE_TOWER_SKIN_IDS[0], isNew, wins: u.zombieTowerWins, skinInventory: u.skinInventory });
   });
   socket.on('leaveMatch', () => {
     const p = players[socket.id];

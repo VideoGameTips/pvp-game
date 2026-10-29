@@ -27185,6 +27185,48 @@ function buildBeeSmoker() {
   return _skFinish(g, -0.182, 0.014, 0.010);
 }
 
+function buildFieldRadio() {
+  // 📻 AK20 -> the field radio from the roof of the Zombie Tower. Olive set with
+  // a frequency window and two dials on top, a speaker grille down the side, the
+  // handset on its coiled cord, a battery pack at the back, and the whip aerial
+  // out the front where the barrel goes. Earned by escaping the tower, not bought.
+  const g = new THREE.Group();
+  const b = new THREE.Group(); b.scale.setScalar(0.76); g.add(b);   // the set is smaller than a rifle; the grip stays full size for the hands
+  const olive = _skM(0x5a6238, 70, 0xa8b080), dark = _skM(0x1c1e1a, 40, 0x464a42);
+  const black = _skM(0x16181a, 60, 0x50545a), steel = _skM(0xc4cad0, 180, 0xffffff);
+  const amber = new THREE.MeshBasicMaterial({ color: 0xffb02a }), red = new THREE.MeshBasicMaterial({ color: 0xff3326 });
+  const cord = _skM(0x2a2c28, 20, 0x4a4e48), tape = _skM(0xc8b878, 40, 0xe8d8a8);
+  gpBox(b, olive, 0.056, 0.074, 0.190, 0, 0.014, -0.020);              // the set
+  gpBox(b, dark, 0.058, 0.006, 0.192, 0, -0.022, -0.020);              // base rail
+  gpBox(b, black, 0.040, 0.004, 0.034, 0, 0.0525, -0.062);             // frequency window
+  gpBox(b, amber, 0.030, 0.0012, 0.010, 0, 0.0548, -0.062);            // the numbers
+  [-0.014, 0.014].forEach(x => {
+    gpCyl(b, black, 0.0105, 0.0105, 0.012, 12, x, 0.056, -0.020, 0);    // tuning dials
+    gpBox(b, steel, 0.003, 0.0016, 0.009, x, 0.063, -0.020, 0, 0.5 + x * 30, 0); // their pointers
+  });
+  gpBox(b, red, 0.006, 0.003, 0.006, 0.020, 0.0535, -0.098);           // power lamp
+  [-0.008, 0.004].forEach(x => gpBox(b, steel, 0.005, 0.010, 0.005, x, 0.0575, 0.030));   // toggles
+  for (let i = 0; i < 7; i++) gpBox(b, dark, 0.003, 0.0035, 0.100, -0.0285, 0.040 - i * 0.0085, -0.030); // speaker slats
+  gpBox(b, dark, 0.050, 0.060, 0.050, 0, 0.014, 0.110);                // battery pack
+  gpBox(b, tape, 0.052, 0.006, 0.020, 0, 0.014, 0.110);                // taped on
+  gpBox(b, dark, 0.008, 0.026, 0.008, -0.020, 0.064, -0.115);          // carry handle posts
+  gpBox(b, dark, 0.008, 0.026, 0.008, 0.020, 0.064, 0.050);
+  gpBox(b, dark, 0.008, 0.008, 0.172, 0.020, 0.080, -0.032, 0, 0, 0);   // handle bar (kept low, off the sightline)
+  gpCyl(b, black, 0.009, 0.009, 0.014, 10, 0, 0.014, -0.122);          // antenna mount
+  gpCyl(b, steel, 0.0036, 0.0016, 0.300, 8, 0, 0.014, -0.275);         // the whip
+  gpCyl(b, red, 0.0045, 0.0045, 0.008, 8, 0, 0.014, -0.428);           // aerial tip
+  gpBox(b, black, 0.020, 0.054, 0.018, 0.0385, 0.016, -0.052);         // handset, clipped to the side
+  gpCyl(b, black, 0.011, 0.011, 0.012, 10, 0.0385, 0.050, -0.052, 0);  // earpiece
+  gpCyl(b, black, 0.011, 0.011, 0.012, 10, 0.0385, -0.018, -0.052, 0); // mouthpiece
+  for (let i = 0; i < 6; i++) {                                         // the coiled cord down to the set
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.006, 0.0014, 5, 10), cord);
+    ring.position.set(0.0385, -0.018 - i * 0.0038, -0.040 + (i % 2) * 0.004);
+    ring.rotation.x = Math.PI / 2; b.add(ring);
+  }
+  _skGrip(g, olive, -0.006);
+  return _skFinish(g, -0.340, 0.011, 0.012);
+}
+
 function buildHandMixer() {
   // 🍰 Taser -> hand mixer. Two wire beaters out the front, the speed slider on
   // top, the handle over the body the way a mixer is actually held.
@@ -51898,6 +51940,9 @@ const MODEL_SKINS = [
   { id: 'ak20_nerf_elite', weapon: 'ak20', name: 'Nerf Elite', rarity: 'good',
     sw: ['#f07a1c', '#2f6fd8'], build: buildNerfElite,
     blurb: 'Foam darts in a clear drum. The orange tip is the legal part.' },
+  { id: 'ak20_field_radio', weapon: 'ak20', name: 'Field Radio', rarity: 'rare',
+    sw: ['#5a6238', '#ffb02a'], build: buildFieldRadio,
+    blurb: 'The one from the roof of the tower. You called, and somebody answered.' },
   { id: 'gl_water_balloon', weapon: 'grenade_launcher', name: 'Water Balloon Launcher', rarity: 'good',
     sw: ['#3a9ad8', '#ff5566'], build: buildWaterBalloonLauncher,
     blurb: 'Six balloons in a clear drum, fed by a garden hose.' },
@@ -52506,7 +52551,10 @@ const GEN2_MELEE_MODEL_SKIN_IDS = new Set([
   'spear_thunder', 'knife_balloon', 'bat_inflatable', 'frying_pan_pizza_cutter',
   'sabre_balloon',
 ]);
-const GATED_MODEL_SKIN_IDS = new Set([...GEN1_GATED_MODEL_SKIN_IDS, ...GEN2_MODEL_SKIN_IDS,...PVP_SHOP_CATALOG.exclusiveSkins]);
+// 🧟 Earned, never bought or pulled: the server hands this over the first time you call for the way out of the Zombie Tower
+// (socket 'zombieTowerWin', mirrored by ZOMBIE_TOWER_SKIN_IDS in server.js). It is in no case and no bundle.
+const TOWER_MODEL_SKIN_IDS = new Set(['ak20_field_radio']);
+const GATED_MODEL_SKIN_IDS = new Set([...GEN1_GATED_MODEL_SKIN_IDS, ...GEN2_MODEL_SKIN_IDS, ...TOWER_MODEL_SKIN_IDS, ...PVP_SHOP_CATALOG.exclusiveSkins]);
 const GATED_MELEE_MODEL_SKIN_IDS = new Set([...GEN2_MELEE_MODEL_SKIN_IDS]);
 for (const id of GEN1_GATED_MODEL_SKIN_IDS) {
   const ms = MODEL_SKINS.find(m => m.id === id);
@@ -56539,6 +56587,7 @@ const SKIN_FX = {
   flamethrower_m2:      { sound: _fxS('flamethrower', .28, .22, 80, 50) },
 
   // ── Objects: their own sound, and a reload for what they actually run on ──
+  ak20_field_radio: { sound: _fxS('rip', .24, .08, 2200, 5200) },
   ak20_nerf_elite: { sound: _fxS('pop', .26, .10, 300, 120),
     reload: _fxR(_RK.under(), [RP(.30,'drum'), RP(.58,'drum','arrive')], null, 'click') },
   gl_water_balloon: { sound: _fxS('pop', .30, .16, 220, 90),
@@ -61864,6 +61913,14 @@ socket.on('ffaProgress', data => {
   if (!currentUser || !data) return;
   currentUser.ffaDamage = data.ffaDamage; currentUser.ffaWins = data.ffaWins;
   if (data.ffaLegend) currentUser.ffaLegend = true;
+});
+socket.on('towerSkinUnlocked', data => {
+  if (!currentUser || !data) return;
+  if (Array.isArray(data.skinInventory)) currentUser.skinInventory = data.skinInventory;
+  if (data.isNew) {
+    pushFeedLine('🧟 ZOMBIE TOWER ESCAPED — new skin unlocked', 'Equip it in the weapon skins panel', '#9fd07a', false);
+    try { playEquipSound('fireup'); } catch (e) {}
+  }
 });
 socket.on('ffaLegendUnlocked', data => {
   if (!currentUser) return;
@@ -67642,7 +67699,7 @@ function updateZombieOutro(dt) {
     const [, who, text] = ZOMBIE_OUTRO[O.line++];
     storyShowSub(who, text, 3800); storyAudio({ ms: 500, freq: 2300, q: 0.6, gain: 0.2, crackle: 0.5, release: 0.1 });
   }
-  if (O.t >= 13200 && !match.over) { Z.outro = null; endMatch('ally', `🧟 MISSION COMPLETE · you made it out of the tower · ${Z.kills} zombies killed`); }
+  if (O.t >= 13200 && !match.over) { Z.outro = null; (() => { try { if (currentUser && !currentUser.isAdmin) socket.emit('zombieTowerWin'); } catch (e) {} })(); endMatch('ally', `🧟 MISSION COMPLETE · you made it out of the tower · ${Z.kills} zombies killed`); }
 }
 function zombieHoldsAmmoUser() {
   const kit = rngKit(); if (!kit) return false;
@@ -73456,6 +73513,7 @@ function openWeaponSkinsPanel() {
       const cells = MODEL_SKINS_BY_WEAPON[wid].map(ms => {
         const legendLocked = isLegendLocked(ms);
         const gen2Locked = GEN2_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id);
+        const towerLocked = TOWER_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id);
         const locked = (GATED_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id)) || legendLocked;
         return `
         <div data-mskin="${ms.id}" data-mweapon="${wid}" class="ms-cell"
@@ -73465,6 +73523,7 @@ function openWeaponSkinsPanel() {
           <div style="font-size:9px;color:#8a8a7a;margin-top:3px;line-height:1.3;">${ms.blurb}</div>
           ${legendLocked ? `<div style="font-size:9px;color:#ff6a4a;margin-top:4px;line-height:1.3;">${ffaLegendProgressText()}</div>` : ''}
           ${gen2Locked ? `<div style="font-size:9px;color:#c9a6ff;margin-top:4px;line-height:1.3;">Pull from Gen 2 — it makes an entrance.</div>` : ''}
+          ${towerLocked ? `<div style="font-size:9px;color:#9fd07a;margin-top:4px;line-height:1.3;">Escape the Zombie Tower to get this one.</div>` : ''}
         </div>`;
       }).join('');
       rows.push(`
@@ -73706,6 +73765,7 @@ function openWeaponSkinsPanel() {
       const id = cell.dataset.mskin;
       if (id && GEN1_GATED_MODEL_SKIN_IDS.has(id) && !ownsSkin(id)) { alert('You have not pulled that skin yet. Open Gen 1 cases in Lobby 13.'); return; }
       if (id && GEN2_MODEL_SKIN_IDS.has(id) && !ownsSkin(id)) { alert('You have not pulled that skin yet. Open Gen 2 cases in Lobby 13.'); return; }
+      if (id && TOWER_MODEL_SKIN_IDS.has(id) && !ownsSkin(id)) { alert('You have not earned that skin yet. Escape the Zombie Tower to get it.'); return; }
       if (isLegendLocked(MODEL_SKINS.find(m => m.id === id))) { alert('FFA Legend skins are earned in FFA: deal 1,000,000 damage or win 5,000 FFA matches.'); return; }
       setModelSkin(cell.dataset.mweapon, id || null);
       openWeaponSkinsPanel();      // redraw so the selection moves
