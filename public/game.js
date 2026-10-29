@@ -23559,7 +23559,7 @@ function buildMachineRevolver() {
   const guard = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.0034, 6, 12, Math.PI * 1.05), blued);
   guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.020, 0.030); g.add(guard);
   gpBox(g, bright, 0.005, 0.015, 0.005, 0, -0.012, 0.030, 0.2);
-  [-0.014, 0.014].forEach(x => gpBox(g, steel, 0.005, 0.005, 0.090, x, 0.006, 0.114));
+  [-0.0035, 0.0035].forEach(x => gpBox(g, steel, 0.005, 0.005, 0.090, x, 0.006, 0.114));   // (they ran a centimetre outside the cuff and never touched it)
   const cuff = new THREE.Mesh(new THREE.TorusGeometry(0.026, 0.0040, 6, 14, Math.PI * 1.3), steel);
   cuff.rotation.set(0, Math.PI/2, 0.4); cuff.position.set(0, 0.000, 0.158); g.add(cuff);
   const flash = makeMuzzleFlash(); flash.position.set(0, 0.020, -0.276); g.add(flash);
@@ -23993,7 +23993,7 @@ function buildPlasmaCarbine() {
   const guard = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.0036, 6, 12, Math.PI * 1.05), poly);
   guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.036, 0.038); g.add(guard);
   gpBox(g, bright, 0.005, 0.016, 0.005, 0, -0.026, 0.038, 0.2);
-  gpBox(g, poly, 0.038, 0.046, 0.090, 0, 0.010, 0.196);
+  gpBox(g, poly, 0.038, 0.046, 0.124, 0, 0.010, 0.179);                 // the stock block starts inside the body
   gpBox(g, inner, 0.040, 0.048, 0.012, 0, 0.010, 0.246, 0.08);
   gpBox(g, steel, 0.028, 0.024, 0.064, 0, 0.066, 0.036);
   gpBox(g, glow, 0.018, 0.012, 0.004, 0, 0.066, 0.068);
@@ -24051,7 +24051,7 @@ function buildArcRifle() {
   const guard = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.0036, 6, 12, Math.PI * 1.05), shell);
   guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.034, 0.046); g.add(guard);
   gpBox(g, bright, 0.005, 0.016, 0.005, 0, -0.024, 0.046, 0.2);
-  gpBox(g, shell, 0.036, 0.044, 0.090, 0, 0.008, 0.200);
+  gpBox(g, shell, 0.036, 0.044, 0.116, 0, 0.008, 0.187);                // the stock block starts inside the body
   gpBox(g, inner, 0.038, 0.046, 0.012, 0, 0.008, 0.250, 0.08);
   const flash = new THREE.Mesh(new THREE.SphereGeometry(0.030, 8, 7),
     new THREE.MeshBasicMaterial({ color: 0xc8ecff }));
@@ -24098,7 +24098,7 @@ function buildCoilgun() {
   const guard = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.0036, 6, 12, Math.PI * 1.05), poly);
   guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.034, 0.046); g.add(guard);
   gpBox(g, bright, 0.005, 0.016, 0.005, 0, -0.024, 0.046, 0.2);
-  gpBox(g, poly, 0.036, 0.044, 0.090, 0, 0.010, 0.206);
+  gpBox(g, poly, 0.036, 0.044, 0.120, 0, 0.010, 0.191);                 // the stock block starts inside the body
   gpBox(g, inner, 0.038, 0.046, 0.012, 0, 0.010, 0.256, 0.08);
   gpBox(g, steel, 0.026, 0.022, 0.060, 0, 0.062, 0.048);
   gpBox(g, glow, 0.016, 0.010, 0.004, 0, 0.062, 0.078);
@@ -24466,7 +24466,7 @@ function buildMortarRifle() {
   const guard = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.0036, 6, 12, Math.PI * 1.05), poly);
   guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.036, 0.038); g.add(guard);
   gpBox(g, bright, 0.005, 0.016, 0.005, 0, -0.026, 0.038, 0.2);
-  gpBox(g, poly, 0.036, 0.044, 0.090, 0, 0.008, 0.196);
+  gpBox(g, poly, 0.036, 0.044, 0.116, 0, 0.008, 0.183);                 // the stock block starts inside the body
   gpBox(g, inner, 0.038, 0.046, 0.012, 0, 0.008, 0.246, 0.08);
   [-1, 1].forEach(sd => gpBox(g, steel, 0.006, 0.006, 0.090, sd * 0.016, -0.036, -0.110, 0.30));
   const flash = makeMuzzleFlash(); flash.position.set(0, 0.118, -0.242); g.add(flash);
@@ -24646,7 +24646,7 @@ function buildSwarmRifle() {
   const guard = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.0036, 6, 12, Math.PI * 1.05), shell);
   guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.036, 0.038); g.add(guard);
   gpBox(g, bright, 0.005, 0.016, 0.005, 0, -0.026, 0.038, 0.2);
-  gpBox(g, shell, 0.038, 0.046, 0.090, 0, 0.010, 0.186);
+  gpBox(g, shell, 0.038, 0.046, 0.116, 0, 0.010, 0.173);                // the stock block starts inside the body (it used to begin a centimetre behind it, in the air)
   gpBox(g, inner, 0.040, 0.048, 0.012, 0, 0.010, 0.236, 0.08);
   const flash = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 7),
     new THREE.MeshBasicMaterial({ color: 0xffd07a }));
@@ -24873,7 +24873,7 @@ function buildAirburstProjector() {
   guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.038, 0.038); g.add(guard);
   gpBox(g, bright, 0.005, 0.016, 0.005, 0, -0.028, 0.038, 0.2);
   gpBox(g, poly, 0.026, 0.050, 0.028, 0, -0.032, -0.196, -0.22);
-  gpBox(g, shell, 0.040, 0.048, 0.090, 0, 0.008, 0.196);
+  gpBox(g, shell, 0.040, 0.048, 0.116, 0, 0.008, 0.183);                // the stock block starts inside the body
   gpBox(g, inner, 0.042, 0.050, 0.012, 0, 0.008, 0.246, 0.08);
   const flash = makeMuzzleFlash(); flash.position.set(0, 0.010, -0.310); g.add(flash);
   g._flash = flash; g._kickZ = 0.026; g._greebled = true; g._handDetailed = true;
@@ -25288,7 +25288,7 @@ function buildLancer() {
   const guard = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.0036, 6, 12, Math.PI * 1.05), poly);
   guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.038, 0.038); g.add(guard);
   gpBox(g, bright, 0.005, 0.016, 0.005, 0, -0.028, 0.038, 0.2);
-  gpBox(g, poly, 0.038, 0.048, 0.090, 0, 0.014, 0.196);
+  gpBox(g, poly, 0.038, 0.048, 0.116, 0, 0.014, 0.183);                 // the stock block starts inside the body
   gpBox(g, inner, 0.040, 0.050, 0.012, 0, 0.014, 0.246, 0.08);
   const flash = makeMuzzleFlash(); flash.position.set(0, 0.016, -0.256); g.add(flash);
   g._flash = flash; g._kickZ = 0.014; g._greebled = true; g._handDetailed = true;
@@ -25566,7 +25566,7 @@ function buildStormCore() {
   gpCyl(g, steel, 0.024, 0.024, 0.016, 16, 0, 0.010, -0.250);
   gpCyl(g, inner, 0.0130, 0.0130, 0.010, 12, 0, 0.010, -0.256);
   // Heat exchanger behind the receiver.
-  gpBox(g, steel, 0.048, 0.048, 0.060, 0, 0.010, 0.184);
+  gpBox(g, steel, 0.048, 0.048, 0.080, 0, 0.010, 0.174);                // (starts inside the body)
   for (let i = 0; i < 8; i++) gpBox(g, bright, 0.052, 0.044, 0.005, 0, 0.010, 0.158 + i * 0.007);
   gpCyl(g, inner, 0.014, 0.014, 0.016, 12, 0, 0.010, 0.220);
   // Grip, trigger.
@@ -28177,7 +28177,7 @@ function buildM4A1() {
   gpBox(g, inner, 0.031, 0.006, 0.050, 0, -0.050, -0.010, 0.02);
   // Pistol grip.
   gpPlate(g, poly, [
-    [0.076,-0.036],[0.108,-0.058],[0.114,-0.146],[0.090,-0.164],[0.064,-0.084],[0.058,-0.040],
+    [0.076,-0.012],[0.108,-0.058],[0.114,-0.146],[0.090,-0.164],[0.064,-0.084],[0.058,-0.016],
   ], 0.038, 0);
   gpBox(g, bright, 0.006, 0.016, 0.006, 0, -0.058, 0.010, 0.22);        // trigger
   // Collapsible buttstock — skeleton frame on a buffer tube.
@@ -28304,8 +28304,8 @@ function buildAKS74U() {
   gpBox(g, M.plum, 0.033, 0.012, 0.050, 0, my + 0.012, mz - 0.004, ang);
   gpContouredPart(g, M.black, [[0.074,-0.038],[0.110,-0.064],[0.118,-0.150],[0.094,-0.170],[0.064,-0.088],[0.058,-0.044]], 0.036, 0, 0.005);
   for (let i = 0; i < 5; i++) gpBox(g, M.dark, 0.038, 0.0035, 0.009, 0, -0.072 - i * 0.017, 0.088 + i * 0.005, 0.35);
-  gpBox(g, M.park, 0.044, 0.074, 0.018, 0, 0.002, 0.146);               // stock hinge
-  gpTriStock(g, M.steel, M.black, { z0: 0.152, z1: 0.396, apexY: 0.006, topR: 0.040, botR: -0.058, r: 0.0044 });   // the AKS-74's triangle frame
+  gpBox(g, M.park, 0.044, 0.074, 0.020, 0, 0.002, 0.136);               // stock hinge (inside the back of the receiver)
+  gpTriStock(g, M.steel, M.black, { z0: 0.142, z1: 0.396, apexY: 0.006, topR: 0.040, botR: -0.058, r: 0.0044 });   // the AKS-74's triangle frame
   gpBox(g, M.black, 0.044, 0.056, 0.130, 0, 0.012, -0.208);             // handguard
   for (let i = 0; i < 4; i++) gpBox(g, M.dark, 0.0455, 0.050, 0.003, 0, 0.012, -0.172 - i * 0.022); // its grooves
   gpBox(g, M.steel, 0.020, 0.040, 0.024, 0, 0.040, -0.284);             // front sight block
@@ -28330,7 +28330,7 @@ function buildSCARH() {
   gpBox(g, M.fde, 0.046, 0.044, 0.090, 0, -0.040, 0.000);               // magwell
   gpBox(g, M.black, 0.034, 0.165, 0.062, 0, -0.140, 0.004, 0.05);       // 7.62 magazine
   for (let i = 0; i < 5; i++) gpBox(g, M.dark, 0.0345, 0.004, 0.0625, 0, -0.085 - i * 0.025, 0.002 + i * 0.0012, 0.05);
-  gpContouredPart(g, M.fde, [[0.092,-0.036],[0.130,-0.058],[0.140,-0.150],[0.112,-0.170],[0.080,-0.092],[0.074,-0.044]], 0.040, 0, 0.005);
+  gpContouredPart(g, M.fde, [[0.092,-0.012],[0.130,-0.058],[0.140,-0.150],[0.112,-0.170],[0.080,-0.092],[0.074,-0.020]], 0.040, 0, 0.005);   // (the top edge goes up into the receiver)
   _milTrigger(g, M, -0.060, 0.040);
   gpBox(g, M.fde, 0.048, 0.050, 0.250, 0, 0.012, -0.315);               // free-float handguard
   for (let i = 0; i < 9; i++) gpBox(g, M.dark, 0.050, 0.005, 0.004, 0, 0.0395, -0.205 - i * 0.026);
@@ -28518,7 +28518,7 @@ function buildM249() {
   gpBox(g, steel, 0.020, 0.016, 0.020, 0, 0.006, -0.360);               // bipod swivel
   // Pistol grip and fixed shoulder stock.
   gpPlate(g, poly, [
-    [0.076,-0.036],[0.108,-0.058],[0.114,-0.146],[0.090,-0.164],[0.064,-0.084],[0.058,-0.040],
+    [0.076,-0.012],[0.108,-0.058],[0.114,-0.146],[0.090,-0.164],[0.064,-0.084],[0.058,-0.016],
   ], 0.038, 0);
   gpBox(g, bright, 0.006, 0.016, 0.006, 0, -0.058, 0.010, 0.22);        // trigger
   gpBox(g, poly, 0.044, 0.056, 0.180, 0, 0.010, 0.190);                 // shoulder stock
@@ -28552,7 +28552,7 @@ function buildWinchester94() {
     [-0.100,0.016],[-0.078,0.024],[0.010,0.024],[0.026,0.010],[0.010,-0.006],[-0.086,-0.006],
   ], 0.034, 0);
   gpPlate(g, wood, [
-    [0.080,-0.040],[0.088,0.030],[0.150,0.038],[0.320,0.026],[0.394,-0.008],[0.386,-0.034],[0.150,-0.052],[0.096,-0.056],
+    [0.030,-0.040],[0.038,0.030],[0.150,0.038],[0.320,0.026],[0.394,-0.008],[0.386,-0.034],[0.150,-0.052],[0.046,-0.056],
   ], 0.044, 0);
   gpBox(g, inner, 0.046, 0.050, 0.008, 0, -0.006, 0.396, 0.10);         // butt plate
   gpBox(g, bright, 0.020, 0.005, 0.004, 0, -0.040, 0.220);              // sling stud
@@ -28607,7 +28607,7 @@ function buildRemington870() {
   gpBox(g, brass, 0.005, 0.005, 0.005, 0, 0.020, -0.386);               // bead front sight
   // Wood stock, straight English-style profile.
   gpPlate(g, wood, [
-    [0.070,-0.042],[0.082,0.024],[0.150,0.032],[0.310,0.020],[0.376,-0.012],[0.368,-0.036],[0.148,-0.050],[0.088,-0.056],
+    [0.020,-0.042],[0.032,0.024],[0.150,0.032],[0.310,0.020],[0.376,-0.012],[0.368,-0.036],[0.148,-0.050],[0.038,-0.056],
   ], 0.046, 0);
   gpBox(g, inner, 0.048, 0.052, 0.008, 0, -0.006, 0.380, 0.10);         // butt plate
   gpBox(g, bright, 0.020, 0.005, 0.004, 0, -0.040, 0.210);              // sling stud
@@ -28643,7 +28643,7 @@ function buildDragunov() {
   gpCyl(g, bright, 0.012, 0.012, 0.030, 12, -0.034, 0.076, 0.006);      // eyepiece
   // Wood stock with the SVD's signature skeleton cutout.
   gpPlate(g, wood, [
-    [0.140,-0.040],[0.150,0.040],[0.220,0.048],[0.330,0.020],[0.390,-0.010],[0.384,-0.030],[0.220,-0.048],[0.166,-0.052],
+    [0.090,-0.040],[0.100,0.040],[0.220,0.048],[0.330,0.020],[0.390,-0.010],[0.384,-0.030],[0.220,-0.048],[0.166,-0.052],
   ], 0.044, 0);
   gpBox(g, inner, 0.046, 0.026, 0.070, 0, 0.004, 0.260);                // skeleton cutout
   gpBox(g, inner, 0.048, 0.052, 0.008, 0, -0.002, 0.388, 0.10);         // butt plate
@@ -28652,7 +28652,7 @@ function buildDragunov() {
     [-0.320,0.012],[-0.290,0.032],[-0.180,0.032],[-0.160,0.010],[-0.184,-0.008],[-0.306,-0.006],
   ], 0.046, 0);
   gpPlate(g, wood, [
-    [0.070,-0.036],[0.104,-0.060],[0.110,-0.146],[0.086,-0.164],[0.058,-0.086],[0.052,-0.040],
+    [0.070,-0.024],[0.104,-0.060],[0.110,-0.146],[0.086,-0.164],[0.058,-0.086],[0.052,-0.028],
   ], 0.036, 0);
   gpBox(g, bright, 0.005, 0.016, 0.006, 0, -0.066, 0.006, 0.22);        // trigger
   const flash = makeMuzzleFlash(); flash.position.set(0, 0.014, -0.562); g.add(flash);
@@ -31451,8 +31451,9 @@ function buildMP40() {
   guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.030, 0.026); g.add(guard);
   gpBox(g, bright, 0.005, 0.015, 0.005, 0, -0.022, 0.026, 0.2);
   // Underfolding stock: two struts and a shoulder plate.
-  [-0.013, 0.013].forEach(x => gpBox(g, steel, 0.005, 0.005, 0.150, x, -0.024, 0.140, 0.10));
-  gpBox(g, steel, 0.036, 0.030, 0.008, 0, -0.040, 0.214);
+  // The struts start inside the receiver tube (they used to hang a centimetre below it), the shoulder plate moves up with them.
+  [-0.013, 0.013].forEach(x => gpBox(g, steel, 0.005, 0.005, 0.150, x, -0.0085, 0.140, 0.10));
+  gpBox(g, steel, 0.036, 0.030, 0.008, 0, -0.022, 0.214);
   // Sights.
   // The front sight stands ON the barrel (top at y 0.0172), not 7 mm above it: block 0.022 +- 0.007, post on top of it.
   gpBox(g, steel, 0.012, 0.014, 0.010, 0, 0.022, -0.230);
@@ -32108,8 +32109,8 @@ function buildBurstRifle() {
   guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.038, 0.026); g.add(guard);
   gpBox(g, bright, 0.005, 0.016, 0.005, 0, -0.028, 0.026, 0.2);
   gpBox(g, bright, 0.008, 0.008, 0.012, 0.020, -0.008, 0.058);      // selector
-  gpBox(g, shell, 0.036, 0.010, 0.100, 0, 0.026, 0.192);            // stock spine
-  gpBox(g, shell, 0.036, 0.010, 0.100, 0, -0.020, 0.192);           // stock lower
+  gpBox(g, shell, 0.036, 0.010, 0.124, 0, 0.026, 0.180);            // stock spine (it starts inside the body now)
+  gpBox(g, shell, 0.036, 0.010, 0.124, 0, -0.020, 0.180);           // stock lower
   gpBox(g, shell, 0.036, 0.052, 0.012, 0, 0.004, 0.242, 0.08);      // butt plate
   gpBox(g, inner, 0.026, 0.014, 0.030, 0, 0.004, 0.148);            // hinge
   const flash = makeMuzzleFlash(); flash.position.set(0, 0.008, -0.302); g.add(flash);
