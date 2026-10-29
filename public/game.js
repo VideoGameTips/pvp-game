@@ -1413,7 +1413,7 @@ const SUPPORT_ITEMS = [
   { id: 'confetti_cannon', name: 'Confetti Cannon', type: 'Chaos', uses: 3, damage: 8, burst: 14, spread: 0.85, cooldown: 520, bulletSpeed: 76, randomBulletColor: true, bulletSize: 0.055 },
   { id: 'moon_mine', name: 'Moon Mine', type: 'Floaty Bomb', uses: 2, damage: 65, cooldown: 800, bulletSpeed: 32, bulletColor: 0xbca7ff, bulletSize: 0.16 },
   { id: 'rubber_duck', name: 'Rubber Duck', type: 'Bouncer', uses: 4, damage: 18, cooldown: 360, bulletSpeed: 68, bulletColor: 0xffe55c, bulletSize: 0.12 },
-  { id: 'black_hole_seed', name: 'Black Hole Seed', type: 'Void', uses: 1, damage: 105, blackHole: true, cooldown: 1300, bulletSpeed: 36, bulletColor: 0x4b0082, bulletSize: 0.20 },
+  { id: 'black_hole_seed', name: 'Black Hole Seed', type: 'Void', uses: 1, damage: 52, blackHole: true, cooldown: 1300, bulletSpeed: 36, bulletColor: 0x4b0082, bulletSize: 0.20 },
   { id: 'glitch_cube', archived: true, name: 'Glitch Cube', type: 'Wild Card', uses: 2, damage: 42, burst: 5, spread: 0.55, cooldown: 780, bulletSpeed: 92, randomBulletColor: true, bulletSize: 0.10 },
   { id: 'vampire_syringe', archived: true, name: 'Vampire Syringe', type: 'Risk Heal', uses: 2, heal: 35, selfDamage: 10, cooldown: 700 },
   // ── New supports ─────────────────────────────────────────────────────────
@@ -63080,13 +63080,13 @@ function explodeSupport(g) {
 
 // ── 🕳️ BLACK HOLE SEED ──────────────────────────────────────────────────────────────────────────────────────────────────
 // The seed used to burst into six purple bolts. Now it lands and a real singularity opens: it swells for under a second,
-// pulls everything within eleven metres toward its middle -- gently at the rim, hard at the core -- for about five more,
+// pulls everything within eleven metres toward its middle -- gently at the rim, hard at the core -- for about two and a half more,
 // then collapses on itself and goes off. Standing at the edge costs you nothing but ground; the core takes you apart.
 // The thrower is pulled like everyone else but is never hurt by their own hole. Damage is dealt by the thrower's client
 // (like every area weapon here); every other client just draws it and is pulled, which is why the server relays a
 // 'blackHole' event.
 const blackHoles = [];
-const BH = { grow: 0.8, life: 7.0, collapse: 0.7, pullR: 11, dmgR: 4.5, tickMs: 250, tickMin: 8, tickMax: 30, finaleR: 7, finaleDmg: 105 };
+const BH = { grow: 0.8, life: 3.5, collapse: 0.7, pullR: 11, dmgR: 4.5, tickMs: 250, tickMin: 4, tickMax: 15, finaleR: 7, finaleDmg: 52 };
 let _bhDiscTex = null;
 function _blackHoleDiscTex() {
   if (_bhDiscTex) return _bhDiscTex;

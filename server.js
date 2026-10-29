@@ -2069,7 +2069,7 @@ event_horizon: 75,
   cane: 30, shovel: 55, gravity_hammer: 110,
   // Support
   frag: 80, smoke: 0, confetti_cannon: 8, moon_mine: 65,
-  rubber_duck: 18, black_hole_seed: 105, glitch_cube: 42,
+  rubber_duck: 18, black_hole_seed: 52, glitch_cube: 42,
   // ── NEW PRIMARIES ──────────────────────────────────────────────────────
     m1_garand: 117, plasma_carbine: 18, arc_rifle: 22,
   gravity_launcher: 75, potato_cannon: 60, sticker_blaster: 8,
