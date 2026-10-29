@@ -6880,6 +6880,7 @@ function buildDuelMap(name, o) {
   }
   MAP_SPAWNS[name] = { ally: { x0: -6, x1: 6, z0: DUEL_SPAWN_Z - 2, z1: DUEL_SPAWN_Z + 2 }, enemy: { x0: -6, x1: 6, z0: -DUEL_SPAWN_Z - 2, z1: -DUEL_SPAWN_Z + 2 } };
   G._skyColor = o.sky;
+  G._duelOpts = o;      // _duelFinish (below, once the decoration kit exists) dresses the arena from this
   // the palette the map-vote picture is drawn in (mapPictureGrid / drawMapPicture)
   const css = n => '#' + n.toString(16).padStart(6, '0');
   G._duelLook = { floor: o.floor, fine: o.fine, bold: o.bold, low: css(o.cover_), tall: css(o.tall), accent: css(o.accent), wall: css(o.wall) };
@@ -17617,6 +17618,143 @@ function initMapThemes() {
   }
 }
 initMapThemes();
+
+// ✨ Finishing the four duel arenas. buildDuelMap lays the arena out in plain boxes (that is what makes a layout a short
+// list); this dresses what it laid, from the boxes themselves, so a new layout gets the same finish for free and no
+// layout line changes: a cap and a lit band on every high wall, a lit edge on every piece of cover, lit rails along each
+// ramp, the border in panels and pilasters, a frame and chevrons on each spawn pad, nested squares at the centre, and a
+// skyline beyond the border so the arena stands somewhere. All of it is decoration (no colliders, nothing to shoot or
+// stand on), batched into two meshes (one lit, one unlit) so the whole finish costs two draw calls.
+const _DUEL_LOOK = {
+  //                  lit band            skyline body  horizon        zenith     mote colours                 how the far towers are built
+  duel_grid:      { glow: 0x6aa0ff, sky: 0x232b44, hor: 0x1b2440, zen: 0x05070f, motes: [0x6aa0ff, 0xbad4ff], tower: 'pylon' },
+  duel_crossroads:{ glow: 0xffb060, sky: 0x3a2c22, hor: 0x2d2018, zen: 0x0a0705, motes: [0xffb060, 0xffe0b0], tower: 'stack' },
+  duel_pillars:   { glow: 0x66ffd8, sky: 0x1f3a36, hor: 0x143028, zen: 0x040a09, motes: [0x66ffd8, 0xc8fff0], tower: 'column' },
+  duel_platform:  { glow: 0xd08aff, sky: 0x33264d, hor: 0x241a3a, zen: 0x07040d, motes: [0xd08aff, 0xecd0ff], tower: 'ziggurat' },
+};
+for (const id of DUEL_MAP_IDS) {
+  const L = _DUEL_LOOK[id];
+  ATMO_FX['motes_' + id] = Object.assign({}, ATMO_FX.dustgold, { col: L.motes, n: 130, h: 10 });
+  _ap(id, { fog: [90, 560], zen: L.zen, fx: ['motes_' + id], gusty: 0.1, snd: {} });
+}
+function _duelMix(a, b, t) {
+  const ch = (h, s) => (h >> s) & 255;
+  return ((Math.round(ch(a, 16) + (ch(b, 16) - ch(a, 16)) * t) << 16) | (Math.round(ch(a, 8) + (ch(b, 8) - ch(a, 8)) * t) << 8) | Math.round(ch(a, 0) + (ch(b, 0) - ch(a, 0)) * t));
+}
+function _duelFinish(name) {
+  const G = MAP_GROUPS[name], o = G && G._duelOpts, L = _DUEL_LOOK[name];
+  if (!G || !o || !L || G._duelFinished) return;
+  G._duelFinished = true;
+  const body = _thBuf(), lit = _thBuf(), rnd = _thRng(name + ':finish');
+  const B = (x, y, z, w, h, d, hex) => _thBox(body, _TH_WORLD, x, y, z, w, h, d, hex);
+  const Lt = (x, y, z, w, h, d, hex) => _thBox(lit, _TH_WORLD, x, y, z, w, h, d, hex);
+  const dim = _duelMix(L.glow, o.wall, 0.55), dark = _duelMix(o.wall, 0x000000, 0.45), faint = _duelMix(L.glow, o.wall, 0.78);
+  const HX = DUEL_W / 2, HZ = DUEL_D / 2, T = 1, WH = 10;
+  // The border: a dark skirt, pilasters every 12 m with a lit slit between each pair, and two lit lines (one a third of the
+  // way up, one along the very top). Along z (the long sides) and along x (the short ends) are the same walls turned.
+  const border = (alongZ, sgn) => {
+    const len = alongZ ? DUEL_D : DUEL_W, face = (alongZ ? HX : HZ) * sgn;
+    const put = (u, y, su, sy, ss, hex, lighted) => {            // u runs along the wall, the wall's face is `face`
+      const f = face - sgn * ss / 2;
+      (lighted ? Lt : B)(alongZ ? f : u, y, alongZ ? u : f, alongZ ? ss : su, sy, alongZ ? su : ss, hex);
+    };
+    put(0, 0.3, len, 0.6, 0.5, dark, false);
+    put(0, 3.4, len - 0.4, 0.22, 0.12, L.glow, true);
+    put(0, WH - 0.15, len, 0.3, 0.5, dim, true);
+    for (let u = -len / 2 + 6; u < len / 2; u += 12) {
+      put(u, WH / 2 - 0.1, 1.3, WH - 0.2, 0.5, dark, false);
+      if (u + 12 < len / 2) { put(u + 6, 6.6, 0.5, 3.4, 0.14, faint, true); put(u + 6, 1.9, 0.5, 1.8, 0.14, faint, true); }
+    }
+  };
+  border(true, 1); border(true, -1); border(false, 1); border(false, -1);
+  // Walls and cover: what buildDuelMap put in the group, read back (the hidden step boxes under a ramp, and the spawn pads,
+  // are not tall enough, or not visible, and are left alone).
+  for (const m of G.children) {
+    const gp = m.isMesh && m.geometry && m.geometry.type === 'BoxGeometry' && m.geometry.parameters;
+    if (!gp || !m.visible || gp.height < 0.2 || m.userData.themeDecor) continue;
+    const { width: w, height: h, depth: d } = gp, x = m.position.x, z = m.position.z, y = m.position.y, top = y + h / 2, base = y - h / 2;
+    const alongX = w >= d, len = alongX ? w : d, thick = alongX ? d : w;
+    if (h >= 5 && thick <= 2.4) {                                // a high wall: a cap, a skirt, a lit band near the top, a faint one low down
+      B(x, top + 0.15, z, w + 0.3, 0.3, d + 0.3, dim);
+      if (base < 0.1) B(x, 0.25, z, w + 0.3, 0.5, d + 0.3, dark);
+      for (const [yy, hh, hex] of [[top - 0.8, 0.18, L.glow], [1.2, 0.1, faint]]) for (const sg of [-1, 1]) {
+        const o2 = thick / 2 + 0.03;
+        if (alongX) Lt(x, yy, z + sg * o2, len - 0.4, hh, 0.06, hex); else Lt(x + sg * o2, yy, z, 0.06, hh, len - 0.4, hex);
+      }
+    } else {                                                     // cover: the top edge lit, so it reads at a distance
+      Lt(x, top + 0.04, z, w + 0.06, 0.08, d + 0.06, base < 0.1 && h < 1.6 ? dim : L.glow);
+    }
+  }
+  // Ramps: a lit rail up each edge, stepped finely enough to read as a slope.
+  for (const r of MAP_RAMPS[name] || []) {
+    const px = -r.uz, pz = r.ux, STEP = 0.4;
+    for (let s = STEP / 2; s < r.run; s += STEP) for (const sg of [-1, 1]) {
+      const cx = r.x0 + r.ux * s + px * sg * (r.halfW + 0.05), cz = r.z0 + r.uz * s + pz * sg * (r.halfW + 0.05), cy = s * r.tan + 0.06;
+      Lt(cx, cy, cz, Math.abs(r.ux) > 0.5 ? STEP : 0.14, 0.12, Math.abs(r.uz) > 0.5 ? STEP : 0.14, L.glow);
+    }
+  }
+  // Each spawn pad: a lit frame, and chevrons on the floor in front of it pointing the way to the middle.
+  for (const [sz, col] of [[DUEL_SPAWN_Z, 0x6a9aff], [-DUEL_SPAWN_Z, 0xff6a6a]]) {
+    const dir = -Math.sign(sz);
+    for (const [cx, cz, w, d] of [[0, sz - 2.6, 14.6, 0.3], [0, sz + 2.6, 14.6, 0.3], [-7.15, sz, 0.3, 5.5], [7.15, sz, 0.3, 5.5]]) Lt(cx, 0.03, cz, w, 0.06, d, col);
+    for (let k = 0; k < 3; k++) for (let i = 0; i < 5; i++) {
+      const dz = sz + dir * (6 + k * 3.2 + i * 0.6);
+      for (const sg of [-1, 1]) Lt(sg * i * 0.6, 0.03, dz, 0.5, 0.06, 0.5, _duelMix(col, 0x000000, 0.45 + 0.17 * k));
+    }
+  }
+  // The centre of the map: two squares inlaid in the floor, with a tick at each corner.
+  for (const half of [13, 17]) {
+    for (const sg of [-1, 1]) { Lt(0, 0.03, sg * half, half * 2 + 0.3, 0.06, 0.3, dim); Lt(sg * half, 0.03, 0, 0.3, 0.06, half * 2, dim); }
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) Lt(sx * (half + 1.6), 0.03, sz * (half + 1.6), 1.2, 0.06, 1.2, L.glow);
+  }
+  // The skyline: far enough out that the border hides it from beside the wall and the middle of the map sees it standing
+  // above. What it is made of is the map's own (pylons, stacks, columns, stepped pyramids).
+  const tower = {
+    pylon(x, z, k) {
+      const w = 5 + rnd() * 5, h = 55 + rnd() * 80;
+      B(x, h / 2, z, w, h, w, L.sky);
+      for (let i = 1; i <= 5; i++) Lt(x, h * i / 6, z, w + 0.5, 0.7 + rnd() * 0.5, w + 0.5, i % 2 ? L.glow : dim);
+      Lt(x, h + 1.2, z, 1.4, 2.4, 1.4, 0xffffff);
+    },
+    stack(x, z, k) {
+      const w = 9 + rnd() * 5, h = 50 + rnd() * 60;
+      B(x, h / 2, z, w, h, w, L.sky); B(x, h + 0.8, z, w + 1.6, 1.6, w + 1.6, dark);
+      Lt(x, h - 3, z, w + 0.4, 1.2, w + 0.4, L.glow);
+      for (let i = 0; i < 4; i++) Lt(x + (rnd() - 0.5) * w * 0.7, 8 + rnd() * (h - 24), z + (w / 2 + 0.1) * (rnd() < 0.5 ? -1 : 1), 1.6, 0.9, 0.2, dim);
+      Lt(x, h + 3, z, 1.6, 2.4, 1.6, 0xff5a3a);
+      B(x + w * 1.4, 7, z + w * 0.3, w * 1.6, 14, w * 1.2, _duelMix(L.sky, 0x000000, 0.25));        // a low shed at its foot
+    },
+    column(x, z, k) {
+      const w = 6 + rnd() * 3, h = 60 + rnd() * 70;
+      B(x, h / 2, z, w, h, w, L.sky); B(x, 1.5, z, w + 4, 3, w + 4, dark); B(x, h + 1.5, z, w + 5, 3, w + 5, dark);
+      Lt(x, h - 0.8, z, w + 5.2, 0.6, w + 5.2, L.glow);
+      for (const [sx, sz] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) Lt(x + sx * (w / 2 + 0.05), h / 2 + 4, z + sz * (w / 2 + 0.05), sx ? 0.1 : 0.7, h - 12, sz ? 0.1 : 0.7, faint);
+    },
+    ziggurat(x, z, k) {
+      const w = 22 + rnd() * 14, tiers = 3 + Math.floor(rnd() * 3), th = 14 + rnd() * 8;
+      for (let i = 0; i < tiers; i++) {
+        const ww = w * (1 - i / (tiers + 0.6)), yy = th * i;
+        B(x, yy + th / 2, z, ww, th, ww, i % 2 ? _duelMix(L.sky, 0x000000, 0.2) : L.sky);
+        Lt(x, yy + th - 0.25, z, ww + 0.4, 0.5, ww + 0.4, i === tiers - 1 ? L.glow : dim);
+      }
+      Lt(x, th * tiers + 2, z, 2.4, 4, 2.4, L.glow);
+    },
+  }[L.tower];
+  const ringN = 38;
+  for (let i = 0; i < ringN; i++) {
+    const a = (i + rnd() * 0.7) / ringN * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
+    // out along the ray from the middle, past the border (the arena is a rectangle, so find where the ray leaves it)
+    const edge = Math.min(Math.abs(c) > 1e-6 ? HX / Math.abs(c) : 1e9, Math.abs(s) > 1e-6 ? HZ / Math.abs(s) : 1e9);
+    const r = edge + 70 + rnd() * 170;
+    tower(c * r, s * r, i);
+  }
+  _thMesh(G, body, false); _thMesh(G, lit, true);
+  // the ground the arena stands on, out to the horizon (the floor texture stops at the border)
+  const far = new THREE.Mesh(new THREE.PlaneGeometry(3200, 3200), new THREE.MeshLambertMaterial({ color: _duelMix(o.wall, 0x000000, 0.55) }));
+  far.rotation.x = -Math.PI / 2; far.position.y = -0.08; far.userData.themeDecor = true; G.add(far);
+  G._skyColor = L.hor;
+}
+for (const id of DUEL_MAP_IDS) { try { _duelFinish(id); } catch (e) { console.warn('[duel finish]', id, e); } }
 
 // Flat shading for every map, whatever built it. The generic arena pass that
 // used to run first (addLowPolyArenaWalls / addLowPolyArenaCover over every map
