@@ -56763,6 +56763,12 @@ const SKIN_FX = {
   revolver_python:      { sound: _fxS('heavy', .44, .14, 0, 0, { action:'revolver', tail:.50 }) },
   grenade_launcher_mgl: { sound: _fxS('thump', .40, .24, 140, 55, { action:'single' }) },
   flamethrower_m2:      { sound: _fxS('flamethrower', .28, .22, 80, 50) },
+  // the five that joined Gen 1 in 214c7aa came in with the gun's own voice, the only real guns in their case without one
+  ak20_aks74u:          { sound: _fxS('auto_blast', .26, .075, 0, 0, { action:'rifle', tail:.20 }) },   // a short AK: sharper, less tail
+  burst_scar_h:         { sound: _fxS('auto_blast_heavy', .28, .09, 0, 0, { action:'rifle', tail:.32 }) },   // 7.62 battle rifle
+  m4a1_arena_hk416:     { sound: _fxS('auto_blast', .22, .075, 0, 0, { action:'rifle', tail:.20 }) },   // an M4 with a piston
+  m1_garand_fal:        { sound: _fxS('crack', .48, .12, 0, 0, { action:'rifle', tail:.55 }) },   // semi-auto 7.62
+  srx_m24:              { sound: _fxS('crack', .66, .20, 0, 0, { action:'bolt', tail:1.20 }) },   // bolt-action 7.62, after the Dragunov
 
   // ── Objects: their own sound, and a reload for what they actually run on ──
   ak20_field_radio: { sound: _fxS('rip', .24, .08, 2200, 5200) },
