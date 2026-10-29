@@ -18319,6 +18319,49 @@ function _mdUnion(items, E) {
 }
 
 // 1) buildings, stretched
+// What rests on what, in one map: every solid binned by the height of its top and of its bottom (5 cm bins), so a
+// pass can ask "what is under this underside" or "what sits on this top" without testing every pair (#80).
+function _mdSolids(group) {
+  const byTop = new Map(), byBot = new Map(), bin = y => Math.round(y * 20);
+  const shown = o => { for (let p = o; p && p !== group; p = p.parent) if (p.visible === false) return false; return true; };
+  group.traverse(o => {
+    if (!o.isMesh || !o.geometry || o.geometry.type === 'PlaneGeometry' || !shown(o)) return;
+    // the theme pass's trim and window lights are one mesh for the whole map: its box tops out at the highest roof
+    // by accident and holds nothing up (it is left out of the buildings for the same reason)
+    if (o.userData && (o.userData.themeDecor || o.userData.eggSign)) return;
+    const b = _mdBox(o); if (b.isEmpty()) return;
+    const e = { m: o, b: b.clone() };
+    for (const [map, y] of [[byTop, b.max.y], [byBot, b.min.y]]) { const k = bin(y); (map.get(k) || map.set(k, []).get(k)).push(e); }
+  });
+  const near = (map, y) => { const k = bin(y), out = []; for (let d = -2; d <= 2; d++) { const l = map.get(k + d); if (l) out.push(...l); } return out; };
+  return { under: y => near(byTop, y), over: y => near(byBot, y) };
+}
+const _mdOverXZ = (a, b) => Math.max(0, Math.min(a.max.x, b.max.x) - Math.max(a.min.x, b.min.x)) * Math.max(0, Math.min(a.max.z, b.max.z) - Math.max(a.min.z, b.min.z));
+// A piece of a building that rests on something the stretch leaves where it is stays on it. The 76 m wall round
+// super_arena is too long to count as a building, but the coping along its top is thin and off the ground, so it
+// counted as a roof, joined the building beside the wall and went up with it: 4.4 m over the wall it caps. The same
+// for rails along a long quay and roofs whose walls are theme decor (#80). A member resting more on things outside the
+// building than on the building stays put, and so does anything that then rests only on what stayed.
+function _mdKeepSupported(group, comps) {
+  const S = _mdSolids(group);
+  // what moves is any member of ANY building being stretched -- a piece resting on the building next door goes up with
+  // its own building as before; only something resting on what no stretch touches is held back
+  const moving = new Set(); for (const c of comps) for (const it of c.members) moving.add(it.m);
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const c of comps) for (const it of c.members) {
+      if (!moving.has(it.m) || it.b.min.y <= 0.4) continue;
+      let aIn = 0, aOut = 0;
+      for (const q of S.under(it.b.min.y)) {
+        if (q.m === it.m || Math.abs(q.b.max.y - it.b.min.y) > 0.06) continue;
+        const a = _mdOverXZ(q.b, it.b); if (a <= 0.01) continue;
+        if (moving.has(q.m)) aIn += a; else aOut += a;
+      }
+      if (aOut > aIn) { moving.delete(it.m); changed = true; }
+    }
+  }
+  for (const c of comps) if (c.members.some(it => !moving.has(it.m))) c.members = c.members.filter(it => moving.has(it.m));
+}
 function _mdStructures(name, rnd) {
   const group = MAP_GROUPS[name], cols = MAP_COLLIDERS[name], v = new THREE.Vector3();
   const spawns = _mdSpawnRects(name, 2.5), dest = new Set();
@@ -18394,6 +18437,7 @@ function _mdStructures(name, rnd) {
     done.push(c);
   }
   if (!done.length) return 0;
+  _mdKeepSupported(group, done);
   const owner = (b) => own(b, done);
   const before = _mdReach(name);
   for (const c of done) c.undo = [];
@@ -18469,13 +18513,17 @@ function _mdVariety(name, rnd) {
   const find = _mdUnion(items, 0.2);
   const comps = new Map();
   items.forEach((it, i) => { const r = find(i); (comps.get(r) || comps.set(r, []).get(r)).push(it); });
-  const props = [];
+  const props = [], S = _mdSolids(group);
   for (const members of comps.values()) {
     const bb = new THREE.Box3(); members.forEach(it => bb.union(it.b));
     const s = bb.getSize(v);
     if (members.length > 9 || bb.min.y > 0.3 || s.y < 0.9 || s.y > 14 || Math.max(s.x, s.z) > 14 || Math.min(s.x, s.z) < 0.5) continue;
     if (spawns.some(r => _mdHits(bb, r))) continue;
-    props.push({ members, bb, w: s.x, d: s.z, h: s.y, cx: (bb.min.x + bb.max.x) / 2, cz: (bb.min.z + bb.max.z) / 2,
+    // load-bearing: something that is not part of it sits on one of its tops (the temple's columns under its roof)
+    const mine = new Set(); members.forEach(it => it.parts.forEach(pt => mine.add(pt.m)));
+    const carries = members.some(it => it.parts.some(pt => S.over(pt.box.max.y).some(q =>
+      !mine.has(q.m) && Math.abs(q.b.min.y - pt.box.max.y) <= 0.06 && _mdOverXZ(q.b, pt.box) > 0.01)));
+    props.push({ carries, members, bb, w: s.x, d: s.z, h: s.y, cx: (bb.min.x + bb.max.x) / 2, cz: (bb.min.z + bb.max.z) / 2,
                  key: Math.round(s.x) + 'x' + Math.round(s.z) + 'x' + Math.round(s.y / 1.5) });
   }
   const groups = new Map();
@@ -18493,6 +18541,7 @@ function _mdVariety(name, rnd) {
       const ownedParts = parts.filter(pt => cols.some(c => inBox(c, pt.box)));
       const dropCols = () => { for (const c of own) { const i = cols.indexOf(c); if (i >= 0) cols.splice(i, 1); } };
       if (r < 0.16 && removed < g.length * 0.3) {
+        if (p.carries) { removed++; continue; }     // (it keeps its turn at being removed, so the count after it is as it was)
         for (const it of p.members) group.remove(it.o);
         dropCols(); removed++; changed++;
         undo.push(() => { for (const it of p.members) group.add(it.o); for (const c of own) cols.push(c); });
@@ -18501,6 +18550,7 @@ function _mdVariety(name, rnd) {
       const sx = 0.8 + rnd() * 0.55, sz = 0.8 + rnd() * 0.55, sy = Math.min(0.7 + rnd() * 0.85, 8 / p.h);
       const yaw = rnd() < 0.4 ? (rnd() < 0.5 ? -1 : 1) * (0.15 + rnd() * 0.55) : 0, cs = Math.cos(yaw), sn = Math.sin(yaw);
       const k = 0.88 + rnd() * 0.26;
+      if (p.carries) continue;                     // load-bearing: every draw made, nothing changed (#80)
       // each object about the middle of the prop's footprint, and up from the ground
       const saved = p.members.map(it => { const o = it.o; return { o, px: o.position.x, py: o.position.y, pz: o.position.z, sx: o.scale.x, sy: o.scale.y, sz: o.scale.z, ry: o.rotation.y }; });
       for (const it of p.members) {
@@ -18537,7 +18587,7 @@ function _mdVariety(name, rnd) {
   }
   // and if it cost a way up anywhere, none of it is kept
   const after = changed ? _mdReach(name) : before, lostN = _mdLost(before, after);
-  group.userData.varietyDbg = { base: before.up.size, lost: lostN, ground: [before.all.size, after.all.size], changed, props: props.length, groups: [...groups.values()].filter(g => g.length >= 5).length };
+  group.userData.varietyDbg = { base: before.up.size, lost: lostN, ground: [before.all.size, after.all.size], changed, props: props.length, loadBearing: props.filter(p => p.carries).length, groups: [...groups.values()].filter(g => g.length >= 5).length };
   if (changed && (_mdBroke(before, after) || _mdExposed(name) > exposed0)) { for (const u of undo.reverse()) u(); return 0; }
   return changed;
 }
