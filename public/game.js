@@ -1733,6 +1733,8 @@ function money(n) { return `${n}${CURRENCY_ICON}`; }
 const FREE_WEAPONS = new Set([
   'ak20','sg8','pistol','flare','fists','frying_pan','frag','medkit',
 ]);
+// Shared final prices also drive server purchases, trials, fragments and bundles.
+PVP_SHOP_CATALOG.rebalance(WEAPON_COSTS, FREE_WEAPONS);
 const TRIAL_DIVISOR = 20;
 const trialingThisMatch = new Set(); // ids the player paid a trial for this match
 
@@ -70522,6 +70524,16 @@ function renderShopAbilities(body) {
   });
 }
 function catalogPrice(n){return Number(n).toLocaleString('en-US')+' donuts';}
+function decorateWeaponTier(card, item) {
+  const key=PVP_SHOP_CATALOG.category(item.id,item),tier=PVP_SHOP_CATALOG.tiers[key];
+  card.dataset.weaponTier=key;card.style.setProperty('--weapon-tier-color',tier.color);
+  const badge=document.createElement('span');badge.className='weapon-tier-label';badge.textContent=tier.name;
+  card.querySelector('.lc-preview')?.appendChild(badge);
+  const price=document.createElement('div');price.className='weapon-tier-price';
+  const cost=shopCost(item.id);
+  price.textContent=FREE_WEAPONS.has(item.id)?'Free starter':cost==null?'Restricted unlock':catalogPrice(cost);
+  (card.querySelector('.lc-copy') || card).appendChild(price);
+}
 function catalogSkin(id){return MODEL_SKINS.find(s=>s.id===id)||MELEE_MODEL_SKINS.find(s=>s.id===id);}
 const catalogSkinArt={};
 function catalogSkinImage(id){
@@ -70652,6 +70664,7 @@ function renderShopItems(body, slot) {
     `;
     const b = card.querySelector('.sbuy');
     card.classList.add('shop-item');
+    decorateWeaponTier(card,item);
     const preview=card.querySelector('.lc-preview');preview.tabIndex=0;preview.setAttribute('role','button');preview.setAttribute('aria-label','Inspect '+item.name);
     preview.onclick=()=>openShopWeaponPreview(id);preview.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openShopWeaponPreview(id);}};
     const t = card.querySelector('.strial');
@@ -70896,6 +70909,8 @@ function showLoadoutScreen(mode) {
 
   // Locked items stay visible; only owned items can be selected.
   function decorateOwnedBadge(card, id, isAdminItem) {
+    const item=WEAPONS.find(w=>w.id===id)||MELEE_ITEMS.find(w=>w.id===id)||SUPPORT_ITEMS.find(w=>w.id===id);
+    if(item)decorateWeaponTier(card,item);
     if (isAdminItem) return isUnlocked(id);
     if (!isOwned(id)) {
       card.classList.add('catalog-card-locked');card.setAttribute('aria-label',weaponDisplayName(id)+' - locked');
@@ -70903,6 +70918,7 @@ function showLoadoutScreen(mode) {
       return false;
     }
     const badge = document.createElement('div');
+    badge.className = 'catalog-status';
     badge.style.cssText = 'font-size:9px;color:#88ff99;letter-spacing:1px;margin-top:3px;';
     badge.textContent = FREE_WEAPONS.has(id) ? 'FREE' : trialingThisMatch.has(id) ? '🧪 TRIAL' : '✓ OWNED';
     card.querySelector('.lc-copy').appendChild(badge);

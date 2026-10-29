@@ -16,9 +16,10 @@
     });
     screen.querySelectorAll('.loadout-col').forEach((col, i) => { col.hidden = i !== step; });
     const query = screen.querySelector('#loadout-search').value.trim().toLowerCase();
+    const tier = screen.querySelector('#loadout-tier').value;
     const cards = [...screen.querySelectorAll('#loadout-' + slots[step] + '-list .loadout-card')];
     for (const card of cards) {
-      card.hidden = !card.textContent.toLowerCase().includes(query);
+      card.hidden = !card.textContent.toLowerCase().includes(query) || (tier !== 'all' && card.dataset.weaponTier !== tier);
       card.setAttribute('aria-pressed', String(card.classList.contains('selected')));
     }
     const count = cards.filter(c => !c.hidden).length;
@@ -41,6 +42,11 @@
   }
   function mount(screen) {
     step = 0;
+    if(!screen.querySelector('#loadout-tier')) {
+      const select=document.createElement('select');select.id='loadout-tier';select.setAttribute('aria-label','Weapon category');
+      select.innerHTML='<option value="all">All categories</option>'+Object.entries(PVP_SHOP_CATALOG.tiers).map(([id,t])=>'<option value="'+id+'">'+t.name+'</option>').join('');
+      select.onchange=()=>refresh(screen);screen.querySelector('.lh-tools').insertBefore(select,screen.querySelector('#loadout-count'));
+    }
     screen.querySelector('#best-loadouts-btn').textContent = 'Saved kits';
     screen.querySelector('#loadout-search').value = '';
     const nav = screen.querySelector('#loadout-steps');

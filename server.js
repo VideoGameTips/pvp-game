@@ -613,6 +613,7 @@ const FREE_WEAPONS = new Set([
 // ── 💼 Bundles — ~60% off the sum of individual prices ─────────────
 // Keep in sync with public/game.js BUNDLES table.
 const SHOP_CATALOG = require('./public/shop-catalog.js');
+SHOP_CATALOG.rebalance(WEAPON_COSTS, FREE_WEAPONS);
 const BUNDLES = Object.fromEntries(SHOP_CATALOG.bundles.map(b=>[b.id,{...b,price:SHOP_CATALOG.price(b,WEAPON_COSTS,FREE_WEAPONS)}]));
 for(const b of Object.values(BUNDLES)){
   if(b.items.length!==3 || b.items.some(id=>WEAPON_COSTS[id]==null || ARCHIVED_ITEM_IDS.has(id) || ADMIN_ITEM_IDS.has(id)))throw new Error('Invalid bundle weapons: '+b.id);
@@ -855,7 +856,7 @@ function trialCost(id) {
 }
 
 app.get('/shop/catalog', (req, res) => {
-  res.json({ costs: WEAPON_COSTS, free: [...FREE_WEAPONS], starterCredits: STARTER_CREDITS, trialDivisor: TRIAL_DIVISOR });
+  res.json({ costs: WEAPON_COSTS, tiers: SHOP_CATALOG.tiers, categories: Object.fromEntries(Object.keys(WEAPON_COSTS).map(id=>[id,SHOP_CATALOG.category(id)])), free: [...FREE_WEAPONS], starterCredits: STARTER_CREDITS, trialDivisor: TRIAL_DIVISOR });
 });
 
 function authedUser(req) {
