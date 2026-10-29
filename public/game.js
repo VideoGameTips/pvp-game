@@ -63139,7 +63139,7 @@ function spawnBlackHole(pos, own, ownerId) {
   pts.frustumCulled = false; g.add(pts);
   const h = { g, halo, tilt, disc, lens, floorRing, floorCore, pgeo, pts, P, arr, t: 0, x: pos.x, y: cy, z: pos.z, floorY, own, ownerId, nextTick: 0, tickN: 0, mats: [halo.material, disc.material, lens.material, floorRing.material, floorCore.material, pts.material] };
   blackHoles.push(h);
-  playSoundEvent('blackhole_activate', { position: new THREE.Vector3(pos.x, cy, pos.z), remote: !own, volume: own ? 0.9 : 0.8, minGap: 0 });
+  if (!own) playSoundEvent('blackhole_activate', { position: new THREE.Vector3(pos.x, cy, pos.z), remote: true, volume: 0.8, minGap: 0 });   // (the thrower already heard it leave their hand)
   return h;
 }
 
