@@ -586,13 +586,14 @@ const WEAPONS = [
     ability: { name: 'Deadeye', cd: 11000, desc: '3 s · strong aim assist', type: 'buff', duration: 3000, spreadMult: 0.1, trackingBoost: true },
   },
   {
-    id: 'frost_blaster', name: 'Frost Blaster', type: 'Secondary', slot: 'secondary',
-    // 2 damage a bullet on top of the slow (it used to do none at all: the slow was the whole weapon).
-    mag: 50, reserve: 0, damage: 2, fireRate: 100, reloadTime: 99999,
-    auto: true, pellets: 1, spread: 0.01, adsZoom: 50, bulletSpeed: 120, noReload: true,
-    bulletColor: 0x99eeff, bulletSize: 0.05,
+    id: 'frost_blaster', name: 'Freeze Ray', type: 'Cryo Ray', slot: 'secondary',
+    // The combo starter. A beam that does almost nothing to HP: hold it on someone and the cold stacks (server:
+    // freezeRayHit), then they are FROZEN for 2.5 s -- rooted, and every other weapon hits them for +50%.
+    // (It used to be the Frost Blaster: a bullet that took 3 speed off a target until they turned to ice and died.)
+    mag: 50, reserve: 0, damage: 3, fireRate: 100, reloadTime: 99999,
+    auto: true, pellets: 1, spread: 0, adsZoom: 50, bulletSpeed: 260, noReload: true,
+    bulletColor: 0xbdf3ff, bulletSize: 0.05, hitscan: true, hitscanRange: 26, freezeRay: true,
     ammoRegen: 5, // recovers 5/sec
-    frostSlow: 3, // each shot subtracts 3 speed points from target
     ability: { name: 'Cryo Burst', cd: 12000, desc: 'Frost AOE · -25 speed all targets in 5 m', type: 'aoe', radius: 5, damage: 0, color: 0x99eeff, frostBurst: 25 },
   },
   { id: 'snub_revolver', name: 'Snubnose', type: 'Secondary', slot: 'secondary',
@@ -1405,7 +1406,7 @@ function displayMeleeName(m) {
 
 const SUPPORT_ITEMS = [
   { id: 'frag', name: 'Frag Grenade', type: 'Explosive', uses: 2, damage: 80, cooldown: 900, bulletSpeed: 56, bulletColor: 0x4d7f36, bulletSize: 0.14 },
-  { id: 'medkit', name: 'Medkit', type: 'Rechargeable Heal', uses: 1, recharge: true, heal: 100, healTime: 2500, cooldown: 20000 },
+  { id: 'medkit', name: 'Medkit', type: 'Rechargeable Heal', uses: 1, recharge: true, heal: 100, healTime: 2500, cooldown: 35000 },
   { id: 'stim', name: 'Stim Shot', type: 'Quick Heal', uses: 2, heal: 22, cooldown: 650 },
   { id: 'smoke', name: 'Smoke Bomb', type: 'Utility', uses: 2, damage: 0, cooldown: 700, bulletSpeed: 48, bulletColor: 0xcccccc, bulletSize: 0.18 },
   { id: 'blink_pearl', name: 'Blink Pearl', type: 'Teleport', uses: 2, blink: 10, cooldown: 900 },
@@ -1434,7 +1435,7 @@ const SUPPORT_ITEMS = [
   { id: 'air_grenade', archived: true, name: 'Air Grenade', type: 'Launch', uses: 2, damage: 15, cooldown: 950, bulletSpeed: 50, bulletColor: 0xaaccff, bulletSize: 0.11, launchVel: 14, launchRadius: 4 },
   { id: 'land_mine', name: 'Land Mine', type: 'Trap', uses: 2, damage: 298, cooldown: 1100, mineRadius: 1.8, launchVel: 16 },
   { id: 'air_blaster', name: 'Air Blaster', type: 'Knockback · No Damage', uses: 5, damage: 0, cooldown: 750, airBlast: true, range: 13, cone: 0.74, launchVel: 11, pushVel: 24 },
-  { id: 'grapple_hook', name: 'Grapple Hook', type: 'Movement · Pull', uses: 4, damage: 0, cooldown: 650, grapple: true, range: 36, pullVel: 34, liftVel: 7, enemyPull: 16 },
+  { id: 'grapple_hook', name: 'Grapple Hook', type: 'Movement · Pull', uses: 1, recharge: true, damage: 0, cooldown: 3500, grapple: true, range: 36, pullVel: 34, liftVel: 7, enemyPull: 16 },
   // ── 🪖 ADMIN UTILITIES (locked behind unlock codes) ──────────────────────
   // ── 🆕 More utilities — batch 4 ──────────────────────────────────────────
   { id: 'flashbang_basic', archived: true, name: 'Flashbang',    type: 'Stun',       uses: 2, damage: 5,  cooldown: 900, bulletSpeed: 50, bulletColor: 0xffffff, bulletSize: 0.10, stunDur: 2500, stunRadius: 6 },
@@ -34320,7 +34321,7 @@ const weaponModels = [
   buildStormBloom(),  // storm_bloom
   buildChainGun(),  // chain_gun
   buildGunslinger(),  // gunslinger
-  buildJavelinLauncher(),
+  buildJavelinLauncher(),  // javelin_launcher
   buildAkimbo(),  // akimbo
   buildHellfire(),  // hellfire
   buildOmegaPistol(),  // omega_pistol
@@ -48890,7 +48891,10 @@ function fireHitscanShot(origin, dir, weaponId, wStats) {
   const range = wStats.hitscanRange || 70;
   const hit = _nearestAbilityRayHit(origin, dir, range, 0.6);
   const end = hit ? hit.pos.clone() : origin.clone().addScaledVector(dir, range);
-  _spawnAbilityBeam(origin, end, wStats.bulletColor || 0xff3333, 0.016, 90);
+  if (weaponId === 'frost_blaster') {                           // the Freeze Ray: a wider, paler beam than the laser pointer's
+    _spawnAbilityBeam(origin, end, 0x9fe8ff, 0.034, 110);
+    _spawnAbilityBeam(origin, end, 0xffffff, 0.012, 90);
+  } else _spawnAbilityBeam(origin, end, wStats.bulletColor || 0xff3333, 0.016, 90);
   if (hit) {
     const mesh = remoteMeshes[hit.pid];
     const dummy = TRAINING_DUMMIES.find(d => d.id === hit.pid);
@@ -50191,6 +50195,7 @@ function doGrappleHook(item) {
 
   if (!target) {
     showAnnouncement('GRAPPLE', 'No hook point', '#aaccff', 650);
+    supportRechargeUntil[item.id] = Date.now() + 400;   // nothing was hooked: only a short fumble, not the full recharge
     playSoundEvent('dryfire', { volume: 0.55, pitch: 1.25, minGap: 80 });
     return;
   }
@@ -58492,7 +58497,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
   // which made the cryo weapons cosmetic. Every ice-kind projectile now bleeds
   // the target's speed; frostSlow is 100 = full speed, 0 = frozen solid.
   const _hitKind = projectileKind(weaponId, WEAPONS.find(w => w.id === weaponId));
-  if (_hitKind === 'ice') {
+  if (_hitKind === 'ice' && weaponId !== 'frost_blaster') {
     const bot = resolveBot(pid);
     if (bot && !bot.dead) {
       if (weaponId === 'cyroclasm' || weaponId === 'cyroclasm_laser') {
@@ -58500,7 +58505,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
         // solid inside a second. Now a hit just keeps the chill alive for a moment more.
         bot._chillUntil = Date.now() + (weaponId === 'cyroclasm_laser' ? 2500 : CHILL_MS);
       } else {
-        const chill = weaponId === 'frost_blaster' ? 3 : 8;   // the dedicated chiller ticks
+        const chill = 8;
         bot.frostSlow = Math.max(0, (bot.frostSlow || 100) - chill);
       }
       spawnAbilityAOEFX(hitWorldPos ? hitWorldPos.clone() : mesh.position.clone(), 0.5, 0x9fe8ff);
@@ -61312,7 +61317,7 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ['acid_pool', 8], ['bee_sting', 5],   // 🧪 acid tick / 🐝 bee sting
   ['thunderstorm', 60],
   // Lazy weapons batch
-  ['frost_blaster', 0], ['air_grenade', 15], ['land_mine', 298], ['frost_freeze', 9999],
+  ['frost_blaster', 3], ['air_grenade', 15], ['land_mine', 298], ['frost_freeze', 9999],
   // 🔬 Tech / Physics batch
   ['prism_launcher', 38], ['foam_cannon', 18], ['airburst_projector', 22], ['glassmaker', 28],
   ['freeze_gun'], ['seismic_hammer', 70], ['painter_beam', 6], ['portal_launcher', 10],
@@ -61595,18 +61600,13 @@ function applyBotDamageToPlayer(weaponId, botId, damageOverride) {
   if (botId && friendlyFireBlocked(myId, botId)) return;
   // ⚡ Admin god mode: no damage taken
   if (adminCheats.godMode && currentUser?.isAdmin) { flashHitIndicator(); return; }
-  // Frost Blaster: doesn't deal HP damage, just reduces speed (lethal at 0)
-  if (weaponId === 'frost_blaster') {
-    if (isDead || match?.type === 'range') return;
-    playerFrostSlow = Math.max(0, playerFrostSlow - 3);     // and then its 2 damage lands like any other hit, below
-  }
   // ❄️⚡ The same effects, pointed at us. Ice bleeds our speed on top of its
   // damage; energy whites out the screen for a moment. Both fall through to the
   // normal damage path below — only the Frost Blaster above deals no HP.
   {
     const k = projectileKind(weaponId, WEAPONS.find(w => w.id === weaponId));
     if (k === 'ice' && !isDead) {
-      if (weaponId === 'frost_blaster') { /* stacked above */ }
+      if (weaponId === 'frost_blaster') { /* the Freeze Ray chills through the server's 'frozen' event, not this */ }
       else if (weaponId === 'cyroclasm' || weaponId === 'cyroclasm_laser') chillPlayer();   // a chill, not a stack
       else playerFrostSlow = Math.max(0, playerFrostSlow - 8);
     }
@@ -62181,6 +62181,11 @@ socket.on('playerHit', data => {
       chillPlayer(2500);
       rootPlayer(3000);
     }
+    else if (data.weapon === 'frost_blaster') chillPlayer(700);          // you feel it before it takes: slower while the cold builds
+  }
+  if (data.shooterId === myId && data.shattered) {                   // you hit something frozen with something heavier than the ray
+    showAnnouncement('SHATTER', '+50% damage', '#bdf3ff', 500);
+    playSoundEvent('freeze_shatter', { volume: 0.7, minGap: 120 });
   }
   // Lightsabre parry: absorb incoming damage
   if (data.targetId === myId && !healthOnly && !incomingPiercesDefense && meleeAbilityBuff?.type === 'parry') {
@@ -63256,6 +63261,43 @@ function _blackHoleFinale(h) {
 socket.on('blackHole', data => {
   if (!data || data.ownerId === myId || inLobby) return;
   spawnBlackHole(new THREE.Vector3(data.x, data.y, data.z), false, data.ownerId);
+});
+
+// ── 🧊 FROZEN (the Freeze Ray) ──────────────────────────────────────────────────────────────────────────────────────────
+// The server counts the cold and says when someone freezes. Frozen: rooted for the duration (they can still turn and
+// shoot), sealed in a block of ice everyone can see, and -- the point of it -- the server deals +50% to them from
+// every other weapon until it thaws. The block cracks and shatters when it ends.
+function showIceBlock(pid, ms) {
+  const mesh = remoteMeshes[pid];
+  if (!mesh) return;
+  if (mesh._iceBlock) { mesh.remove(mesh._iceBlock); mesh._iceBlock.geometry.dispose(); mesh._iceBlock.material.dispose(); }
+  const ice = new THREE.Mesh(new THREE.BoxGeometry(1.0, 2.0, 1.0),
+    new THREE.MeshBasicMaterial({ color: 0x9fe8ff, transparent: true, opacity: 0.42, depthWrite: false, blending: THREE.AdditiveBlending }));
+  ice.position.y = 1.0; mesh.add(ice); mesh._iceBlock = ice;
+  spawnAbilityAOEFX(mesh.position.clone().setY(mesh.position.y + 0.9), 1.1, 0xbdf3ff);
+  setTimeout(() => {
+    if (mesh._iceBlock !== ice) return;
+    mesh.remove(ice); ice.geometry.dispose(); ice.material.dispose(); mesh._iceBlock = null;
+    spawnAbilityAOEFX(mesh.position.clone().setY(mesh.position.y + 0.9), 1.6, 0xffffff);
+    playSoundEvent('freeze_shatter', { position: mesh.position.clone(), volume: 0.8, minGap: 100 });
+  }, ms);
+}
+socket.on('frozen', data => {
+  if (!data || inLobby || !(data.ms > 0)) return;
+  const ms = Math.min(5000, data.ms), now = Date.now();
+  if (data.targetId === myId) {
+    if (isDead) return;
+    playerRootedUntil = Math.max(playerRootedUntil, now + ms);
+    chillPlayer(ms + 800);                                          // and a slow after the thaw: it does not release you at full speed
+    flashScreen('rgba(170,225,255,0.5)', 600);
+    showAnnouncement('FROZEN', 'You are an ice block: heavy hits shatter you', '#bdf3ff', Math.max(600, ms - 200));
+    playSoundEvent('freeze_shatter', { volume: 0.6, minGap: 100 });
+    return;
+  }
+  const bot = resolveBot(data.targetId);
+  if (bot && !bot.dead) bot._rootUntil = Math.max(bot._rootUntil || 0, now + ms);
+  showIceBlock(data.targetId, ms);
+  if (data.shooterId === myId) showAnnouncement('FROZEN', 'Hit it hard: +50% damage', '#bdf3ff', 900);
 });
 
 function getSupportRadius(item) {

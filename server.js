@@ -2094,7 +2094,7 @@ event_horizon: 75,
   orbital_strike: 250, guardian_drone: 14, nano_shield: 0,
   thunderstorm: 60,
   // Lazy weapons
-  frost_blaster: 2, air_grenade: 15, land_mine: 298, frost_freeze: 9999,
+  frost_blaster: 3, air_grenade: 15, land_mine: 298, frost_freeze: 9999,
   // 🪖 ADMIN — Military OP weapons (unlock codes required)
   gau19: 50, mk44: 25, xm7: 60, barrett: 250, m134: 15, hkmp7: 30, p90_spec: 22,
   desert_eagle: 65, m1911: 50,  glock18: 30, five_seven: 40,
@@ -2129,7 +2129,30 @@ WEAPON_DAMAGE.explosive_barrel = 100;
 
 function canUseHellfire(p) { return !!(p && !p.isBot && users[p.account]?.isAdmin); }
 function hellfireWeapon(id) { return typeof id==='string' && id.startsWith('hellfire'); }
+// ── 🧊 Freeze Ray ─────────────────────────────────────────────────────────────────────────────────────────────────────
+// Each ray hit adds a stack of cold; a gap of FREEZE.windowMs lets it all drain away. FREEZE.stacks in a row and the
+// target is FROZEN for FREEZE.ms: rooted on their own client (the 'frozen' event) and, here, hit for FREEZE.shatter
+// times the damage by everything but the ray itself. After it thaws they cannot be frozen again for FREEZE.immuneMs.
+const FREEZE = { stacks: 14, windowMs: 1500, ms: 2500, immuneMs: 5000, range: 30, shatter: 1.5 };
+function isFrozen(t) { return (t._frozenUntil || 0) > Date.now() && t._frozenDeaths === t.deaths; }
+function freezeRayHit(shooter, target) {
+  const now = Date.now();
+  if (isFrozen(target) || now < (target._freezeImmuneUntil || 0)) return;
+  if (dist3(shooter, target) > FREEZE.range) return;
+  target._cold = (now - (target._coldAt || 0) > FREEZE.windowMs ? 0 : (target._cold || 0)) + 1;
+  target._coldAt = now;
+  if (target._cold < FREEZE.stacks) return;
+  target._cold = 0;
+  target._frozenUntil = now + FREEZE.ms; target._frozenDeaths = target.deaths;
+  target._freezeImmuneUntil = now + FREEZE.ms + FREEZE.immuneMs;
+  emitToMatch(target.matchId, 'frozen', { targetId: target.id, shooterId: shooter.id, ms: FREEZE.ms });
+}
 function serverHitDamage(data, shooter, target) {
+  const dmg = serverHitDamageBase(data, shooter, target);
+  if (data?.weapon !== 'frost_blaster' && dmg > 0 && isFrozen(target)) { data._shattered = true; return Math.round(dmg * FREEZE.shatter); }
+  return dmg;
+}
+function serverHitDamageBase(data, shooter, target) {
   if(data?.weapon==='omega_pistol'){
     if(!canUseHellfire(shooter)||!shooter._omegaPermit||Date.now()>shooter._omegaPermit)return 0;
     shooter._omegaPermit=0;return target.hp;
@@ -2184,7 +2207,7 @@ const WEAPON_FALLOFF = {
   event_horizon: FALLOFF_ENERGY, storm_core: FALLOFF_ENERGY, abs_zero: FALLOFF_ENERGY, quantum_repeater: FALLOFF_ENERGY, pulse_needle: FALLOFF_ENERGY, magnetar: FALLOFF_MARKSMAN, void_harvester: FALLOFF_MARKSMAN, solar_lance: FALLOFF_LMG, arc_torrent: FALLOFF_LMG, slingshot: FALLOFF_LMG,
   crossbow: FALLOFF_NONE, grenade_launcher: FALLOFF_NONE, boombow: FALLOFF_NONE, flare: FALLOFF_NONE, gravity_launcher: FALLOFF_NONE, potato_cannon: FALLOFF_NONE, mortar_rifle: FALLOFF_NONE, firework_launcher: FALLOFF_NONE, seismic_hammer: FALLOFF_NONE, signal_pistol: FALLOFF_NONE, throwing_axes: FALLOFF_NONE, nebula_mortar: FALLOFF_NONE, rpg: FALLOFF_NONE, bazooka: FALLOFF_NONE, cyroclasm_laser: FALLOFF_NONE, storm_bloom_ball: FALLOFF_NONE, storm_bloom_aura: FALLOFF_NONE, javelin_launcher: FALLOFF_NONE,
   switchblade_gun: FALLOFF_SIDEARM, shockwave_launcher: FALLOFF_SIDEARM, storm_cannon: FALLOFF_SIDEARM, prism_launcher: FALLOFF_SIDEARM, foam_cannon: FALLOFF_SIDEARM, portal_launcher: FALLOFF_SIDEARM, traffic_controller: FALLOFF_SIDEARM, pinball_launcher: FALLOFF_SIDEARM, dart_gun: FALLOFF_SIDEARM, boomerang: FALLOFF_SIDEARM, traffic_cone: FALLOFF_SIDEARM, cream_pie: FALLOFF_SIDEARM,
-  airburst_projector: FALLOFF_AR, gravity_paint: FALLOFF_AR, frost_blaster: FALLOFF_AR,
+  airburst_projector: FALLOFF_AR, gravity_paint: FALLOFF_AR, frost_blaster: FALLOFF_NONE,
 };
 function dist3(a, b) {
   const dx = a.x - b.x, dy = (a.y || 0) - (b.y || 0), dz = a.z - b.z;
@@ -2841,12 +2864,13 @@ io.on('connection', (socket) => {
     if (shooter.matchId !== target.matchId) return;
     if (blocksFriendlyFire(shooter, target)) return;
     const dmg = serverHitDamage(data, shooter, target);
+    if (data.weapon === 'frost_blaster' && !target.dead) freezeRayHit(shooter, target);
     const hpBefore = target.hp;
     target.hp = Math.max(0, target.hp - dmg);
     creditFfaDamage(shooter, hpBefore - target.hp);
     // shooterId: the victim's screen points an arc at whoever fired (#36)
     const killTags = cleanKillTags(data.tags);
-    emitToMatch(target.matchId, 'playerHit', { targetId: target.id, hp: target.hp, environmentSeq: target.environmentSeq || 0, bulletId: data.bulletId, shooterId: socket.id, weapon: data.weapon, headshot: !!data.headshot, tags: killTags });
+    emitToMatch(target.matchId, 'playerHit', { targetId: target.id, hp: target.hp, environmentSeq: target.environmentSeq || 0, bulletId: data.bulletId, shooterId: socket.id, weapon: data.weapon, headshot: !!data.headshot, shattered: !!data._shattered, tags: killTags });
     if (target.hp <= 0) {
       target.dead = true; target.deaths++; shooter.kills++;
       shooter.matchKills = (shooter.matchKills || 0) + 1;
@@ -2869,6 +2893,7 @@ io.on('connection', (socket) => {
     if (shooter.matchId !== bot.matchId) return;
     if (blocksFriendlyFire(shooter, bot)) return;
     let dmg = serverHitDamage(data, shooter, bot);
+    if (data.weapon === 'frost_blaster' && !bot.dead) freezeRayHit(shooter, bot);
     // The shooter's client already saw this bot die (#48). Client and server work damage out
     // differently (their own tables, zone bonuses, positions), and with other real players in
     // the match a kill that stays on one screen leaves a frozen, unkillable bot on everyone else's.
@@ -2879,7 +2904,7 @@ io.on('connection', (socket) => {
     if (shooter === players[socket.id]) creditFfaDamage(shooter, botHpBefore - bot.hp);
     // shooterId: the host must not count another player's kill of its bot as its own (#48)
     const killTags = cleanKillTags(data.tags);
-    emitToMatch(bot.matchId, 'playerHit', { targetId: bot.id, hp: bot.hp, bulletId: data.bulletId, shooterId: shooter.id, weapon: data.weapon, headshot: !!data.headshot, tags: killTags });
+    emitToMatch(bot.matchId, 'playerHit', { targetId: bot.id, hp: bot.hp, bulletId: data.bulletId, shooterId: shooter.id, weapon: data.weapon, headshot: !!data.headshot, shattered: !!data._shattered, tags: killTags });
     if (bot.hp <= 0) {
       bot.dead = true; bot.deaths++; shooter.kills++;
       if (shooter === players[socket.id]) shooter.matchKills = (shooter.matchKills || 0) + 1;
