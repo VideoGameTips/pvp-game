@@ -4227,16 +4227,17 @@ if (ok && process.argv.includes('--music')) {
     // which track
     const save = { started: gameStarted, lobby: inLobby, map: activeMapName, ctx: audioCtx, vol: GAMEPLAY_SETTINGS.music, m: { ...MUSIC } };
     try {
-      gameStarted = false; inLobby = false; if (musicWanted() !== 'lobby') issues.push('the menus should have the lobby theme');
-      gameStarted = true; inLobby = true; if (musicWanted() !== 'lobby') issues.push('the lobby should have its theme');
+      gameStarted = false; inLobby = false; if (musicWanted() !== (LOBBY_MUSIC ? 'lobby' : null)) issues.push('the menus should have the lobby theme, or no music while LOBBY_MUSIC is off');
+      gameStarted = true; inLobby = true; if (musicWanted() !== (LOBBY_MUSIC ? 'lobby' : null)) issues.push('the lobby should have its theme, or no music while LOBBY_MUSIC is off');
       inLobby = false; activeMapName = 'shipyard'; if (musicWanted() !== 'industry') issues.push('the shipyard should have the industry track');
       activeMapName = 'urban'; if (musicWanted() !== 'groove') issues.push('urban should have the groove track'); activeMapName = 'no_such_map'; if (musicWanted() !== null) issues.push('a place with no music should be quiet');
       // the scheduler
       MUSIC.ctx = null; MUSIC.bus = null; MUSIC.out = null; MUSIC.track = undefined; MUSIC.master = null; audioCtx = ctx; GAMEPLAY_SETTINGS.music = 0.5;
       gameStarted = false; updateMusic(0.016);
-      if (MUSIC.track !== 'lobby' || MUSIC.bar < 1) issues.push('the lobby theme should start and schedule ahead (track ' + MUSIC.track + ', bar ' + MUSIC.bar + ')');
+      if (LOBBY_MUSIC ? (MUSIC.track !== 'lobby' || MUSIC.bar < 1) : MUSIC.track !== null) issues.push('the lobby theme should start and schedule ahead, or the menus play nothing while LOBBY_MUSIC is off (track ' + MUSIC.track + ', bar ' + MUSIC.bar + ')');
       gameStarted = true; activeMapName = 'sky_arena'; updateMusic(0.016);
       if (MUSIC.track !== 'heaven') issues.push('going to Sky Arena should change the track to heaven, it is ' + MUSIC.track);
+      if (MUSIC.bar < 1) issues.push('a track should start and schedule ahead (track ' + MUSIC.track + ', bar ' + MUSIC.bar + ')');
       GAMEPLAY_SETTINGS.music = 0; updateMusic(0.016); if (MUSIC.track !== null) issues.push('with the music turned to 0 nothing should play');
       GAMEPLAY_SETTINGS.music = 0.5; ctx.state = 'suspended'; const before = MUSIC.track; activeMapName = 'shipyard'; updateMusic(0.016);
       if (MUSIC.track !== before) issues.push('before the first click (a suspended context) the music must wait');

@@ -15645,8 +15645,9 @@ const MUSIC_TRACKS = {
 const _mMixDefaults = { pad: 0.9, choir: 0.9, drone: 0.8, bass: 0.9, pluck: 0.8, bell: 0.7, stab: 0.8, drums: 0.9 };
 
 // What should be playing now: the lobby's theme in the lobby and the menus, a map's own track in a match, otherwise nothing.
+const LOBBY_MUSIC = false;    // the lobby and menu theme is switched off for now (Andy: "delete it for now"); MUSIC_TRACKS.lobby is kept as it is: set this to true to bring it back
 function musicWanted() {
-  if (inLobby || !gameStarted) return 'lobby';
+  if (inLobby || !gameStarted) return LOBBY_MUSIC ? 'lobby' : null;
   if (/^\d+v\d+$/.test(currentModeId() || '')) return null;    // 1v1, 2v2, 3v3, 5v5, 10v10: no music while you play (it was distracting)
   return MUSIC_FOR_MAP[activeMapName] || null;
 }
