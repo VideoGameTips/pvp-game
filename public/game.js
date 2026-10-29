@@ -1405,7 +1405,7 @@ function displayMeleeName(m) {
 
 const SUPPORT_ITEMS = [
   { id: 'frag', name: 'Frag Grenade', type: 'Explosive', uses: 2, damage: 80, cooldown: 900, bulletSpeed: 56, bulletColor: 0x4d7f36, bulletSize: 0.14 },
-  { id: 'medkit', name: 'Medkit', type: 'Heal', uses: 1, heal: 100, healTime: 2500, cooldown: 1200 },
+  { id: 'medkit', name: 'Medkit', type: 'Rechargeable Heal', uses: 1, recharge: true, heal: 100, healTime: 2500, cooldown: 20000 },
   { id: 'stim', name: 'Stim Shot', type: 'Quick Heal', uses: 2, heal: 22, cooldown: 650 },
   { id: 'smoke', name: 'Smoke Bomb', type: 'Utility', uses: 2, damage: 0, cooldown: 700, bulletSpeed: 48, bulletColor: 0xcccccc, bulletSize: 0.18 },
   { id: 'blink_pearl', name: 'Blink Pearl', type: 'Teleport', uses: 2, blink: 10, cooldown: 900 },
@@ -3353,6 +3353,7 @@ let joyDir = { x: 0, y: 0 }, joyActive = false;
 // Per-weapon ammo pools (so switching preserves ammo)
 const weaponAmmo = WEAPONS.map(w => ({ ammo: w.mag, reserve: w.reserve }));
 const supportUses = SUPPORT_ITEMS.map(s => s.uses);
+const supportRechargeUntil = {};
 
 // ── Three.js setup ─────────────────────────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -45051,6 +45052,7 @@ function loadoutReady() {
 }
 
 function resetCombatResources() {
+  for (const id of Object.keys(supportRechargeUntil)) delete supportRechargeUntil[id];
   window.PVP_RAGDOLL?.resetLocal();
   hellfireCores=3;
   pendingEnvironmentDamage.length = 0;
@@ -50293,11 +50295,11 @@ function trySupport() {
   if (countdownActive) return;
   const item = SUPPORT_ITEMS[selectedSupportIdx];
   const unlimited = adminInfiniteAmmoActive();
-  if (!item || (!unlimited && supportUses[selectedSupportIdx] <= 0)) return;
+  if (!item || (!item.recharge && !unlimited && supportUses[selectedSupportIdx] <= 0)) return;
   if (item.id === 'satchel' && !unlimited && activeSatchels.filter(s => s.ownerId === myId).length >= item.uses) return;
   if (item.id === 'medkit' && medkitHealChannel) return;
   const now = Date.now();
-  if (now - lastSupport < item.cooldown) return;
+  if (item.recharge ? now < (supportRechargeUntil[item.id] || 0) : now - lastSupport < item.cooldown) return;
 
   // ── Frag grenade: wind-up + delayed throw ─────────────────────────────────
   if (item.id === 'frag') {
@@ -50311,7 +50313,8 @@ function trySupport() {
   }
 
   lastSupport = now;
-  if (!unlimited) supportUses[selectedSupportIdx]--;
+  if (item.recharge) supportRechargeUntil[item.id] = now + item.cooldown;
+  else if (!unlimited) supportUses[selectedSupportIdx]--;
   updateAmmoHUD();
   // 🎵 Per-utility sound (mapped above). Some items override this with their own.
   if (SUPPORT_SOUND[item.id]) playSoundEvent(SUPPORT_SOUND[item.id], { volume: 1.0 });
@@ -61110,6 +61113,12 @@ function updateWeaponHUD() {
   if (activeSlot === 'support' && selectedSupportIdx !== null && selectedSupportIdx >= 0) {
     const item = SUPPORT_ITEMS[selectedSupportIdx];
     document.getElementById('ammo-gun').textContent = item.name;
+    if (item.recharge) {
+      const left=Math.max(0,(supportRechargeUntil[item.id] || 0)-Date.now());
+      document.getElementById('ammo-count').textContent=medkitHealChannel?'HEALING':left?Math.ceil(left/1000)+'s':'READY';
+      document.getElementById('ammo-reserve').textContent=left?'RECHARGING':'REUSABLE';
+      return;
+    }
     document.getElementById('ammo-count').textContent = adminInfiniteAmmoActive() ? 'UNLIMITED' : supportUses[selectedSupportIdx];
     document.getElementById('ammo-reserve').textContent = item.id === 'satchel'
       ? `${activeSatchels.filter(s => s.ownerId === myId).length} deployed` : 'USES';
@@ -70202,6 +70211,7 @@ function loop() {
   if (inLobby) safeLoopStep('lobby-interactions', () => updateLobbyInteractions()); // duel-pad / challenge prompt
   safeLoopStep('interact-button', syncInteractButton); // every frame, so DUEL clears once you leave the lobby
   safeLoopStep('ability-button', syncAbilityButton);   // shows only while what you hold has an ability (#30)
+  if (activeSlot === 'support' && SUPPORT_ITEMS[selectedSupportIdx]?.recharge) safeLoopStep('support-recharge', updateWeaponHUD);
   safeLoopStep('lobby-tag', syncLobbyTag);
   safeLoopStep('edge-warning', syncEdgeWarning);             // "LOBBY 13 · CHILL ZONE · NO DAMAGE" (#35)
   safeLoopStep('admin-cheats', () => updateAdminCheats(dt));// admin cheat tick (fly, kill aura, etc.)
@@ -70828,7 +70838,7 @@ function renderShopItems(body, slot) {
     pickIsAdmin = m => !!m.adminItem;
   } else {
     source = SUPPORT_ITEMS.filter(s => !s.archived);
-    descFn = s => `${s.heal ? 'HEAL ' + s.heal : 'DMG ' + (s.damage || 0)} · USES ${s.uses}`;
+    descFn = s => `${s.heal ? 'HEAL ' + s.heal : 'DMG ' + (s.damage || 0)} · ${s.recharge ? 'RECHARGE '+s.cooldown/1000+'s' : 'USES '+s.uses}`;
     pickIsAdmin = s => !!s.adminItem;
   }
   for (const item of source) {
@@ -71236,7 +71246,7 @@ function showLoadoutScreen(mode) {
     card.innerHTML = `${loadoutPreviewHTML(s.id)}<div class="lc-copy">
       <div class="lc-name">${s.name}${adminTag}</div>
       <div class="lc-type">${s.type}</div>
-      <div class="lc-stats">${stat} · USES ${s.uses}</div>
+      <div class="lc-stats">${stat} · ${s.recharge ? 'RECHARGE '+s.cooldown/1000+'s' : 'USES '+s.uses}</div>
     </div>`;
     const usable = decorateOwnedBadge(card, s.id, !!s.adminItem);
     const handler = () => { if (usable) pickSupport(i, card);else openShopWeaponPreview(s.id); };

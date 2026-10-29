@@ -108,7 +108,7 @@
       ] : [['Aim recoil','None']]);
     } else if (kind === 'melee') {
       html += section('Melee', [['Damage',number(w.damage)],['Reach',number(w.range)+' studs'],['Attack interval',number(w.cooldown)+' ms'],['Attacks / second',number(1000/w.cooldown)]]);
-    } else html += section('Utility', [['Damage',number(w.damage || 0)],['Healing',number(w.heal || 0)],['Uses',number(w.uses)],['Use interval',number(w.cooldown || 0)+' ms']]);
+    } else html += section('Utility', [['Damage',number(w.damage || 0)],['Healing',number(w.heal || 0)],['Uses',w.recharge?'Unlimited':number(w.uses)],[w.recharge?'Recharge time':'Use interval',number(w.cooldown || 0)+' ms']]);
     const ability = equippedAbility(item) || item.ability;
     if (ability) html += section('Ability \u00b7 ' + ability.name, [['Effective cooldown',number(abilityCooldownFor(item,ability) / 1000)+' s'], ...fields(ability)]);
     html += `<details class="pr-section"><summary>All configured parameters</summary>${pairs(fields(w))}</details>`;
