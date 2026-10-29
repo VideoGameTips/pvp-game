@@ -15647,6 +15647,7 @@ const _mMixDefaults = { pad: 0.9, choir: 0.9, drone: 0.8, bass: 0.9, pluck: 0.8,
 // What should be playing now: the lobby's theme in the lobby and the menus, a map's own track in a match, otherwise nothing.
 function musicWanted() {
   if (inLobby || !gameStarted) return 'lobby';
+  if (/^\d+v\d+$/.test(currentModeId() || '')) return null;    // 1v1, 2v2, 3v3, 5v5, 10v10: no music while you play (it was distracting)
   return MUSIC_FOR_MAP[activeMapName] || null;
 }
 function _musicReverb(ctx) {
