@@ -46360,6 +46360,7 @@ function updateGrappleRide(dt) {
 }
 
 function updateMovement(dt, socialBlocked = false) {
+  if (window.PVP_LOBBY_CASE?.active) return;
   if (window.PVP_RAGDOLL?.controlling) return;
   if (SOCIAL_VIEW.mode && !socialBlocked) {
     const held = { ...keys };
@@ -49266,6 +49267,7 @@ function startCycleBurst(wStats) {
 }
 
 function tryShoot() {
+  if (window.PVP_LOBBY_CASE?.active) return;
   if (window.PVP_RAGDOLL?.controlling) return;
   if (window.PVP_UNDERWORLD?.paused) return;
   if (match && match.dice && match.dice.me && match.dice.me.rolling) return;   // 🎲 the dice are in your hand
@@ -69906,6 +69908,7 @@ function loop() {
   });
   viewCamera = window.PVP_RAGDOLL?.viewCamera() || viewCamera;
   if (SOCIAL_VIEW.mode) viewCamera = SOCIAL_VIEW.camera;
+  safeLoopStep('lobby-case', () => { if (window.PVP_LOBBY_CASE?.tick(dt)) viewCamera = camera; });
   safeLoopStep('stealth-laser', () => window.PVE_STEALTH?.update(weaponModels[currentWeaponIdx], viewCamera === camera && !SOCIAL_VIEW.mode && !THEATER.active));
   if (!THEATER.active) {
     const hidden = viewCamera !== camera ? camera.children.filter(o => o.visible && !(o instanceof THREE.Light)) : [];
@@ -72917,13 +72920,17 @@ async function buySkinCase(caseId = 'gen1_basic') {
 }
 async function buySkinCaseGen1() { return buySkinCase('gen1_basic'); }
 
+let skinCaseRequestPending = false;
 async function openSkinCase(caseId = 'gen1_basic') {
+  if (skinCaseRequestPending || window.PVP_LOBBY_CASE?.active) return false;
   if (!currentUser) { alert('Log in first.'); return false; }
   if (!inLobby) { alert('Open skin cases in Lobby 13. It is more dramatic there.'); return false; }
   const c = skinCaseDef(caseId);
   const defs = c.defs();
   const count = currentUser.isAdmin ? 99 : (currentUser.skinCasePacks?.[caseId] || 0);
   if (count <= 0) { alert(`No unopened ${c.name}s. Buy one for ${money(c.cost)}.`); return false; }
+  skinCaseRequestPending = true;
+  try {
   const r = currentUser.isAdmin
     ? (() => {
         const missing = defs.filter(s => !ownedSkinIds().has(s.id));
@@ -72939,10 +72946,16 @@ async function openSkinCase(caseId = 'gen1_basic') {
   showSkinCaseOpening(r.skinId, !!r.duplicate, caseId);
   updateUserInfoBar();
   return true;
+  } finally { skinCaseRequestPending = false; }
 }
 async function openSkinCaseGen1() { return openSkinCase('gen1_basic'); }
 
 function showSkinCaseOpening(skinId, duplicate, caseId = 'gen1_basic') {
+  if (window.PVP_LOBBY_CASE) {
+    if (inLobby) PVP_LOBBY_CASE.show(skinId, duplicate, caseId);
+    else pushFeedLine('Skin unlocked: ' + skinDefById(skinId).name, '', '#88ccff', false);
+    return;
+  }
   const c = skinCaseDef(caseId);
   const accent = c.accent || '#88ccff';
   const skin = skinDefById(skinId);

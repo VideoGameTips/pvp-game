@@ -47,6 +47,8 @@ fi
 # public upload.
 FILES=(index.html game.js chat.js i18n.js three.min.js socket.io.min.js wiki.html stats.html weapon-stats.json equipment-models.js shop-catalog.js underworld-data.js underworld.js underworld-adapter.js underworld.css backrooms-data.js backrooms.js backrooms.css ragdoll.js sound-data.js weapon-finish.js stealth-series.js stealth-showroom.js stealth-showroom.css loadout-hub.js player-record.js loadout-hub.css volcano-map.js vendor/cannon-es.js vendor/cannon-es.LICENSE)
 
+FILES+=(lobby-case.js)
+
 echo "==> staging"
 rm -rf "$STAGE" "$ZIP"
 mkdir -p "$STAGE"
