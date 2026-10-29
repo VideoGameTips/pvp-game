@@ -471,6 +471,7 @@ for (const id of Object.keys(WEAPON_COSTS)) {
 // (gotcha #4) -- pulled from the shop, and from chest/wheel reward pools
 // below, but still a valid purchase for anyone who already owns one.
 const ARCHIVED_ITEM_IDS = new Set([
+  'amr',
   'shockwave_launcher',
   'storm_cannon',
   'prism_launcher',

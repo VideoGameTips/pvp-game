@@ -398,7 +398,7 @@ const WEAPONS = [
     ability: { name: 'Target Link', cd: 13000, desc: '3 s · enhanced bullet tracking', type: 'buff', duration: 3000, spreadMult: 0.3, trackingBoost: true },
   },
   {
-    id: 'amr', activeReload: true, name: 'Anti-Material Rifle', type: 'Heavy Sniper', slot: 'primary',
+    id: 'amr', archived: true, activeReload: true, name: 'Anti-Material Rifle', type: 'Heavy Sniper', slot: 'primary',
     mag: 3, reserve: 12, damage: 180, fireRate: 1600, reloadTime: 3400,
     auto: false, pellets: 1, spread: 0, adsZoom: 14, bulletSpeed: 260, bulletSpeedMult: 10, noReload: false,
     bulletColor: 0xddaa44, bulletSize: 0.075,
@@ -67043,7 +67043,7 @@ const ZOMBIE_DROP_POOL = {
   C: ['pistol', 'machine_pistol', 'snub_revolver', 'shorty', 'sawed_off', 'mp40', 'm:bat', 'm:knife', 'm:sabre', 'u:frag', 'u:medkit', 'u:molotov'],
   B: ['revolver', 'mauser', 'duelist_pistol', 'auto_revolver', 'sg8', 'vector', 'burst', 'ak20', 'lever', 'm:katana', 'm:combat_axe', 'u:stim', 'u:land_mine'],
   A: ['hand_cannon', 'akimbo', 'p90', 'm1_garand', 'srx', 'rpd', 'grenade_launcher', 'm:chainsaw', 'm:sledge', 'u:mini_turret', 'u:smoke'],
-  S: ['minigun', 'chain_gun', 'rpg', 'amr', 'm:chain_hammer', 'u:satchel'],
+  S: ['minigun', 'chain_gun', 'rpg', 'railgun', 'm:chain_hammer', 'u:satchel'],
 };
 const ZOMBIE_DROP_TIER_WEIGHT = { C: 52, B: 31, A: 13, S: 4 };
 function zombieDropRoll(avoidId, gunsOnly) {
