@@ -6360,6 +6360,7 @@ function activateMap(name) {
   wallColliders.length = 0;
   if (MAP_COLLIDERS[name]) wallColliders.push(...MAP_COLLIDERS[name]);
   activeMapName = name;
+  if (trainingDummiesReady) spawnTrainingDummies();
   for (const dest of mapDestructibles) if (dest.mapName === name) {
     dest.hp = dest.maxHp;
     dest.mesh.visible = true;
@@ -58591,6 +58592,7 @@ const TRAINING_DUMMIES = [
   { id: 'dummy_100', label: '300 HP', hp: 300, maxHp: 300, infinite: false, x:  7, z: 5, color: 0xdd4422 },
   { id: 'dummy_inf', label: '∞ HP',   hp: 999, maxHp: 999, infinite: true,  x: -7, z: 5, color: 0x2255dd },
 ];
+var trainingDummiesReady = true;
 
 // Headshots were a flat x2 for every weapon in the game, and headshotMult sat
 // in the table doing nothing but carrying a comment admitting it was a stub.
@@ -58684,7 +58686,15 @@ function makeTrainingDummyMesh(dummy) {
 
 function spawnTrainingDummies() {
   TRAINING_DUMMIES.forEach(dummy => {
-    const mesh = makeTrainingDummyMesh(dummy);
+    const mesh = dummy._mesh || (dummy._mesh = makeTrainingDummyMesh(dummy));
+    if (activeMapName !== 'lobby13') {
+      mesh.visible = false;
+      mesh.removeFromParent();
+      if (remoteMeshes[dummy.id] === mesh) delete remoteMeshes[dummy.id];
+      if (players[dummy.id]?.isDummy) delete players[dummy.id];
+      return;
+    }
+    mesh.visible = true;
     mesh.position.set(dummy.x, 0, dummy.z);
     scene.add(mesh);
     remoteMeshes[dummy.id] = mesh;
@@ -58694,6 +58704,7 @@ function spawnTrainingDummies() {
 spawnTrainingDummies(); // safe here — TRAINING_DUMMIES const is already initialised above
 
 function handleDummyHit(dummy, mesh, opts, hitPos) {
+  if (activeMapName !== 'lobby13' || !mesh?.visible) return;
   const dmg = opts.damage ?? getClientWeaponDamage(opts.weaponId);
   hitFeedback(dummy.id, mesh, hitPos, dmg, !!opts.headshot, opts.falloff, opts.headMiss, opts.weaponId);
   if (dummy.infinite) {
