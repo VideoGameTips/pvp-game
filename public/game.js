@@ -5852,6 +5852,7 @@ function applyMapLighting(name) {
   mapSkyFill.groundColor.setHex(dark ? 0x39313a : bright ? 0xf2f2fb : 0x645a43);
   sun.color.setHex(concept || dark || bright ? 0xffffff : 0xffefd5);
   sun.intensity = concept ? 1.2 : dark ? .85 : 1.45;
+  if (MAP_GROUPS[name]?.userData.authoredVolcano) { mapAmbient.intensity=.45;mapSkyFill.intensity=.45;sun.intensity=1.15; }
   const b = MAP_BOUNDS[name], reach = concept ? 60 : Math.min(180, Math.max(b?.halfX || 60, b?.halfZ || 60) + 12);
   if (concept) sun.position.set(30, 50, 20);
   else sun.position.set(reach * .65, reach * 1.35, reach * .4);
@@ -13080,6 +13081,7 @@ function _atmoTex(kind) {
 // The ground mesh the layout built, made uneven and given its surface. Heights only ever go DOWN from the floor.
 function _atmoGround(name, prof) {
   const g = MAP_GROUPS[name]; if (!g || g._atmoGround || !prof.ground) return;
+  if (g.userData.authoredVolcano) return; // Its authored floor is molten, not generic rock terrain.
   const b = MAP_BOUNDS[name] || { halfX: 70, halfZ: 70 };
   let ground = null, gw = 0, gd = 0;
   for (const o of g.children) {
@@ -13547,7 +13549,7 @@ _ap('big_arena', { ground: 'dirt', amp: 0.1, mottle: [0.88, 0.92, 0.78], clutter
 _ap('tundra', { ground: 'snow', amp: 0.16, mottle: [0.9, 0.95, 1], clutter: { n: 260, parts: [['drift', [0xffffff, 0xe8f0f6], 0.5], ['rock', [0x8a929a, 0x7a828a], 0.3], ['tuft', 0xc8c2a8, 0.2]] }, relief: 22, shape: 'hill', fog: [50, 170], zen: 0xa0bedc, sun: _SUNLOW, cloud: _CL(10, 0xeef2f6), fx: ['snow'], haze: 0.45, gusty: 1, snd: { wind: 0.6, windF: 420, howl: 0.05, ev: [['creak', 14, 30, 0.35]] } });
 _ap('holiday', { ground: 'snow', amp: 0.1, mottle: [0.92, 0.95, 1], clutter: { n: 200, parts: [['drift', [0xffffff, 0xeef4fa], 0.6], ['rock', 0x9aa2aa, 0.2], ['scrap', [0xc4332e, 0x2f7a4a], 0.2]] }, relief: 8, shape: 'hill', fog: [60, 180], zen: 0x86a6d0, sun: _SUNLOW, cloud: _CL(8, 0xf0f4f8), fx: ['snowsoft'], gusty: 0.3, snd: { wind: 0.15, windF: 400, ev: [['bells', 10, 22, 0.4]] } });
 // fire
-_ap('volcano', { ground: 'rock', amp: 0.12, mottle: [0.82, 0.7, 0.64], clutter: { n: 220, parts: [['rock', [0x2a1f1c, 0x3a2a24, 0x4a3028], 0.7], ['rubble', 0x2a1f1c, 0.3]] }, fog: [40, 150], zen: 0x2a0c06, fx: ['ash', 'embers'], gusty: 0.5, snd: { rumble: 0.34, hiss: 0.05, ev: [['boom', 10, 24, 0.55], ['crackle', 2, 6, 0.4]] } });
+_ap('volcano', { ground: 'rock', amp: 0.08, mottle: [0.9, 0.95, 1], clutter: { n: 90, parts: [['rock', [0x30363d, 0x414953, 0x282e34], 0.7], ['rubble', 0x30363d, 0.3]] }, fog: [95, 230], zen: 0x39414d, fx: ['ash', 'embers'], gusty: 0.5, snd: { rumble: 0.34, hiss: 0.05, ev: [['boom', 10, 24, 0.55], ['crackle', 2, 6, 0.4]] } });
 _ap('doomsday', { ground: 'rock', amp: 0.12, mottle: [0.85, 0.75, 0.68], clutter: { n: 240, parts: [['rubble', [0x3a322a, 0x5a4a3a], 0.5], ['rock', 0x4a4036, 0.3], ['scrap', 0x2a2420, 0.2]] }, fog: [40, 150], zen: 0x2a1208, fx: ['ash', 'embers'], gusty: 0.8, snd: { rumble: 0.3, wind: 0.3, windF: 380, ev: [['boom', 5, 12, 0.6], ['siren', 35, 70, 0.3]] } });
 _ap('foundry', { ground: 'metal', amp: 0, clutter: { n: 120, parts: [['scrap', [0x3a3430, 0x5a4a40], 0.6], ['rubble', 0x4a3f38, 0.4]] }, fx: ['sparks', 'embers'], snd: { rumble: 0.25, hiss: 0.07, hissF: 4000, hum: [60, 0.05], ev: [['hammer', 4, 10, 0.5], ['crackle', 3, 8, 0.4]] } });
 // industry, ruin
@@ -16516,6 +16518,7 @@ function buildDoomsdayLayout() {
 // 🌋 Volcano: obsidian ridges and lava pools across a black plain, a caldera in the middle you climb in rings, rock
 // arches to cross, a shrine on the south rim.
 function buildVolcanoLayout() {
+  if (window.PVP_VOLCANO) return PVP_VOLCANO.build();
   const name = 'volcano', K = _bkBegin(name, 140, 140, 0x180f0d);
   K.perim(14, 0x120c0b);
   const obs = 0x111010, ash = 0x251c19, rim = 0x3a2118, ember = 0xff6a1a;
@@ -17607,6 +17610,7 @@ function initMapThemes() {
   for (const name of Object.keys(MAP_THEMES)) {
     if (!MAP_GROUPS[name]) continue;
     try { if (_BESPOKE[name]) _BESPOKE[name](); } catch (e) { console.warn('[bespoke]', name, e); }
+    if (MAP_GROUPS[name].userData.authoredVolcano) { MAP_THEMES[name].customDetail = true; continue; }
     if (MAP_THEMES[name].tower) {
       const b = MAP_BOUNDS[name], scale = (b.halfX + 1.5) / 50;
       MAP_SPAWNS[name] = {
@@ -19382,7 +19386,8 @@ GIM.vietnam = (X) => {
 // then throw a column of boiling water twelve metres up. Good for getting onto a ledge. Bad for standing on a vent.
 GIM_LABELS.geyser = 'was boiled by a geyser';
 GIM.volcano = (X) => {
-  const spots = X.spots(10, { r: 2.2, pairs: true, sep: 14, maxR: 85, edge: 10 });
+  if (X.G.userData.authoredVolcano) PVP_VOLCANO.animate(X);
+  const spots = X.G.userData.authoredVolcano ? X.G.userData.ventSpots : X.spots(10, { r: 2.2, pairs: true, sep: 14, maxR: 85, edge: 10 });
   if (!spots.length) return;
   X.dbg(spots);
   const vents = spots.map((s, i) => {
@@ -19399,7 +19404,7 @@ GIM.volcano = (X) => {
   X.on((dt, A, t) => {
     for (const v of vents) {
       v.t -= dt;
-      if (v.phase === 'idle' && v.t <= 0) { v.phase = 'warn'; v.t = 1.6; v.warn.visible = true; }
+      if (v.phase === 'idle' && v.t <= 0) { v.phase = 'warn'; v.t = X.G.userData.authoredVolcano ? 2.6 : 1.6; v.warn.visible = true; }
       else if (v.phase === 'warn') {
         v.warn.material.opacity = 0.4 + 0.5 * Math.abs(Math.sin(t * 14));
         v.steam.forEach((p, k) => { p.visible = true; const u = ((t * 1.3 + k * 0.27) % 1); p.position.set(Math.cos(k * 1.6) * 0.8, 0.6 + u * 3.2, Math.sin(k * 1.6) * 0.8); p.scale.setScalar(0.5 + u); p.material.opacity = 0.5 * (1 - u); });
@@ -20690,6 +20695,7 @@ LOOK.vietnam = (X) => {                                       // a firebase gone
 };
 
 LOOK.volcano = (X) => {                                       // scorched: black stumps, steam, boulders of cooled rock
+  if (X.G.userData.authoredVolcano) return;
   X.scatter(() => lkDeadTree(0x15100c), 12, { r: 0.8, sep: 12, solid: true });
   X.scatter(() => lkSteam(7), 6, { r: 1.2, sep: 26, maxR: 85 });
   X.scatter(() => lkBoulder(0x2a2420, 1.5 + X.rnd()), 10, { r: 2.0, sep: 14, solid: true });
@@ -21812,6 +21818,11 @@ function _upgradeMap(name) {
   if (!g || g._upgraded || !MAP_THEMES[name]) return;
   g._upgraded = true;
   const t0 = performance.now();
+  if (g.userData.authoredVolcano) {
+    try { _gimMap(name); } catch (e) { console.warn('[upgrade] volcano vents', e); }
+    g.userData.upgradeMs = Math.round(performance.now() - t0);
+    return;
+  }
   try { _depthMap(name); } catch (e) { console.warn('[upgrade] depth', name, e); }
   try { addCentralMapStructure(name); } catch (e) { console.warn('[upgrade] central structure', name, e); }
   try { addOpenLaneCover(name); } catch (e) { console.warn('[upgrade] lane cover', name, e); }
@@ -50766,7 +50777,8 @@ function updateMapGimmicks(dt) {
   const g = activeMapGimmicks;
   if (!g) return;
   const now = Date.now();
-  const inDamageZone = (z, x, zz) => {
+  const inDamageZone = (z, x, zz, feet = 0) => {
+    if (z.surfaceY != null && feet > z.surfaceY + .22) return false;
     if (z.safeRects?.some(r => _pointInRotRect(x, zz, r))) return false;
     if (z.w && z.d) {
       return _pointInRotRect(x, zz, z);
@@ -50780,7 +50792,7 @@ function updateMapGimmicks(dt) {
     // Player
     if (!isDead && match?.type !== 'range' && !isShielded()) {
       for (const z of g.damageZones) {
-        if (inDamageZone(z, camera.position.x, camera.position.z)) {
+        if (inDamageZone(z, camera.position.x, camera.position.z, playerFeetY())) {
           // Apply half a second's worth (since tick is 500ms)
           const dmg = (z.dps || 4) / 2;
           const me = players[myId];
@@ -50798,7 +50810,7 @@ function updateMapGimmicks(dt) {
     for (const bot of gameBots) {
       if (bot.dead) continue;
       for (const z of g.damageZones) {
-        if (inDamageZone(z, bot.x, bot.z)) {
+        if (inDamageZone(z, bot.x, bot.z, bot.y || 0)) {
           _mechHurtBot(bot, (z.dps || 4) / 2, z.type || 'lava');
           break;
         }
@@ -68009,6 +68021,11 @@ function _botNavGrid() {
       }
     }
   }
+  if (MAP_GROUPS[activeMapName]?.userData.authoredVolcano && window.PVP_VOLCANO) {
+    for (let j=0;j<H;j++) for (let i=0;i<W;i++) {
+      if (!PVP_VOLCANO.safeAt(x0+(i+.5)*cell,z0+(j+.5)*cell,.85)) blocked[j*W+i]=1;
+    }
+  }
   Object.assign(_botNav, { map: activeMapName, sig, cell, W, H, x0, z0, blocked, builtAt: now, goal: -1, dist: null });
   return _botNav;
 }
@@ -68035,6 +68052,8 @@ function _botNavFill(g, goal) {
 let BOT_NAV_ON = true;      // (a switch for tools/verify-boot.js, which compares routed bots with the old steering)
 function botNavPoint(bot, target) {
   if (!BOT_NAV_ON || (bot.y || 0) > 0.6 || !target) return null;
+  const volcanic = MAP_GROUPS[activeMapName]?.userData.authoredVolcano && window.PVP_VOLCANO;
+  const navClear = (ax,az,bx,bz,h) => hasLineOfSight(ax,az,bx,bz,h) && (!volcanic || PVP_VOLCANO.lineSafe(ax,az,bx,bz));
   const nowMs = performance.now();
   // Is the route working? A bot that has covered under 2 m in three seconds of following it is caught on something the
   // grid did not know about: for the next four seconds it goes cell by cell (no cutting corners, no long looks ahead).
@@ -68047,7 +68066,7 @@ function botNavPoint(bot, target) {
   if (bot._navWp && nowMs - bot._navWp.t < 140 && Math.hypot(bot._navWp.x - bot.x, bot._navWp.z - bot.z) > 0.9) return bot._navWp;
   // (at kerb height, not eye height: a bot is stopped by a 0.6 m crate that it can see over, so the route has to be
   // judged against what stops a body, which is the same 0.3 m the grid blocks at)
-  if (hasLineOfSight(bot.x, bot.z, target.x, target.z, 0.4)) { bot._navWp = null; return null; }
+  if (navClear(bot.x, bot.z, target.x, target.z, 0.4)) { bot._navWp = null; return null; }
   const g = _botNavGrid();
   if (!g) return null;
   const at = (x, z) => { const i = Math.floor((x - g.x0) / g.cell), j = Math.floor((z - g.z0) / g.cell); return (i < 0 || j < 0 || i >= g.W || j >= g.H) ? -1 : j * g.W + i; };
@@ -68072,7 +68091,7 @@ function botNavPoint(bot, target) {
         if (dist[m] < 0) continue;
         const ex = g.x0 + (x + 0.5) * g.cell, ez = g.z0 + (y + 0.5) * g.cell;
         const dd = Math.hypot(ex - bot.x, ez - bot.z);
-        if (dd < foundD && hasLineOfSight(bot.x, bot.z, ex, ez, 0.4)) { found = m; foundD = dd; }
+        if (dd < foundD && navClear(bot.x, bot.z, ex, ez, 0.4)) { found = m; foundD = dd; }
       }
     }
     if (found < 0) return null;
@@ -68100,8 +68119,8 @@ function botNavPoint(bot, target) {
     let clear = step === 0;
     if (!clear) {
       const ex = px - bot.x, ez = pz - bot.z, el = Math.hypot(ex, ez) || 1, nx = -ez / el * 0.45, nz = ex / el * 0.45;
-      clear = hasLineOfSight(bot.x, bot.z, px, pz, 0.4) && hasLineOfSight(bot.x + nx, bot.z + nz, px + nx, pz + nz, 0.4)
-        && hasLineOfSight(bot.x - nx, bot.z - nz, px - nx, pz - nz, 0.4);
+      clear = navClear(bot.x, bot.z, px, pz, 0.4) && navClear(bot.x + nx, bot.z + nz, px + nx, pz + nz, 0.4)
+        && navClear(bot.x - nx, bot.z - nz, px - nx, pz - nz, 0.4);
     }
     if (careful) { best = { x: px, z: pz, t: nowMs }; break; }       // one cell at a time
     if (clear) best = { x: px, z: pz, t: nowMs };
@@ -74401,7 +74420,7 @@ const MAP_DESCS = {
   warehouse:  'Warehouse — stacked crates, pipes, narrow lanes · the overhead CRANE drops crates on red rings',
   forest:     'Forest — dense pine routes, sheltered clearings, a timber bridge · WILDFIRE spreads through the pines',
   vietnam:    '🇻🇳 Vietnam — huge dense jungle, tight sightlines · hidden PUNJI PITS',
-  volcano:    '🔥 Volcano — lava fields, black obsidian routes · GEYSERS blow on a timer',
+  volcano:    'Volcano — basalt caldera, four rim ramps, protected spawns · lava 120 damage/s · telegraphed vents',
   cyber:      '⚡ Cyber Alley — neon city · NEON LAUNCHERS fire you across the map',
   desert:     'Desert — sandstone canyons, ruined arches, climbable ridges · QUICKSAND pits',
   tundra:     '❄️ Tundra — blue ice corridors, a research station · THIN ICE cracks under you',

@@ -112,6 +112,7 @@ try {
   console.log('BOOT FAILED in equipment-models.js\n   ' + e.name + ': ' + e.message);
 }
 try {
+  if (ok) vm.runInThisContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'volcano-map.js'), 'utf8'), { filename: 'public/volcano-map.js' });
   if (ok) vm.runInThisContext(src, { filename: 'public/game.js' });
 } catch (e) {
   ok = false;
