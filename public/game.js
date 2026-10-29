@@ -5848,6 +5848,7 @@ function applyMapLighting(name) {
   const bright = name === 'sky_arena';                       // heaven: soft light from everywhere, so the faces away from the sun stay white
   mapAmbient.intensity = concept ? .6 : bright ? .62 : dark ? .34 : .24;
   mapSkyFill.intensity = concept ? 0 : bright ? 1.05 : dark ? .22 : .58;
+  if (name === 'battleground') { mapAmbient.intensity = .56; mapSkyFill.intensity = .5; }   // lit like a pro arena: the grey and white has to read
   mapSkyFill.color.setHex(dark ? 0x8495b5 : bright ? 0xf4f8ff : 0xc5ddf2);
   mapSkyFill.groundColor.setHex(dark ? 0x39313a : bright ? 0xf2f2fb : 0x645a43);
   sun.color.setHex(concept || dark || bright ? 0xffffff : 0xffefd5);
@@ -14442,9 +14443,74 @@ _SCN.shipyard = (K) => {
   });
 };
 
+// The league's badge and the screens it sits on. A pro arena has an identity, not a word: PVP ARENA, the WORLD FINAL, a crest
+// (an eight-sided badge, two crossed swords, a star), and a scoreboard hung over the stage that is live: the kills of each team and the clock.
+function _bgCanvas(w, h, draw) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d'); draw(g, w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy?.() || 1);
+  if ('colorSpace' in t && THREE.SRGBColorSpace !== undefined) t.colorSpace = THREE.SRGBColorSpace;
+  else if (THREE.sRGBEncoding !== undefined) t.encoding = THREE.sRGBEncoding;
+  return { tex: t, canvas: c, g, w, h, draw };
+}
+function _bgPoly(g, cx, cy, r, n, rot = Math.PI / 8) { g.beginPath(); for (let i = 0; i < n; i++) { const a = rot + i / n * Math.PI * 2; g[i ? 'lineTo' : 'moveTo'](cx + Math.cos(a) * r, cy + Math.sin(a) * r); } g.closePath(); }
+function _bgCrest(g, cx, cy, R) {
+  g.save();
+  g.fillStyle = '#ff2a2a'; _bgPoly(g, cx, cy, R, 8); g.fill();                                           // the red rim
+  g.fillStyle = '#e8eaee'; _bgPoly(g, cx, cy, R * 0.93, 8); g.fill();                                    // a white keyline
+  const grad = g.createLinearGradient(cx, cy - R, cx, cy + R); grad.addColorStop(0, '#2a2d34'); grad.addColorStop(1, '#0b0c10');
+  g.fillStyle = grad; _bgPoly(g, cx, cy, R * 0.88, 8); g.fill();                                          // the dark field
+  g.strokeStyle = 'rgba(255,42,42,0.55)'; g.lineWidth = R * 0.025; _bgPoly(g, cx, cy, R * 0.78, 8); g.stroke();
+  for (const sg of [-1, 1]) {                                                                             // two crossed swords
+    g.save(); g.translate(cx, cy + R * 0.02); g.rotate(sg * 0.74);
+    g.fillStyle = '#f4f6fa'; g.beginPath(); g.moveTo(0, -R * 0.7); g.lineTo(R * 0.075, -R * 0.55); g.lineTo(R * 0.075, R * 0.34); g.lineTo(-R * 0.075, R * 0.34); g.lineTo(-R * 0.075, -R * 0.55); g.closePath(); g.fill();
+    g.fillStyle = '#b7bcc6'; g.fillRect(-R * 0.012, -R * 0.62, R * 0.024, R * 0.94);                      // the fuller down the blade
+    g.fillStyle = '#9aa0ab'; g.fillRect(-R * 0.23, R * 0.34, R * 0.46, R * 0.075);                         // the guard
+    g.fillStyle = '#8a8f99'; g.fillRect(-R * 0.04, R * 0.415, R * 0.08, R * 0.19);                         // the grip
+    g.fillStyle = '#e8eaee'; g.beginPath(); g.arc(0, R * 0.65, R * 0.065, 0, 6.3); g.fill();               // the pommel
+    g.restore();
+  }
+  g.fillStyle = '#ff2a2a'; g.beginPath(); g.arc(cx, cy, R * 0.3, 0, 6.3); g.fill();                       // the star on a red disc where they cross
+  g.strokeStyle = '#e8eaee'; g.lineWidth = R * 0.035; g.stroke();
+  g.fillStyle = '#ffffff'; g.beginPath();
+  for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? R * 0.115 : R * 0.25; g[i ? 'lineTo' : 'moveTo'](cx + Math.cos(a) * r, cy + Math.sin(a) * r); }
+  g.closePath(); g.fill();
+  g.restore();
+}
+const _BG_FONT = '"Arial Black", Impact, "Helvetica Neue", sans-serif';
+// the live scoreboard: PVP ARENA and the crest along the top, HOME and AWAY kills either side, the clock under the crest
+function _bgDrawBoard(g, w, h, st) {
+  const grad = g.createLinearGradient(0, 0, 0, h); grad.addColorStop(0, '#1b0c10'); grad.addColorStop(0.5, '#0d0e13'); grad.addColorStop(1, '#08090c');
+  g.fillStyle = grad; g.fillRect(0, 0, w, h);
+  g.fillStyle = 'rgba(255,42,42,0.16)';                                                                   // slashes of light behind the numbers
+  for (const [x, wd] of [[40, 70], [150, 26], [w - 110, 70], [w - 176, 26]]) { g.beginPath(); g.moveTo(x, h * 0.2); g.lineTo(x + wd, h * 0.2); g.lineTo(x + wd - 90, h * 0.84); g.lineTo(x - 90, h * 0.84); g.closePath(); g.fill(); }
+  g.fillStyle = '#e8eaee'; g.font = '900 38px ' + _BG_FONT; g.textAlign = 'left'; g.textBaseline = 'middle'; g.fillText('PVP ARENA', 28, 38);
+  g.textAlign = 'right'; g.fillStyle = '#ff2a2a'; g.fillText('WORLD FINAL', w - 28, 38);
+  g.fillStyle = '#ffffff'; g.fillRect(0, 74, w, 3);
+  _bgCrest(g, w / 2, 214, 74);
+  g.textAlign = 'center';
+  g.fillStyle = '#e8eaee'; g.font = '900 34px ' + _BG_FONT; g.fillText('HOME', w * 0.245, 128); g.fillStyle = '#ff5a5a'; g.fillText('AWAY', w * 0.755, 128);
+  g.fillStyle = '#ffffff'; g.font = '900 196px ' + _BG_FONT; g.fillText(String(st.home), w * 0.245, 258); g.fillText(String(st.away), w * 0.755, 258);
+  g.fillStyle = '#ffd24a'; g.font = 'bold 60px monospace'; g.fillText(st.clock, w / 2, 340);
+  g.fillStyle = st.live ? '#ff2a2a' : '#7a7f87'; g.fillRect(0, h - 74, w, 74);
+  g.fillStyle = '#ffffff'; g.font = '900 34px ' + _BG_FONT; g.fillText(st.ticker, w / 2, h - 36);
+}
+// the hero screen over each tunnel: the crest and the final
+function _bgDrawHero(g, w, h) {
+  const grad = g.createLinearGradient(0, 0, w, h); grad.addColorStop(0, '#220b0f'); grad.addColorStop(0.55, '#0c0d11'); grad.addColorStop(1, '#14161c');
+  g.fillStyle = grad; g.fillRect(0, 0, w, h);
+  g.fillStyle = 'rgba(255,42,42,0.22)';
+  for (let i = 0; i < 7; i++) { const x = w * 0.38 + i * 150; g.beginPath(); g.moveTo(x, 0); g.lineTo(x + 48, 0); g.lineTo(x - 130, h); g.lineTo(x - 178, h); g.closePath(); g.fill(); }
+  _bgCrest(g, h * 0.52, h * 0.5, h * 0.4);
+  g.textBaseline = 'middle'; g.textAlign = 'left';
+  g.fillStyle = '#ff2a2a'; g.font = '900 54px ' + _BG_FONT; g.fillText('PVP ARENA', h * 1.02, h * 0.2);
+  g.fillStyle = '#ffffff'; g.font = '900 168px ' + _BG_FONT; g.fillText('WORLD', h * 1.0, h * 0.47); g.fillText('FINAL', h * 1.0, h * 0.77);
+  g.fillStyle = '#ff2a2a'; g.fillRect(0, h - 22, w, 22); g.fillRect(0, 0, w, 10);
+}
 // ── 🏟️ BATTLEGROUND ───────────────────────────────────────────────────────────────────────────────────────────────
 function buildBattlegroundLayout() {
-  const name = 'battleground', K = _bkBegin(name, 140, 190, 0x3b3e44), G = MAP_GROUPS[name];
+  const name = 'battleground', K = _bkBegin(name, 140, 190, 0x5a5f68), G = MAP_GROUPS[name];
   const C = { floor: 0x3b3e44, wall: 0x4a4e55, dark: 0x2a2d32, grey: 0x7a7f87, white: 0xe8eaee, red: 0xff2a2a, redD: 0x8a1a1a };
   const detail = _thBuf(), glow = _thBuf();
   const deco = (x0, x1, y0, y1, z0, z1, c, lit = false) => _thBox(lit ? glow : detail, _TH_WORLD, (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2, x1 - x0, y1 - y0, z1 - z0, c);
@@ -14471,19 +14537,18 @@ function buildBattlegroundLayout() {
     deco(sx * 54 - 0.4, sx * 54 + 0.4, 5.2, 6.4, -65, 65, 0xdfe3ea);                                                                          // a white barrier along the first row
   }
   // the centre stage: a stair up each side, four pylons with red light, a ring of light overhead and the board hung over it
-  K.mound(-13, 13, -13, 13, 3.0, 0x2a2d32, ['n', 's', 'e', 'w'], 0.4, 1.0, 5);
+  K.mound(-13, 13, -13, 13, 3.0, 0xc4c9d1, ['n', 's', 'e', 'w'], 0.4, 1.0, 5);
   deco(-13.2, 13.2, 3.0, 3.1, -13.2, -12.8, C.red, true); deco(-13.2, 13.2, 3.0, 3.1, 12.8, 13.2, C.red, true); deco(-13.2, -12.8, 3.0, 3.1, -13, 13, C.red, true); deco(12.8, 13.2, 3.0, 3.1, -13, 13, C.red, true);
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) { K.box(sx * 11, 3.0, sz * 11, 2, 9, 2, 0x3a3e44); for (const y of [5, 8]) deco(sx * 11 - 1.05, sx * 11 + 1.05, y, y + 0.3, sz * 11 - 1.05, sz * 11 + 1.05, C.red, true); }
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) { K.box(sx * 11, 3.0, sz * 11, 2, 9, 2, 0xe2e5ea); for (const y of [5, 8]) deco(sx * 11 - 1.05, sx * 11 + 1.05, y, y + 0.3, sz * 11 - 1.05, sz * 11 + 1.05, C.red, true); }
   const ringLight = new THREE.Mesh(new THREE.TorusGeometry(10, 0.35, 8, 56), new THREE.MeshBasicMaterial({ color: C.red })); ringLight.rotation.x = Math.PI / 2; ringLight.position.y = 14; G.add(ringLight);
-  const board = surfTex('bg-board', 512, (ctx, s) => {
-    ctx.fillStyle = '#101216'; ctx.fillRect(0, 0, s, s);
-    ctx.fillStyle = '#ff2a2a'; ctx.fillRect(0, s * 0.30, s, 6); ctx.fillRect(0, s * 0.70, s, 6);
-    ctx.fillStyle = '#e8eaee'; ctx.font = 'bold ' + Math.floor(s * 0.12) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('BATTLEGROUND', s / 2, s * 0.5);
-    ctx.fillStyle = '#ff2a2a'; ctx.font = 'bold ' + Math.floor(s * 0.05) + 'px monospace'; ctx.fillText('LIVE', s / 2, s * 0.18); ctx.fillText('FINAL ROUND', s / 2, s * 0.85);
-  });
-  const bm = new THREE.MeshBasicMaterial({ map: board }), dm = new THREE.MeshBasicMaterial({ color: 0x15171b });
+  // the scoreboard hung over the stage: one live screen on all four faces (updated about once a second from the match), a bezel of red light round it
+  const boardLive = _bgCanvas(1024, 512, (g, w, h) => _bgDrawBoard(g, w, h, { home: 0, away: 0, clock: '--:--', live: false, ticker: 'WORLD FINAL  ·  GET READY' }));
+  const hero = _bgCanvas(1024, 512, _bgDrawHero);
+  const bm = new THREE.MeshBasicMaterial({ map: boardLive.tex }), dm = new THREE.MeshBasicMaterial({ color: 0x15171b });
   const cube = new THREE.Mesh(new THREE.BoxGeometry(12, 6, 12), [bm, bm, dm, dm, bm, bm]); cube.position.set(0, 19, 0); G.add(cube);
+  for (const y of [15.9, 22.1]) for (const [w, d] of [[12.3, 0.16], [0.16, 12.3]]) for (const sg of [-1, 1]) deco(-w / 2 + (w < 1 ? sg * 6.1 : 0), w / 2 + (w < 1 ? sg * 6.1 : 0), y - 0.08, y + 0.08, -d / 2 + (d < 1 ? sg * 6.1 : 0), d / 2 + (d < 1 ? sg * 6.1 : 0), C.red, true);
+  deco(-3.6, 3.6, 14.9, 15.9, -3.6, 3.6, 0x15171b);                                                       // the under-skirt with the cameras and speakers in it
+  const boardRef = { canvas: boardLive, last: '' };
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) deco(sx * 5.9 - 0.05, sx * 5.9 + 0.05, 20, 30, sz * 5.9 - 0.05, sz * 5.9 + 0.05, 0x20242a);
   // the roof's trusses, high up, with red spots (light for the eye; nothing here is solid)
   for (const z of [-60, -30, 0, 30, 60]) { deco(-68, 68, 17.6, 18.2, z - 0.3, z + 0.3, 0x2c3037); for (let x = -60; x <= 60; x += 12) deco(x - 0.6, x + 0.6, 17.0, 17.6, z - 0.6, z + 0.6, C.red, true); }
@@ -14491,14 +14556,14 @@ function buildBattlegroundLayout() {
   // a bunker in every quarter (a block with a stair up and a rail round its top), pillars to stand behind, low barriers to shoot over
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
     const x0 = sx * 34 - 7, x1 = sx * 34 + 7, z0 = sz * 42 - 5, z1 = sz * 42 + 5;
-    K.mound(x0, x1, z0, z1, 4.6, 0x353a41, [sz > 0 ? 'n' : 's'], 0.4, 1.0, 4);
+    K.mound(x0, x1, z0, z1, 4.6, 0x7a808a, [sz > 0 ? 'n' : 's'], 0.4, 1.0, 4);
     K.wx(x0, x1, z0 + 0.2, 0.3, 4.6, 1.1, C.white, sz > 0 ? [{ at: sx * 34, w: 4.4, sill: 0, top: 9 }] : undefined);
     K.wx(x0, x1, z1 - 0.2, 0.3, 4.6, 1.1, C.white, sz < 0 ? [{ at: sx * 34, w: 4.4, sill: 0, top: 9 }] : undefined);
     K.wz(z0, z1, x0 + 0.2, 0.3, 4.6, 1.1, C.white); K.wz(z0, z1, x1 - 0.2, 0.3, 4.6, 1.1, C.white);
     deco(x0, x1, 4.6, 4.75, z0 - 0.05, z0 + 0.1, C.red, true); deco(x0, x1, 4.6, 4.75, z1 - 0.1, z1 + 0.05, C.red, true);
     K.poi('bunker top', sx * 34, sz * 42, 4.6);
     for (const [px, pz] of [[26, 16], [44, 26], [12, 44]]) {
-      K.box(sx * px, 0, sz * pz, 3, 8, 3, 0x41454c);
+      K.box(sx * px, 0, sz * pz, 3, 8, 3, 0xaab0ba);
       for (const y of [2.2, 5.5]) deco(sx * px - 1.55, sx * px + 1.55, y, y + 0.3, sz * pz - 1.55, sz * pz + 1.55, C.red, true);
     }
     for (const [bx0, bz0, along] of [[10, 30, 'x'], [24, 52, 'z'], [5, 56, 'x']]) {
@@ -14509,16 +14574,26 @@ function buildBattlegroundLayout() {
   // the two team tunnels: a screen across each, a wall either side, a roof over the spawn and red light inside
   for (const sz of [-1, 1]) {
     K.box(0, 0, sz * 70, 28, 9, 2, 0x353a41);
+    for (const [face, team] of [[sz, true], [-sz, false]]) {                                           // a sign on each face of the screen: the team's name for the ones who start here, the crest for the field
+      const sign = _bgCanvas(1024, 250, (g, w, h) => {
+        g.fillStyle = '#0c0d11'; g.fillRect(0, 0, w, h); g.fillStyle = sz > 0 ? '#e8eaee' : '#ff2a2a'; g.fillRect(0, 0, 14, h); g.fillRect(w - 14, 0, 14, h);
+        _bgCrest(g, 150, h / 2, 100); g.textBaseline = 'middle'; g.textAlign = 'left';
+        g.fillStyle = '#ffffff'; g.font = '900 ' + (team ? 150 : 104) + 'px ' + _BG_FONT; g.fillText(team ? (sz > 0 ? 'HOME' : 'AWAY') : 'PVP ARENA', 290, h * 0.43);
+        g.fillStyle = sz > 0 ? '#9ab4ff' : '#ff5a5a'; g.font = '900 40px ' + _BG_FONT; g.fillText(team ? 'PVP ARENA  ·  WORLD FINAL' : 'THE WORLD FINAL  ·  LIVE', 292, h * 0.8);
+      });
+      const sg = new THREE.Mesh(new THREE.PlaneGeometry(18, 4.4), new THREE.MeshBasicMaterial({ map: sign.tex }));
+      sg.position.set(0, 3.7, sz * 70 + face * 1.06); sg.rotation.y = face > 0 ? 0 : Math.PI; sg.userData.mapGlow = true; G.add(sg);
+    }
     for (const f of [-1.03, 1.03]) { deco(-13, 13, 6.2, 6.6, sz * 70 + f - 0.04, sz * 70 + f + 0.04, C.red, true); deco(-13, 13, 1.0, 1.2, sz * 70 + f - 0.04, sz * 70 + f + 0.04, C.red, true); }
     for (const sx of [-1, 1]) K.wz(sz > 0 ? 72 : -94, sz > 0 ? 94 : -72, sx * 20, 0.8, 0, 7, C.wall);
     K.slab(-20, 20, sz > 0 ? 72 : -94, sz > 0 ? 94 : -72, 7.4, 0.4, 0x2a2d32);
-    const bs = new THREE.Mesh(new THREE.PlaneGeometry(30, 15), new THREE.MeshBasicMaterial({ map: board }));          // the big screen over the tunnel
+    const bs = new THREE.Mesh(new THREE.PlaneGeometry(30, 15), new THREE.MeshBasicMaterial({ map: hero.tex }));          // the big screen over the tunnel
     bs.position.set(0, 12.5, sz * 94.1); bs.rotation.y = sz > 0 ? Math.PI : 0; G.add(bs);
     deco(-20, 20, 7.5, 7.7, sz * 72 - 0.2, sz * 72 + 0.2, C.red, true);
     for (const x of [-10, 0, 10]) deco(x - 0.4, x + 0.4, 6.88, 6.98, sz * 83 - 6, sz * 83 + 6, C.red, true);
   }
   // ── more of an arena: a crowd, banners, painted floors, pyro, confetti, moving spots, sponsors (all for the eye; the only solid thing added is the trophy's pedestal)
-  _IRR.battle = { crowd: [], flames: [], beams: [], confetti: null, flags: [] };
+  _IRR.battle = { crowd: [], flames: [], beams: [], confetti: null, flags: [], board: boardRef };
   {
     const rc = _thRng(name + ':crowd'), mkTex = (key, w, h, draw) => surfTex(key, w, (ctx, s) => { draw(ctx, s); });
     // the crowd: a body and a head in every seat, in the colours of the two teams; a fifth of them are on their feet with their arms up and do the wave
@@ -14550,7 +14625,7 @@ function buildBattlegroundLayout() {
       ctx.save(); ctx.translate(s / 2, s / 2); ctx.scale(0.57, 1); ctx.fillStyle = fg; ctx.font = 'bold ' + Math.floor(s * 0.3) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(label, 0, -s * 0.06);
       ctx.font = 'bold ' + Math.floor(s * 0.11) + 'px monospace'; ctx.fillText(sub, 0, s * 0.27); ctx.restore();
     });
-    const BAN = [banner('HOME', '#e8eaee', '#c8202a', 'BATTLEGROUND'), banner('AWAY', '#8a1a1a', '#e8eaee', 'BATTLEGROUND'), banner('FINAL', '#15171b', '#ff2a2a', 'ROUND 7'), banner('LIVE', '#c8202a', '#ffffff', 'ON AIR')];
+    const BAN = [banner('HOME', '#e8eaee', '#c8202a', 'WORLD FINAL'), banner('AWAY', '#8a1a1a', '#e8eaee', 'WORLD FINAL'), banner('FINAL', '#15171b', '#ff2a2a', 'ROUND 7'), banner('LIVE', '#c8202a', '#ffffff', 'ON AIR')];
     for (const sx of [-1, 1]) for (let i = 0; i < 6; i++) {
       const z = -52 + i * 20.8, p = new THREE.Mesh(new THREE.PlaneGeometry(7, 4), new THREE.MeshBasicMaterial({ map: BAN[(i + (sx > 0 ? 1 : 0)) % 4], side: THREE.DoubleSide }));
       p.position.set(sx * 69.12, 13.8, z); p.rotation.y = -sx * Math.PI / 2; p.userData.mapGlow = true; G.add(p);
@@ -14566,11 +14641,11 @@ function buildBattlegroundLayout() {
       painted('bg-end-' + sz, 30, 12, 0, 0.035, sz * 66, (ctx, s) => { ctx.clearRect(0, 0, s, s); ctx.fillStyle = sz > 0 ? 'rgba(232,234,238,0.9)' : 'rgba(255,60,60,0.9)'; ctx.font = 'bold ' + Math.floor(s * 0.36) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.save(); ctx.translate(s / 2, s / 2); ctx.scale(0.4, 1); ctx.fillText(sz > 0 ? 'HOME' : 'AWAY', 0, 0); ctx.restore(); }, sz > 0 ? 0 : Math.PI);
       for (let k = 0; k < 4; k++) { const z = sz * (52 - k * 3.2); deco(-3.2, -2.6, 0.03, 0.06, z - 0.9, z + 0.9, C.red, true); deco(2.6, 3.2, 0.03, 0.06, z - 0.9, z + 0.9, C.red, true); deco(-2.6, 2.6, 0.03, 0.06, z - sz * 0.9 - 0.12, z - sz * 0.9 + 0.12, C.red, true); }
     }
-    painted('bg-logo', 24, 24, 0, 3.04, 0, (ctx, s) => {                                                   // the stage: a shield with a ring round it
-      ctx.clearRect(0, 0, s, s); ctx.strokeStyle = '#ff2a2a'; ctx.lineWidth = 10; ctx.beginPath(); ctx.arc(s / 2, s / 2, s * 0.46, 0, 6.3); ctx.stroke();
-      ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(s / 2, s / 2, s * 0.40, 0, 6.3); ctx.stroke();
-      ctx.fillStyle = '#15171b'; ctx.beginPath(); ctx.moveTo(s * 0.28, s * 0.24); ctx.lineTo(s * 0.72, s * 0.24); ctx.lineTo(s * 0.72, s * 0.52); ctx.quadraticCurveTo(s * 0.72, s * 0.74, s * 0.5, s * 0.8); ctx.quadraticCurveTo(s * 0.28, s * 0.74, s * 0.28, s * 0.52); ctx.closePath(); ctx.fill(); ctx.strokeStyle = '#e8eaee'; ctx.lineWidth = 6; ctx.stroke();
-      ctx.fillStyle = '#ff2a2a'; ctx.font = 'bold ' + Math.floor(s * 0.28) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('BG', s / 2, s * 0.5);
+    painted('bg-logo', 24, 24, 0, 3.04, 0, (ctx, s) => {                                                   // the stage: the league's crest inside two rings
+      ctx.clearRect(0, 0, s, s); ctx.strokeStyle = '#ff2a2a'; ctx.lineWidth = s * 0.02; ctx.beginPath(); ctx.arc(s / 2, s / 2, s * 0.485, 0, 6.3); ctx.stroke();
+      ctx.lineWidth = s * 0.008; ctx.strokeStyle = '#e8eaee'; ctx.beginPath(); ctx.arc(s / 2, s / 2, s * 0.455, 0, 6.3); ctx.stroke();
+      _bgCrest(ctx, s / 2, s / 2, s * 0.4);
+      ctx.fillStyle = '#e8eaee'; ctx.font = '900 ' + Math.floor(s * 0.05) + 'px ' + _BG_FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('PVP ARENA  ·  WORLD FINAL', s / 2, s * 0.935);
     });
     // the trophy on the stage: a pedestal to stand behind, and a cup of gold that shines
     K.box(0, 3.0, 0, 2.2, 1.2, 2.2, 0x1a1c20); deco(-1.15, 1.15, 4.2, 4.28, -1.15, 1.15, C.red, true);
@@ -14614,7 +14689,7 @@ function buildBattlegroundLayout() {
     for (const sz of [-1, 1]) { const z = sz * 78; deco(-0.25, 0.25, 0, 3.4, z - 0.25, z + 0.25, 0x2c3037); deco(-1.6, 1.6, 3.4, 3.6, z - 0.12, z + 0.12, 0x2c3037); deco(-0.5, 0.5, 3.0, 3.6, z - 0.4, z + 0.4, 0x15171b); deco(-0.2, 0.2, 3.1, 3.5, z - sz * 0.46, z - sz * 0.4, C.red, true); }
   }
   for (const [x, y, z, i, r] of [[0, 12, 0, 2.2, 40], [-30, 9, -40, 1.8, 34], [30, 9, -40, 1.8, 34], [-30, 9, 40, 1.8, 34], [30, 9, 40, 1.8, 34], [0, 5.5, 84, 1.6, 22], [0, 5.5, -84, 1.6, 22]]) {
-    const l = new THREE.PointLight(0xff2a2a, i, r, 1.5); l.position.set(x, y, z); G.add(l);
+    const l = new THREE.PointLight(x === 0 && y === 12 ? 0xfff0f0 : 0xff2a2a, i, r, 1.5); l.position.set(x, y, z); G.add(l);
   }
   _thMesh(G, detail, false); _thMesh(G, glow, true);
   K.spawn({ x0: -10, x1: 10, z0: 78, z1: 86 }, { x0: -10, x1: 10, z0: -86, z1: -78 });
@@ -14638,6 +14713,19 @@ _SCN.battleground = (K) => {
   K.anim((dt, t) => {
     lights.forEach((b, i) => { b.rotation.x = 0.28 * Math.sin(t * 0.5 + i * 1.6); b.material.opacity = 0.1 + 0.06 * Math.sin(t * 0.9 + i); });
     const B = _IRR.battle; if (!B) return;
+    const bd = B.board;                                                                                  // the scoreboard: redrawn when the score or the clock changes
+    if (bd) {
+      let st = { home: 0, away: 0, clock: '--:--', live: false, ticker: 'WORLD FINAL  ·  GET READY' };
+      try {
+        if (match && match.teamKills) {
+          const goal = match.cfg && match.cfg.killGoal;
+          st = { home: match.teamKills.ally, away: match.teamKills.enemy, clock: formatMatchTime(matchTimeUnlimited() ? Infinity : match.timeLeft), live: true,
+                 ticker: goal ? 'WORLD FINAL  ·  FIRST TO ' + goal + ' KILLS' : 'WORLD FINAL  ·  LIVE' };
+        }
+      } catch (e) {}
+      const key = [st.home, st.away, st.clock, st.live].join('|');
+      if (key !== bd.last) { bd.last = key; _bgDrawBoard(bd.canvas.g, bd.canvas.w, bd.canvas.h, st); bd.canvas.tex.needsUpdate = true; }
+    }
     for (const c of B.crowd) c.grp.position.y = 0.34 * Math.max(0, Math.sin(t * 2.6 - c.z * 0.085 + (c.sx > 0 ? 0 : 1.9)));           // the wave runs down both stands, the ones on their feet bob in turn
     for (const f of B.flames) { const k = 0.8 + 0.35 * Math.sin(t * 13 + f.ph) * Math.sin(t * 7.3 + f.ph * 2); f.g.scale.set(0.9 + 0.1 * Math.sin(t * 9 + f.ph), k, 0.9 + 0.1 * Math.cos(t * 8 + f.ph)); }
     for (const b of B.beams) { b.piv.rotation.x = 0.55 * Math.sin(t * b.sp + b.ph); b.piv.rotation.z = 0.55 * Math.cos(t * b.sp * 0.73 + b.ph * 1.3); }
