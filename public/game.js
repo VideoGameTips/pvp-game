@@ -15359,15 +15359,18 @@ const _MV = {
 
 // the tracks: bpm, bars in the loop, how loud each part is and how much of it goes to the reverb, and bar(b) = the notes in bar b
 const MUSIC_TRACKS = {
-  lobby: { bpm: 94, bars: 8, mix: { pad: 0.9, bass: 0.9, pluck: 0.8, bell: 0.7, drums: 0.8 }, send: { pad: 0.45, pluck: 0.3, bell: 0.7 }, bar(b) {
-    const R = 57, P = [0, 5, 2, 6], c = P[b % 4], ch = _mChord(R, 'minor', c, 0), root = _mNote(R, 'minor', c, -2), ev = [];
-    ev.push(_mE(0, 16, 'pad', ch, 0.8));
-    for (const [s, d, k] of [[0, 3, 0], [3, 3, 0], [6, 2, 12], [8, 3, 0], [11, 3, 0], [14, 2, 7]]) ev.push(_mE(s, d, 'bass', [root + k], 0.75));
-    [0, 2, 3, 5, 6, 8, 10, 11, 13, 14].forEach((s, k) => ev.push(_mE(s, 1.6, 'pluck', [ch[k % 3] + 12], 0.5)));
-    if (b % 8 >= 4) { const M = [[[0, 7, 3], [4, 6, 2], [8, 4, 4]], [[0, 5, 3], [4, 4, 2], [8, 2, 4]], [[0, 4, 3], [4, 2, 2], [8, 0, 4]], [[0, 1, 3], [4, 2, 2], [8, 4, 4]]][b % 4]; for (const [s, deg, d] of M) ev.push(_mE(s, d, 'bell', [_mNote(R, 'minor', deg, 1)], 0.6)); }
-    for (const s of [0, 8]) ev.push(_mE(s, 1, 'kick', null, 0.7)); if (b % 2) ev.push(_mE(10, 1, 'kick', null, 0.5));
-    if (b >= 2) for (const s of [4, 12]) ev.push(_mE(s, 1, 'clap', null, 0.45));
-    for (const s of [2, 6, 10, 14]) ev.push(_mE(s, 1, 'hat', null, 0.5)); if (b >= 4) for (let s = 1; s < 16; s += 2) ev.push(_mE(s, 1, 'hat', null, 0.22));
+  lobby: { bpm: 76, bars: 8, mix: { pad: 1.0, drone: 0.9, bass: 0.8, pluck: 0.6, bell: 0.7, drums: 0.6 }, send: { pad: 0.55, pluck: 0.4, bell: 0.85 }, bar(b) {          // the hub after dark: slow, low and minor all the way (the first version was a bright A minor pop loop: fast, claps, a bell tune up high)
+    const R = 45, P = [0, 3, 0, 6, 0, 3, 1, 0], c = P[b], ch = _mChord(R + 12, 'phrygian', c, 0), root = _mNote(R, 'phrygian', c, 0), ev = [];      // A phrygian: Am, Dm, Am, Gm, Am, Dm, B-flat (the half step over the root is the dark one), Am
+    ev.push(_mE(0, 16, 'drone', [R - 12, R], 0.6));
+    ev.push(_mE(0, 16, 'pad', ch, 0.7));
+    for (const [s, d, k] of [[0, 7, 0], [8, 6, b % 2 ? 7 : 0]]) ev.push(Object.assign(_mE(s, d, 'bass', [root + k], 0.7), { w: 'triangle', cut: 480 }));
+    if (b % 4 !== 3) for (const [s, k] of [[0, 0], [6, 2], [10, 1]]) ev.push(_mE(s, 3.5, 'pluck', [ch[k]], 0.38));       // a muted figure, three notes a bar and then silence
+    if (b % 2 === 0) { ev.push(_mE(2, 5, 'bell', [ch[0] + 12], 0.34)); ev.push(_mE(10, 6, 'bell', [ch[2] + 12], 0.3)); }
+    else if (b % 4 === 1) ev.push(_mE(6, 7, 'bell', [ch[1] + 12], 0.28));
+    ev.push(_mE(0, 1, 'kick', null, 0.55)); if (b % 2) ev.push(_mE(10, 1, 'kick', null, 0.38));
+    if (b % 4 === 0) ev.push(_mE(0, 1, 'tim', null, 0.35));
+    for (const s of [4, 12]) ev.push(_mE(s, 1, 'hiss', null, 0.35));
+    if (b === 7) ev.push(_mE(4, 12, 'riser', null, 0.3));                   // the loop leans back into the first chord
     return ev;
   } },
   heaven: { bpm: 66, bars: 8, mix: { choir: 1.9, drone: 1.4, pluck: 1.25, bell: 1.25, drums: 0.9 }, send: { choir: 0.85, pluck: 0.6, bell: 0.9 }, bar(b) {
