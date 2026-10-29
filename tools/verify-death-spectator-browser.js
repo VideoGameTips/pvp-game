@@ -24,15 +24,20 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
       const savedDeath=onEntityDied;onEntityDied=()=>{};
       spawnShieldUntil=0;isDead=false;countdownActive=false;meleeAbilityBuff=null;
       applyBotDamageToPlayer('ak20',null,30);
-      check(isDead&&spectatorState&&!KILLCAM.active,'Bot death did not go straight to spectator');
+      // 52a6c20 holds the death view (the ragdoll) for 3 s first, then loop() -> updateSpectatorCamera enters it (#82)
+      check(isDead&&!spectatorState&&!KILLCAM.active,'Bot death skipped the 3 s death view (or started a killcam)');
+      spectatorDeathAt=performance.now()-3100;updateSpectatorCamera(0.016);
+      check(isDead&&spectatorState&&!KILLCAM.active,'Bot death did not reach spectator after the death view');
       check(getComputedStyle(document.getElementById('waiting-screen')).display==='none','Waiting overlay remains');
       check(document.getElementById('death-screen').style.display==='none','Death panel covers spectator');
       check(getLiveAllies().some(p=>p.id==='spectate-human'),'Human teammates absent from spectator');
       const before=camera.position.clone();startKillcam('spectate-human','ak20');
       check(!KILLCAM.active&&camera.position.equals(before),'Archived replay still starts');
-      updateSpectatorCamera(.016);check(camera.position.y>4,'Spectator ignores elevated teammate');
+      // first person since 52a6c20 (the camera at the ally's eye, 2 + 1.65 here); it was a camera 2.5 m above and behind
+      // when this said > 4. What it guards is the same: a camera that ignored the height would sit at about 1.65 (#82)
+      updateSpectatorCamera(.016);check(camera.position.y>2+1.0,'Spectator ignores elevated teammate');
       window._spectatorSavedDeath=savedDeath;
-      return {immediateSpectator:true,humanAndBotTargets:getLiveAllies().length,killcamArchived:KILLCAM.archived};
+      return {spectatorAfterDeathView:true,humanAndBotTargets:getLiveAllies().length,killcamArchived:KILLCAM.archived};
     }));
     await page.locator('#change-loadout-btn').click();
     assert.equal(await page.locator('#loadout-screen').isVisible(),true);
@@ -60,6 +65,8 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
       isDead=false;players[myId].dead=false;_localDeathAt=-10000;
       const networkDeath=socket.listeners('playerDied').at(-1);
       networkDeath({targetId:myId,killerId:'spectate-enemy',weapon:'ak20'});
+      if(spectatorState||KILLCAM.active)throw Error('Network death skipped the 3 s death view (or started a killcam)');   // 52a6c20, #82
+      spectatorDeathAt=performance.now()-3100;updateSpectatorCamera(0.016);
       if(!spectatorState||KILLCAM.active)throw Error('Network death did not enter live spectator');
       onEntityDied=window._spectatorSavedDeath;
       const preview=new THREE.Scene();preview.background=new THREE.Color(0x53646b);preview.environment=scene.environment;
