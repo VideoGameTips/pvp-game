@@ -690,6 +690,7 @@
     '🎭 CHANDELIER!': '🎭 吊灯掉下来了！', 'CLEAR THE CENTER!': '快离开中间！',
     '🎯 MORTAR ARMED': '🎯 迫击炮就绪', '{a}/{b} shells · LMB to fire · F to exit': '{a}/{b} 发炮弹 · 左键发射 · F 离开',
     'LEFT MORTAR': '离开迫击炮', 'OUT OF SHELLS': '炮弹打完了',
+    'No spears left this life': '这条命的长矛用完了',
     '💣 C4 PLACED': '💣 C4 已放置', 'Press E to detonate': '按 E 引爆',
     '💣 CLAYMORE ARMED': '💣 阔剑地雷已布设', 'Front-facing trap': '朝前的陷阱',
     '🛰️ PREDATOR UAV': '🛰️ 捕食者无人机', '{n}s · enemies revealed': '{n} 秒 · 敌人全部现形',

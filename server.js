@@ -2660,6 +2660,7 @@ io.on('connection', (socket) => {
       p._coneBatch.indices.add(batch.index);
     }
     if(w==='omega_pistol'){p._omegaSpent=true;p._omegaPermit=now+1200;}
+    if (w === 'spear_throw' && data.spear === true) { const left = p._spearsLeft ?? 5; if (left <= 0) return; p._spearsLeft = left - 1; }   // five spears a life; the client keeps the same count (the Hatchet and Tomahawk throw the same projectile and are not counted)
     p.lastShot = now;
     let projectileId = `${socket.id}_${now}_${Math.random()}`;
     if ((w === 'rpg' || w === 'traffic_cone') && typeof data.projectileId === 'string'
@@ -2823,7 +2824,7 @@ io.on('connection', (socket) => {
       if (!coords.every(Number.isFinite) || Math.hypot(data.x-p.x,data.y-p.y,data.z-p.z) > 3) return;
       const len = Math.hypot(data.dx,data.dy,data.dz), id = String(data.id || '');
       const unlimited = !!(users[p.account]?.isAdmin && p._adminInfiniteAmmo);
-      if (len < .01 || id.length > 100 || !id.startsWith(`satchel_${socket.id}_`) || (!unlimited && p._satchelIds.size >= 5)) return;
+      if (len < .01 || id.length > 100 || !id.startsWith(`satchel_${socket.id}_`) || (!unlimited && p._satchelIds.size >= 2)) return;   // two out at a time (the client's `uses`)
       const now = Date.now();
       if (now - (p._satchelThrownAt || 0) < 800) return;
       p._satchelThrownAt = now; p._satchelIds.add(id);
@@ -2848,6 +2849,22 @@ io.on('connection', (socket) => {
       p._satchelIds.clear();
       emitToMatchExcept(p.matchId, socket.id, 'satchelEvent', { action:'detonate', ownerId:p.id });
     }
+  });
+
+  // 🔱 Throw Spear: a spear that lands stays, and everyone has to see it and bump into it. The thrower's client works out where it
+  // ended; this checks that it is a plausible spear of theirs and tells the rest. (It may land after its owner has died: still theirs.)
+  socket.on('spearPlant', data => {
+    const p = players[socket.id];
+    if (!p || !p.matchId || p.matchId === HUB_MATCH || !data) return;
+    const v = [data.x, data.y, data.z, data.dx, data.dy, data.dz, data.floorY];
+    if (!v.every(Number.isFinite) || v.slice(0, 3).some(n => Math.abs(n) > 10000)) return;
+    const len = Math.hypot(data.dx, data.dy, data.dz), id = String(data.id || '');
+    if (len < .01 || id.length > 100 || !id.startsWith(`spear_${socket.id}_`)) return;
+    const now = Date.now();
+    if (now - (p._spearPlantedAt || 0) < 150) return;
+    p._spearPlantedAt = now;
+    emitToMatchExcept(p.matchId, socket.id, 'spearPlant', { ownerId: p.id, id, x: data.x, y: data.y, z: data.z,
+      dx: data.dx / len, dy: data.dy / len, dz: data.dz / len, floorY: data.floorY });
   });
 
   socket.on('hit', (data) => {
@@ -3014,7 +3031,7 @@ io.on('connection', (socket) => {
     const z = data.z != null ? Number(data.z) : s.z;
     // The same spawn shield the client shows (grantSpawnShield caps it at 1.5 s), kept here so hits
     // during it cost no HP — the server used to take it anyway and kill players showing full health (#22).
-    Object.assign(p, { x, y: s.y, z, hp: maxHpFor(p), dead: false, _hellfireCores:3, shieldUntil: Date.now() + SPAWN_SHIELD_MS });
+    Object.assign(p, { x, y: s.y, z, hp: maxHpFor(p), dead: false, _hellfireCores:3, _spearsLeft:5, shieldUntil: Date.now() + SPAWN_SHIELD_MS });
     emitToMatch(p.matchId, 'playerRespawned', { ...p, clientSpawn: data.x != null && data.z != null });
   });
 
@@ -3025,7 +3042,7 @@ io.on('connection', (socket) => {
     const x = data.x != null ? Number(data.x) : p.x;
     const z = data.z != null ? Number(data.z) : p.z;
     // A reset (a new round) is a respawn too, and gets the same protection as readyRespawn.
-    Object.assign(p, { x, y: 1, z, hp: maxHpFor(p), dead: false, _hellfireCores:3, shieldUntil: Date.now() + SPAWN_SHIELD_MS });
+    Object.assign(p, { x, y: 1, z, hp: maxHpFor(p), dead: false, _hellfireCores:3, _spearsLeft:5, shieldUntil: Date.now() + SPAWN_SHIELD_MS });
     emitToMatch(p.matchId, 'playerRespawned', { ...p, forcedReset: true });
   });
 

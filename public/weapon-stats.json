@@ -2728,7 +2728,7 @@
    "name": "Anti-Material Rifle",
    "type": "Heavy Sniper",
    "slot": "primary",
-   "archived": false,
+   "archived": true,
    "damage": 180,
    "pellets": 1,
    "headshotMult": 2,
@@ -4124,26 +4124,26 @@
   },
   {
    "id": "frost_blaster",
-   "name": "Frost Blaster",
-   "type": "Secondary",
+   "name": "Freeze Ray",
+   "type": "Cryo Ray",
    "slot": "secondary",
    "archived": false,
-   "damage": 2,
+   "damage": 3,
    "pellets": 1,
    "headshotMult": 2,
-   "headDamage": 4,
-   "damagePerShot": 2,
+   "headDamage": 6,
+   "damagePerShot": 3,
    "fireRateMs": 100,
    "shotsPerSec": 10,
    "auto": true,
-   "dps": 20,
+   "dps": 30,
    "magazine": 50,
    "reserve": 0,
    "reloadSec": 99.999,
    "reloadStyle": "magazine",
    "noReload": true,
    "timeToEmptySec": 4.9,
-   "bulletSpeed": 120,
+   "bulletSpeed": 260,
    "adsZoom": 50,
    "falloff": {
     "nearM": 28,
@@ -4151,24 +4151,24 @@
     "minPct": 55
    },
    "damageByRange": [
+    3,
+    3,
+    3,
+    3,
+    3,
     2,
     2,
     2,
     2,
     2,
-    2,
-    1,
-    1,
-    1,
-    1,
-    1
+    2
    ],
    "shotsToKill": {
-    "body": 150,
-    "head": 75
+    "body": 100,
+    "head": 50
    },
-   "ttkBodySec": 14.9,
-   "scatterDeg": 0.573,
+   "ttkBodySec": 9.9,
+   "scatterDeg": 0,
    "bloom": null,
    "recoil": {
     "kickPerShotDeg": 0.238,
@@ -4186,7 +4186,7 @@
     "desc": "Frost AOE · -25 speed all targets in 5 m"
    },
    "traits": [
-    "Slows the target",
+    "Hitscan: hits the instant you fire, out to 26 m",
     "Ammo slowly regenerates"
    ]
   },
@@ -6208,8 +6208,8 @@
    },
    "screenKick": 0.624,
    "ability": {
-    "name": "Volley",
-    "desc": "Launch the whole magazine at the locked target"
+    "name": "Skystrike",
+    "desc": "E: vertical volley · climbs 12 studs, then seeks enemies automatically"
    },
    "traits": [
     "Lobbed: the shot arcs and drops"
@@ -6355,7 +6355,7 @@
    "speedMult": 1,
    "ability": {
     "name": "Ground Slam",
-    "desc": "Leap 5 m up · hang · slam down · AOE 4m · 80 dmg (more the higher you fall from)",
+    "desc": "Leap 10 m up · hang · slam down · AOE 4m · about 120 dmg from the top (80 from 5.7 m)",
     "cooldownSec": 1.5,
     "steps": null
    },
@@ -6374,7 +6374,7 @@
    "speedMult": 1,
    "ability": {
     "name": "Throw Spear",
-    "desc": "Hurl spear · 85 dmg · weapon gone until CD",
+    "desc": "Hurl a spear · 85 dmg · 5 a life · each one stays where it lands and blocks the way",
     "cooldownSec": 1.5,
     "steps": null
    },

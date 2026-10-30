@@ -1043,8 +1043,8 @@ const MELEE_ITEMS = [
         { name: '360° SPIN', kind: 'spin', ms: 460, lock: 400, hang: 280, aoe: { id: 'sledge_spin', radius: 3.8, damage: 40, knock: 4, launch: 6, color: 0xffaa55 } },
         { name: 'BACKFLIP SLAM', kind: 'slam', flip: true, dive: 32 },
       ] },
-    plainAbility: { name: 'Ground Slam', cd: 12000, desc: 'Leap 5 m up · hang · slam down · AOE 4m · 80 dmg (more the higher you fall from)', type: 'melee_slam', radius: 4, damage: 80, slamDamage: 80, leap: 16.5, leapForward: 4.5, dive: 30,
-      heightScale: { ref: 5.7, perM: 0.12, min: 0.5, max: 2 } } },
+    plainAbility: { name: 'Ground Slam', cd: 12000, desc: 'Leap 10 m up · hang · slam down · AOE 4m · about 120 dmg from the top (80 from 5.7 m)', type: 'melee_slam', radius: 4, damage: 80, slamDamage: 80, leap: 22.1, leapForward: 4.5, dive: 30,   // 22.1 m/s up at GRAVITY 24 peaks at 10 m (at 60 fps; it was 16.5 = 5.7 m)
+      heightScale: { ref: 5.7, perM: 0.12, min: 0.5, max: 2 } } },   // the height rule is as it was, so the higher leap is a harder slam: 80 x (1 + 0.12 x 4.3) = about 121
   { id: 'spear',      name: 'Spear',      type: 'Reach Melee', damage: 50, range: 3.0, cooldown: 760,
     ability: { name: 'Spear Combo', cd: 1500, desc: 'E thrust · E sweep · E skewer', type: 'melee_combo',
       comboCd: 1500, comboWindow: 1200, comboPartialCd: 700,
@@ -1053,7 +1053,7 @@ const MELEE_ITEMS = [
         { name: 'SWEEP', kind: 'spin', ms: 460, lock: 400, hang: 0, aoe: { id: 'spear_sweep', radius: 3.6, damage: 38, knock: 4, launch: 3, color: 0xdde6ee, power: 1.4 } },
         { name: 'SKEWER', kind: 'chop', anim: 'skewer', ms: 620, lock: 560, delay: 260, power: 1.9, kick: -0.12, kickMs: 400, whoosh: 1.3, impact: 'heavy', aoe: { id: 'spear_skewer', radius: 3.6, arc: 0.3, damage: 65, knock: 5, launch: 5, color: 0xffffff } },
       ] },
-    plainAbility: { name: 'Throw Spear',  cd: 15000, desc: 'Hurl spear · 85 dmg · weapon gone until CD', type: 'melee_throw' } },
+    plainAbility: { name: 'Throw Spear',  cd: 700, desc: 'Hurl a spear · 85 dmg · 5 a life · each one stays where it lands and blocks the way', type: 'melee_throw' } },
   { id: 'katana',     name: 'Katana',     type: 'Melee',       damage: 65, range: 2.8, cooldown: 480,
     ability: { name: 'Deflect',      cd: 4000, desc: '1s · reflect bullets · every hit blocked adds 0.1s', type: 'melee_deflect', duration: 1000, extendPerHit: 100, maxExtend: 2000 } },
   { id: 'baguette',   name: 'Baguette',   type: 'Melee',       damage: 28, range: 2.0, cooldown: 300,
@@ -1483,7 +1483,7 @@ const SUPPORT_ITEMS = [
   { id: 'predator_uav', name: 'Predator UAV', type: 'Admin · Recon', uses: 1, cooldown: 2000, uavDur: 10000, adminItem: true },
   { id: 'care_package', name: 'Care Package', type: 'Admin · Random Drop', uses: 1, cooldown: 1500, adminItem: true },
   { id: 'tac_nuke', name: 'Tactical Nuke', type: 'Admin · End the Match', uses: 1, damage: 500, cooldown: 3000, nukeRadius: 25, nukeDelay: 5000, adminItem: true },
-  { id: 'satchel', name: 'Satchel Charge', type: 'Remote Explosive', uses: 5, damage: 140, radius: 6, cooldown: 900, playerOnly: true,
+  { id: 'satchel', name: 'Satchel Charge', type: 'Remote Explosive', uses: 2, damage: 140, radius: 6, cooldown: 900, playerOnly: true,   // two out at a time (it was five; server.js holds the same cap)
     ability: { name: 'Detonate', type: 'satchel_detonate', cd: 0 } },
 ];
 const ARCHIVED_ITEM_IDS = new Set([...WEAPONS, ...MELEE_ITEMS, ...SUPPORT_ITEMS].filter(x => x.archived).map(x => x.id));
@@ -1830,7 +1830,14 @@ const CHAINSAW_FUEL_MAX = 120, CHAINSAW_SWING_FUEL = 1;
 let chainsawFuel = CHAINSAW_FUEL_MAX, _chainsawDryAt = 0, _fuelHud = { last: -1, shown: null };
 let meleeAbilityBuff = null; // { type, endTime?, usesLeft?, lastSpinHits? }
 let slamState = null;        // { vel } — for sledge ground slam animation
-let spearThrown = false;     // true while spear weapon is "in the air"
+// Throw Spear: five per life. Each one that lands stays (plantedSpears, below) and is solid. `spearThrown` is the spent state:
+// true once the fifth has gone, and the spear can't be swung, thrown or shown again until the next life.
+const SPEAR_THROWS = 5;
+let spearsLeft = SPEAR_THROWS;
+let spearThrown = false;
+let axeThrown = null;        // Hatchet / Tomahawk: { idx, key, cd } while the one you threw is "in the air" (back in hand when its cooldown ends)
+const plantedSpears = [];    // the ones that have landed: { id, ownerId, mesh, boxes } (up here because activateMap clears them while the page is still starting)
+function spearSpent(item) { return spearThrown && (item?.baseId || item?.id) === 'spear'; }
 let twinKnifeCharges = 10;   // Twin Knife: thrown knives left this life, see melee_multithrow
 let meleeSwingDur  = 400;     // ms for full swing arc
 let meleeDeflectDir = 1;      // resting guard side; impacts add a randomized pose
@@ -6359,6 +6366,7 @@ function activateMap(name) {
   if (scene.fog && scene.fog.color && MAP_GROUPS[name] && MAP_GROUPS[name]._skyColor != null) scene.fog.color.setHex(MAP_GROUPS[name]._skyColor);
   if (typeof atmoActivate === 'function') { try { atmoActivate(name); } catch (e) { console.warn('[atmo]', name, e); } }
   applyMapLighting(name);
+  clearPlantedSpears();                       // last map's spears; their boxes go with the colliders below
   wallColliders.length = 0;
   if (MAP_COLLIDERS[name]) wallColliders.push(...MAP_COLLIDERS[name]);
   activeMapName = name;
@@ -42008,7 +42016,88 @@ function _buildDonutShot(tint, r) {
   return g;
 }
 
+// 🔱 The thrown spear. One model for the flight and for where it lands: the tip is the origin and the shaft runs back along -Y,
+// so aligned to a direction (local +Y = the way it points) it flies point first, and it stands in a wall or the floor the same way.
+const SPEAR_LENGTH = 2.0;
+function _buildSpearShot() {
+  const P = _projCache('spear_throw', () => ({
+    head:  new THREE.ConeGeometry(0.045, 0.30, 4),                              headM: _lam(0xc8d0d6),
+    shaft: new THREE.CylinderGeometry(0.021, 0.021, SPEAR_LENGTH - 0.30, 6),    shaftM: _lam(0x7a4f28),
+    band:  new THREE.CylinderGeometry(0.027, 0.027, 0.07, 6),                   bandM: _lam(0x3a2a18),
+    butt:  new THREE.CylinderGeometry(0.030, 0.024, 0.06, 6),
+  }));
+  const g = new THREE.Group();
+  const head = new THREE.Mesh(P.head, P.headM); head.position.y = -0.15; g.add(head);
+  const shaft = new THREE.Mesh(P.shaft, P.shaftM); shaft.position.y = -0.30 - (SPEAR_LENGTH - 0.30) / 2; g.add(shaft);
+  const band = new THREE.Mesh(P.band, P.bandM); band.position.y = -0.34; g.add(band);       // the binding under the head
+  const butt = new THREE.Mesh(P.butt, P.headM); butt.position.y = -SPEAR_LENGTH; g.add(butt);
+  g._alignToDir = true;
+  return g;
+}
+
+// 🔱 Spears that have landed. A spear that lands STAYS, and it is solid: a row of short boxes down the shaft in wallColliders, so
+// players (and bots) walk into it instead of through it. Bullets stop on it too, as on any collider. Five per thrower at a time (a
+// sixth landing takes that thrower's oldest out). They go with the map (activateMap) and with the match (leaving it).
+const SPEAR_BOX_HALF = 0.12;                     // each box is a cube this far out from its centre; the player's own radius comes on top
+const SPEAR_BOX_STEP = 0.24;                      // = the cube's width, so the row has no gaps
+const SPEAR_BLOCK_FROM = 0.75;                    // nothing lower than this above the floor: that would be a kerb to step up on, not a thing in the way
+function removePlantedSpear(s) {
+  scene.remove(s.mesh);
+  for (const box of s.boxes) { const i = wallColliders.indexOf(box); if (i >= 0) wallColliders.splice(i, 1); }
+  const i = plantedSpears.indexOf(s); if (i >= 0) plantedSpears.splice(i, 1);
+}
+function clearPlantedSpears(ownerId = null) {
+  for (let i = plantedSpears.length - 1; i >= 0; i--) if (ownerId == null || plantedSpears[i].ownerId === ownerId) removePlantedSpear(plantedSpears[i]);
+}
+// `tip` is where the point ended up (already sunk into whatever took it), `dir` the way it points, `floorY` the floor under it.
+function plantSpear(id, ownerId, tip, dir, floorY = 0) {
+  if (plantedSpears.some(s => s.id === id)) return;
+  const d = dir.clone().normalize();
+  const mesh = _buildSpearShot();
+  mesh._alignToDir = false;
+  mesh.position.copy(tip);
+  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d);
+  scene.add(mesh);
+  const boxes = [], H = SPEAR_BOX_HALF;
+  for (let k = 0; ; k++) {
+    const back = 0.22 + SPEAR_BOX_STEP * (k + 0.5);              // the first 0.22 m is in the wall or the floor
+    if (back > SPEAR_LENGTH) break;
+    const c = tip.clone().addScaledVector(d, -back);
+    const box = new THREE.Box3(new THREE.Vector3(c.x - H, c.y - H, c.z - H), new THREE.Vector3(c.x + H, c.y + H, c.z + H));
+    if (box.max.y < floorY + SPEAR_BLOCK_FROM) continue;
+    boxes.push(box); wallColliders.push(box);
+  }
+  plantedSpears.push({ id, ownerId, mesh, boxes });
+  const mine = plantedSpears.filter(p => p.ownerId === ownerId);
+  if (mine.length > SPEAR_THROWS) removePlantedSpear(mine[0]);
+  if (plantedSpears.length > 60) removePlantedSpear(plantedSpears[0]);
+  playSoundEvent('melee_heavy', { position: tip, volume: 0.8, pitch: 0.55, minGap: 0 });
+}
+// Where your own thrown spear ended. `hit` is the point it struck and `normal` the face (up for the floor), or null when it went into
+// somebody: it drops and stands at their feet. A wall takes it as it flew (point in, shaft out). The floor takes it leaning back
+// toward you, never flatter than 60 degrees: a spear lying down is stepped over, one standing in the ground is in the way.
+function landThrownSpear(b, hit, normal) {
+  const dir = b.dir.clone().normalize();
+  const tip = hit.clone();
+  let floorY = 0;
+  if (!normal || normal.y > 0.5) {
+    const flat = Math.hypot(dir.x, dir.z), down = Math.max(-dir.y, 0.866), run = Math.sqrt(Math.max(0, 1 - down * down));
+    if (flat > 1e-4) dir.set(dir.x / flat * run, -down, dir.z / flat * run); else dir.set(0, -1, 0);
+    floorY = tip.y;
+  }
+  tip.addScaledVector(dir, 0.22);
+  plantSpear(b.id, myId, tip, dir, floorY);
+  socket.emit('spearPlant', { id: b.id, x: tip.x, y: tip.y, z: tip.z, dx: dir.x, dy: dir.y, dz: dir.z, floorY });
+}
+socket.on('spearPlant', d => {
+  if (!gameStarted || !d || d.ownerId === myId) return;
+  const v = [d.x, d.y, d.z, d.dx, d.dy, d.dz, d.floorY];
+  if (!v.every(Number.isFinite) || typeof d.id !== 'string') return;
+  plantSpear(d.id, d.ownerId, new THREE.Vector3(d.x, d.y, d.z), new THREE.Vector3(d.dx, d.dy, d.dz), d.floorY);
+});
+
 function makeBulletMesh(color, size, weaponId, own) {
+  if (weaponId === 'spear_throw') return _buildSpearShot();
   const r = size || 0.04;
   const weapon = (typeof WEAPONS !== 'undefined') ? WEAPONS.find(w => w.id === weaponId) : null;
   // A model skin can say what its rounds look like. Only for bullets YOU fire:
@@ -45101,7 +45190,7 @@ function resetCombatResources() {
   chainGunSpin = 0; chainGunLastShotAt = 0;
   playerRootedUntil = 0;
   crossbowCharging = false; crossbowChargeStart = 0;
-  spearThrown = false; revealActive = false; revealEndTime = 0;
+  spearThrown = false; spearsLeft = SPEAR_THROWS; axeThrown = null; revealActive = false; revealEndTime = 0;
   twinKnifeCharges = 10;
   riotShieldHp = RIOT_SHIELD_MAX_HP;
   javelinLockTargetId = null; javelinLockStartedAt = 0; javelinLocked = false;
@@ -45364,7 +45453,7 @@ function equipActiveSlot() {
     reserve = weaponAmmo[selectedSecondaryIdx].reserve;
   } else if (activeSlot === 'melee') {
     if (selectedMeleeIdx !== null && selectedMeleeIdx >= 0) {
-      meleeModels[selectedMeleeIdx].visible = true;
+      meleeModels[selectedMeleeIdx].visible = !spearSpent(MELEE_ITEMS[selectedMeleeIdx]);   // a thrown-out spear is not in your hands
       ensureHeldWrap(meleeModels[selectedMeleeIdx]);
       startMeleeEquipAnim(selectedMeleeIdx, _eqMs);
     }
@@ -48205,6 +48294,7 @@ function activateMeleeAbility() {
   if (countdownActive) return;
   const ab = item.ability;
   const now = Date.now();
+  if (spearSpent(item)) { flashAbilityName('NO SPEARS LEFT'); return; }
   if (ab.combo) { activateMeleeCombo(item, ab, now); return; }   // a chain of presses, not one move
   if (now - (abilityCDs[item.id] || 0) < abilityCooldownFor(item, ab)) return; // on cooldown
   abilityCDs[item.id] = now;
@@ -48272,21 +48362,38 @@ function activateMeleeAbility() {
     flashAbilityName(ab.name);
   }
   else if (ab.type === 'melee_throw') {
-    if (spearThrown) return; // can't throw twice
+    // The Spear is five throws a life, and each one stays where it lands. The Hatchet and the Tomahawk keep what they had: one
+    // throw, then gone until the cooldown ends.
+    const isSpear = (item.baseId || item.id) === 'spear';
+    if (isSpear ? spearsLeft <= 0 : !!axeThrown) {
+      if (isSpear) { abilityCDs[item.id] = 0; flashAbilityName('NO SPEARS LEFT'); }
+      return;
+    }
     const origin = new THREE.Vector3();
     camera.getWorldPosition(origin);
     origin.add(new THREE.Vector3(0.10, -0.10, -0.35).applyQuaternion(camera.quaternion));
     const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
     const sid = `spear_${myId}_${now}`;
-    socket.emit('shoot', { x: origin.x, y: origin.y, z: origin.z, dx: dir.x, dy: dir.y, dz: dir.z, weapon: 'spear_throw' });
-    spawnLocalBullet(origin, dir, sid, true, 110, 0xccaa66, 0.09, 'spear_throw');
-    spearThrown = true;
-    // The throw: the arm draws back and drives forward, the spear stays in hand through the release, then goes (it is
-    // "in flight" until the cooldown puts it back). It used to vanish the instant the key was pressed.
+    socket.emit('shoot', { x: origin.x, y: origin.y, z: origin.z, dx: dir.x, dy: dir.y, dz: dir.z, weapon: 'spear_throw', spear: isSpear });
+    spawnLocalBullet(origin, dir, sid, true, 110, 0xccaa66, 0.09, 'spear_throw', isSpear ? { plantsSpear: true } : {});
+    // The throw: the arm draws back and drives forward, the weapon stays in hand through the release, then goes.
     startUseAnim('melee', item, 'throw');
-    const thrownModel = meleeModels[selectedMeleeIdx];
-    setTimeout(() => { if (spearThrown && thrownModel) thrownModel.visible = false; }, 240);
-    flashAbilityName(ab.name);
+    const thrownModel = meleeModels[selectedMeleeIdx], ep = matchEpoch;
+    setTimeout(() => { if (thrownModel && ep === matchEpoch) thrownModel.visible = false; }, 240);
+    if (!isSpear) {
+      axeThrown = { idx: selectedMeleeIdx, key: item.id, cd: ab.cd };
+      flashAbilityName(ab.name);
+    } else {
+      // With spears left, the next one is in hand a beat later; after the fifth the spear is gone, and you are handed your gun.
+      spearsLeft--;
+      if (spearsLeft <= 0) spearThrown = true;
+      if (spearsLeft > 0) setTimeout(() => { if (thrownModel && ep === matchEpoch && !spearThrown && activeSlot === 'melee' && meleeModels[selectedMeleeIdx] === thrownModel) thrownModel.visible = true; }, 560);
+      else setTimeout(() => {
+        if (ep !== matchEpoch || isDead || activeSlot !== 'melee' || meleeModels[selectedMeleeIdx] !== thrownModel) return;
+        activeSlot = 'primary'; equipActiveSlot();
+      }, 520);
+      flashAbilityName(spearsLeft > 0 ? `${ab.name} · ${spearsLeft} left` : `${ab.name} · that was the last`);
+    }
   }
   else if (ab.type === 'melee_multithrow') {
     if (twinKnifeCharges <= 0) { flashAbilityName('OUT OF KNIVES'); return; }
@@ -49426,6 +49533,10 @@ function _updateAbilityHUD() {
     nameEl.textContent = ab.name;
     if (descEl) descEl.textContent = ab.desc || '';
     if (keyEl) { keyEl.textContent = '[E]'; keyEl.style.opacity = '1'; }
+    if (ab.type === 'melee_throw' && (item.baseId || item.id) === 'spear') {   // Throw Spear: the spears you have left
+      nameEl.textContent = `${ab.name} · ${spearsLeft}/${SPEAR_THROWS}`;
+      if (!spearsLeft) { if (descEl) descEl.textContent = 'No spears left this life'; fillEl.style.width = '100%'; fillEl.style.background = '#555'; if (keyEl) keyEl.style.opacity = '0.4'; return; }
+    }
     if (ab.combo) {                                        // a combo: the pips of the chain, and the window left to press E again
       const C = meleeCombo && meleeCombo.itemId === item.id ? meleeCombo : null, nowH = Date.now();
       nameEl.textContent = `${ab.name}  ${ab.combo.map((s, i) => (C && i <= C.step) ? '●' : '○').join(' ')}`;
@@ -49884,6 +49995,7 @@ function tryMelee() {
   if (countdownActive) return;
   const item = equippedMeleeItem();
   if (!item) return;
+  if (spearSpent(item)) return;                 // all five thrown: there is no spear to swing
   const now = Date.now();
   // An auto-swing buff (Slash Combo, Butcher...) used to swing every 15 ms -- one frame -- which restarted the swing
   // animation before it moved. Each ability names its own cadence (autoMs); the chainsaw keeps its chainsaw rate.
@@ -59204,6 +59316,7 @@ function updateBullets(dt) {
         spawnHitParticle(wallHitPt);
         if (!EXPLOSIVE_KINDS.has(projectileKind(b.weaponId, WEAPONS.find(w => w.id === b.weaponId))))
           spawnImpactMark(wallHitPt, wallHitNormal, b.weaponId);
+        if (b.plantsSpear) landThrownSpear(b, wallHitPt, wallHitNormal);                      // it stays where it struck
         // ── Batch-5 special destructibles (orbital window, fuse box, chandelier) ──
         const S = _batch5[activeMapName];
         if (S) {
@@ -59318,6 +59431,7 @@ function updateBullets(dt) {
         if (EXPLOSIVE_KINDS.has(projectileKind(b.weaponId, WEAPONS.find(w => w.id === b.weaponId)))) {
           rocketExplode(_bpos.clone(), b.weaponId, bestHit.pid, { damagePlayer: false });
         }
+        if (b.plantsSpear) landThrownSpear(b, bestHit.mesh.position, null);                   // it drops and stands at their feet
         removeBullet();
         spawnHitParticle(_bpos);
         continue;
@@ -70329,14 +70443,10 @@ function loop() {
     }
   }
 
-  // Spear: re-show spear model when CD has expired
-  if (spearThrown && selectedMeleeIdx === 4) { // 4 = spear index
-    const spearItem = MELEE_ITEMS[4];
-    const elapsed = Date.now() - (abilityCDs[spearItem.id] || 0);
-    if (elapsed >= (spearItem.plainAbility || spearItem.ability).cd) {   // the throw's own cooldown, not the combo's
-      spearThrown = false;
-      if (activeSlot === 'melee' && meleeModels[4]) meleeModels[4].visible = true;
-    }
+  // Hatchet / Tomahawk: back in hand when the throw's cooldown has ended
+  if (axeThrown && Date.now() - (abilityCDs[axeThrown.key] || 0) >= axeThrown.cd) {
+    const back = axeThrown; axeThrown = null;
+    if (activeSlot === 'melee' && selectedMeleeIdx === back.idx && meleeModels[back.idx]) meleeModels[back.idx].visible = true;
   }
 
   updateMatchTimer(dt);
@@ -72487,6 +72597,7 @@ function teardownMatchWorld() {
   serverUnlimitedMatchTime = false;
   finishBatCrowdClear();
   clearSatchels();
+  clearPlantedSpears();
   finishChainMaulSwing();
   resetPlayerView();
   stopSocialView();

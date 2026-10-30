@@ -3936,7 +3936,8 @@ if (ok && process.argv.includes('--combo')) {
           if (meleeCombo || !meleeSlam) issues.push('default mode: sledge E should start the ground slam');
           let g = 0; while (meleeSlam && g++ < 900) { clock += 16; updateMeleeSlam(0.016); updateMovement(1 / 60); }
           const plainHit = hits.find(h => h.wid === 'sledge');
-          if (!plainHit || plainHit.dmg < 74 || plainHit.dmg > 86) issues.push('default mode: a ground slam from its own leap should do about 80, did ' + (plainHit && plainHit.dmg));
+          // the leap is 10 m and the height rule is 80 from 5.7 m, +12% a metre above: 80 x (1 + 0.12 x 4.3) = about 121 from the top of its own leap
+          if (!plainHit || plainHit.dmg < 112 || plainHit.dmg > 130) issues.push('default mode: a ground slam from its own 10 m leap should do about 120, did ' + (plainHit && plainHit.dmg));
           if (isDead) issues.push('the slam test killed the player (out of bounds?)');
           // the sledge slams straight down from the air, in both modes (no hop, no climb), and it is the finishing blow
           for (const mode of [true, false]) {
