@@ -31769,7 +31769,7 @@ function buildAkimboGun() {
 // barrels meet far ahead. Everything about the pair lives on `_akimbo`: the shot alternates between the hands
 // (akimboFire), each gun kicks and runs its own slide (updateAkimboHands), and the hands are fitted to the grips
 // (attachAkimboHands, called from attachViewHands).
-function buildAkimbo() {
+function _akimboPair(gunFn) {
   const root = new THREE.Group();
   const A = { holders: [], guns: [], flashes: [], hand: 1, kick: [0, 0], handLocal: [], handRot: [], rest: [] };
   [1, -1].forEach((side, i) => {
@@ -31777,7 +31777,7 @@ function buildAkimbo() {
     holder.position.set(side * 0.062, 0, 0);
     holder.rotation.y = side * 0.05;
     if (side < 0) holder.scale.x = -1;
-    const gun = buildAkimboGun();
+    const gun = gunFn();
     holder.add(gun); root.add(holder);
     A.holders.push(holder); A.guns.push(gun); A.flashes.push(gun._flash);
     A.rest.push(holder.position.clone());
@@ -31791,6 +31791,189 @@ function buildAkimbo() {
   root.position.set(0, -0.1, -0.24);
   return root;
 }
+function buildAkimbo() { return _akimboPair(buildAkimboGun); }
+
+// ── 🔫🔫 Akimbo skins ─────────────────────────────────────────────────────────
+// Each is ONE pistol of the pair (the left hand is the right one mirrored, so a side detail shows on the outside of both) and
+// lives in the stock pistol's frame, so the hands, the toe-in and the reload roll all fit it: the grip is at z .03-.056 with the
+// trigger hand a little behind it, the muzzle at z -.15, a long magazine under the grip. The contract with updateAkimboHands is
+// the stock one: `_slide` is the part that runs back on every shot, `_flash` the muzzle flash, `_kickZ` the kick.
+const _AKIMBO_GRIP = [[0.030,-0.014],[0.052,-0.036],[0.056,-0.104],[0.030,-0.112],[0.014,-0.052],[0.012,-0.018]];   // the stock grip's profile
+function _akimboFinish(g, slide, flashZ, flashY = 0.020) {
+  const flash = makeMuzzleFlash(); flash.position.set(0, flashY, flashZ); g.add(flash);
+  g._flash = flash; g._slide = slide; g._kickZ = 0.016; g._greebled = true; g._handDetailed = true;
+  return g;
+}
+function _akimboGuard(g, mat, trigger, y = -0.026) {
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.003, 6, 12, Math.PI * 1.05), mat);
+  guard.rotation.set(0, Math.PI / 2, -0.35); guard.position.set(0, y, 0.000); g.add(guard);
+  gpBox(g, trigger, 0.004, 0.013, 0.004, 0, y + 0.006, 0.000, 0.2);
+}
+
+// 1911 pair: a blued slide with serrations at both ends, a long narrow ejection port, a bushing at the muzzle, a beavertail and a
+// spurless hammer, walnut grips with a diamond cut, and a single-stack magazine with a bright floorplate.
+function buildAkimbo1911() {
+  const g = new THREE.Group();
+  const M = _milMats(), blued = gpFinish(0x15181c, .36, .88, 'steel'), frame = gpFinish(0x6f757b, .30, .86, 'steel');
+  const slide = new THREE.Group(); g.add(slide);
+  gpBox(slide, blued, 0.024, 0.028, 0.160, 0, 0.021, -0.041);                       // slide
+  gpBox(slide, blued, 0.016, 0.004, 0.150, 0, 0.0375, -0.041);                      // the flat top rib
+  for (let i = 0; i < 6; i++) gpBox(slide, M.dark, 0.0255, 0.019, 0.0026, 0, 0.022, 0.030 - i * 0.0062);          // rear serrations
+  for (let i = 0; i < 3; i++) gpBox(slide, M.dark, 0.0255, 0.019, 0.0026, 0, 0.022, -0.082 - i * 0.0062);         // front serrations
+  gpBox(slide, M.dark, 0.003, 0.011, 0.038, 0.0123, 0.028, -0.030);                 // the ejection port
+  gpBox(slide, M.bright, 0.003, 0.004, 0.005, 0.0123, 0.026, -0.018);               // the extractor
+  gpBox(slide, M.bright, 0.012, 0.006, 0.008, 0, 0.042, 0.034);                     // rear sight
+  gpBox(slide, M.dark, 0.0042, 0.005, 0.0026, 0, 0.0422, 0.034);                    // its notch
+  gpBox(slide, M.bright, 0.0036, 0.007, 0.005, 0, 0.0425, -0.112);                  // front blade
+  gpBox(slide, M.bright, 0.0025, 0.0022, 0.012, 0.0122, 0.012, -0.100);             // a stamp: "COLT" in spirit
+  gpCyl(g, M.bright, 0.0076, 0.0076, 0.014, 16, 0, 0.0195, -0.118);                 // barrel bushing
+  gpCyl(g, blued, 0.0058, 0.0058, 0.012, 14, 0, 0.0195, -0.128);                    // barrel crown
+  gpCyl(g, M.dark, 0.0038, 0.0038, 0.008, 12, 0, 0.0195, -0.134);                   // bore
+  gpCyl(g, M.bright, 0.0036, 0.0036, 0.020, 10, 0, 0.0035, -0.112);                 // recoil spring plug under the slide
+  gpBox(g, frame, 0.022, 0.020, 0.106, 0, -0.003, -0.022);                          // frame
+  gpBox(g, frame, 0.021, 0.011, 0.046, 0, -0.0145, -0.080);                         // dust cover
+  gpBox(g, M.dark, 0.0225, 0.0022, 0.060, 0, -0.0052, -0.030);                      // the line where slide meets frame
+  gpBox(g, M.bright, 0.005, 0.0075, 0.016, 0, 0.0335, 0.046);                       // spurless hammer
+  gpBox(g, M.bright, 0.020, 0.016, 0.020, 0, 0.026, 0.046, -0.34);                  // grip safety / beavertail
+  gpBox(g, M.bright, 0.004, 0.0065, 0.022, 0.0135, 0.012, 0.016);                   // thumb safety
+  gpBox(g, M.bright, 0.004, 0.008, 0.009, 0.0128, 0.011, -0.014);                   // slide stop
+  gpPlate(g, frame, _AKIMBO_GRIP, 0.022, 0);                                        // the grip frame
+  [-0.0125, 0.0125].forEach(x => {                                                  // walnut panels, diamond-cut
+    gpBox(g, M.wood, 0.004, 0.060, 0.030, x, -0.062, 0.034, 0.30);
+    for (let r = 0; r < 5; r++) for (let c = 0; c < 3; c++)
+      gpBox(g, M.dark, 0.0012, 0.0036, 0.0036, x + Math.sign(x) * 0.0024, -0.036 - r * 0.0105, 0.0285 + c * 0.0068 - r * 0.0031, 0.30 + Math.PI / 4);
+    gpCyl(g, M.bright, 0.0034, 0.0034, 0.0014, 12, x + Math.sign(x) * 0.0022, -0.040, 0.026, 0.0, Math.PI / 2);   // the grip screw
+  });
+  gpBox(g, M.bright, 0.021, 0.044, 0.026, 0, -0.130, 0.047, 0.30);                  // single-stack magazine
+  gpBox(g, M.dark, 0.0105, 0.040, 0.0016, 0, -0.130, 0.0345, 0.30);                 // its witness slot
+  gpBox(g, M.bright, 0.026, 0.007, 0.032, 0, -0.1555, 0.0545, 0.30);                // floorplate
+  _akimboGuard(g, blued, M.bright);
+  return _akimboFinish(g, slide, -0.150);
+}
+
+// Micro Uzi pair: the stamped box receiver with its ridged top cover, a shrouded barrel with its nut, two sight ears, and a cocking
+// knob that runs back on every shot; the magazine rises up through the pistol grip.
+function buildAkimboUzi() {
+  const g = new THREE.Group();
+  const M = _milMats(), stamped = gpFinish(0x23282c, .50, .70, 'steel');
+  const slide = new THREE.Group(); g.add(slide);
+  gpBox(g, stamped, 0.034, 0.040, 0.134, 0, 0.018, -0.040);                         // the receiver, stamped from sheet
+  gpBox(g, stamped, 0.030, 0.007, 0.120, 0, 0.0425, -0.040);                        // top cover
+  gpBox(g, M.dark, 0.008, 0.0024, 0.112, 0, 0.0462, -0.040);                        // its groove
+  for (let i = 0; i < 4; i++) gpBox(g, M.dark, 0.0345, 0.0024, 0.0034, 0, 0.006 + i * 0.0105, -0.040);              // the ribs pressed in the side
+  gpBox(slide, M.bright, 0.012, 0.004, 0.034, 0, 0.0475, 0.020);                    // the cocking slot's runner
+  gpCyl(slide, M.bright, 0.0072, 0.0062, 0.011, 14, 0.0, 0.0535, 0.020, 0);         // the cocking knob
+  gpCyl(slide, M.dark, 0.0035, 0.0035, 0.002, 10, 0.0, 0.0595, 0.020, 0);
+  gpBox(g, M.dark, 0.004, 0.010, 0.030, 0.0172, 0.022, -0.016);                     // ejection port
+  gpCyl(g, stamped, 0.0108, 0.0108, 0.034, 16, 0, 0.020, -0.122);                   // barrel shroud
+  gpCyl(g, M.bright, 0.0095, 0.0095, 0.008, 16, 0, 0.020, -0.141);                  // barrel nut
+  gpCyl(g, M.steel, 0.0070, 0.0070, 0.020, 14, 0, 0.020, -0.154);                   // barrel
+  gpCyl(g, M.dark, 0.0042, 0.0042, 0.008, 12, 0, 0.020, -0.162);                    // bore
+  [-1, 1].forEach(s => gpBox(g, stamped, 0.0030, 0.017, 0.006, s * 0.0058, 0.0520, -0.108));   // the front sight ears
+  gpBox(g, M.bright, 0.0016, 0.012, 0.0016, 0, 0.0535, -0.108);                     // and the post between them
+  gpBox(g, M.bright, 0.010, 0.006, 0.008, 0, 0.0505, 0.032);                        // flip sight
+  gpPlate(g, M.black, _AKIMBO_GRIP, 0.028, 0);                                      // the pistol grip, polymer
+  for (let i = 0; i < 5; i++) gpBox(g, M.dark, 0.029, 0.0026, 0.0045, 0, -0.040 - i * 0.015, 0.0125 + i * 0.0042, 0.34);   // finger grooves
+  gpBox(g, M.black, 0.020, 0.030, 0.006, 0, -0.050, 0.066, 0.10);                   // the grip safety strap
+  gpBox(g, M.steel, 0.022, 0.050, 0.028, 0, -0.132, 0.047, 0.30);                   // the stick magazine
+  gpBox(g, M.dark, 0.0105, 0.044, 0.0016, 0, -0.132, 0.0335, 0.30);
+  gpBox(g, M.black, 0.027, 0.008, 0.034, 0, -0.1585, 0.0545, 0.30);                 // its base plate
+  gpCyl(g, M.bright, 0.0040, 0.0040, 0.003, 10, 0.0175, 0.010, 0.022, 0.0, Math.PI / 2);   // the selector
+  _akimboGuard(g, stamped, M.bright);
+  return _akimboFinish(g, slide, -0.171);
+}
+
+// Water-pistol pair: cyan shell, a clear tank on top with the water showing, a white nozzle, and an orange pump grip that is
+// the moving part, so the pump goes back and forth with every shot.
+function buildAkimboSoaker() {
+  const g = new THREE.Group();
+  const cyan = _skM(0x19c5e6, 110, 0xc8f6ff), deep = _skM(0x1286a6, 90, 0x9adcf0), orange = _skM(0xff7a1a, 100, 0xffd0a0);
+  const white = _skM(0xf2f5f7, 120, 0xffffff), clear = _skGlass(0xcdeeff), water = new THREE.MeshPhongMaterial({ color: 0x2a8cff, shininess: 160, specular: 0xffffff, transparent: true, opacity: 0.78 });
+  const inner = GUN_MATS.inner(), yellow = _skM(0xffd23a, 100, 0xffffff);
+  const slide = new THREE.Group(); g.add(slide);
+  gpBox(g, cyan, 0.026, 0.034, 0.124, 0, 0.012, -0.030);                            // body shell
+  gpBox(g, deep, 0.0275, 0.008, 0.070, 0, 0.002, -0.030);                           // a darker band down the side
+  gpCyl(g, clear, 0.0235, 0.0235, 0.088, 18, 0, 0.049, -0.026);                     // the tank
+  gpCyl(g, water, 0.0200, 0.0200, 0.080, 18, 0, 0.046, -0.026);                     // the water in it
+  [-1, 1].forEach(s => gpCyl(g, cyan, 0.0250, 0.0250, 0.006, 18, 0, 0.049, -0.026 + s * 0.047));   // end caps
+  gpCyl(g, white, 0.0060, 0.0060, 0.012, 10, 0, 0.0760, -0.026, 0);                 // the filler cap
+  for (let i = 0; i < 3; i++) gpCyl(g, white, 0.0014, 0.0014, 0.0155, 8, 0.0, 0.053 - i * 0.0042, -0.074, 0.0, Math.PI / 2);   // the scale lines
+  gpCyl(g, white, 0.0140, 0.0115, 0.034, 14, 0, 0.012, -0.104);                     // nozzle
+  gpCyl(g, orange, 0.0090, 0.0090, 0.012, 14, 0, 0.012, -0.126);                    // the spout
+  gpCyl(g, inner, 0.0040, 0.0040, 0.006, 10, 0, 0.012, -0.131);                     // and its hole
+  gpBox(slide, orange, 0.028, 0.020, 0.046, 0, -0.014, -0.076);                     // pump grip under the barrel
+  for (let i = 0; i < 4; i++) gpBox(slide, deep, 0.0295, 0.0036, 0.0036, 0, -0.014, -0.092 + i * 0.0105);        // its ridges
+  gpPlate(g, cyan, _AKIMBO_GRIP, 0.024, 0);                                         // grip
+  [-0.0135, 0.0135].forEach(x => { for (let i = 0; i < 4; i++) gpBox(g, orange, 0.0045, 0.0026, 0.026, x, -0.042 - i * 0.014, 0.038 - i * 0.004, 0.30); });
+  gpBox(g, orange, 0.007, 0.022, 0.009, 0, -0.016, 0.000, 0.2);                     // a big orange trigger
+  gpBox(g, yellow, 0.020, 0.028, 0.024, 0, -0.130, 0.047, 0.30);                    // the little reservoir at the heel
+  gpBox(g, orange, 0.024, 0.006, 0.028, 0, -0.1465, 0.052, 0.30);
+  return _akimboFinish(g, slide, -0.140, 0.012);
+}
+
+// Stapler pair: a red top arm on a dark base with a chrome strip down the spine, the hinge at the back, a staple strip standing in
+// where the magazine goes, and a rubber pistol grip because a stapler has none. The arm is the slide.
+function buildAkimboStapler() {
+  const g = new THREE.Group();
+  const red = _skM(0xd7261e, 120, 0xffb0a8), base = _skM(0x23262b, 70, 0x80848c), chrome = GUN_MATS.bright(), inner = GUN_MATS.inner();
+  const rubber = _skM(0x15171a, 30, 0x484c52), tape = _skM(0xf2efe6, 60, 0xffffff);
+  const slide = new THREE.Group(); g.add(slide);
+  gpBox(g, base, 0.027, 0.014, 0.150, 0, 0.004, -0.036);                            // the base plate
+  gpBox(g, rubber, 0.022, 0.0036, 0.040, 0, -0.0045, -0.096);                       // its rubber foot
+  gpBox(g, chrome, 0.012, 0.010, 0.040, 0, 0.0145, -0.104);                         // the anvil the staple closes on
+  gpBox(g, inner, 0.0040, 0.0028, 0.016, 0, 0.0200, -0.104);                        // and its groove
+  gpCyl(g, chrome, 0.0062, 0.0062, 0.032, 12, 0, 0.026, 0.040, Math.PI / 2, Math.PI / 2);   // the hinge pin
+  gpBox(g, base, 0.029, 0.018, 0.012, 0, 0.016, 0.042);                             // and its lugs
+  gpBox(slide, red, 0.029, 0.022, 0.150, 0, 0.0285, -0.034);                        // the top arm
+  gpBox(slide, red, 0.0295, 0.008, 0.138, 0, 0.0155, -0.030);                       // its skirt
+  gpBox(slide, chrome, 0.013, 0.0026, 0.124, 0, 0.0407, -0.034);                    // the chrome spine
+  gpBox(slide, base, 0.020, 0.010, 0.026, 0, 0.0195, -0.114);                       // the head, where the staple leaves
+  gpBox(slide, inner, 0.0036, 0.0036, 0.006, 0, 0.0145, -0.128);                    // its mouth
+  for (let i = 0; i < 5; i++) gpBox(slide, base, 0.0300, 0.0026, 0.0045, 0, 0.0302, -0.008 - i * 0.0075);       // a ridged thumb pad
+  gpBox(slide, tape, 0.0016, 0.010, 0.040, 0.0150, 0.0290, -0.058);                 // a label on the side: "20 SHEETS"
+  gpBox(slide, red, 0.0295, 0.014, 0.012, 0, 0.0285, 0.040);                        // the knuckle at the hinge
+  gpPlate(g, rubber, _AKIMBO_GRIP, 0.026, 0);                                       // the pistol grip, rubber
+  for (let i = 0; i < 5; i++) gpBox(g, inner, 0.027, 0.0024, 0.005, 0, -0.040 - i * 0.015, 0.0125 + i * 0.0042, 0.34);
+  gpBox(g, chrome, 0.011, 0.058, 0.014, 0, -0.130, 0.047, 0.30);                    // the staple strip
+  for (let i = 0; i < 5; i++) gpBox(g, inner, 0.0125, 0.0016, 0.015, 0, -0.112 - i * 0.0105, 0.0405 + i * 0.0016, 0.30);
+  gpBox(g, rubber, 0.017, 0.007, 0.022, 0, -0.1625, 0.056, 0.30);
+  _akimboGuard(g, base, chrome);
+  return _akimboFinish(g, slide, -0.140, 0.016);
+}
+
+// Banana pair: five segments bent into the curve, a brown stalk at the heel and a brown tip for the muzzle, spots, and three
+// peeled strips hanging under the heel where the hand goes.
+function buildAkimboBanana() {
+  const g = new THREE.Group();
+  const yellow = _skM(0xf6d02a, 70, 0xfff2a0), ripe = _skM(0xe9b81c, 60, 0xffe58a), brown = _skM(0x4a3418, 25, 0x6a5030), spot = _skM(0x3a2810, 10, 0x4a3820);
+  const peel = _skM(0xf4e9a2, 40, 0xffffff), pith = _skM(0xfaf5d8, 30, 0xffffff), inner = GUN_MATS.inner();
+  const slide = new THREE.Group(); g.add(slide);
+  // (z, y) of each segment's middle, and the tilt that follows the curve: the middle sags and both ends come up
+  [[-0.108, 0.020, 0.30], [-0.070, 0.008, 0.18], [-0.030, 0.001, 0.05], [0.010, 0.0, -0.06], [0.046, 0.009, -0.22]].forEach(([z, y, rx], i) => {
+    gpBox(g, i % 2 ? ripe : yellow, 0.030 - (i === 0 ? 0.006 : 0), 0.026 - (i === 0 ? 0.004 : 0), 0.046, 0, y, z, rx);
+    gpBox(g, i % 2 ? yellow : ripe, 0.020, 0.0044, 0.040, 0, y + 0.0132, z - 0.002, rx);          // the ridge along the top
+  });
+  [[-0.050, 0.0, 0.0150], [-0.008, -0.0045, 0.0140], [0.030, 0.0, -0.0120], [-0.096, 0.012, 0.0140]].forEach(([z, y, x]) => {
+    gpBox(g, spot, 0.0030, 0.0042, 0.0050, x, 0.001 + y, z, 0.1, 0.3);                            // brown spots
+  });
+  gpBox(g, brown, 0.012, 0.012, 0.020, 0, 0.0185, 0.070, -0.30);                                    // the stalk
+  gpBox(g, brown, 0.017, 0.010, 0.010, 0, 0.0240, 0.082, -0.45);
+  gpCyl(g, brown, 0.0075, 0.0105, 0.020, 12, 0, 0.0200, -0.141);                                    // the tip, which is the muzzle
+  gpCyl(g, inner, 0.0042, 0.0042, 0.008, 12, 0, 0.0200, -0.151);
+  gpBox(g, pith, 0.020, 0.020, 0.002, 0, 0.0200, -0.1325);                                          // the pale ring where the peel met the tip
+  [[-0.012, 0.0, 0.04], [0.0, 0.0, 0.0], [0.012, 0.0, -0.04]].forEach(([x, , rz], i) => {            // three peeled strips: the grip
+    gpBox(g, peel, 0.0055, 0.064, 0.026, x, -0.050, 0.034 + i * 0.002, 0.18, 0, rz);
+    gpBox(g, pith, 0.0030, 0.058, 0.020, x * 0.7, -0.052, 0.0285 + i * 0.002, 0.18, 0, rz);
+    gpBox(g, brown, 0.0070, 0.0070, 0.010, x, -0.084, 0.044 + i * 0.002, 0.18, 0, rz);                // a bruised tip
+  });
+  gpBox(g, peel, 0.0050, 0.016, 0.005, 0, -0.020, 0.000, 0.2);                                      // a small strip for the trigger
+  return _akimboFinish(g, slide, -0.158);
+}
+function buildAkimbo1911Pair() { return _akimboPair(buildAkimbo1911); }
+function buildAkimboUziPair() { return _akimboPair(buildAkimboUzi); }
+function buildAkimboSoakerPair() { return _akimboPair(buildAkimboSoaker); }
+function buildAkimboStaplerPair() { return _akimboPair(buildAkimboStapler); }
+function buildAkimboBananaPair() { return _akimboPair(buildAkimboBanana); }
 // A hand's place and turn for the gun it holds, in the model's space (a hand is a child of the model, not of the
 // holder, so that addViewArms can run an arm out of it the way it does for every other gun).
 function placeAkimboHand(A, hand, i) {
@@ -51730,6 +51913,7 @@ function _buildMech(model, id, evs) {
 // dryer or a rocket in a tuba is the joke ruined.
 function _skinHasMechanics(skin) {
   if (!skin) return true;                                   // the stock gun
+  if (skin.noMech) return false;                            // a pair (the Akimbo skins): the pair has its own slides and magazines
   if (skin.series === 'stealth') return true;
   if (skin.rarity === 'donut' || skin.rarity === 'legend' || skin.id === 'aug') return true;
   try { return GEN1_GATED_MODEL_SKIN_IDS.has(skin.id); } catch (e) { return false; }   // the realistic military set
@@ -52791,6 +52975,22 @@ const MODEL_SKINS = [
   { id: 'javelin_launcher_champagne', weapon: 'javelin_launcher', name: 'Champagne Popper', rarity: 'rare',
     sw: ['#2a5a2a', '#d8b84a'], build: buildChampagnePopper,
     blurb: 'Still corks. Still locks on. Somehow still a celebration.' },
+  // 🔫🔫 Akimbo skins: a pair each. noMech: the reload helpers pick ONE slide out of a model, which is wrong for two.
+  { id: 'akimbo_1911', weapon: 'akimbo', name: 'Twin 1911s', rarity: 'good', noMech: true,
+    sw: ['#15181c', '#6b4a2c'], build: buildAkimbo1911Pair,
+    blurb: 'Blued slides, walnut grips, a spurless hammer on each. Seven rounds of .45 in spirit, a whole magazine in practice.' },
+  { id: 'akimbo_micro_uzi', weapon: 'akimbo', name: 'Micro Uzis', rarity: 'rare', noMech: true,
+    sw: ['#23282c', '#b9c2c8'], build: buildAkimboUziPair,
+    blurb: 'Stamped boxes with the magazine up the grip. The cocking knob runs back on every shot, one hand then the other.' },
+  { id: 'akimbo_water_pistols', weapon: 'akimbo', name: 'Water Pistols', rarity: 'good', noMech: true,
+    sw: ['#19c5e6', '#ff7a1a'], build: buildAkimboSoakerPair,
+    blurb: 'Cyan shells and a tank of real-looking water each. The orange pump goes back and forth. Lands the same.' },
+  { id: 'akimbo_staplers', weapon: 'akimbo', name: 'Staplers', rarity: 'basic', noMech: true,
+    sw: ['#d7261e', '#23262b'], build: buildAkimboStaplerPair,
+    blurb: 'Two office staplers with pistol grips, because staplers do not have any. The red arm is the slide.' },
+  { id: 'akimbo_bananas', weapon: 'akimbo', name: 'Bananas', rarity: 'good', noMech: true,
+    sw: ['#f6d02a', '#4a3418'], build: buildAkimboBananaPair,
+    blurb: 'A banana in each hand, held by the peel. The brown tip is the muzzle. Potassium rounds.' },
 ];
 // 🔥 FFA Legend skins unlock from FFA: a million damage or five thousand wins.
 // Wrapped because it runs while the file is still loading -- skins restored
@@ -52836,6 +53036,7 @@ const GEN1_GATED_MODEL_SKIN_IDS = new Set([
   'rpd_m249', 'lever_winchester94', 'pistol_m9', 'sg8_remington870',
   'srx_dragunov', 'revolver_python', 'grenade_launcher_mgl', 'flamethrower_m2',
   'ak20_aks74u', 'burst_scar_h', 'm4a1_arena_hk416', 'm1_garand_fal', 'srx_m24',
+  'akimbo_1911', 'akimbo_micro_uzi',
 ]);
 const DONUT_SKIN_IDS = [
   'revolver_donut', 'katana_donut',

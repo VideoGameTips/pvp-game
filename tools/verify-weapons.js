@@ -61,7 +61,7 @@ const constBlock = n => { const b = blockAt(new RegExp('^const ' + n + ' = \\{',
 
 function load() {
   let code = '';
-  for (const n of ['gpBox', 'gpCyl', 'gpPlate', 'gpPart', 'gpFinish', 'gpContouredPart', 'gpOpenMuzzle', 'gpOptic', 'smoothManufacturedBevels', 'gpTriStock', '_milMats', '_milPlaque', '_milRecoil', '_milFinish', '_milTrigger', 'addBeltAndCover', 'makeMuzzleFlash',
+  for (const n of ['gpBox', 'gpCyl', 'gpPlate', 'gpPart', 'gpFinish', 'gpContouredPart', 'gpOpenMuzzle', 'gpOptic', 'smoothManufacturedBevels', 'gpTriStock', '_akimboPair', '_akimboFinish', '_akimboGuard', '_milMats', '_milPlaque', '_milRecoil', '_milFinish', '_milTrigger', 'addBeltAndCover', 'makeMuzzleFlash',
                    '_skM', '_skGlass', '_skGrip', '_skFinish',
                    // PBR plumbing the hands and the legend materials now sit on
                    '_rng', '_grain', '_weave', '_blotches', '_shade', 'surfTex', 'pbrMat',
@@ -80,7 +80,7 @@ function load() {
     if (b) code += b + '\n';
   }
   // …and the tables and caches that plumbing reads.
-  for (const re of [/^const _surfCache = .*$/m, /^const _sculptCache = .*$/m,
+  for (const re of [/^const _AKIMBO_GRIP = .*$/m, /^const _surfCache = .*$/m, /^const _sculptCache = .*$/m,
                     /^let _charSurf = .*$/m, /^let _gunSurf = .*$/m,
                     /^const _hx = .*$/m, /^const artRes = .*$/m]) {
     const m = src.match(re); if (m) code += m[0] + '\n';
