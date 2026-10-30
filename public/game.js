@@ -42562,6 +42562,16 @@ document.addEventListener('mousemove', e => {
 let ASSIST = { autoShoot: false, aimAssist: false, aimbot: false, aiAim: false };
 try { const s = JSON.parse(localStorage.getItem('pvp_assist') || 'null'); if (s) ASSIST = { ...ASSIST, ...s }; } catch (e) {}
 function saveAssist() { try { localStorage.setItem('pvp_assist', JSON.stringify(ASSIST)); } catch (e) {} }
+// 🗄️ Archived for everyone but the admin: the Aim Bot (it snaps your view onto people) and, off a phone, Auto Shoot (it pulls the
+// trigger for you). A phone keeps Auto Shoot, where aiming with a thumb is hard enough that it is the fair aid. A flag left ON in
+// an old save does nothing: this is checked where it is used, not where it is stored.
+function assistAvailable(key) {
+  if (currentUser?.isAdmin) return true;
+  if (key === 'aimbot') return false;
+  if (key === 'autoShoot') return isTouchUI();
+  return true;
+}
+const assistOn = key => !!ASSIST[key] && assistAvailable(key);
 
 let GAMEPLAY_SETTINGS = {
   showFPS: true,
@@ -42811,7 +42821,7 @@ function _aimToward(pos, degPerSec, dt) {
 function _resetAssistTimers() { _aimbotTimer = 0; _autoShootTimer = 0; }
 
 function updateAimAssist(dt) {
-  const anyOn = ASSIST.autoShoot || ASSIST.aimAssist || ASSIST.aimbot || ASSIST.aiAim;
+  const anyOn = assistOn('autoShoot') || assistOn('aimAssist') || assistOn('aimbot') || assistOn('aiAim');
   if (!anyOn) { if (_aiAimDot) _aiAimDot.visible = false; return; }
   if (isDead || !gameStarted || inLobby || countdownActive || KILLCAM.active || SOCIAL_VIEW.mode) {
     _resetAssistTimers(); if (_aiAimDot) _aiAimDot.visible = false; return;
@@ -42830,17 +42840,17 @@ function updateAimAssist(dt) {
   }
   for (const id of _assistVel.keys()) if (!live.has(id)) _assistVel.delete(id);
 
-  const wide  = (ASSIST.aimAssist || ASSIST.aimbot || ASSIST.aiAim) ? _pickAssistTarget(enemies, 38) : null;
-  const tight = ASSIST.autoShoot ? _pickAutoShootTarget(enemies) : null;
+  const wide  = (assistOn('aimAssist') || assistOn('aimbot') || assistOn('aiAim')) ? _pickAssistTarget(enemies, 38) : null;
+  const tight = assistOn('autoShoot') ? _pickAutoShootTarget(enemies) : null;
   // While you're actively moving the mouse, the view aids step aside so you keep
   // full manual control (they resume ~150ms after you stop).
   const manualAiming = performance.now() - _lastManualAimAt < 150;
 
   // Aim Assist — gentle magnetism toward the body
-  if (ASSIST.aimAssist && wide && !manualAiming) _aimToward(wide.pos, 5, dt);
+  if (assistOn('aimAssist') && wide && !manualAiming) _aimToward(wide.pos, 5, dt);
 
   // Aim Bot — after 0.2s of the target on screen, snap toward it fast
-  if (ASSIST.aimbot && wide) { _aimbotTimer += dt; if (_aimbotTimer >= 0.2 && !manualAiming) _aimToward(wide.pos, 50, dt); }
+  if (assistOn('aimbot') && wide) { _aimbotTimer += dt; if (_aimbotTimer >= 0.2 && !manualAiming) _aimToward(wide.pos, 50, dt); }
   else _aimbotTimer = 0;
 
   // Auto Shoot — fire 0.01s after the crosshair lands on an opponent. Only with a
@@ -42849,7 +42859,7 @@ function updateAimAssist(dt) {
   // `tight` is now a real body hit rather than a 2.2° cone around the chest, so
   // any limb under the crosshair counts.
   const gunEquipped = (activeSlot === 'primary' || activeSlot === 'secondary');
-  if (ASSIST.autoShoot && tight && gunEquipped) {
+  if (assistOn('autoShoot') && tight && gunEquipped) {
     _autoShootTimer += dt;
     if (_autoShootTimer >= 0.006) {
       // A tiny aim settle before the trigger press makes auto-shoot feel less
@@ -42862,7 +42872,7 @@ function updateAimAssist(dt) {
   else _autoShootTimer = 0;
 
   // AI Aim — drop a red dot where the opponent is predicted to be ~0.35s from now
-  if (ASSIST.aiAim && wide) {
+  if (assistOn('aiAim') && wide) {
     const lead = 0.35, dot = _getAiAimDot();
     dot.position.set(wide.x + (wide.vx || 0) * lead, wide.pos.y, wide.z + (wide.vz || 0) * lead);
     dot.visible = true;
@@ -74014,7 +74024,7 @@ function openAimAssistPanel() {
     { key: 'aimAssist', name: 'AIM ASSIST',  desc: 'Opponent on screen → view drifts to their body at 5°/s.' },
     { key: 'aimbot',    name: 'AIM BOT',     desc: 'Opponent on screen 0.2s → snaps to them at 50°/s.' },
     { key: 'aiAim',     name: 'AI AIM',      desc: 'Red dot predicts where the opponent moves next — your call whether to trust it.' },
-  ];
+  ].filter(o => assistAvailable(o.key));
   const rowHTML = (o) => `
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin:12px 0;padding-bottom:10px;border-bottom:1px solid #3a2020;">
       <div style="flex:1;">
