@@ -2130,19 +2130,15 @@ WEAPON_DAMAGE.explosive_barrel = 100;
 function canUseHellfire(p) { return !!(p && !p.isBot && users[p.account]?.isAdmin); }
 function hellfireWeapon(id) { return typeof id==='string' && id.startsWith('hellfire'); }
 // ── 🧊 Freeze Ray ─────────────────────────────────────────────────────────────────────────────────────────────────────
-// Each ray hit adds a stack of cold; a gap of FREEZE.windowMs lets it all drain away. FREEZE.stacks in a row and the
-// target is FROZEN for FREEZE.ms: rooted on their own client (the 'frozen' event) and, here, hit for FREEZE.shatter
-// times the damage by everything but the ray itself. After it thaws they cannot be frozen again for FREEZE.immuneMs.
-const FREEZE = { stacks: 14, windowMs: 1500, ms: 2500, immuneMs: 5000, range: 30, shatter: 1.5 };
+// One shot, and a hit freezes: the target is FROZEN for FREEZE.ms -- rooted on their own client (the 'frozen' event)
+// and, here, hit for FREEZE.shatter times the damage by everything but the ray itself. After it thaws they cannot be
+// frozen again for FREEZE.immuneMs. (The client's ray is the old Frost Blaster, id 'frost_blaster'.)
+const FREEZE = { ms: 3000, immuneMs: 5000, range: 36, shatter: 1.5 };
 function isFrozen(t) { return (t._frozenUntil || 0) > Date.now() && t._frozenDeaths === t.deaths; }
 function freezeRayHit(shooter, target) {
   const now = Date.now();
   if (isFrozen(target) || now < (target._freezeImmuneUntil || 0)) return;
   if (dist3(shooter, target) > FREEZE.range) return;
-  target._cold = (now - (target._coldAt || 0) > FREEZE.windowMs ? 0 : (target._cold || 0)) + 1;
-  target._coldAt = now;
-  if (target._cold < FREEZE.stacks) return;
-  target._cold = 0;
   target._frozenUntil = now + FREEZE.ms; target._frozenDeaths = target.deaths;
   target._freezeImmuneUntil = now + FREEZE.ms + FREEZE.immuneMs;
   emitToMatch(target.matchId, 'frozen', { targetId: target.id, shooterId: shooter.id, ms: FREEZE.ms });

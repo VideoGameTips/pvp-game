@@ -587,13 +587,13 @@ const WEAPONS = [
   },
   {
     id: 'frost_blaster', name: 'Freeze Ray', type: 'Cryo Ray', slot: 'secondary',
-    // The combo starter. A beam that does almost nothing to HP: hold it on someone and the cold stacks (server:
-    // freezeRayHit), then they are FROZEN for 2.5 s -- rooted, and every other weapon hits them for +50%.
-    // (It used to be the Frost Blaster: a bullet that took 3 speed off a target until they turned to ice and died.)
-    mag: 50, reserve: 0, damage: 3, fireRate: 100, reloadTime: 99999,
-    auto: true, pellets: 1, spread: 0, adsZoom: 50, bulletSpeed: 260, noReload: true,
-    bulletColor: 0xbdf3ff, bulletSize: 0.05, hitscan: true, hitscanRange: 26, freezeRay: true,
-    ammoRegen: 5, // recovers 5/sec
+    // The combo starter. ONE shot: a hit freezes them on the spot (server: freezeRayHit) for 3 s -- rooted, and every
+    // other weapon hits them for +50%. The shot comes back after 5 s. Miss and you wait.
+    // (It used to be the Frost Blaster: a stream of bullets that took speed off a target until they turned to ice and died.)
+    mag: 1, reserve: 0, damage: 5, fireRate: 700, reloadTime: 99999,
+    auto: false, pellets: 1, spread: 0, adsZoom: 50, bulletSpeed: 260, noReload: true,
+    bulletColor: 0xbdf3ff, bulletSize: 0.05, hitscan: true, hitscanRange: 32, freezeRay: true,
+    ammoRegen: 0.2, // the one shot comes back in 5 s
     ability: { name: 'Cryo Burst', cd: 12000, desc: 'Frost AOE · -25 speed all targets in 5 m', type: 'aoe', radius: 5, damage: 0, color: 0x99eeff, frostBurst: 25 },
   },
   { id: 'snub_revolver', name: 'Snubnose', type: 'Secondary', slot: 'secondary',
@@ -49008,9 +49008,9 @@ function fireHitscanShot(origin, dir, weaponId, wStats) {
   const range = wStats.hitscanRange || 70;
   const hit = _nearestAbilityRayHit(origin, dir, range, 0.6);
   const end = hit ? hit.pos.clone() : origin.clone().addScaledVector(dir, range);
-  if (weaponId === 'frost_blaster') {                           // the Freeze Ray: a wider, paler beam than the laser pointer's
-    _spawnAbilityBeam(origin, end, 0x9fe8ff, 0.034, 110);
-    _spawnAbilityBeam(origin, end, 0xffffff, 0.012, 90);
+  if (weaponId === 'frost_blaster') {                           // the Freeze Ray: a wide pale bolt, it only fires once
+    _spawnAbilityBeam(origin, end, 0x9fe8ff, 0.06, 260);
+    _spawnAbilityBeam(origin, end, 0xffffff, 0.020, 200);
   } else _spawnAbilityBeam(origin, end, wStats.bulletColor || 0xff3333, 0.016, 90);
   if (hit) {
     const mesh = remoteMeshes[hit.pid];
@@ -62305,7 +62305,6 @@ socket.on('playerHit', data => {
       chillPlayer(2500);
       rootPlayer(3000);
     }
-    else if (data.weapon === 'frost_blaster') chillPlayer(700);          // you feel it before it takes: slower while the cold builds
   }
   if (data.shooterId === myId && data.shattered) {                   // you hit something frozen with something heavier than the ray
     showAnnouncement('SHATTER', '+50% damage', '#bdf3ff', 500);
