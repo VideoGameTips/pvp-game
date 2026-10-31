@@ -32467,11 +32467,10 @@ function buildCrossbow() {
   gpCyl(g, wood, 0.0038, 0.0038, 0.180, 8, 0, 0.034, -0.126);
   gpCyl(g, bright, 0.0075, 0.0028, 0.026, 6, 0, 0.034, -0.226);        // broadhead
   [0, 1, 2].forEach(i => gpBox(g, inner, 0.0035, 0.012, 0.020, 0, 0.034, -0.042, (i * Math.PI * 2) / 3));
-  // Scope over the rail.
-  gpCyl(g, blued, 0.0135, 0.0135, 0.110, 16, 0, 0.062, 0.010);
-  gpCyl(g, blued, 0.0180, 0.0180, 0.022, 16, 0, 0.062, -0.056);
-  gpCyl(g, inner, 0.0150, 0.0150, 0.005, 14, 0, 0.062, -0.066);
-  [-0.026, 0.046].forEach(z => gpBox(g, steel, 0.022, 0.026, 0.012, 0, 0.046, z));
+  // Compact archery optic, distinct from the sniper's long telescopic sight.
+  gpOptic(g,0,.060,.010,.075,.012,.038);
+  gpBox(g,bright,.025,.004,.018,0,.040,.010);
+  gpBox(g,new THREE.MeshBasicMaterial({color:0xffbf62}),.001,.004,.025,.013,.059,.008);
   // Fire control, foregrip, stirrup.
   gpPlate(g, poly, [[0.036,-0.028],[0.058,-0.048],[0.060,-0.096],[0.036,-0.104],[0.020,-0.056],[0.018,-0.032]], 0.028, 0);
   const guard = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.0032, 6, 12, Math.PI * 1.05), steel);
@@ -45695,11 +45694,33 @@ function setADS(on) {
   weaponModels[currentWeaponIdx].visible = !isSniperADS;
 }
 
+function drawCrossbowScope(ctx, W, H) {
+  const cx=W/2,cy=H/2,rx=Math.min(W*.45,H*.59),ry=Math.min(H*.40,W*.34);
+  ctx.fillStyle='#05090b';ctx.fillRect(0,0,W,H);
+  ctx.globalCompositeOperation='destination-out';ctx.beginPath();ctx.ellipse(cx,cy,rx,ry,0,0,Math.PI*2);ctx.fill();ctx.globalCompositeOperation='source-over';
+  ctx.strokeStyle='#253238';ctx.lineWidth=8;ctx.beginPath();ctx.ellipse(cx,cy,rx-3,ry-3,0,0,Math.PI*2);ctx.stroke();
+  ctx.strokeStyle='rgba(255,190,91,.95)';ctx.fillStyle='rgba(255,190,91,.95)';ctx.lineWidth=1.6;ctx.lineJoin='round';
+  const tip=Math.max(5,Math.min(10,ry*.04));
+  // The chevron tip is the shot centre. Lower marks are unnumbered holdovers.
+  ctx.beginPath();ctx.moveTo(cx-tip,cy+tip);ctx.lineTo(cx,cy);ctx.lineTo(cx+tip,cy+tip);ctx.stroke();
+  for(const [height,width]of [[.13,.13],[.25,.095],[.39,.06]]){
+    const y=cy+ry*height,half=rx*width;
+    ctx.beginPath();ctx.moveTo(cx-half,y);ctx.lineTo(cx+half,y);ctx.moveTo(cx,y-3);ctx.lineTo(cx,y+3);ctx.stroke();
+  }
+  ctx.strokeStyle='rgba(255,190,91,.55)';
+  for(const sign of [-1,1]){
+    const x=cx+sign*rx*.64;
+    ctx.beginPath();ctx.moveTo(x,cy-ry*.1);ctx.lineTo(x,cy+ry*.1);ctx.moveTo(x,cy);ctx.lineTo(x-sign*rx*.14,cy);ctx.stroke();
+  }
+}
 function drawScope() {
   const canvas = document.getElementById('scope-canvas');
   const W = window.innerWidth, H = window.innerHeight;
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext('2d');
+  const crossbow=(currentWeapon?.baseId || currentWeapon?.id)==='crossbow';
+  canvas.dataset.scopeStyle=crossbow?'crossbow':'sniper';
+  if(crossbow){drawCrossbowScope(ctx,W,H);return;}
   const cx = W / 2, cy = H / 2;
   const r = Math.min(W, H) * 0.38;
 
