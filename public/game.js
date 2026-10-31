@@ -61488,6 +61488,59 @@ function waterSpray() {
     if ((dx * _spray.x + dz * _spray.z) / (d * hl) > 0.93) douseBot(bot);
   }
 }
+// 🌫️ Standing in smoke blinds you.
+// The cloud is 18 translucent spheres, and a sphere is only drawn from the OUTSIDE:
+// the camera inside one is looking at back faces, which are culled, so each puff
+// simply vanished as you walked into it and the middle of the cloud was the one
+// place you could see perfectly. So the blindness is not left to the spheres. It is
+// measured: how deep the eye is inside each puff, as it is drawn right now (its
+// current size and its current opacity), combined across every puff it is inside.
+// That is what lets a cloud still growing, or fading out, blind you only as much as
+// it is actually there.
+// This is a list of its own and not smokeClouds, because smokeClouds is dropped at
+// 8.4 s for the fire-dousing and the smoke is still on screen until 10.4 s.
+const smokeVolumes = [];      // { meshes: [{ mesh, mat, maxOp }] }, one per cloud, for as long as it is visible
+let _smokeBlind = 0, _smokeBlindEl = null;
+function smokeDensityAt(p) {
+  let seen = 0;                                               // how much of the view the smoke has taken
+  for (const v of smokeVolumes) for (const { mesh, mat, maxOp } of v.meshes) {
+    const R = mesh.geometry.parameters.radius * mesh.scale.x;
+    const d = mesh.position.distanceTo(p);
+    if (d >= R) continue;
+    const k = Math.min(1, (1 - d / R) / 0.3);                  // 0 at the surface, whole by 30% of the way in
+    const c = (mat.opacity / maxOp) * k * k * (3 - 2 * k);     // a soft edge instead of a wall
+    seen = 1 - (1 - seen) * (1 - c);                           // two puffs hide more than one
+  }
+  return seen;
+}
+function _smokeBlindOverlay() {
+  if (_smokeBlindEl) return _smokeBlindEl;
+  const el = document.createElement('div');
+  el.id = 'smoke-blind';
+  el.style.cssText = 'position:fixed;inset:0;pointer-events:none;background:#b0b0b0;opacity:0;display:none';   // the puffs' own grey
+  // No z-index on purpose. A fixed element with none paints in document order, so
+  // directly before #hud it is over the canvas and under every piece of the HUD:
+  // the smoke takes the world, not your health and ammo.
+  const hud = document.getElementById('hud');
+  if (hud && hud.parentNode) hud.parentNode.insertBefore(el, hud); else document.body.appendChild(el);
+  return (_smokeBlindEl = el);
+}
+function updateSmokeBlind(dt) {
+  // Only the live first-person view. A killcam, the theater, a spectator and the lobby are not
+  // somewhere the player is standing in the cloud, and the finale has its own camera.
+  const live = gameStarted && !inLobby && !isDead && !KILLCAM.active && !spectatorState && !THEATER.active && !MATCH_FINALE.active;
+  const target = live && smokeVolumes.length ? smokeDensityAt(camera.position) : 0;
+  // Quick in, slower out: walking into it takes the view at once, walking out lets it clear.
+  _smokeBlind += (target - _smokeBlind) * Math.min(1, dt * (target > _smokeBlind ? 14 : 3.5));
+  if (target === 0 && _smokeBlind < 0.01) {
+    _smokeBlind = 0;
+    if (_smokeBlindEl && _smokeBlindEl.style.display !== 'none') _smokeBlindEl.style.display = 'none';
+    return;
+  }
+  const el = _smokeBlindOverlay();
+  if (el.style.display === 'none') el.style.display = 'block';
+  el.style.opacity = String(_smokeBlind);
+}
 const smokeClouds = [];       // { x, z, r, until }: where smoke is right now (spawnSmokeCloud registers each one)
 function smokeAt(x, z) {
   const now = Date.now();
@@ -64116,11 +64169,15 @@ function spawnSmokeCloud(pos) {
     return { mesh, mat, maxOp: p.maxOp };
   });
 
+  const volume = { meshes };
+  smokeVolumes.push(volume);
   const start = performance.now();
   const tick = () => {
     const elapsed = performance.now() - start;
     if (elapsed > TOTAL_MS) {
       meshes.forEach(({ mesh }) => scene.remove(mesh));
+      const vi = smokeVolumes.indexOf(volume);
+      if (vi >= 0) smokeVolumes.splice(vi, 1);
       return;
     }
 
@@ -71181,6 +71238,7 @@ function loop() {
   requestAnimationFrame(loop);
   const now = performance.now();
   updateFPSCounter(now);
+  safeLoopStep('smoke-blind', () => updateSmokeBlind(Math.min((now - lastTime) / 1000, 0.05)));   // ahead of the early returns below, so entering a finale or dying clears it
   const dt = Math.min((now-lastTime)/1000, 0.05);
   lastTime = now;
   safeLoopStep('ragdoll', () => window.PVP_RAGDOLL?.tick(dt));
