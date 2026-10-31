@@ -5993,7 +5993,26 @@ function setPlayerBodyScale(sc) {
 // crouched player's feet up to 0.95m BELOW the floor: every step and ramp then
 // read as a wall to slide into, and a box you crouched on stopped counting as
 // ground.
-function playerFeetY() { return camera.position.y - (window._crouchEye || PLAYER_EYE_HEIGHT); }
+//
+// There is one moment this derivation is wrong. doJump stands the eye back up in a
+// single frame (a slide leaves it 0.95 m low, a crouch 0.55 m) while the camera is
+// still down where the slide had it, so for the first few frames of the jump the
+// "feet" come out that far UNDER the surface you just left. Everything that asks
+// where the feet are then believed you were sunk into whatever you were standing
+// on: a crate or deck stopped counting as ground and became a wall, and
+// resolveWallCollisions shoved you sideways to its nearest edge (1 m off a crate,
+// 6 m off a platform at 60 fps) or, at 30 fps, stepped you up 0.5 m in one frame.
+// Open ground never showed it, which is why it only happened "sometimes".
+// So: while you are still rising and the derived feet are below where they left
+// the ground, the feet are where they left the ground. doJump records that spot
+// (_launchFeet); the 200 ms expiry is a backstop so a stale one can never outlive
+// the jump it belongs to.
+function playerFeetY() {
+  const f = camera.position.y - (window._crouchEye || PLAYER_EYE_HEIGHT);
+  const L = window._launchFeet;
+  if (L && f < L.y && slamState && slamState.vel > 0 && Date.now() - L.at < 200) return L.y;
+  return f;
+}
 // Is there floor under (x, z)? Everywhere, except on a map with a void edge, where it stops at the ground's end.
 function floorExistsAt(x, z) {
   const v = MAP_VOID[activeMapName];
@@ -43925,6 +43944,7 @@ function doJump(repeat) {
   if (window.PVP_BACKROOMS?.swimming) return;
   if (adminMapBuilderOpen && selectedModeConfig?.type === 'builder') return;
   if (!isDead && isPlayerGrounded()) {
+    window._launchFeet = { y: playerFeetY(), at: Date.now() };   // before the eye is stood back up below -- see playerFeetY
     // 🛹 Slide jump: leaving the ground out of a slide trades a little height
     // for the slide's speed carried into the air. The slide ends on the jump,
     // so you cannot hold the boost and hop repeatedly on it.
