@@ -58,3 +58,11 @@ assert.equal(p._satchelIds.size, 2);
 handlers.satchelEvent({ action: 'detonate' }); assert.equal(p._satchelIds.size, 0);
 events.length = 0; p._satchelThrownAt = 0; handlers.satchelEvent(sat(9)); assert.equal(count('satchelEvent'), 1, 'after a detonation there is room again');
 console.log('Satchel server: capped at two out at a time');
+
+// the skin on a gun rides on its shot, so everybody sees the same round: passed on only if it is a plain id (it is cosmetic, but it is still a string a client sent)
+p.dead = false; p._spearsLeft = 5;
+const fired = () => events.filter(e => e.event === 'bulletFired').pop().data;
+events.length = 0; p.lastShot = 0; handlers.shoot({ x: 0, y: 1, z: 0, dx: 0, dy: 0, dz: -1, weapon: 'grenade_launcher', skin: 'grenade_launcher_donut' }); assert.equal(fired().skin, 'grenade_launcher_donut');
+events.length = 0; p.lastShot = 0; handlers.shoot({ x: 0, y: 1, z: 0, dx: 0, dy: 0, dz: -1, weapon: 'grenade_launcher' }); assert.equal(fired().skin, undefined);
+for (const bad of ['<img src=x>', 'a'.repeat(60), 'Has Caps', '', 42, { x: 1 }, null]) { events.length = 0; p.lastShot = 0; handlers.shoot({ x: 0, y: 1, z: 0, dx: 0, dy: 0, dz: -1, weapon: 'rpg', skin: bad }); assert.equal(fired().skin, undefined, 'a skin of ' + JSON.stringify(bad) + ' is not passed on'); }
+console.log('Skin shots server: a plain skin id rides on the shot, anything else is dropped');

@@ -42409,15 +42409,208 @@ socket.on('spearPlant', d => {
   plantSpear(d.id, d.ownerId, new THREE.Vector3(d.x, d.y, d.z), new THREE.Vector3(d.dx, d.dy, d.dz), d.floorY);
 });
 
-function makeBulletMesh(color, size, weaponId, own) {
+// ── 🎯 Skin shots ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+// A gun skin changes what the gun SHOOTS, as well as what it looks like (Andy: "each skin should also affect the projectile: the Glaze Launcher
+// should launch doughnuts instead of grenades, the explosion should look different and have the same effect"). The round is built from the skin:
+// `shot` is a shape and two colours (see SKIN_SHAPES), `boom` a burst for the explosive guns (see BOOM_THEMES). It is the LOOK and nothing else:
+// the speed, the hit size, the damage and the splash radius all still come from the weapon, so no skin is a balance change in a costume. A skin
+// with nothing written for it still gets a round tinted from its own swatch, and an explosive one a burst in the same colour; the realistic ones
+// get the tracer of their cartridge and keep the ordinary fire. Everybody sees it: the shot carries the skin's id (see the socket.emit wrapper).
+const SKIN_SHAPES = (() => {
+  const B = (w, h, d) => new THREE.BoxGeometry(w, h, d), Cy = (r1, r2, h, n = 12) => new THREE.CylinderGeometry(r1, r2, h, n), Sp = (r) => new THREE.SphereGeometry(r, 10, 8);
+  const L = (c) => new THREE.MeshPhongMaterial({ color: c, shininess: 70, specular: 0xffffff }), K = (c) => new THREE.MeshBasicMaterial({ color: c });
+  const T = (c, o = 0.75) => new THREE.MeshPhongMaterial({ color: c, shininess: 150, specular: 0xffffff, transparent: true, opacity: o });
+  const part = (geo, mat, pos, rot, scale) => ({ geo, mat, pos, rot, scale });
+  return {
+    ball:   (a, b, R) => ({ parts: [part(Sp(R), L(a)), part(Sp(R * 0.4), K(b), [R * 0.35, R * 0.35, R * 0.45])] }),
+    cube:   (a, b, R) => ({ parts: [part(B(R * 1.5, R * 1.5, R * 1.5), L(a)), part(B(R * 0.8, R * 0.8, R * 0.8), K(b), [0, R * 0.9, 0])], spin: { x: 9, y: 7, z: 0 } }),
+    disc:   (a, b, R) => ({ parts: [part(Cy(R * 1.7, R * 1.7, R * 0.35, 18), L(a)), part(Cy(R * 1.1, R * 1.1, R * 0.42, 14), L(b))], spin: { x: 0, y: 12, z: 0 } }),
+    can:    (a, b, R) => ({ parts: [part(Cy(R * 0.85, R * 0.85, R * 2.6, 14), L(a)), part(Cy(R * 0.92, R * 0.92, R * 0.22, 14), L(b), [0, R * 1.3, 0]), part(Cy(R * 0.92, R * 0.92, R * 0.22, 14), L(b), [0, -R * 1.3, 0])], spin: { x: 0, y: 8, z: 0 } }),
+    slice:  (a, b, R) => ({ parts: [part(Cy(R * 1.9, R * 1.9, R * 0.45, 3), L(a)), part(Cy(R * 2.05, R * 2.05, R * 0.3, 3), L(b), [0, -R * 0.3, 0]),
+                                   ...[[0.5, 0.4], [-0.6, 0.1], [0.1, -0.6]].map(([x, z]) => part(Cy(R * 0.42, R * 0.42, R * 0.1, 10), L(0xb32020), [x * R, R * 0.26, z * R]))], spin: { x: 0, y: 9, z: 0 } }),
+    banana: (a, b, R) => ({ parts: [[-1.5, 0.30, 0.38], [-0.5, 0.06, 0.13], [0.5, 0.06, -0.13], [1.5, 0.30, -0.38]].map(([y, z, rx], i) => part(B(R * 0.85, R * 1.1, R * 0.8), L(a), [0, y * R, z * R], [rx, 0, 0])).concat(
+                                   [part(B(R * 0.5, R * 0.4, R * 0.5), L(b), [0, -2.2 * R, 0.55 * R]), part(B(R * 0.42, R * 0.4, R * 0.42), L(b), [0, 2.2 * R, 0.55 * R])]), spin: { x: 0, y: 6, z: 0 } }),
+    staple: (a, b, R) => ({ parts: [part(B(R * 2.4, R * 0.3, R * 0.3), L(a), [0, -R, 0]), part(B(R * 0.3, R * 1.6, R * 0.3), L(a), [R * 1.05, -R * 0.2, 0]), part(B(R * 0.3, R * 1.6, R * 0.3), L(a), [-R * 1.05, -R * 0.2, 0])] }),
+    dart:   (a, b, R) => ({ parts: [part(Cy(R * 0.4, R * 0.4, R * 3.2, 10), L(a)), part(Sp(R * 0.6), L(b), [0, R * 1.8, 0]), part(Cy(R * 0.55, R * 0.55, R * 0.3, 10), L(b), [0, -R * 1.5, 0])] }),
+    note:   (a, b, R) => ({ parts: [part(Sp(R * 0.8), L(a), [0, -R * 0.9, 0], null, [1.2, 0.9, 0.9]), part(B(R * 0.2, R * 2.2, R * 0.2), L(a), [R * 0.8, R * 0.3, 0]), part(B(R * 0.8, R * 0.28, R * 0.14), L(b), [R * 1.1, R * 1.3, 0], [0, 0, -0.5])], spin: { x: 0, y: 6, z: 0 } }),
+    gear:   (a, b, R) => ({ parts: [part(Cy(R * 1.4, R * 1.4, R * 0.5, 14), L(a)), part(Cy(R * 0.5, R * 0.5, R * 0.56, 10), K(0x1a1a1a)),
+                                   ...Array.from({ length: 8 }, (_, i) => { const t = i / 8 * Math.PI * 2; return part(B(R * 0.5, R * 0.5, R * 0.5), L(b), [Math.cos(t) * R * 1.55, 0, Math.sin(t) * R * 1.55], [0, -t, 0]); })], spin: { x: 0, y: 7, z: 0 } }),
+    star:   (a, b, R) => ({ parts: [0, 1, 2].map(k => part(B(R * 3.2, R * 0.5, R * 0.5), L(a), null, [0, k * Math.PI / 3, 0])).concat([part(Sp(R * 0.6), K(b))]), spin: { x: 0, y: 10, z: 0 } }),
+    brick:  (a, b, R) => ({ parts: [part(B(R * 2.2, R * 1.2, R * 1.2), L(a)), part(Cy(R * 0.4, R * 0.4, R * 0.35, 10), L(b), [R * 0.55, R * 0.75, 0], [0, 0, 0]), part(Cy(R * 0.4, R * 0.4, R * 0.35, 10), L(b), [-R * 0.55, R * 0.75, 0], [0, 0, 0])], spin: { x: 8, y: 0, z: 0 } }),
+    plane:  (a, b, R) => ({ parts: [part(new THREE.ConeGeometry(R * 1.2, R * 3.6, 3), L(a), null, null, [1, 1, 0.3]), part(B(R * 0.1, R * 3.0, R * 0.5), L(b), [0, -R * 0.1, R * 0.1])] }),
+    drop:   (a, b, R) => ({ parts: [part(Sp(R * 0.9), T(a, 0.8), null, null, [1, 1.5, 1]), part(Sp(R * 0.3), K(b), [R * 0.3, R * 0.4, R * 0.4])], wake: a }),
+    cork:   (a, b, R) => ({ parts: [part(Cy(R * 0.7, R * 0.8, R * 1.5, 12), L(a)), part(Cy(R * 0.86, R * 0.86, R * 0.6, 12), L(b), [0, R * 0.9, 0])], spin: { x: 0, y: 8, z: 0 } }),
+    needle: (a, b, R) => ({ parts: [part(Cy(R * 0.18, R * 0.18, R * 4.2, 8), L(a)), part(Cy(R * 0.06, R * 0.06, R * 3.0, 6), K(b), [0, -R * 3.0, 0])] }),
+    leaf:   (a, b, R) => ({ parts: [part(Sp(R), L(a), null, null, [1.6, 0.25, 0.9]), part(B(R * 2.4, R * 0.08, R * 0.12), L(b))], spin: { x: 0, y: 10, z: 0 } }),
+    shard:  (a, b, R) => ({ parts: [part(new THREE.OctahedronGeometry(R * 1.2), L(a), null, null, [1, 1.9, 1])], wake: b, spin: { x: 0, y: 8, z: 0 } }),
+    orb:    (a, b, R) => ({ parts: [part(Sp(R * 0.8), K(a)), part(Sp(R * 1.5), new THREE.MeshBasicMaterial({ color: b, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }))] }),
+    bolt:   (a, b, R) => ({ parts: [part(Cy(R * 0.22, R * 0.22, R * 4.6, 8), K(a)), part(Cy(R * 0.1, R * 0.1, R * 4.7, 6), K(0xffffff))], wake: b }),
+    carrot: (a, b, R) => ({ parts: [part(new THREE.ConeGeometry(R * 1.0, R * 4, 10), L(a), [0, R * 0.2, 0]), part(new THREE.ConeGeometry(R * 0.3, R * 1.1, 6), L(b), [R * 0.3, -R * 2.2, 0], [0, 0, 0.3]), part(new THREE.ConeGeometry(R * 0.3, R * 1.1, 6), L(b), [-R * 0.3, -R * 2.2, 0], [0, 0, -0.3])] }),
+  };
+})();
+// The round of a skin: shared geometry and materials per (shape, colours, size), so a minigun's worth of them costs nothing.
+function _skinShotMesh(spec, r) {
+  const R = Math.max(r * (spec.k || 1.4), spec.min || 0.06), c1 = spec.c[0], c2 = spec.c.length > 1 ? spec.c[1] : spec.c[0];
+  const P = _projCache('skinshot|' + spec.shape + '|' + c1 + '|' + c2 + '|' + R.toFixed(3), () => SKIN_SHAPES[spec.shape](c1, c2, R));
+  const g = new THREE.Group();
+  for (const p of P.parts) {
+    const m = new THREE.Mesh(p.geo, p.mat);
+    if (p.pos) m.position.set(p.pos[0], p.pos[1], p.pos[2]);
+    if (p.rot) m.rotation.set(p.rot[0], p.rot[1], p.rot[2]);
+    if (p.scale) m.scale.set(p.scale[0], p.scale[1], p.scale[2]);
+    g.add(m);
+  }
+  if (P.wake) {                                                            // a soft streak behind it, along the way it came
+    const w = _projCache('skinshot-wake|' + P.wake + '|' + R.toFixed(3), () => ({ geo: new THREE.CylinderGeometry(R * 0.8, R * 0.08, R * 9, 8, 1, true), mat: _glow(P.wake) }));
+    const m = new THREE.Mesh(w.geo, w.mat); m.position.y = -R * 5; g.add(m);
+  }
+  if (P.spin) g._spin = P.spin;
+  g._alignToDir = true;
+  return g;
+}
+// 💥 The bursts: colours for the fireball, the white core, the smoke and the bits that fly, and what a bit is. The ring is the flat shockwave on the floor.
+const BOOM_THEMES = {
+  glaze:    { fire: 0xff78bd, core: 0xfff0f8, smoke: 0xe8a0c0, bits: [0xff78bd, 0xffd27a, 0xc8844a, 0xffffff, 0xff9ac8], bit: 'sprinkle', ring: 0xff9ad0, flash: [255, 120, 190] },
+  crumbs:   { fire: 0xe8a838, core: 0xfff0c0, smoke: 0xb8935a, bits: [0xe8a838, 0xc0392b, 0xf2c14e, 0x8a5a2a], bit: 'chunk', ring: 0xf2c14e, flash: [255, 200, 90] },
+  soda:     { fire: 0xe8dcc0, core: 0xffffff, smoke: 0xf4f4f4, bits: [0xffffff, 0xcfe8ff, 0xe8c07a], bit: 'ball', ring: 0xffffff, flash: [255, 255, 255] },
+  water:    { fire: 0x55bbff, core: 0xe8f8ff, smoke: 0xcfeeff, bits: [0x55bbff, 0xaadcff, 0xffffff], bit: 'drop', ring: 0x66ccff, flash: [90, 170, 255] },
+  confetti: { fire: 0xff6ab8, core: 0xffffff, smoke: 0xfff0a0, bits: [0xff4fa8, 0x4ad8ff, 0xffe14a, 0x7aff7a, 0xff8a3a], bit: 'flake', ring: 0xffe14a, flash: [255, 230, 120] },
+  foam:     { fire: 0xf4f8ff, core: 0xffffff, smoke: 0xe0eaf4, bits: [0xffffff, 0xdbe8f5], bit: 'ball', ring: 0xdbe8f5, flash: [230, 240, 255] },
+  paint:    { fire: 0xff4fa8, core: 0xffffff, smoke: 0xaa44cc, bits: [0xff4fa8, 0x4ad8ff, 0xffe14a, 0x7aff7a], bit: 'drop', ring: 0xff4fa8, flash: [255, 90, 190] },
+  cyber:    { fire: 0x00f0ff, core: 0xffffff, smoke: 0x2a1a5a, bits: [0x00f0ff, 0xff2bd6, 0xffffff], bit: 'cube', ring: 0xff2bd6, flash: [0, 220, 255] },
+  pixel:    { fire: 0x58d85a, core: 0xffffff, smoke: 0x1a3a1a, bits: [0x58d85a, 0xffffff, 0x2a8a3a, 0xf0e050], bit: 'cube', ring: 0x58d85a, flash: [110, 255, 120] },
+  gears:    { fire: 0xc8a030, core: 0xfff0b0, smoke: 0x6b4a2c, bits: [0xc8a030, 0x8a6a2a, 0xb0b8c0], bit: 'flake', ring: 0xc8a030, flash: [255, 210, 90] },
+  paper:    { fire: 0xf2efe6, core: 0xffffff, smoke: 0xd8d4c8, bits: [0xf2efe6, 0xe74c3c, 0xffffff], bit: 'flake', ring: 0xf2efe6, flash: [255, 250, 235] },
+  music:    { fire: 0xb08aff, core: 0xffffff, smoke: 0x4a3a7a, bits: [0xb08aff, 0xffd24a, 0xffffff], bit: 'ball', ring: 0xffd24a, flash: [190, 150, 255] },
+  ice:      { fire: 0xbdf3ff, core: 0xffffff, smoke: 0xe8fbff, bits: [0xbdf3ff, 0xffffff], bit: 'shard', ring: 0x9ae8ff, flash: [170, 235, 255] },
+  star:     { fire: 0xfff0a0, core: 0xffffff, smoke: 0x4a5a9a, bits: [0xfff0a0, 0x8ab4ff, 0xffffff], bit: 'shard', ring: 0x8ab4ff, flash: [255, 245, 170] },
+};
+function _boomFromTint(c) {                                                  // a burst in the colour of the skin, for a skin that has none of its own
+  const col = new THREE.Color(c), dark = col.clone().multiplyScalar(0.45), light = col.clone().lerp(new THREE.Color(0xffffff), 0.6);
+  return { fire: col.getHex(), core: 0xffffff, smoke: dark.getHex(), bits: [col.getHex(), light.getHex(), 0xffffff], bit: 'chunk', ring: col.getHex(), flash: [Math.round(col.r * 255), Math.round(col.g * 255), Math.round(col.b * 255)] };
+}
+function _skinTintOf(skin) {                                                 // the livelier of the two swatch colours
+  let best = 0x9aa4aa, bs = -1;
+  for (const hex of (skin.sw || [])) { const c = new THREE.Color(hex), hsl = { h: 0, s: 0, l: 0 }; c.getHSL(hsl); const score = hsl.s * (0.25 + Math.min(hsl.l, 1 - hsl.l)); if (score > bs) { bs = score; best = c.getHex(); } }
+  return best;
+}
+// What each skin shoots: [shape + two colours (+ size), burst, skin ids]. A skin not listed gets the default below.
+const SKIN_SHOT = {};
+(() => {
+  const G = (shot, boom, ids, tint) => { for (const id of ids) SKIN_SHOT[id] = { shot, boom, tint }; };
+  // food
+  G({ shape: 'slice', c: [0xf2c14e, 0xc0392b], min: 0.08 }, 'crumbs', ['shorty_pizza']);
+  G({ shape: 'can', c: [0x24a798, 0xe8eef0], min: 0.07 }, 'soda', ['machine_pistol_soda']);
+  G({ shape: 'cube', c: [0xd99a48, 0xffdf76] }, 'crumbs', ['sg8_waffle']);
+  G({ shape: 'dart', c: [0xff9ac8, 0xfff3e0] }, 'soda', ['dart_gun_milkshake']);
+  G({ shape: 'disc', c: [0xe8b84a, 0xc98a2a] }, 'crumbs', ['potato_cannon_crisp_tube']);
+  G({ shape: 'carrot', c: [0xff8a1c, 0x3aa83a], min: 0.09 }, 'crumbs', ['rpg_carrot']);
+  G({ shape: 'banana', c: [0xf6d02a, 0x4a3418], min: 0.07 }, 'crumbs', ['deagle_banana', 'akimbo_bananas']);
+  G({ shape: 'ball', c: [0xffffff, 0x222222], k: 1 }, 'crumbs', ['sawed_off_salt_pepper']);
+  G({ shape: 'ball', c: [0x4a3626, 0xd8c8a0] }, 'crumbs', ['chain_gun_pepper_mill']);
+  G({ shape: 'cube', c: [0xe8c07a, 0x8a5a2a] }, 'crumbs', ['twin_ar_toaster']);
+  G({ shape: 'cork', c: [0xc8a030, 0xe8e0c0], min: 0.08 }, 'soda', ['firework_champagne', 'javelin_launcher_champagne', 'firework_showman']);
+  G({ shape: 'leaf', c: [0x4caf3a, 0x2e7d32] }, 'crumbs', ['minigun_salad_spinner'], 0x4caf3a);
+  G({ shape: 'ball', c: [0xff4fa8, 0xffe14a] }, 'paint', ['paintball_gumball']);
+  // water and foam
+  G({ shape: 'drop', c: [0x3aa8e8, 0xffffff] }, 'water', ['glock18_water_pistol', 'akimbo_water_pistols', 'm134_lawn_sprinkler', 'barrett_pressure_washer']);
+  G({ shape: 'ball', c: [0xf4f8ff, 0xdbe8f5], min: 0.08 }, 'foam', ['foam_cannon_extinguisher']);
+  G({ shape: 'shard', c: [0xbdf3ff, 0x9ae8ff] }, 'ice', ['freeze_slushie', 'freeze_hyperslush', 'cyroclasm_snow_globe', 'frost_blaster_window_ac']);
+  // the office and the house
+  G({ shape: 'staple', c: [0xc8d0d6, 0xc8d0d6], min: 0.07 }, 'paper', ['burst_staple_gun', 'akimbo_staplers']);
+  G({ shape: 'disc', c: [0xffffff, 0x2a75ff] }, 'paper', ['vector_label_maker', 'vector_brick_labeler']);
+  G({ shape: 'disc', c: [0xfff3e0, 0xffd27a] }, 'confetti', ['sticker_blaster_hole_punch']);
+  G({ shape: 'disc', c: [0xd8c8a0, 0x8a6a3a] }, 'paper', ['machine_pistol_tape_gun']);
+  G({ shape: 'ball', c: [0xfff0a0, 0xffffff] }, 'foam', ['nail_gun_hot_glue']);
+  G({ shape: 'needle', c: [0xc8d0d6, 0xff4a6a] }, 'gears', ['rpd_sewing_machine']);
+  G({ shape: 'cube', c: [0x2a2a2a, 0xf2efe6] }, 'paper', ['mp40_typewriter']);
+  G({ shape: 'needle', c: [0xc8a030, 0x2a2a2a] }, 'gears', ['hkmp7_power_drill']);
+  G({ shape: 'brick', c: [0xe74c3c, 0xf1c40f] }, 'pixel', ['xm7_bricks']);
+  G({ shape: 'plane', c: [0xf2efe6, 0xe74c3c], min: 0.08 }, 'paper', ['pistol_origami', 'mortar_rifle_mailing_tube']);
+  // music
+  G({ shape: 'note', c: [0x2a1a3a, 0xffd24a] }, 'music', ['mk44_keytar', 'lever_trombone', 'sg8_accordion', 'mg42_accordion', 'boombow_harp', 'bazooka_tuba', 'gau19_pipe_organ', 'shockwave_launcher_boombox', 'signal_pistol_bike_horn', 'hand_cannon_megaphone']);
+  // the neon, the pixels, the clockwork, the stars
+  G({ shape: 'bolt', c: [0x00f0ff, 0xff2bd6] }, 'cyber', ['ak20_cyberpunk', 'srx_cyberpunk', 'sg8_cyberpunk', 'vector_cyberpunk', 'pistol_cyberpunk', 'mp40_cyberpunk', 'revolver_cyberpunk', 'smart_smg_neon', 'p90_neon_sign']);
+  G({ shape: 'cube', c: [0x58d85a, 0xffffff] }, 'pixel', ['srx_8bit', 'ak20_8bit', 'sg8_8bit', 'revolver_8bit', 'vector_8bit', 'shorty_8bit']);
+  G({ shape: 'orb', c: [0xff8a1c, 0x2a8cff] }, 'cyber', ['sg8_portal', 'vector_portal', 'railgun_portal_detector', 'p90_quantum_scanner']);
+  G({ shape: 'star', c: [0xfff0a0, 0x8ab4ff] }, 'star', ['railgun_constellation', 'portal_launcher_constellation']);
+  G({ shape: 'gear', c: [0xc8a030, 0x6b4a2c], min: 0.07 }, 'gears', ['coilgun_clockwork', 'rpd_clockwork_belt', 'grenade_launcher_cuckoo']);
+  G({ shape: 'bolt', c: [0x4aa8ff, 0xffffff] }, 'cyber', ['ak20_blueprint']);
+  G({ shape: 'cube', c: [0xe74c3c, 0x2ecc71] }, 'pixel', ['p90_rubiks_cube']);
+  G({ shape: 'shard', c: [0xb0b8ff, 0x6a6aff] }, 'star', ['ak20_hyperspace', 'deagle_phantom', 'burst_cannon_phantom', 'deagle_glitch']);
+  // more of the house
+  G({ shape: 'drop', c: [0x2a9fd8, 0xffffff], min: 0.1 }, 'water', ['gl_water_balloon']);
+  G(null, 'water', ['rpg_water_balloon']);                                     // (its round is the authored water balloon; the burst is a splash)
+  G({ shape: 'dart', c: [0xf2e63a, 0xf07a1c] }, 'foam', ['ak20_nerf_elite']);
+  G({ shape: 'leaf', c: [0xc8782a, 0x8a5a1a] }, 'crumbs', ['sg8_leaf_blower']);
+  G({ shape: 'ball', c: [0xe8442c, 0xffffff] }, 'water', ['lever_fishing_rod']);
+  G({ shape: 'ball', c: [0xff4a3a, 0xffd0a0], k: 1 }, 'confetti', ['revolver_cap_gun']);
+  G({ shape: 'ball', c: [0xff9a5a, 0xffe0c0] }, 'foam', ['mp40_hair_dryer']);
+  G({ shape: 'cube', c: [0xf2c14e, 0xd89a2a] }, 'crumbs', ['crossbow_mousetrap']);
+  G({ shape: 'needle', c: [0xe8c066, 0x8a5a2a] }, 'crumbs', ['mauser_broom']);
+  G({ shape: 'ball', c: [0xdff6ff, 0xff9ad0], min: 0.075 }, 'foam', ['five_seven_soap']);
+  G({ shape: 'disc', c: [0x1a1a1a, 0xffffff] }, 'crumbs', ['garand_hockey_stick']);
+  G({ shape: 'ball', c: [0xf1c40f, 0xffffff] }, 'pixel', ['amr_pool_net']);
+  G({ shape: 'orb', c: [0xffb040, 0xff7a1a] }, null, ['duelist_candlestick']);
+  G({ shape: 'ball', c: [0xfff3d0, 0xe8d8b0], min: 0.075 }, 'crumbs', ['snub_revolver_egg_timer']);
+  G({ shape: 'disc', c: [0xd7261e, 0xffffff], min: 0.08 }, 'crumbs', ['traffic_stop_sign']);
+  G({ shape: 'star', c: [0xd8c8a0, 0xc8a030] }, 'star', ['shorty_outlaw']);
+  G({ shape: 'orb', c: [0xb08aff, 0xff6ad8] }, 'music', ['storm_bloom_plasma_globe']);
+  G({ shape: 'ball', c: [0x6a7078, 0x9aa4aa] }, 'crumbs', ['desert_eagle_flintlock']);
+  G({ shape: 'drop', c: [0x66ccff, 0xff9a2a] }, 'water', ['plasma_carbine_fishbowl', 'paintball_fishbowl']);
+  G({ shape: 'needle', c: [0xc8d0d6, 0xff4a6a] }, 'paper', ['lancer_fencing_foil']);
+  G({ shape: 'shard', c: [0xff6ad8, 0x6ad8ff] }, 'star', ['prism_launcher_kaleidoscope']);
+  // water balloons, the confetti guns
+  G({ shape: 'ball', c: [0xff4fa8, 0xffe14a] }, 'confetti', ['gunslinger_confetti', 'flare_party_popper']);
+  // the realistic ones: the tracer of their cartridge, and the ordinary fire (boom: null)
+  G(null, null, ['ak20_ak47_wood', 'ak20_aks74u', 'rpd_m249'], 0xffa83a);
+  G(null, null, ['burst_m4a1', 'm4a1_arena_hk416', 'burst_scar_h', 'vector_mp5', 'flechette_bullpup', 'aug'], 0xff5a3a);
+  G(null, null, ['srx_dragunov', 'srx_m24', 'm1_garand_fal', 'lever_winchester94', 'sg8_remington870', 'revolver_python', 'pistol_m9', 'grenade_launcher_mgl', 'flamethrower_m2', 'akimbo_1911', 'akimbo_micro_uzi', 'machine_pistol_uzi'], 0xffc060);
+})();
+const _skinLookCache = {};
+const _SKIN_EXPLOSIVE = new Set(['rocket', 'grenade']);
+function skinLookFor(skin) {                                                // the whole look of a skin's shots: what skin.look says, then the table above, then the default
+  if (!skin) return null;
+  if (_skinLookCache[skin.id]) return _skinLookCache[skin.id];
+  const T = SKIN_SHOT[skin.id] || null, tint = (T && T.tint) || (T && T.shot && T.shot.c[0]) || _skinTintOf(skin);
+  const look = Object.assign({ bulletColor: tint }, skin.look || {});
+  if (T && T.shot && !(skin.look && skin.look.projectile)) look.shot = T.shot;
+  let boom = null;
+  if (skin.look && skin.look.projectile === 'donut') boom = BOOM_THEMES.glaze;
+  else if (T && T.boom) boom = BOOM_THEMES[T.boom] || null;
+  else if (!T) {                                                              // nothing written for it: an explosive gun bursts in the colour of the skin
+    const w = WEAPONS.find(x => x.id === skin.weapon);
+    if (w && _SKIN_EXPLOSIVE.has(projectileKind(w.id, w))) boom = _boomFromTint(tint);
+  }
+  look.boom = boom;
+  return _skinLookCache[skin.id] = look;
+}
+let _skinById = null;
+function skinLookById(id) {                                                 // for somebody else's shot: the skin id they sent
+  if (typeof id !== 'string') return null;
+  try { if (!_skinById) _skinById = new Map(MODEL_SKINS.map(m => [m.id, m])); return skinLookFor(_skinById.get(id)); } catch (e) { return null; }
+}
+// The skin you wear rides on every shot you take, so the others see the same round and the same burst (server.js checks it is a plain id and passes it on).
+{
+  const _emit = socket.emit.bind(socket);
+  socket.emit = function (ev, d, ...rest) {
+    if (ev === 'shoot' && d && typeof d === 'object' && d.weapon && d.skin === undefined) {
+      try { const sk = _activeModelSkin[d.weapon]; if (sk) d.skin = sk.id; } catch (e) {}     // (_activeModelSkin is declared far below)
+    }
+    return _emit(ev, d, ...rest);
+  };
+}
+
+function makeBulletMesh(color, size, weaponId, own, lookArg) {
   if (weaponId === 'spear_throw') return _buildSpearShot();
   const r = size || 0.04;
   const weapon = (typeof WEAPONS !== 'undefined') ? WEAPONS.find(w => w.id === weaponId) : null;
   // A model skin can say what its rounds look like. Only for bullets YOU fire:
   // an enemy carrying the same weapon is carrying THEIR skin, not yours, and
   // the server never hears about any of this.
-  const look = own && typeof _modelSkinLook !== 'undefined' ? _modelSkinLook[weaponId] : null;
+  const look = lookArg || (own && typeof _modelSkinLook !== 'undefined' ? _modelSkinLook[weaponId] : null);
   if (look && look.bulletColor !== undefined) color = look.bulletColor;
+  if (look && look.shot) return _skinShotMesh(look.shot, r);               // a skin with a round of its own (SKIN_SHOT)
   if (look && look.rainbow) color = new THREE.Color().setHSL(Math.floor(((performance.now() / 1000) * 0.6 % 1) * 24) / 24, 1, 0.55).getHex();
   const kind = (look && look.projectile) || projectileKind(weaponId, weapon);
   switch (kind) {
@@ -53391,7 +53584,7 @@ function applyModelSkin(weaponId) {
     }
     next = skin._model;
   }
-  if (skin && skin.look) _modelSkinLook[weaponId] = skin.look;
+  if (skin) _modelSkinLook[weaponId] = skinLookFor(skin);                    // every skin has a look for its shots, even if only a tint (skinLookFor)
   else delete _modelSkinLook[weaponId];
   if (skin) _activeModelSkin[weaponId] = skin;
   else delete _activeModelSkin[weaponId];
@@ -58042,7 +58235,9 @@ function updateReloadAnim() {
 
 
 function spawnLocalBullet(origin, dir, id, isOwn, speed, color, size, weaponId, opts = {}) {
-  const mesh = makeBulletMesh(color, size, weaponId, isOwn);
+  // The skin's look: yours from what you wear, somebody else's from the skin id their shot carried (opts.skinId, see the bulletFired handler).
+  const skinLook = isOwn ? ((typeof _modelSkinLook !== 'undefined' && _modelSkinLook[weaponId]) || null) : (opts.skinId ? skinLookById(opts.skinId) : null);
+  const mesh = makeBulletMesh(color, size, weaponId, isOwn, skinLook);
   mesh.position.copy(origin);
   const flightDir = dir.clone();
   if (flightDir.lengthSq() < 0.000001) flightDir.set(0, 0, -1);
@@ -58057,7 +58252,7 @@ function spawnLocalBullet(origin, dir, id, isOwn, speed, color, size, weaponId, 
   // Track origin and max range for short-range weapons (arc torrent)
   const wSpec = projectileWeaponSpec(weaponId);
   const maxRange = opts.maxRange || wSpec?.maxRange;
-  localBullets.push({ mesh, dir: flightDir, createdAt: Date.now(), id, isOwn, ownerId: isOwn ? myId : opts.botId,
+  localBullets.push({ mesh, dir: flightDir, createdAt: Date.now(), id, isOwn, skinLook, ownerId: isOwn ? myId : opts.botId,
     speed: projectileBaseSpeed(weaponId, wSpec, speed) * BULLET_SPEED_MULTIPLIER * (wSpec?.bulletSpeedMult || 1), weaponId, size,
     spawnX: origin.x, spawnY: origin.y, spawnZ: origin.z, maxRange, ...opts });
 }
@@ -59445,8 +59640,9 @@ function boxFaceNormal(box, p) {
 function rocketExplode(pos, weaponId, excludePid, opts = {}) {
   const w = projectileWeaponSpec(weaponId) || {};
   const radius = w.splashRadius || 5;
-  spawnExplosion(pos);
-  spawnAbilityAOEFX(pos.clone().setY(0.2), radius, 0xff7722);
+  const boom = (opts.skinLook && opts.skinLook.boom) || null;               // the burst of the skin that fired it: what it LOOKS like, not what it does (same radius, same damage)
+  spawnExplosion(pos, boom);
+  spawnAbilityAOEFX(pos.clone().setY(0.2), radius, boom ? boom.ring : 0xff7722);
   playSoundEvent('explosion', { position: pos, volume: 1.1, minGap: 60 });
   const splashId = weaponId + '_splash';
   const damageRemotes = opts.damageRemotes !== false;
@@ -59698,7 +59894,7 @@ function updateBullets(dt) {
         if (wallHit && !b.isOwn) {
           spawnHitParticle(wallHitPt);
           if (EXPLOSIVE_KINDS.has(projectileKind(b.weaponId, WEAPONS.find(w => w.id === b.weaponId)))) {
-            rocketExplode(wallHitPt, b.weaponId, null, { damageRemotes: false, damagePlayer: true });
+            rocketExplode(wallHitPt, b.weaponId, null, { damageRemotes: false, damagePlayer: true, skinLook: b.skinLook });
           } else {
             spawnImpactMark(wallHitPt, wallHitNormal, b.weaponId);
           }
@@ -59832,7 +60028,7 @@ function updateBullets(dt) {
         // projectile kind rather than two hardcoded ids, so every launcher in
         // the roster explodes instead of only the two rockets.
         if (EXPLOSIVE_KINDS.has(projectileKind(b.weaponId, WEAPONS.find(w => w.id === b.weaponId)))) {
-          rocketExplode(wallHitPt, b.weaponId, null, { damagePlayer: false });
+          rocketExplode(wallHitPt, b.weaponId, null, { damagePlayer: false, skinLook: b.skinLook });
           removeBullet(); continue;
         }
         // Bouncing weapons (prism, pulse disc, pinball): reflect off wall and speed up
@@ -59910,7 +60106,7 @@ function updateBullets(dt) {
         }
         // 🚀💣 Direct target took the main hit; splash everyone else nearby.
         if (EXPLOSIVE_KINDS.has(projectileKind(b.weaponId, WEAPONS.find(w => w.id === b.weaponId)))) {
-          rocketExplode(_bpos.clone(), b.weaponId, bestHit.pid, { damagePlayer: false });
+          rocketExplode(_bpos.clone(), b.weaponId, bestHit.pid, { damagePlayer: false, skinLook: b.skinLook });
         }
         if (b.plantsSpear) landThrownSpear(b, bestHit.mesh.position, null);                   // it drops and stands at their feet
         removeBullet();
@@ -62621,6 +62817,7 @@ socket.on('bulletFired', b => {
     ? { ballLightning: true, auraRadius: 3.0, auraCooldown: 1000, directRootMs: 3000, auraRootMs: 1000, maxRange: 42 }
     : {};
   opts.ownerId = b.ownerId;
+  if (b.skin) opts.skinId = b.skin;
   spawnLocalBullet(origin, new THREE.Vector3(b.dx,b.dy,b.dz), b.id, false, w.bulletSpeed, w.bulletColor, w.bulletSize, b.weapon || w.id, opts);
 });
 socket.on('projectileIntercept', data => {
@@ -63993,23 +64190,31 @@ function applyBlastImpulse(pos, opts = {}) {
   window._dashLeft = 1;
 }
 
-function spawnExplosion(pos) {
-  // 💥 Boom — positional volume based on distance from camera
+const _boomBits = {};
+function _boomBitGeo(kind) {                                                  // what a bit of a themed burst is (shared: a burst throws fourteen of them)
+  return _boomBits[kind] || (_boomBits[kind] = kind === 'sprinkle' ? new THREE.BoxGeometry(0.095, 0.022, 0.022)
+    : kind === 'ball' ? new THREE.SphereGeometry(0.05, 7, 5) : kind === 'drop' ? new THREE.SphereGeometry(0.042, 7, 5)
+    : kind === 'flake' ? new THREE.BoxGeometry(0.10, 0.012, 0.10) : kind === 'cube' ? new THREE.BoxGeometry(0.065, 0.065, 0.065)
+    : kind === 'shard' ? new THREE.OctahedronGeometry(0.06) : new THREE.BoxGeometry(0.055, 0.055, 0.055));
+}
+function spawnExplosion(pos, boom = null) {
+  // 💥 Boom — positional volume based on distance from camera. `boom` (BOOM_THEMES, or a tint of a skin) changes only the colours and what the bits are:
+  // the blast, the damage and the sound are the same for every skin.
   playSoundEvent('explosion', { position: pos, remote: pos.distanceTo(camera.position) > 5, volume: 1.1, minGap: 80 });
   applyBlastImpulse(pos);
   window.PVP_RAGDOLL?.blast(pos);
   // ── Fireball (grows + fades) ──
-  const fbMat = new THREE.MeshBasicMaterial({ color: 0xff7700, transparent: true, opacity: 0.92 });
+  const fbMat = new THREE.MeshBasicMaterial({ color: boom ? boom.fire : 0xff7700, transparent: true, opacity: 0.92 });
   const fb = new THREE.Mesh(new THREE.SphereGeometry(0.30, 8, 6), fbMat);
   fb.position.copy(pos); scene.add(fb);
 
   // ── White inner flash ──
-  const coreMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1 });
+  const coreMat = new THREE.MeshBasicMaterial({ color: boom ? boom.core : 0xffffff, transparent: true, opacity: 1 });
   const core = new THREE.Mesh(new THREE.SphereGeometry(0.18, 7, 5), coreMat);
   core.position.copy(pos); scene.add(core);
 
   // ── Smoke ring ──
-  const smokeMat = new THREE.MeshBasicMaterial({ color: 0x444444, transparent: true, opacity: 0.55 });
+  const smokeMat = new THREE.MeshBasicMaterial({ color: boom ? boom.smoke : 0x444444, transparent: true, opacity: 0.55 });
   const smoke = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), smokeMat);
   smoke.position.copy(pos).setY(pos.y + 0.3); scene.add(smoke);
 
@@ -64041,10 +64246,11 @@ function spawnExplosion(pos) {
   requestAnimationFrame(tick);
 
   // ── Debris chunks ──
+  const bits = boom ? boom.bits : null;
   for (let i = 0; i < 14; i++) {
-    const hue = i % 3 === 0 ? 0xff4400 : (i % 3 === 1 ? 0xffaa22 : 0x888888);
+    const hue = bits ? bits[i % bits.length] : (i % 3 === 0 ? 0xff4400 : (i % 3 === 1 ? 0xffaa22 : 0x888888));
     const dMat = new THREE.MeshBasicMaterial({ color: hue });
-    const chunk = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.055, 0.055), dMat);
+    const chunk = new THREE.Mesh(boom ? _boomBitGeo(boom.bit) : new THREE.BoxGeometry(0.055, 0.055, 0.055), dMat);
     chunk.position.copy(pos);
     scene.add(chunk);
     const vx = (Math.random() - 0.5) * 18, vy = Math.random() * 12 + 4, vz = (Math.random() - 0.5) * 18;
@@ -64064,11 +64270,21 @@ function spawnExplosion(pos) {
     requestAnimationFrame(debrisTick);
   }
 
+  // ── A themed burst also throws a flat ring across the floor, in its own colour ──
+  if (boom) {
+    const ringMat = new THREE.MeshBasicMaterial({ color: boom.ring, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false });
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.85, 1.0, 36), ringMat);
+    ring.rotation.x = -Math.PI / 2; ring.position.copy(pos).setY(Math.max(0.06, pos.y * 0.1 + 0.06)); scene.add(ring);
+    let t0 = 0;
+    const ringTick = () => { t0 += 16; const t = Math.min(1, t0 / 480); ring.scale.setScalar(0.4 + t * 6.5); ringMat.opacity = 0.8 * (1 - t); if (t < 1) requestAnimationFrame(ringTick); else scene.remove(ring); };
+    requestAnimationFrame(ringTick);
+  }
   // ── Screen flash if close ──
   if (camera.position.distanceTo(pos) < 9) {
     const alpha = Math.max(0, 0.65 - camera.position.distanceTo(pos) / 9 * 0.65);
     const fl = document.createElement('div');
-    fl.style.cssText = `position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(255,160,30,${alpha.toFixed(2)});pointer-events:none;z-index:89;transition:opacity 0.18s`;
+    const fc = boom && boom.flash ? boom.flash : [255, 160, 30];
+    fl.style.cssText = `position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(${fc[0]},${fc[1]},${fc[2]},${alpha.toFixed(2)});pointer-events:none;z-index:89;transition:opacity 0.18s`;
     document.body.appendChild(fl);
     requestAnimationFrame(() => { fl.style.opacity = '0'; setTimeout(() => fl.remove(), 200); });
   }

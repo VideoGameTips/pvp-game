@@ -2675,6 +2675,8 @@ io.on('connection', (socket) => {
       x: data.x, y: data.y, z: data.z,
       dx: data.dx, dy: data.dy, dz: data.dz,
       weapon: w,
+      // The skin on the gun, so everyone sees its round and its burst. Cosmetic only (nothing here reads it), and only a plain id is passed on.
+      skin: typeof data.skin === 'string' && /^[a-z0-9_]{1,48}$/.test(data.skin) ? data.skin : undefined,
     });
   });
 

@@ -4182,6 +4182,59 @@ if (ok && process.argv.includes('--irregular')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--skinshot')) {
+  // Skin shots (Andy: "each skin should affect the projectile: the Glaze Launcher launches doughnuts, the explosion looks different and has the same effect"): every gun skin has
+  // a look for its shots (at the least a tint from its swatch); the table names real skins, real shapes and real bursts; a themed shot builds; the burst of a skin reaches
+  // rocketExplode and changes nothing but the look (the radius, the damage, the speed and the hit size are the weapon's); the realistic ones keep the ordinary fire.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [], ids = new Set(MODEL_SKINS.map(m => m.id));
+    for (const [id, T] of Object.entries(SKIN_SHOT)) {
+      if (!ids.has(id)) issues.push('SKIN_SHOT names "' + id + '": there is no such model skin');
+      if (T.shot) { if (!SKIN_SHAPES[T.shot.shape]) issues.push(id + ' has a shot shape that does not exist: ' + T.shot.shape); if (!Array.isArray(T.shot.c) || !T.shot.c.length) issues.push(id + ' has no colours for its shot'); }
+      if (T.boom && !BOOM_THEMES[T.boom]) issues.push(id + ' has a burst that does not exist: ' + T.boom);
+    }
+    for (const [k, B] of Object.entries(BOOM_THEMES)) for (const f of ['fire', 'core', 'smoke', 'ring']) if (!Number.isFinite(B[f])) issues.push('burst ' + k + ' has no ' + f);
+    let shots = 0, boomed = 0;
+    for (const m of MODEL_SKINS) {
+      const w = WEAPONS.find(x => x.id === m.weapon); if (!w) continue;
+      const look = skinLookFor(m);
+      if (!look || look.bulletColor === undefined) { issues.push(m.id + ' has no look for its shots'); continue; }
+      try {
+        const mesh = makeBulletMesh(w.bulletColor, w.bulletSize, w.id, true, look);
+        if (!mesh) issues.push(m.id + ' builds no round');
+        if (look.shot) shots++;
+      } catch (e) { issues.push(m.id + ' cannot build its round: ' + e.message); }
+      if (look.boom) boomed++;
+    }
+    if (shots < 60) issues.push('only ' + shots + ' skins have a round of their own, expected well over 60');
+    if (!(boomed > 40)) issues.push('only ' + boomed + ' skins have a burst of their own');
+    // the donut guns: the round is a donut and the burst is the glaze one
+    const glaze = skinLookFor(MODEL_SKINS.find(m => m.id === 'grenade_launcher_donut'));
+    if (glaze.projectile !== 'donut' || glaze.boom !== BOOM_THEMES.glaze) issues.push('the Glaze Launcher should shoot donuts and burst in glaze');
+    // ordinary skins of an explosive gun burst in their own colour; the realistic ones keep the ordinary fire and the cartridge's tracer
+    if (!skinLookFor(MODEL_SKINS.find(m => m.id === 'gl_water_balloon')).boom) issues.push('the water balloon launcher should burst as a splash');
+    const mgl = skinLookFor(MODEL_SKINS.find(m => m.id === 'grenade_launcher_mgl'));
+    if (mgl.boom || mgl.shot) issues.push('the realistic MGL should shoot the ordinary grenade and burst in the ordinary fire');
+    // the burst reaches rocketExplode and changes only the look
+    const seen = [], keepSE = spawnExplosion, keepAOE = spawnAbilityAOEFX, keepSnd = playSoundEvent;
+    try {
+      spawnExplosion = (pos, boom) => seen.push(['boom', boom]); spawnAbilityAOEFX = (pos, r, c) => seen.push(['ring', r, c]); playSoundEvent = () => {};
+      rocketExplode(new THREE.Vector3(0, 0.5, -20), 'grenade_launcher', null, { skinLook: glaze, damageRemotes: false });
+      rocketExplode(new THREE.Vector3(0, 0.5, -20), 'grenade_launcher', null, { damageRemotes: false });
+    } finally { spawnExplosion = keepSE; spawnAbilityAOEFX = keepAOE; playSoundEvent = keepSnd; }
+    const [a, ar, b, br] = seen;
+    if (!(a && a[1] === BOOM_THEMES.glaze && ar[2] === BOOM_THEMES.glaze.ring)) issues.push('the glaze burst did not reach the explosion: ' + JSON.stringify(seen.map(s => s[0])));
+    if (!(b && b[1] === null && br[2] === 0xff7722)) issues.push('a stock shot should burst as it always did');
+    if (ar[1] !== br[1]) issues.push('a skin must not change the splash radius (' + ar[1] + ' against ' + br[1] + ')');
+    // nothing a skin writes can touch how the round behaves: its look has no stat in it
+    const BAD = ['damage', 'speed', 'bulletSpeed', 'splashRadius', 'radius', 'size', 'pellets', 'fireRate', 'spread'];
+    for (const m of MODEL_SKINS) { const look = skinLookFor(m); for (const k of BAD) if (look && look[k] !== undefined) issues.push(m.id + ' has "' + k + '" in its look: a skin is the look and nothing else'); }
+    return issues;
+  })()`);
+  console.log('skin shot checks: every gun skin has a look for its round (a tint at least), the table names real skins, shapes and bursts, the Glaze Launcher shoots donuts and bursts in glaze, a skin changes only the look of a burst (same radius), realistic skins keep the ordinary fire');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.argv.includes('--saw')) {
   // The chainsaw's Rev Up is a HELD ability (Andy): press E and the saw revs, swinging by itself faster than a click and burning fuel the whole time; the instant E comes
   // up it stops. No dash, no 3 s timer, no 12 s cooldown, nothing for the press to cost on its own, and no rev on an empty tank.
