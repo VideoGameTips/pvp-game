@@ -67869,7 +67869,7 @@ function spawnGameBots() {
   // They become ally-team bots so they never attack you — with no enemies present
   // they just wander/idle around the lounge while you organize 1v1s in the duel pit.
   if (selectedModeConfig.type === 'lobby') {
-    draftedAllies = Object.keys(window.CHAT_CAST || {});
+    draftedAllies = LOBBY_CAST ? Object.keys(window.CHAT_CAST || {}) : [];
     allies  = draftedAllies.length + LOBBY_VISITOR_NAMES.length;
     enemies = 0;
   }
@@ -73769,6 +73769,9 @@ const LOBBY_SERVICES = [
   {id:'arcade',x:21,z:26,label:'Choose an arcade activity',action:()=>openLobbyArcade()},
   {id:'range',x:1,z:34,label:'Enter the shooting range',action:()=>enterShootingRange()},
 ];
+// 🗄️ Archived (Andy): the comic characters (the chat cast) who used to wander Lobby 13 beside the visitors. Only the twelve
+// NPC visitors are left. Set true to bring the whole cast back.
+const LOBBY_CAST = false;
 const LOBBY_VISITOR_NAMES = ['PRogame567','ToastOnWifi','xXPixelRushXx','NotAFryingPan','CloudyAim42','CtrlAltYeet',
   'MintyReload','LaggyLegend07','BeanWithAK','NeonNoodle','RamenRunner9','tinyBoss300'];
 let lobbyServiceHere = null, lobbyNav = null;
