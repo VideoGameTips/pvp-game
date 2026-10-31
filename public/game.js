@@ -62235,8 +62235,8 @@ function scheduleLocalOutOfBoundsRecovery() {
       if (me) { me.hp = matchMaxHp(); me.dead = false; }
       updateHealthHUD(matchMaxHp());
       resetCombatResources();
-      camera.position.set(-22, 1.65, 22);
-      faceToward(-22, 0);
+      camera.position.set(DDAY_BUNKER_XS[0], 1.65, DDAY_BUNKER_Z);
+      faceToward(DDAY_BUNKER_XS[0], 0);
       socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z, mode: currentModeId() });
       grantSpawnShield(3000);
       requestPointerLockSafe();
@@ -62484,7 +62484,7 @@ function applyBotDamageToPlayer(weaponId, botId, damageOverride) {
         if (ds) ds.style.display = 'none';
         isDead = false;
         me.hp = 300; updateHealthHUD(300);
-        camera.position.set(-22, 1.65, 22); faceToward(-22, 0);
+        camera.position.set(DDAY_BUNKER_XS[0], 1.65, DDAY_BUNKER_Z); faceToward(DDAY_BUNKER_XS[0], 0);
         grantSpawnShield(3000);
         requestPointerLockSafe();
       });
@@ -63157,8 +63157,8 @@ socket.on('playerDied', data => {
         if (!match || match.over || !isDead) return;
         ds.style.display = 'none';
         isDead = false;
-        camera.position.set(-22, 1.65, 22); // back to bunker 0 slit
-        faceToward(-22, 0);   // out of the slit, toward the enemies (-Z)
+        camera.position.set(DDAY_BUNKER_XS[0], 1.65, DDAY_BUNKER_Z); // back to bunker 0 slit
+        faceToward(DDAY_BUNKER_XS[0], 0);   // out of the slit, toward the enemies (-Z)
         socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z, mode: currentModeId() });
         grantSpawnShield(3000);
         requestPointerLockSafe();
@@ -67094,8 +67094,14 @@ function initLastStand() {}
 function onLastStandKill() {}
 
 // ── D-Day mode ──────────────────────────────────────────────────────────────
+// The Battlefield is 120 x 160: the defenders now hold the south trench line and the attackers start from the far north
+// edge, so they cross the whole of no man's land (farmhouse, craters, hedgerows) instead of a 60 m strip of it. Fewer
+// troopers, more ground: 12 + 12 + 26 where it used to be 20 + 20 + 50.
 const DDAY_BUNKER_XS = [-22, -7, 7, 22];
-const DDAY_BUNKER_Z  = 24;
+const DDAY_BUNKER_Z  = 44;       // between the two sandbag rows of the south trench line
+const DDAY_SPAWN_Z   = -70;      // the attackers' start (inside the north spawn zone)
+const DDAY_SPREAD    = 96;       // how wide they line up
+const DDAY_WAVES     = [12, 12, 26];
 
 function initDDay() {
   ddayState = {
@@ -67130,18 +67136,18 @@ function startDDayPhase(phase) {
     setTimeout(() => startDDayPhase('wave1'), 5000);
   } else if (phase === 'wave1') {
     ddayState.wavesSent = 1;
-    showAnnouncement('WAVE 1', '20 troops charging the hill!', '#ff9944', 2800);
-    spawnDDayWave(20, 1);
+    showAnnouncement('WAVE 1', `${DDAY_WAVES[0]} troops charging the hill!`, '#ff9944', 2800);
+    spawnDDayWave(DDAY_WAVES[0], 1);
     ddayState.wave2Timer = setTimeout(() => startDDayPhase('wave2'), 10000);
   } else if (phase === 'wave2') {
     ddayState.wavesSent = 2;
-    showAnnouncement('WAVE 2', '20 more troops incoming!', '#ff7722', 2800);
-    spawnDDayWave(20, 2);
+    showAnnouncement('WAVE 2', `${DDAY_WAVES[1]} more troops incoming!`, '#ff7722', 2800);
+    spawnDDayWave(DDAY_WAVES[1], 2);
     ddayState.wave3Timer = setTimeout(() => startDDayPhase('wave3'), 30000);
   } else if (phase === 'wave3') {
     ddayState.wavesSent = 3;
-    showAnnouncement('FINAL WAVE', '50 troops — HOLD THE LINE!', '#ff2222', 3000);
-    spawnDDayWave(50, 3);
+    showAnnouncement('FINAL WAVE', `${DDAY_WAVES[2]} troops — HOLD THE LINE!`, '#ff2222', 3000);
+    spawnDDayWave(DDAY_WAVES[2], 3);
     ddayState.phase = 'final';
   }
   updateMatchHUD();
@@ -67151,11 +67157,11 @@ function spawnDDayWave(count, waveNum) {
   if (!match || match.over) return;
   const now = Date.now();
   const botList = [];
-  const spread  = 80;
+  const spread  = DDAY_SPREAD;
   for (let i = 0; i < count; i++) {
     const id = `dday_w${waveNum}_${i}_${now}`;
     const xPos = ((i / Math.max(count-1, 1)) - 0.5) * spread + (Math.random()-0.5) * 3;
-    const zPos = -40 - Math.random() * 4;
+    const zPos = DDAY_SPAWN_Z - Math.random() * 4;
     const weaponId = randomPrimaryId();
     const pData = {
       id, name: `Trooper ${waveNum}-${i+1}`, isBot: true, team: 'enemy',
@@ -67223,10 +67229,10 @@ function onDDayKill(targetId, killerId) {
 function spawnDDayGrenadeRain() {
   const mat = new THREE.MeshLambertMaterial({ color: 0x2a2a2a });
   ddayGrenades.length = 0;
-  for (let i = 0; i < 35; i++) {
+  for (let i = 0; i < 45; i++) {
     const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.18, 6, 6), mat);
-    const x  = (Math.random()-0.5) * 90;
-    const gz = Math.random() * 80 - 38; // whole map
+    const x  = (Math.random()-0.5) * 100;
+    const gz = Math.random() * 130 - 66; // from the attackers' start to the defenders' line
     mesh.position.set(x, 22 + Math.random() * 12, gz);
     scene.add(mesh);
     ddayGrenades.push({
@@ -67578,8 +67584,8 @@ function botSideSpawn(idx, count, team) {
   }
   // D-Day ally bots: place in bunkers 1, 2, 3 (player is in bunker 0)
   if (selectedModeConfig && selectedModeConfig.type === 'dday' && team === 'ally') {
-    const bunkerXs = [-7, 7, 22]; // bunkers 1, 2, 3
-    return { x: bunkerXs[idx] || 0, z: 22 }; // near slit, inside bunker
+    const bunkerXs = DDAY_BUNKER_XS.slice(1); // bunkers 1, 2, 3
+    return { x: bunkerXs[idx] || 0, z: DDAY_BUNKER_Z }; // near slit, inside bunker
   }
   // 🛋️ Lobby 13: scatter the cast around the lounge (avoid the duel pit at x≈-22).
   if (selectedModeConfig && selectedModeConfig.type === 'lobby') {
@@ -67853,7 +67859,7 @@ function spawnGameBots() {
 
   // Move the player to their team side before the round begins
   if (selectedModeConfig && selectedModeConfig.type === 'dday') {
-    camera.position.set(-22, 1.65, 22); faceToward(-22, 0); // D-Day: inside bunker 0, facing enemies
+    camera.position.set(DDAY_BUNKER_XS[0], 1.65, DDAY_BUNKER_Z); faceToward(DDAY_BUNKER_XS[0], 0); // D-Day: inside bunker 0, facing enemies
   } else if (selectedModeConfig && selectedModeConfig.type === 'range') {
     camera.position.set(0, 1.65, 38); faceToward(0, 0); // Shooting range: down the range at the targets
   } else if (selectedModeConfig && selectedModeConfig.type === 'obby') {
@@ -69171,7 +69177,7 @@ function getBotTarget(bot) {
 
   // D-Day attackers: advance toward bunker line, target nearest defender
   if (bot.state === 'dday_attacker') {
-    let best = null, bestDist = 40; // only attack if within 40 units
+    let best = null, bestDist = 55; // only attack if within 55 units (the field is bigger now)
     // Player
     if (!isDead) {
       const d = Math.hypot(camera.position.x - bot.x, camera.position.z - bot.z);
@@ -69183,8 +69189,8 @@ function getBotTarget(bot) {
       const d = Math.hypot(ob.x - bot.x, ob.z - bot.z);
       if (d < bestDist) { bestDist = d; best = { x: ob.x, z: ob.z, isPlayer: false, botRef: ob }; }
     }
-    // If no target in range, just advance up the map (toward z=+30)
-    if (!best) return { x: bot.x + (Math.random()-0.5)*4, z: 30, isPlayer: false };
+    // If no target in range, just advance up the map toward the defenders' line
+    if (!best) return { x: bot.x + (Math.random()-0.5)*4, z: DDAY_BUNKER_Z - 8, isPlayer: false };
     return best;
   }
 
