@@ -59721,9 +59721,10 @@ function updateBullets(dt) {
         if (b.weaponId === 'firework_launcher') {
           spawnBurnZone(wallHitPt, 3, 3, 10000);
         }
-        // Flare / Signal Pistol: keeps burning on the ground where it lands
+        // Flare / Signal Pistol: a burn zone where it lands (it was a glowing blob with its own point light and smoke puffs,
+        // which made the screen lag: a light added to the scene recompiles every material, and each puff was another draw)
         if (b.weaponId === 'flare' || b.weaponId === 'signal_pistol') {
-          spawnGroundFlare(wallHitPt, { color: WEAPONS.find(w => w.id === b.weaponId)?.bulletColor });
+          spawnBurnZone(wallHitPt, 2.4, 5, 10000, { color: WEAPONS.find(w => w.id === b.weaponId)?.bulletColor || 0xff5500 });
         }
         // 🚀💣 Rockets AND grenades detonate on terrain impact. Keyed off the
         // projectile kind rather than two hardcoded ids, so every launcher in
@@ -60938,69 +60939,6 @@ function updateSwitchbladeHUD() {
     + (!switchbladeCharged ? `<div style="font-size:10px;opacity:0.7;">[E] swap mode</div>` : '');
 }
 
-// ── Flare / Signal Pistol: burns where it lands ────────────────────────────
-// Purely cosmetic (no damage, unlike burnZones below) — an ember + halo +
-// flickering point light + slow-rising smoke puffs, sitting on the ground
-// for a while and dying out. arcShot on the weapon gets it there; this is
-// what happens once it does.
-const groundFlares = [];
-function spawnGroundFlare(pos, opts = {}) {
-  const color = opts.color || 0xff5500;
-  const g = new THREE.Group();
-  const ember = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8),
-    new THREE.MeshBasicMaterial({ color }));
-  g.add(ember);
-  const halo = new THREE.Mesh(new THREE.SphereGeometry(0.62, 10, 8),
-    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.5,
-      blending: THREE.AdditiveBlending, depthWrite: false }));
-  g.add(halo);
-  const light = new THREE.PointLight(color, 2.6, 13, 2);
-  light.position.y = 0.3;
-  g.add(light);
-  g.position.copy(pos).setY(0.2);
-  scene.add(g);
-  playSoundEvent('fire_sizzle', { position: pos, volume: 0.7, minGap: 200 });
-  groundFlares.push({ mesh: g, ember: ember.material, halo: halo.material, light,
-    born: performance.now(), duration: 20000, puffTimer: 0 });
-}
-function updateGroundFlares(dt) {
-  const now = performance.now();
-  for (let i = groundFlares.length - 1; i >= 0; i--) {
-    const f = groundFlares[i];
-    const age = now - f.born;
-    if (age > f.duration) {
-      scene.remove(f.mesh); f.ember.dispose(); f.halo.dispose();
-      groundFlares.splice(i, 1); continue;
-    }
-    // Fades out over the last 2.5 s instead of just vanishing.
-    const fadeT = Math.max(0, 1 - Math.max(0, age - (f.duration - 2500)) / 2500);
-    const flicker = (0.82 + Math.random() * 0.32) * fadeT;
-    f.light.intensity = 2.6 * flicker;
-    f.halo.opacity = 0.5 * flicker;
-    f.ember.opacity = fadeT < 1 ? fadeT : 1;
-    f.ember.transparent = fadeT < 1;
-    f.puffTimer -= dt;
-    if (f.puffTimer <= 0 && fadeT > 0.15) {
-      f.puffTimer = 0.3 + Math.random() * 0.2;
-      const puff = _getSmokePuff();
-      puff.visible = true;
-      puff.material.opacity = 0.4;
-      puff.scale.setScalar(0.12);
-      puff.position.copy(f.mesh.position).setY(0.15);
-      const start = now;
-      const drift = () => {
-        const t = (performance.now() - start) / 900;
-        if (t >= 1 || !groundFlares.includes(f)) { puff.visible = false; return; }
-        puff.position.y = 0.15 + t * 1.1;
-        puff.scale.setScalar(0.12 + t * 0.5);
-        puff.material.opacity = 0.4 * (1 - t);
-        requestAnimationFrame(drift);
-      };
-      requestAnimationFrame(drift);
-    }
-  }
-}
-
 // ── Firework Launcher: burn-zone system ────────────────────────────────────
 function spawnBurnZone(pos, radius, dps, durationMs, opts = {}) {
   const ringGeo = new THREE.RingGeometry(radius * 0.85, radius, 24);
@@ -61178,12 +61116,6 @@ function extinguishAt(x, z, r) {
     if (bz.acid) continue;
     const d = Math.hypot(bz.x - x, bz.z - z);
     if (d < bz.radius + r) { scene.remove(bz.mesh); burnZones.splice(i, 1); n++; }
-  }
-  for (let i = groundFlares.length - 1; i >= 0; i--) {
-    const f = groundFlares[i];
-    if (Math.hypot(f.mesh.position.x - x, f.mesh.position.z - z) < r + 0.6) {
-      scene.remove(f.mesh); f.ember.dispose(); f.halo.dispose(); groundFlares.splice(i, 1); n++;
-    }
   }
   if (n) playSoundEvent('fire_sizzle', { position: new THREE.Vector3(x, 0, z), volume: 0.9, pitch: 1.6, minGap: 120 });
   return n;
@@ -70722,7 +70654,6 @@ function loop() {
   safeLoopStep('king-crown', () => updateKingCrown(dt));   // crown the current top fragger
   safeLoopStep('burn-zones', () => updateBurnZones(dt));
   safeLoopStep('black-holes', () => updateBlackHoles(dt)); // firework launcher DOT fields
-  safeLoopStep('ground-flares', () => updateGroundFlares(dt)); // flares burning where they landed
   safeLoopStep('traps', () => updateTraps(dt)); // tripwires, magnet mines, bounce pads, hologram decoys
   safeLoopStep('p2w-systems', () => updateP2WSystems(dt)); // orbital strikes, guardian drones, nano shield
   safeLoopStep('tesla-coils', () => updateTeslaCoils(dt)); // deployed tesla coils zap nearby enemies

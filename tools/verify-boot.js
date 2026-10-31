@@ -2315,7 +2315,7 @@ if (ok && process.argv.includes('--flare')) {
     if (!f || !(f.bulletSpeed <= 40)) issues.push('the flare should be slower than a rifle round');
     const keepWalls = wallColliders.slice(); wallColliders.length = 0;
     const savedSound = playSoundEvent; playSoundEvent = () => {};
-    const savedFlares = groundFlares.length;
+    const savedFlares = burnZones.length;
     try {
       const flight = (spec) => {
         localBullets.length = 0;
@@ -2331,10 +2331,10 @@ if (ok && process.argv.includes('--flare')) {
       f.arcGravity = 1; f.bulletSpeed = 44;
       let old; try { old = flight(f); } finally { f.arcGravity = keep.g; f.bulletSpeed = keep.s; }
       if (!(r.secs > old.secs)) issues.push('the flare is not slower to land than a speed-44 lob would be');
-      if (groundFlares.length <= savedFlares) issues.push('the landed flare did not leave a ground flare');
+      if (burnZones.length <= savedFlares) issues.push('the landed flare did not leave a burn zone');
     } finally {
       wallColliders.push(...keepWalls); localBullets.length = 0; playSoundEvent = savedSound;
-      while (groundFlares.length > savedFlares) { const g = groundFlares.pop(); try { scene.remove(g.mesh); } catch (e) {} }
+      while (burnZones.length > savedFlares) { const z = burnZones.pop(); try { scene.remove(z.mesh); } catch (e) {} }
     }
     return issues;
   })()`);
