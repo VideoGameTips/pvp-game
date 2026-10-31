@@ -69651,6 +69651,198 @@ function reconcileBotEntities() {
 }
 
 let _botShotsOut = [];   // see botShots
+// ═══ 🧠 BOT STRATEGY ═══════════════════════════════════════════════════════════════════════════════════════════════════
+// A bot used to have one idea at any moment: shoot whoever is nearest and drift toward or away from them. It never went
+// anywhere on purpose. This gives it a PLAN that lasts many seconds:
+//
+//   perch   climb to high ground that can see the enemy: a deck, a roof, a ledge, reached the way a person would reach it
+//           (up the stairs and ramps, not through the wall under it), and hold it for a while, shooting down
+//   flank   where there is no high ground worth taking, walk round to the side of the enemy, to ground that sees them
+//
+// The map is read as LAYERS: every 1.5 m cell has the surfaces a person can stand on (the floor, a deck, a roof), and
+// two neighbouring surfaces join if one is at most a step (0.65 m) above the other, or at most 2 m below it, with room for
+// a head. That is the same walkability test _mdReach uses to prove a map still has its ways up. A search from where the bot
+// stands finds every perch it can walk to and the route to each; the best one is chosen by height over the enemy, a
+// clear line to them, a sensible range for the gun, and not being where a team-mate is already going.
+// A plan is dropped the moment it stops being a good idea: hurt badly, the enemy upon you, or no progress for 3 s.
+let BOT_STRATEGY_ON = true;       // (a switch for tools/verify-boot.js)
+const _bhNav = { map: null, ok: false };
+const _bhClaims = [];             // { x, z, y, until, id }: perches somebody is going to or holding
+function botHighNav() {
+  const name = activeMapName;
+  if (_bhNav.map === name) return _bhNav.ok ? _bhNav : null;
+  _bhNav.map = name; _bhNav.ok = false;
+  const b = MAP_BOUNDS[name], all = MAP_COLLIDERS[name];
+  if (!b || !all || !all.length) return null;
+  const R = 0.38, HEAD = 1.8;      // R: the body's radius, which is how far from a box a bot still counts as standing on it (botGroundYAt)
+  let CELL = 0.75;                 // fine enough that a stair tread (0.4 m deep, 1.16 m to a body) is under a cell centre every time
+  while (CELL < 1.5 && (2 * b.halfX / CELL) * (2 * b.halfZ / CELL) > 160000) CELL += 0.25;
+  const cols = all.filter(c => !(c.max.y - c.min.y > 11 && Math.max(c.max.x - c.min.x, c.max.z - c.min.z) > 100));
+  const nx = Math.ceil(2 * b.halfX / CELL), nz = Math.ceil(2 * b.halfZ / CELL), x0 = -b.halfX, z0 = -b.halfZ;
+  if (nx * nz > 170000) return null;
+  const idx = new Array(nx * nz);
+  for (let i = 0; i < nx * nz; i++) idx[i] = [];
+  for (const c of cols) {
+    const i0 = Math.max(0, Math.floor((c.min.x - R - x0) / CELL)), i1 = Math.min(nx - 1, Math.floor((c.max.x + R - x0) / CELL));
+    const j0 = Math.max(0, Math.floor((c.min.z - R - z0) / CELL)), j1 = Math.min(nz - 1, Math.floor((c.max.z + R - z0) / CELL));
+    for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) idx[i * nz + j].push(c);
+  }
+  const ramps = MAP_RAMPS[name] || [];
+  // What the bot's own physics would put under its feet at this cell's centre, arriving from height fromY. This is
+  // botGroundYAt, read through the per-cell lists instead of every box in the map, so a route is only ever made of steps
+  // the bot loop will actually let it take (an earlier version read box tops and sent bots at a deck from a ramp that
+  // ended 1.8 m short of it).
+  const groundAt = (i, j, fromY) => {
+    const x = x0 + (i + 0.5) * CELL, z = z0 + (j + 0.5) * CELL;
+    let g = 0;
+    for (const r of ramps) { const y = rampSurfaceAt(r, x, z); if (y == null) continue; if (y <= fromY + 1.05 && fromY - y <= 2.0) g = Math.max(g, y); }
+    for (const c of idx[i * nz + j]) {
+      if (!_standable(c)) continue;
+      if (x < c.min.x - R || x > c.max.x + R || z < c.min.z - R || z > c.max.z + R) continue;
+      const top = c.max.y;
+      if (top <= fromY + 1.05 && fromY - top <= 2.0) g = Math.max(g, top);
+    }
+    return g;
+  };
+  const clear = (i, j, y) => {
+    const x = x0 + (i + 0.5) * CELL, z = z0 + (j + 0.5) * CELL;
+    if (y < 0.05 && typeof floorExistsAt === 'function' && !floorExistsAt(x, z)) return false;      // no floor there: the void
+    for (const c of idx[i * nz + j]) { if (x < c.min.x - R || x > c.max.x + R || z < c.min.z - R || z > c.max.z + R) continue; if (c.max.y > y + 0.05 && c.min.y < y + HEAD) return false; }
+    return true;
+  };
+  Object.assign(_bhNav, { ok: true, nx, nz, x0, z0, CELL, groundAt, clear });
+  return _bhNav;
+}
+// Search outward from where the bot stands: every surface it can walk to within `cap` steps.
+function _bhSearch(nav, bx, bz, by, cap) {
+  const { nx, nz, x0, z0, CELL, groundAt, clear } = nav;
+  const si = Math.floor((bx - x0) / CELL), sj = Math.floor((bz - z0) / CELL);
+  if (si < 0 || sj < 0 || si >= nx || sj >= nz) return null;
+  const sy = Math.max(0, by);
+  const key = (i, j, y) => (i * nz + j) * 1000 + Math.round(y * 10);
+  const startK = key(si, sj, sy), prev = new Map([[startK, -1]]), info = new Map([[startK, [si, sj, sy, 0]]]);
+  const q = [startK];
+  for (let h = 0; h < q.length && q.length < cap; h++) {
+    const k = q[h], [i, j, y, d] = info.get(k);
+    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+      const ni = i + di, nj = j + dj; if (ni < 0 || nj < 0 || ni >= nx || nj >= nz) continue;
+      const ny = groundAt(ni, nj, y);
+      const nk = key(ni, nj, ny); if (prev.has(nk)) continue;
+      if (!clear(ni, nj, ny)) continue;
+      if (di && dj && (!clear(i + di, j, y) || !clear(i, j + dj, y))) continue;      // no cutting a corner
+      prev.set(nk, k); info.set(nk, [ni, nj, ny, d + (di && dj ? 1.41 : 1)]); q.push(nk);
+    }
+  }
+  return { prev, info, q, startK };
+}
+function _bhPath(nav, res, k) {
+  const out = [];
+  for (let c = k; c !== -1; c = res.prev.get(c)) {
+    const [i, j, y] = res.info.get(c);
+    out.push({ x: nav.x0 + (i + 0.5) * nav.CELL, z: nav.z0 + (j + 0.5) * nav.CELL, y });
+  }
+  return out.reverse();
+}
+let _bhBudgetAt = 0;
+function botPlanFor(bot, target, now) {
+  const nav = botHighNav(); if (!nav) return null;
+  const res = _bhSearch(nav, bot.x, bot.z, bot.y || 0, 26000); if (!res) return null;
+  const w = WEAPONS.find(x => x.id === bot.weaponId) || {};
+  const sniperish = /Sniper|Marksman/i.test(w.type || '') || bot.personality === 'sniper';
+  const lo = sniperish ? 22 : /SMG|Secondary|Shotgun/i.test(w.type || '') ? 8 : 12, hi = sniperish ? 52 : /SMG|Secondary|Shotgun/i.test(w.type || '') ? 22 : 38;
+  const ty = target.isPlayer ? camera.position.y - 0.4 : (target.y || 0);
+  const eyeT = ty + 1.3;
+  const cands = [];
+  for (const k of res.q) {
+    const [i, j, y, d0] = res.info.get(k), d = d0 * nav.CELL;                  // d: the walk to it, in metres
+    if (d < 5) continue;
+    const x = nav.x0 + (i + 0.5) * nav.CELL, z = nav.z0 + (j + 0.5) * nav.CELL;
+    const range = Math.hypot(x - target.x, z - target.z);
+    if (range < lo * 0.7 || range > hi * 1.25) continue;
+    const high = y - ty;
+    let kind = null, pre;
+    if (y >= 2.4 && high >= 1.6) { kind = 'perch'; pre = Math.min(high, 8) * 2.2 - Math.abs(range - (lo + hi) / 2) * 0.12 - d * 0.05; }
+    else if (y < 1 && (bot.y || 0) < 1 && d > 8) {            // a flank: well off to the side of the line from the bot to the enemy
+      const ax = target.x - bot.x, az = target.z - bot.z, bx = x - target.x, bz = z - target.z;
+      const cos = (ax * bx + az * bz) / ((Math.hypot(ax, az) * Math.hypot(bx, bz)) || 1);
+      if (cos > 0.2 || cos < -0.8) continue;                      // 0.2 or less: at least 78 degrees round, but not right behind us
+      kind = 'flank'; pre = -Math.abs(range - (lo + hi) / 2) * 0.12 - d * 0.04 - Math.abs(cos + 0.3) * 3;
+    }
+    if (!kind) continue;
+    let crowded = false;
+    for (const c of _bhClaims) if (c.id !== bot.id && now < c.until && Math.hypot(c.x - x, c.z - z) < 5 && Math.abs(c.y - y) < 2) { crowded = true; break; }
+    if (crowded) continue;
+    cands.push({ k, x, z, y, d, range, kind, pre: pre + Math.random() * 2.5 });
+  }
+  cands.sort((a, b) => b.pre - a.pre);
+  let pick = null, pickPath = null;
+  const failed = []; let looks = 0;
+  for (const c of cands) {                                      // the best first; each gets the (dearer) look at whether it sees the enemy
+    if (looks >= 16) break;
+    if (failed.some(f => Math.hypot(f.x - c.x, f.z - c.z) < 3.5 && Math.abs(f.y - c.y) < 1.5)) continue;   // beside a spot that could not see: so can't this
+    looks++;
+    if (!hasLineOfSight(c.x, c.z, target.x, target.z, c.y + 1.5, eyeT)) { failed.push(c); continue; }
+    const route = _bhPath(nav, res, c.k);                         // and a route that does not run past the enemy's feet: it would be dropped at 7 m
+    if (route.some(p => Math.hypot(p.x - target.x, p.z - target.z) < 9)) { failed.push(c); continue; }
+    pick = c; pickPath = route; break;
+  }
+  if (!pick) return null;
+  const path = pickPath;
+  const long = sniperish || bot.personality === 'camper';
+  const plan = { kind: pick.kind, path, i: 1, reach: nav.CELL * 0.6, goal: pick, holding: false, giveUp: now + 9000 + pick.d * 450, holdFor: pick.kind === 'perch' ? (long ? 14000 + Math.random() * 10000 : 7000 + Math.random() * 6000) : 3500 + Math.random() * 2500, progAt: now, progX: bot.x, progZ: bot.z, started: now };
+  _bhClaims.push({ x: pick.x, z: pick.z, y: pick.y, until: now + plan.giveUp - now + plan.holdFor, id: bot.id });
+  return plan;
+}
+function botDropPlan(bot, cool) {
+  bot.plan = null; bot._planAt = Math.max(bot._planAt || 0, Date.now() + cool);
+  for (let i = _bhClaims.length - 1; i >= 0; i--) if (_bhClaims[i].id === bot.id) _bhClaims.splice(i, 1);
+}
+// One call per bot per frame, from the bot loop. Returns the step to take this frame ({x, z}, already scaled by dt), or
+// null when the plan has nothing to say and the ordinary fighting code should drive.
+function botStrategy(bot, target, dt, now) {
+  if (!BOT_STRATEGY_ON || !target || bot.zombie || bot._lobbyVisitor || bot._duelGoto || bot.state === 'turret' || bot.state === 'dday_attacker' ||
+      bot.state === 'cover' || bot.state === 'melee_charge' || bot._holdPosActive || bot._regroupActive || bot._scatterActive || bot._distractActive || bot._coverPlayerActive ||
+      match?.type === 'range' || inLobby) {
+    if (bot.plan) botDropPlan(bot, 2500);
+    return null;
+  }
+  const diff = bot.difficulty || 'medium';
+  if (diff === 'easy') return null;
+  const dist = Math.hypot(target.x - bot.x, target.z - bot.z);
+  let P = bot.plan;
+  if (P) {
+    const hurt = bot.hp < (bot.maxHp || 300) * 0.28;
+    if (hurt || now > P.giveUp && !P.holding) { botDropPlan(bot, 6000); return null; }
+    if (!P.holding && dist < 7) { botDropPlan(bot, 5000); return null; }
+  } else {
+    if (now < (bot._planAt || 0)) return null;
+    bot._planAt = now + 3500 + Math.random() * 4500;
+    const eager = diff === 'expert' ? 0.8 : diff === 'hard' ? 0.65 : 0.4;
+    const pers = bot.personality === 'sniper' || bot.personality === 'camper' ? 1.5 : bot.personality === 'tactician' ? 1.15 : bot.personality === 'aggressor' ? 0.45 : 1;
+    if (Math.random() > eager * pers) return null;
+    if (dist < 11 || bot.hp < (bot.maxHp || 300) * 0.45) return null;
+    if (_bhBudgetAt === now) return null;                            // one search per frame across all the bots
+    _bhBudgetAt = now;
+    P = botPlanFor(bot, target, now);
+    if (!P) return null;
+    bot.plan = P;
+  }
+  if (P.holding) {
+    if (now > P.holdUntil || dist < 5) { botDropPlan(bot, 3000); return null; }
+    return { x: 0, z: 0, hold: true };
+  }
+  // follow the route: the next point not yet reached
+  while (P.i < P.path.length - 1 && Math.hypot(P.path[P.i].x - bot.x, P.path[P.i].z - bot.z) < P.reach && Math.abs(P.path[P.i].y - (bot.y || 0)) < 1.1) P.i++;
+  const wp = P.path[P.i];
+  if (P.i >= P.path.length - 1 && Math.hypot(wp.x - bot.x, wp.z - bot.z) < 1.0 && Math.abs(wp.y - (bot.y || 0)) < 1.1) { P.holding = true; P.holdUntil = now + P.holdFor; return { x: 0, z: 0, hold: true }; }
+  if (now - P.progAt > 2500) {                                      // moving? two seconds' walk should be 8 m or so
+    if (Math.hypot(bot.x - P.progX, bot.z - P.progZ) < 2) { botDropPlan(bot, 7000); return null; }
+    P.progAt = now; P.progX = bot.x; P.progZ = bot.z;
+  }
+  const dx = wp.x - bot.x, dz = wp.z - bot.z, l = Math.hypot(dx, dz) || 1, spd = 8.5 * dt;
+  return { x: dx / l * spd, z: dz / l * spd };
+}
+
 function updateBotAI(dt) {
   resolveBotHitsInFlight();   // land any bot bullets whose tracer has arrived
   if (!gameBots.length) return;
@@ -70247,6 +70439,7 @@ function updateBotAI(dt) {
         bot.strafeFlipTimer = 1.2 + Math.random() * 1.8;
       }
 
+      const _strat = botStrategy(bot, target, dt, now);   // 🧠 a plan that lasts: high ground, a flank (see BOT STRATEGY)
       // ── Movement by state ───────────────────────────────────────────────
       if (bot.state === 'melee_charge') {
         // Sprint straight at player, ignoring walls; swing when close
@@ -70286,6 +70479,8 @@ function updateBotAI(dt) {
           moveX = perpX * bot.strafeDir * 6 * dt;
           moveZ = perpZ * bot.strafeDir * 6 * dt;
         }
+      } else if (_strat) {
+        moveX = _strat.x; moveZ = _strat.z;
       } else if (bot.state === 'flank') {
         // HOLD POSITION override: don't move, just shoot
         if (bot._holdPosActive) {

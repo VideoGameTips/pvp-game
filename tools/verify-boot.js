@@ -2342,6 +2342,68 @@ if (ok && process.argv.includes('--flare')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+// Bot strategy: on every map, ten random bot/enemy pairs 20-36 m apart each ask for a plan. A plan has to be a route a body can
+// walk (each step at most 0.65 m up and 2 m down, one cell at a time), end where it says it does (a perch is 2.4 m or higher
+// and sees the enemy), and most maps with a deck or a roof should have at least one.
+if (ok && process.argv.includes('--strategy')) {
+  const rep = vm.runInThisContext(`(() => {
+    const issues = [], per = {}, stuck = []; let walked = 0, arrived = 0;
+    const ps = playSoundEvent; playSoundEvent = function () {};
+    myId = myId || 'me'; players[myId] = players[myId] || { hp: 100, dead: false }; inLobby = false;
+    const t0 = Date.now();
+    try {
+      for (const n of Object.keys(MAP_GROUPS)) {
+        let sp = MAP_SPAWNS[n];
+        if (!sp || !sp.ally || !sp.enemy) continue;
+        try { _upgradeMap(n); activateMap(n); } catch (e) { continue; }
+        _bhNav.map = null;                                        // the grid is per map
+        let found = { perch: 0, flank: 0, none: 0 };
+        const nav0 = botHighNav(); if (!nav0) continue;
+        const bb = MAP_BOT_BOUNDS[n] || MAP_BOUNDS[n], rnd = (() => { let t = 12345 + n.length * 977; return () => (t = (t * 1664525 + 1013904223) >>> 0) / 4294967296; })();
+        const ground = () => { for (let tries = 0; tries < 200; tries++) { const x = (rnd() * 2 - 1) * (bb.halfX - 6), z = (rnd() * 2 - 1) * (bb.halfZ - 6); const i = Math.floor((x - nav0.x0) / nav0.CELL), j = Math.floor((z - nav0.z0) / nav0.CELL); if (i >= 0 && j >= 0 && i < nav0.nx && j < nav0.nz && nav0.clear(i, j, 0)) return { x, z }; } return null; };
+        for (let k = 0; k < 10; k++) {
+          const pa = ground(); if (!pa) continue;
+          const ang = rnd() * 6.283, rr = 20 + rnd() * 16, pt = { x: pa.x + Math.cos(ang) * rr, z: pa.z + Math.sin(ang) * rr };
+          const ti = Math.floor((pt.x - nav0.x0) / nav0.CELL), tj = Math.floor((pt.z - nav0.z0) / nav0.CELL);
+          if (ti < 0 || tj < 0 || ti >= nav0.nx || tj >= nav0.nz || !nav0.clear(ti, tj, 0)) continue;
+          const bot = { id: 'sb', x: pa.x, z: pa.z, y: 0, hp: 300, maxHp: 300, weaponId: 'ak20', personality: 'tactician', difficulty: 'hard' };
+          const target = { x: pt.x, z: pt.z, isPlayer: false, y: 0 };
+          _bhClaims.length = 0;
+          const P = botPlanFor(bot, target, Date.now() + k * 1e5);
+          if (!P) { found.none++; continue; }
+          found[P.kind]++;
+          for (let i = 1; i < P.path.length; i++) {
+            const A = P.path[i - 1], B = P.path[i];
+            if (Math.hypot(B.x - A.x, B.z - A.z) > nav0.CELL * 1.5) issues.push(n + ': a route step jumps ' + Math.hypot(B.x - A.x, B.z - A.z).toFixed(1) + ' m');
+            if (B.y > A.y + 1.06 || B.y < A.y - 2.21) issues.push(n + ': a route step climbs/drops ' + (B.y - A.y).toFixed(2) + ' m');
+          }
+          { // walk it, the way the bot loop would: botStrategy's step each frame, the height from the ground under the bot
+            bot.plan = P; bot.y = 0; bot.state = 'chase'; let t = Date.now(), steps = 0;
+            while (steps < 1600 && bot.plan && !bot.plan.holding) { const st = botStrategy(bot, target, 0.05, t); if (!st) break; bot.x += st.x; bot.z += st.z; bot.y = botGroundYAt(bot.x, bot.z, bot.y, 1.05, 2.2); t += 50; steps++; }
+            walked++; if (bot.plan && bot.plan.holding) { arrived++; if (P.kind === 'perch' && bot.y < 2.0) issues.push(n + ': arrived at a perch but stands only ' + bot.y.toFixed(1) + ' m up'); }
+            else stuck.push(n + '(' + P.kind + ' ' + steps + ' steps, y ' + bot.y.toFixed(1) + ')');
+            botDropPlan(bot, 0);
+          }
+          const G = P.goal;
+          if (P.kind === 'perch' && G.y < 2.4) issues.push(n + ': a perch only ' + G.y.toFixed(1) + ' m up');
+          if (!hasLineOfSight(G.x, G.z, target.x, target.z, G.y + 1.5, 1.3)) issues.push(n + ': the chosen spot cannot see the enemy');
+        }
+        per[n] = found;
+      }
+    } finally { playSoundEvent = ps; }
+    const names = Object.keys(per), withPerch = names.filter(n => per[n].perch), withAny = names.filter(n => per[n].perch || per[n].flank);
+    return { issues, maps: names.length, withPerch: withPerch.length, withAny: withAny.length, none: names.filter(n => !per[n].perch && !per[n].flank), ms: Date.now() - t0, perch: withPerch, walked, arrived, stuck };
+  })()`);
+  console.log('strategy: ' + rep.maps + ' maps, ' + rep.withPerch + ' with a perch plan, ' + rep.withAny + ' with any plan, ' + rep.ms + ' ms');
+  console.log('  walked ' + rep.walked + ' plans: ' + rep.arrived + ' arrived');
+  if (rep.stuck.length) console.log('  did not arrive: ' + rep.stuck.slice(0, 12).join(', '));
+  if (rep.none.length) console.log('  no plan at all on: ' + rep.none.join(', '));
+  if (rep.arrived < rep.walked * 0.8) { ok = false; console.log('only ' + rep.arrived + ' of ' + rep.walked + ' routes could be walked'); }
+  if (rep.issues.length) { ok = false; console.log(rep.issues.slice(0, 20).join('\n')); }
+}
+
+
+
 if (ok && process.argv.includes('--mappick')) {
   // The map vote: a picture of every duel map (a grid drawn from its real colliders), a bot that decides by
   // reading that picture, no pre-pick on the mode screen, a screenshot of every map for the cards, a vote in every
