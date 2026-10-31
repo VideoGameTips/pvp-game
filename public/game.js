@@ -4115,6 +4115,10 @@ function weaponAudioProfile(id, baseWeapon) {
   return w.auto ? { kind:'auto_blast', vol:0.23, dur:0.080, f1:145, f2:52, action:'water_rifle' }
                 : { kind:'rifle', vol:0.38, dur:0.10, f1:145, f2:52, action:'rifle' };
 }
+// 🎚️ The pitch of the shot being made right now. Your own gun skin has a pitch of its own (SKIN_PITCH, skinPitchFor), and a shot is made by
+// the four primitives below plus the recorded-clip player, all inside one synchronous call to playWeaponSound, which sets this for the length of
+// that call and puts it back to 1. Everything else in the game (a footstep, a pickup, a grenade) is made with it at 1.
+let _wpnPitch = 1;
 function playNoise(ctx, start, dur, outNode, volume, tone = 0.5) {
   const len = Math.max(1, Math.floor(ctx.sampleRate * dur));
   const buffer = ctx.createBuffer(1, len, ctx.sampleRate);
@@ -4125,7 +4129,7 @@ function playNoise(ctx, start, dur, outNode, volume, tone = 0.5) {
   const gain = ctx.createGain();
   src.buffer = buffer;
   filter.type = 'bandpass';
-  filter.frequency.setValueAtTime(900 + tone * 2200, start);
+  filter.frequency.setValueAtTime((900 + tone * 2200) * _wpnPitch, start);
   filter.Q.value = 0.7;
   src.connect(filter).connect(gain).connect(outNode);
   gain.gain.setValueAtTime(Math.max(0.001, volume), start);
@@ -4210,8 +4214,8 @@ function playSweptNoise(ctx, start, dur, outNode, volume, type, fromF, toF, q = 
   const src = ctx.createBufferSource(); src.buffer = buffer;
   const filter = ctx.createBiquadFilter();
   filter.type = type; filter.Q.value = q;
-  filter.frequency.setValueAtTime(fromF, start);
-  filter.frequency.exponentialRampToValueAtTime(Math.max(40, toF), start + dur);
+  filter.frequency.setValueAtTime(fromF * _wpnPitch, start);
+  filter.frequency.exponentialRampToValueAtTime(Math.max(40, toF * _wpnPitch), start + dur);
   const gain = ctx.createGain();
   gain.gain.setValueAtTime(Math.max(0.001, volume), start);
   gain.gain.exponentialRampToValueAtTime(0.001, start + dur);
@@ -4234,7 +4238,7 @@ function playFilteredNoise(ctx, start, dur, outNode, volume, filterType, freq, q
   const gain = ctx.createGain();
   src.buffer = buffer;
   filter.type = filterType;
-  filter.frequency.setValueAtTime(freq, start);
+  filter.frequency.setValueAtTime(freq * _wpnPitch, start);
   filter.Q.value = q;
   src.connect(filter).connect(gain).connect(outNode);
   gain.gain.setValueAtTime(0.001, start);
@@ -4247,8 +4251,8 @@ function playTone(ctx, start, dur, outNode, freqA, freqB, volume, type = 'square
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
   osc.type = type;
-  osc.frequency.setValueAtTime(freqA, start);
-  osc.frequency.exponentialRampToValueAtTime(Math.max(20, freqB), start + dur);
+  osc.frequency.setValueAtTime(freqA * _wpnPitch, start);
+  osc.frequency.exponentialRampToValueAtTime(Math.max(20, freqB * _wpnPitch), start + dur);
   osc.connect(gain).connect(outNode);
   gain.gain.setValueAtTime(Math.max(0.001, volume), start);
   gain.gain.exponentialRampToValueAtTime(0.001, start + dur);
@@ -4751,6 +4755,27 @@ function skinSampleFor(ctx, id) {                                   // the recor
   try { const sk = _activeModelSkin[id], def = sk && SKIN_SAMPLES[sk.id]; return def ? sampleFor(ctx, def) : null; }   // (_activeModelSkin is declared far below: a sound before the script has loaded must not throw)
   catch (e) { return null; }
 }
+// 🎚️ Every gun skin sounds a little different from the gun under it, to its wearer: one pitch each, a few percent up or down, never so much that it distorts
+// (Andy: "modify every gun skin's shooting sound's frequency by a bit; the AUG, more low-pitched"). Bigger, heavier, longer-barrelled things sit lower and short,
+// light, silly ones higher; any skin not named here gets a pitch of its own from its id (deterministic, 4.5 % to 11 % off), so a skin added later has one too.
+// A skin with a recording of its own (SKIN_SAMPLES) already sounds like itself, with a pitch tuned in that table, so it is left alone. Only your own shots: see playWeaponSound.
+const SKIN_PITCH = {
+  aug: 0.88,
+  rpd_m249: 0.90, flamethrower_m2: 0.92, grenade_launcher_mgl: 0.92, srx_dragunov: 0.90, srx_m24: 0.92, sg8_remington870: 0.92, lever_winchester94: 0.93,
+  revolver_python: 0.92, m1_garand_fal: 0.93, burst_scar_h: 0.94, m4a1_arena_hk416: 1.05, ak20_aks74u: 1.08, flechette_bullpup: 1.06, vector_mp5: 1.06, pistol_m9: 1.06,
+  akimbo_1911: 0.94, akimbo_micro_uzi: 1.10, akimbo_water_pistols: 1.12, akimbo_staplers: 1.10, akimbo_bananas: 0.92, machine_pistol_uzi: 0.94,
+};
+function _skinPitchHash(id) {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) { h ^= id.charCodeAt(i); h = Math.imul(h, 16777619); }
+  h >>>= 0;
+  return Math.round((1 + ((h & 1) ? 1 : -1) * (0.045 + 0.065 * (((h >>> 1) % 1000) / 1000))) * 1000) / 1000;
+}
+function skinPitchOf(skinId) { return SKIN_PITCH[skinId] || _skinPitchHash(skinId); }
+function skinPitchFor(weaponId) {                                   // the pitch of the skin this gun wears (1 for the stock gun, or a skin that has its own recording)
+  try { const sk = _activeModelSkin[weaponId]; return !sk || SKIN_SAMPLES[sk.id] ? 1 : skinPitchOf(sk.id); }
+  catch (e) { return 1; }                                           // (_activeModelSkin is declared far below: a sound before the script has loaded must not throw)
+}
 function weaponSamplesPreload(ctx) {                                // (one fetch per file: the rest find it loading)
   sampleFor(ctx, { file: 'stealth' });
   for (const id of Object.keys(WEAPON_SAMPLES)) weaponSampleFor(ctx, id);
@@ -4788,7 +4813,7 @@ function sampleBus(ctx) {                                          // a recordin
 }
 function playWeaponSample(ctx, start, S, level, distGain, remote) {
   if (_sampleVoices > 48) return;                                   // (a long clip at the Vector's rate is a couple of dozen at once; anything past that helps nobody)
-  const d = S.def, src = ctx.createBufferSource(), g = ctx.createGain(), r = d.rate[0] + Math.random() * (d.rate[1] - d.rate[0]), t1 = start + d.len;
+  const d = S.def, src = ctx.createBufferSource(), g = ctx.createGain(), r = (d.rate[0] + Math.random() * (d.rate[1] - d.rate[0])) * _wpnPitch, t1 = start + d.len;
   src.buffer = S.buf; src.playbackRate.value = r;
   g.gain.setValueAtTime(level * d.gain, start); g.gain.setValueAtTime(level * d.gain, Math.max(start, t1 - d.fade)); g.gain.linearRampToValueAtTime(0.0001, t1);
   src.connect(g); g.connect(sampleBus(ctx));
@@ -4815,6 +4840,11 @@ function burstClipStillSounding(id, opts) {
   return false;
 }
 function playWeaponSound(idOrWeapon, opts = {}) {
+  const wid = typeof idOrWeapon === 'object' ? idOrWeapon && idOrWeapon.id : idOrWeapon;
+  _wpnPitch = (opts.remote || !wid) ? 1 : skinPitchFor(wid);              // somebody else's shot is the gun's own voice: what they wear is not yours to know
+  try { return _playWeaponSound(idOrWeapon, opts); } finally { _wpnPitch = 1; }
+}
+function _playWeaponSound(idOrWeapon, opts = {}) {
   const ctx = getAudioCtx();
   if (!ctx) return;
   const base = opts.baseWeapon || (typeof idOrWeapon === 'object' ? idOrWeapon : null);

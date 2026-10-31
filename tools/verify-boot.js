@@ -4182,6 +4182,60 @@ if (ok && process.argv.includes('--irregular')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--skinpitch')) {
+  // Every gun skin has a pitch of its own (Andy: "modify every gun skin's shooting sound's frequency by a bit; the AUG, more low-pitched"): each model skin that does not
+  // have a recording of its own is a few percent off the gun's pitch, never so far that it distorts; the AUG is the low one; only YOUR shot wears it (not somebody else's, not the
+  // stock gun); a shot puts the pitch back to 1 whatever happens; and the four sound primitives and the clip player really apply it.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const LO = 0.85, HI = 1.15, MIN_OFF = 0.04;
+    const guns = new Set(WEAPONS.map(w => w.id));
+    const got = [];
+    for (const m of MODEL_SKINS) {
+      if (!guns.has(m.weapon)) continue;
+      if (SKIN_SAMPLES[m.id]) { if (skinPitchOf(m.id) === undefined) issues.push(m.id + ': no pitch'); continue; }
+      const f = skinPitchOf(m.id); got.push(f);
+      if (!(f >= LO && f <= HI)) issues.push(m.id + ' has pitch ' + f + ': outside ' + LO + ' to ' + HI + ' it distorts');
+      if (!(Math.abs(f - 1) >= MIN_OFF)) issues.push(m.id + ' has pitch ' + f + ': within ' + MIN_OFF * 100 + ' % of the gun it sounds just the same');
+    }
+    for (const id of Object.keys(SKIN_PITCH)) if (!MODEL_SKINS.some(m => m.id === id)) issues.push('SKIN_PITCH names "' + id + '": there is no such model skin');
+    if (!(skinPitchOf('aug') <= 0.92)) issues.push('the AUG should be low-pitched, it is ' + skinPitchOf('aug'));
+    if (new Set(got).size < got.length * 0.2) issues.push('almost every skin has the same pitch (' + new Set(got).size + ' different in ' + got.length + ')');
+    if (skinPitchOf('some_skin_nobody_wrote_down') !== skinPitchOf('some_skin_nobody_wrote_down')) issues.push('an unlisted skin has to get the same pitch every time');
+    // who hears it
+    const keep = _playWeaponSound, seen = [], saveSkin = _activeModelSkin.ak20;
+    try {
+      _playWeaponSound = function () { seen.push(_wpnPitch); };
+      delete _activeModelSkin.ak20; playWeaponSound('ak20', {});
+      _activeModelSkin.ak20 = MODEL_SKINS.find(m => m.id === 'aug'); playWeaponSound('ak20', {}); playWeaponSound({ id: 'ak20' }, {}); playWeaponSound('ak20', { remote: true }); playWeaponSound(undefined, {});
+      if (JSON.stringify(seen) !== JSON.stringify([1, 0.88, 0.88, 1, 1])) issues.push('the AUG pitch should reach the wearer only (stock 1, own 0.88 twice, remote 1, nothing 1): ' + JSON.stringify(seen));
+      _playWeaponSound = function () { throw new Error('boom'); };
+      try { playWeaponSound('ak20', {}); } catch (e) {}
+      if (_wpnPitch !== 1) issues.push('a shot that throws left the pitch at ' + _wpnPitch);
+      _activeModelSkin.ak20 = { id: 'ak20_ak47_wood' }; seen.length = 0; _playWeaponSound = function () { seen.push(_wpnPitch); }; playWeaponSound('ak20', {});
+      if (seen[0] !== 1) issues.push('a skin with a recording of its own is left to its own pitch, got ' + seen[0]);
+    } finally { _playWeaponSound = keep; if (saveSkin) _activeModelSkin.ak20 = saveSkin; else delete _activeModelSkin.ak20; _wpnPitch = 1; }
+    // the primitives apply it, and only while it is set
+    const log = [];
+    const param = (k) => ({ set value(v) { log.push([k + '.value', v]); }, setValueAtTime(v) { log.push([k, v]); }, linearRampToValueAtTime() {}, exponentialRampToValueAtTime(v) { log.push([k + '->', v]); }, setTargetAtTime() {} });
+    const node = () => new Proxy({ connect(x) { return x; }, disconnect() {}, start() {}, stop() {}, frequency: param('f'), gain: param('g'), Q: param('q'), playbackRate: param('rate'), type: '', buffer: null },
+      { get(t, k) { return k in t ? t[k] : (typeof k === 'string' ? param(k) : undefined); }, set(t, k, v) { t[k] = v; return true; } });   // (anything else a bus asks of a node is a parameter)
+    const ctx = new Proxy({ currentTime: 1, sampleRate: 4000, destination: node(), createBuffer(ch, len) { return { getChannelData() { return new Float32Array(len); } }; } },
+      { get(t, k) { return k in t ? t[k] : (typeof k === 'string' && k.startsWith('create') ? node : undefined); }, set(t, k, v) { t[k] = v; return true; } });
+    const freqs = (fn) => { log.length = 0; fn(); return log.filter(e => e[0] === 'f' || e[0] === 'f->').map(e => e[1]); };
+    const run = () => { playTone(ctx, 1, 0.1, node(), 400, 200, 1); playNoise(ctx, 1, 0.1, node(), 1, 0.5); playFilteredNoise(ctx, 1, 0.1, node(), 1, 'bandpass', 1000, 0.7); playSweptNoise(ctx, 1, 0.1, node(), 1, 'lowpass', 3000, 500); };
+    const base = freqs(run); _wpnPitch = 0.5; const low = freqs(run); _wpnPitch = 1;
+    if (!base.length || base.length !== low.length || !base.every((f, i) => Math.abs(low[i] - f * 0.5) < 1e-6)) issues.push('playTone / playNoise / playFilteredNoise / playSweptNoise should all halve their frequencies at pitch 0.5: ' + JSON.stringify([base, low]));
+    log.length = 0; const S = { def: { rate: [1, 1], gain: 1, len: 0.3, fade: 0.1, from: 0 }, buf: {} };
+    _wpnPitch = 0.8; playWeaponSample(ctx, 1, S, 1, 1, false); _wpnPitch = 1;
+    const rate = log.find(e => e[0] === 'rate.value');
+    if (!rate || Math.abs(rate[1] - 0.8) > 1e-9) issues.push('a recorded clip should play at the skin pitch (rate 0.8), got ' + JSON.stringify(rate));
+    return issues;
+  })()`);
+  console.log('skin pitch checks: every gun skin has a pitch of its own (' + vm.runInThisContext('MODEL_SKINS.length') + ' skins, 4 % to 15 % off the gun), the AUG is low, only your own shot wears it and puts it back, the primitives and the clip player apply it');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.argv.includes('--music')) {
   // The music: every track is well formed (known voices, notes in range, steps inside the bar, the same every time round), the maps that have a
   // track name one that exists, the right track is chosen for the lobby, a match and a map without music, and the scheduler runs on a context
