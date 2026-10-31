@@ -33152,6 +33152,53 @@ function buildMachinePistol() {
   g.position.set(0.1, -0.1, -0.22); return g;
 }
 
+function buildUziSkin() {
+  // 🔫 Machine Pistol -> IMI Uzi. The stamped box receiver with its pressed stiffening ribs, the ridged top cover and the
+  // cocking knob riding its slot, a barrel nut and shrouded barrel, the sight guard's two ears, the magazine up through the
+  // pistol grip (a long 32-round stick, the shape you know it by), a grip safety at the back, and the wire stock folded
+  // underneath where the Uzi keeps it.
+  const g = new THREE.Group(), M = _milMats();
+  gpBox(g, M.park, 0.044, 0.052, 0.196, 0, 0.010, -0.018);              // the receiver, stamped from sheet
+  gpBox(g, M.park, 0.040, 0.012, 0.184, 0, 0.0415, -0.012);             // top cover
+  gpBox(g, M.dark, 0.006, 0.0022, 0.150, 0, 0.0478, -0.012);            // its groove
+  for (let i = 0; i < 3; i++) gpBox(g, M.dark, 0.0455, 0.0026, 0.120, 0, -0.004 + i * 0.016, -0.040);   // the pressed stiffening ribs, both sides
+  gpBox(g, M.dark, 0.0046, 0.020, 0.044, 0.0228, 0.018, -0.034);        // ejection port
+  gpBox(g, M.steel, 0.0048, 0.020, 0.008, 0.0230, 0.018, -0.056);       // and the dust cover that closes it
+  gpBox(g, M.dark, 0.0458, 0.0030, 0.020, 0, -0.012, 0.070);            // the seam where the grip frame joins
+  gpCyl(g, M.steel, 0.0150, 0.0150, 0.020, 18, 0, 0.012, -0.124);       // barrel nut
+  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; gpBox(g, M.dark, 0.004, 0.006, 0.020, Math.cos(a) * 0.0148, 0.012 + Math.sin(a) * 0.0148, -0.124, 0, 0, a); }
+  gpCyl(g, M.park, 0.0105, 0.0105, 0.040, 16, 0, 0.012, -0.154);        // the barrel shroud
+  gpCyl(g, M.steel, 0.0062, 0.0062, 0.036, 16, 0, 0.012, -0.192);       // the barrel
+  gpOpenMuzzle(g, 0.0092, 0.0050, 0.018, 0, 0.012, -0.214, M.steel, M.dark, false);
+  gpBox(g, M.park, 0.018, 0.012, 0.018, 0, 0.0525, -0.112);             // front sight base
+  [-1, 1].forEach(s => gpBox(g, M.park, 0.0030, 0.020, 0.010, s * 0.0072, 0.0660, -0.112));   // the guard's two ears
+  gpBox(g, M.bright, 0.0026, 0.014, 0.0026, 0, 0.0640, -0.112);         // and the post between them
+  gpBox(g, M.steel, 0.020, 0.008, 0.020, 0, 0.0535, 0.052);             // flip rear sight
+  gpBox(g, M.dark, 0.0040, 0.006, 0.020, 0, 0.0582, 0.052);
+  gpBox(g, M.bright, 0.003, 0.008, 0.003, -0.0072, 0.0585, 0.052);
+  gpBox(g, M.bright, 0.003, 0.008, 0.003, 0.0072, 0.0585, 0.052);
+  gpContouredPart(g, M.black, [[0.012,-0.012],[0.042,-0.020],[0.048,-0.090],[0.016,-0.100],[-0.012,-0.076],[-0.014,-0.016]], 0.038, 0, 0.005);   // the pistol grip
+  for (let i = 0; i < 5; i++) gpBox(g, M.dark, 0.040, 0.0030, 0.0075, 0, -0.034 - i * 0.012, -0.010 + i * 0.0045, -0.12);   // finger grooves down the front strap
+  gpBox(g, M.steel, 0.022, 0.044, 0.008, 0, -0.040, 0.050, -0.12);      // grip safety
+  gpBox(g, M.park, 0.026, 0.140, 0.036, 0, -0.114, 0.016, -0.10);       // the 32-round stick magazine, through the grip
+  for (let i = 0; i < 7; i++) gpBox(g, M.dark, 0.028, 0.0034, 0.0375, 0, -0.062 - i * 0.017, 0.0165 + i * 0.0017, -0.10);   // its ribs
+  gpBox(g, M.black, 0.030, 0.010, 0.042, 0, -0.1845, 0.0275, -0.10);    // base plate
+  _milTrigger(g, M, -0.034, -0.016);
+  gpBox(g, M.bright, 0.0050, 0.007, 0.024, -0.0236, 0.010, 0.040, 0, 0, 0.2);   // selector, on the left
+  [-0.017, 0.017].forEach(x => gpBox(g, M.steel, 0.0046, 0.0046, 0.200, x, -0.026, 0.004));   // the wire stock, folded under the receiver
+  gpBox(g, M.steel, 0.040, 0.0046, 0.0046, 0, -0.026, 0.104);           // its cross bar at the hinge end
+  gpBox(g, M.black, 0.040, 0.030, 0.006, 0, -0.030, -0.098, 0.10);      // and the shoulder plate, folded forward
+  gpBox(g, M.steel, 0.036, 0.012, 0.016, 0, -0.018, 0.098);             // the stock hinge
+  _milPlaque(g, 'UZI', 'IMI  /  9x19mm PARA', 0.094, 0.024, 0.0229, 0.004, -0.040);
+  const handle = new THREE.Group(); handle.position.set(0, 0, 0.046); g.add(handle);          // the cocking knob and its runner, which travel
+  gpBox(handle, M.steel, 0.010, 0.0040, 0.044, 0, 0.0475, 0);
+  gpCyl(handle, M.bright, 0.0078, 0.0068, 0.012, 14, 0, 0.0555, 0, 0);
+  gpCyl(handle, M.dark, 0.0034, 0.0034, 0.0020, 10, 0, 0.0620, 0, 0);
+  _milRecoil(g, handle, 0.040);
+  g._sightLine = { space: g, rear: new THREE.Vector3(0, 0.0585, 0.052), front: new THREE.Vector3(0, 0.0710, -0.112) };
+  return _milFinish(g, 0.012, -0.226, 0.012);
+}
+
 function buildGatecrasher() {
   const g = new THREE.Group();
   const steel = GUN_MATS.steel();
@@ -52602,6 +52649,9 @@ const MODEL_SKINS = [
   { id: 'shorty_hair_clippers', weapon: 'shorty', name: 'Hair Clippers', rarity: 'good',
     sw: ['#2a2c34', '#c8a040'], build: buildHairClippers,
     blurb: 'Short, loud, close range. Number two on the guard.' },
+  { id: 'machine_pistol_uzi', weapon: 'machine_pistol', name: 'Uzi', rarity: 'rare', noMech: true,
+    sw: ['#2c3034', '#9aa4aa'], build: buildUziSkin,
+    blurb: 'Stamped box receiver, a long stick magazine up the grip, the wire stock folded underneath. The cocking knob runs back on every shot.' },
   { id: 'machine_pistol_tape_gun', weapon: 'machine_pistol', name: 'Packing Tape Gun', rarity: 'good',
     sw: ['#d02a2a', '#c89a52'], build: buildTapeGun,
     blurb: 'It was always gun-shaped. That noise is the whole point.' },
@@ -53047,7 +53097,7 @@ const GEN1_GATED_MODEL_SKIN_IDS = new Set([
   'rpd_m249', 'lever_winchester94', 'pistol_m9', 'sg8_remington870',
   'srx_dragunov', 'revolver_python', 'grenade_launcher_mgl', 'flamethrower_m2',
   'ak20_aks74u', 'burst_scar_h', 'm4a1_arena_hk416', 'm1_garand_fal', 'srx_m24',
-  'akimbo_1911', 'akimbo_micro_uzi',
+  'akimbo_1911', 'akimbo_micro_uzi', 'machine_pistol_uzi',
 ]);
 const DONUT_SKIN_IDS = [
   'revolver_donut', 'katana_donut',

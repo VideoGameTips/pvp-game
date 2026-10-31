@@ -429,7 +429,7 @@ const GEN1_SKIN_IDS = [
   'rpd_m249', 'lever_winchester94', 'pistol_m9', 'sg8_remington870',
   'srx_dragunov', 'revolver_python', 'grenade_launcher_mgl', 'flamethrower_m2',
   'ak20_aks74u', 'burst_scar_h', 'm4a1_arena_hk416', 'm1_garand_fal', 'srx_m24',
-  'akimbo_1911', 'akimbo_micro_uzi',
+  'akimbo_1911', 'akimbo_micro_uzi', 'machine_pistol_uzi',
 ];
 // The donut weapons: the Glazer, Ring King, and twelve donut guns. No longer a
 // case of their own -- this is Gen 2's rarest tier (GEN2_MYTHIC_SKIN_IDS), and an
