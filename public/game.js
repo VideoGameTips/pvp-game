@@ -41450,20 +41450,22 @@ function _tracerFor(tint, r) {
   const key = tint + '|' + r;
   let p = _tracerParts.get(key);
   if (p) return p;
-  const len = Math.max(0.42, r * 11);
+  // A real tracer is a streak, not a bead: a round at 100+ m/s covers metres between two frames, so a 0.4 m blob read as a
+  // row of translucent frog eggs in slow motion. Two to three metres of tapered glow with a white-hot core along its front.
+  const len = Math.min(3, Math.max(2, r * 30)), w = Math.max(r * 0.9, 0.03);
   p = {
     len,
     // Tapered sheath: fat at the nose, thinning to nothing behind. Additive so
     // overlapping tracers bloom together instead of flattening each other, and
     // depthWrite off so they don't punch holes in one another.
-    glowGeo: new THREE.CylinderGeometry(r * 0.95, r * 0.12, len, 6, 1, true),
+    glowGeo: new THREE.CylinderGeometry(w, 0.004, len, 6, 1, true),
     glowMat: new THREE.MeshBasicMaterial({
-      color: tint, transparent: true, opacity: 0.55,
+      color: tint, transparent: true, opacity: 0.8,
       blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
     }),
     // Short white-hot core riding at the nose — this is what reads as "bullet"
     // at speed, with the coloured sheath trailing it.
-    coreGeo: new THREE.CylinderGeometry(r * 0.38, r * 0.22, len * 0.45, 6),
+    coreGeo: new THREE.CylinderGeometry(w * 0.45, 0.003, len * 0.6, 6),
     coreMat: new THREE.MeshBasicMaterial({ color: 0xfff3d6 }),
   };
   _tracerParts.set(key, p);
@@ -42668,9 +42670,10 @@ function makeBulletMesh(color, size, weaponId, own, lookArg) {
   glow.position.y = -p.len * 0.5;
   g.add(glow);
   const core = new THREE.Mesh(p.coreGeo, p.coreMat);
-  core.position.y = -p.len * 0.20;
+  core.position.y = -p.len * 0.30;
   g.add(core);
   g._alignToDir = true;
+  g._growMs = 70;     // the streak lengthens out of the muzzle (see updateBullets) instead of starting as a rod pointing back at you
   return g;
 }
 
@@ -59748,6 +59751,7 @@ function updateBullets(dt) {
       }
     }
     b.mesh.position.addScaledVector(b.dir, b.speed * dt);
+    if (b.mesh._growMs) b.mesh.scale.y = 0.12 + 0.88 * Math.min(1, (now - b.createdAt) / b.mesh._growMs);
     if (b.mesh._donutTrail) _emitDonutTrail(b.mesh._donutTrail.tint, b.mesh._donutTrail.r, _bulletPrevTrail.set(px0, py0, pz0), b.mesh.position);
     if (b.mesh._bloodTrail) _emitBloodTrail(b.mesh._bloodTrail.tint, b.mesh._bloodTrail.r, _bulletPrevTrail.set(px0, py0, pz0), b.mesh.position);
     // Grenades, blobs and shards tumble; tracers and rockets hold their line.
