@@ -4799,6 +4799,20 @@ function playWeaponSample(ctx, start, S, level, distGain, remote) {
   src.start(start, d.from, d.len * r + 0.02); src.stop(t1 + 0.03);
 }
 
+// A recording that already IS a whole burst. The Burst Rifle's clip has its three shots in it, and the gun asks for a sound
+// once per bullet -- so a three-round burst played the three-shot clip three times: nine bangs for three bullets. Such a clip
+// plays once per burst instead: while it is still sounding (about this many seconds) the burst's other bullets stay quiet.
+// (Per shooter: someone else's burst does not swallow yours.)
+const BURST_CLIP_S = { burst: 0.6 };
+const _burstClipAt = {};
+function burstClipStillSounding(id, opts) {
+  const len = BURST_CLIP_S[id];
+  if (!len) return false;
+  const key = id + ':' + (opts.remote ? (opts.source || 'r') : 'me'), now = performance.now();
+  if (_burstClipAt[key] && now - _burstClipAt[key] < len * 1000) return true;
+  _burstClipAt[key] = now;
+  return false;
+}
 function playWeaponSound(idOrWeapon, opts = {}) {
   const ctx = getAudioCtx();
   if (!ctx) return;
@@ -4823,7 +4837,7 @@ function playWeaponSound(idOrWeapon, opts = {}) {
   if (id) {
     const stealth = !opts.remote && _activeModelSkin[id]?.series === 'stealth';
     const smp = stealth ? sampleFor(ctx, { file: 'stealth', gain: .6, from: .085, len: 1.75, fade: .04, rate: [1, 1] }) : ((!opts.remote && skinSampleFor(ctx, id)) || weaponSampleFor(ctx, id));
-    if (smp) { playWeaponSample(ctx, start, smp, mult, distGain, !!opts.remote); return; }
+    if (smp) { if (burstClipStillSounding(id, opts)) return; playWeaponSample(ctx, start, smp, mult, distGain, !!opts.remote); return; }
   }
   const mainGain = ctx.createGain();
   // Real guns go through the shared gun bus (see gunBus): mastered to the level of
@@ -22585,6 +22599,27 @@ function gpOpenMuzzle(g,outer,inner,length,x,y,z,metal,dark,slotted=false) {
   shadow.rotation.y=Math.PI;shadow.position.z=-length/2+Math.min(inner*2.2,length*.75);shadow.userData.noSmooth=true;group.add(shadow);
   g.add(group);return group;
 }
+function gpReflexSight(g, x, y, z, deckY, holographic = false) {
+  const optic=new THREE.Group();optic.position.set(x,y,z);
+  optic.userData.weaponOptic=true;optic.userData.squareReflex=true;
+  const frame=new THREE.MeshStandardMaterial({color:holographic?0x76d5db:0x263039,metalness:.75,roughness:.3,
+    transparent:holographic,opacity:holographic?.7:1});
+  const edge=.023,thick=.003;
+  for(const sign of [-1,1]) {
+    gpBox(optic,frame,thick,edge*2+thick,.012,sign*edge,0,0);
+    gpBox(optic,frame,edge*2-thick,thick,.012,0,sign*edge,0);
+  }
+  const glass=new THREE.Mesh(new THREE.PlaneGeometry(.042,.042),new THREE.MeshBasicMaterial({color:0xa6e8ea,transparent:true,opacity:.035,depthWrite:false,side:THREE.DoubleSide}));optic.add(glass);
+  const dot=new THREE.Mesh(new THREE.CircleGeometry(.0008,20),new THREE.MeshBasicMaterial({color:0xff3434,side:THREE.DoubleSide}));dot.position.z=.007;optic.add(dot);
+  if(!holographic) {
+    const height=Math.max(.004,y-edge-deckY);
+    gpBox(optic,frame,.029,height,.026,0,-edge-height/2,0);
+    gpBox(optic,frame,.037,.004,.031,0,deckY-y,0);
+    gpCyl(optic,frame,.004,.004,.005,16,.028,-.014,0,0,Math.PI/2);
+  } else optic.userData.eqFx=true;
+  g.add(optic);g._sightLine={space:optic,rear:new THREE.Vector3(0,0,.006),front:new THREE.Vector3(0,0,-.006)};
+  g._hasDefaultAimer=true;return optic;
+}
 function gpOptic(g, x, y, z, length, radius, deckY) {
   y = Math.min(y, deckY + radius * 1.55 + .002);
   const optic = new THREE.Group();optic.position.set(x,y,z);optic.userData.weaponOptic=true;
@@ -31463,7 +31498,7 @@ function buildP90() {
   for (let i = 0; i < 7; i++) gpCyl(g, bright, 0.0055, 0.0055, 0.034, 8, 0, 0.056, -0.078 + i * 0.023, 0, Math.PI/2);
   gpBox(g, poly, 0.042, 0.008, 0.024, 0, 0.056, 0.082);                // mag rear catch
   // A real open optic, not a solid housing blocking the aiming axis.
-  gpOptic(g, 0, .081, .052, .062, .008, .066);
+  gpReflexSight(g, 0, .094, .052, .066);
   g._hasDefaultAimer = true;
   // Barrel, sling loop, ejection port, controls.
   gpCyl(g, blued, 0.0068, 0.0068, 0.070, 14, 0, 0.006, -0.216);
@@ -42658,6 +42693,7 @@ function heldWalkPose(t, phase = 0) {
 }
 function updateRealismFeedback(dt) {
   const model = weaponModels[currentWeaponIdx];
+  if (model?._aimOnlySight) model._aimOnlySight.visible=isADS && !reloading && !_equip;
   if (model && model._spinApplied) {
     if (model.visible && !reloading && activeSlot !== 'melee' && activeSlot !== 'support' && !_equip) model.rotation.x -= model._spinApplied;
     model._spinApplied = 0;
@@ -45871,6 +45907,7 @@ function weaponSightPose(model) {
 function setWeaponADSPos(ads) {
   const model = weaponModels[currentWeaponIdx];
   if (!model) return;
+  if (model._aimOnlySight) model._aimOnlySight.visible=ads;
   if (!model._hipPosition) model._hipPosition = (model._homePos || model.position).clone();
   const position = ads ? weaponSightPose(model).position : model._hipPosition;
   if (!model._homePos) model._homePos = position.clone();
@@ -52117,7 +52154,21 @@ function addViewArms(root) {
   if (H.front && H.front !== H.rear) one(H.front, [-0.50, -0.40, 0.77]);
   refreshViewArms();
 }
-function prepViewModel(m, weaponId) {
+function ensureWeaponAimingSight(model, weaponId) {
+  const w=WEAPONS.find(w=>w.id===weaponId);
+  if(!w?.auto || w.archived || w.skinOnly || model._sightLine || model._akimbo) return;
+  let top=-.02;
+  for(const p of _localPartBoxes(model)) {
+    const mat=Array.isArray(p.obj.material)?p.obj.material[0]:p.obj.material;
+    let skip=false;
+    for(let o=p.obj;o && o!==model;o=o.parent)if(o.userData.vmHand || o.userData.eqFx || o===model._flash)skip=true;
+    if(skip || !mat || mat.transparent || mat.isMeshBasicMaterial || p.box.min.x>.012 || p.box.max.x<-.012)continue;
+    top=Math.max(top,p.box.max.y);
+  }
+  model._aimOnlySight=gpReflexSight(model,0,top+.029,.025,top,true);
+  model._aimOnlySight.visible=false;model._adsSightPose=null;
+}
+function prepViewModel(m, weaponId, sightWeaponId = weaponId) {
   if (!m) return m;
   m.scale.setScalar(VM_GUN_SCALE);
   fitRestDistance(m);                          // before hands: attachViewHands captures _homePos
@@ -52135,6 +52186,7 @@ function prepViewModel(m, weaponId) {
   if (m._anchorOverride && m._anchors) Object.assign(m._anchors, m._anchorOverride);
   try { metalizeModel(m); } catch (e) {}       // parts added by the passes above
   if (weaponId) ensureMech(m, weaponId);       // working parts, once the finished model is final
+  ensureWeaponAimingSight(m,sightWeaponId);
   return m;
 }
 weaponModels.forEach((m, i) => {
@@ -53200,7 +53252,7 @@ function applyModelSkin(weaponId) {
     // opened a menu would leak geometry into the scene graph.
     if (!skin._model) {
       try {
-        skin._model = prepViewModel(skin.rarity === 'donut' ? skin.build() : _smoothModelSkin(skin.build()), _skinHasMechanics(skin) ? weaponId : null);   // a doughnut keeps its hard edges
+        skin._model = prepViewModel(skin.rarity === 'donut' ? skin.build() : _smoothModelSkin(skin.build()), _skinHasMechanics(skin) ? weaponId : null, weaponId);   // a doughnut keeps its hard edges
         try { blendProudSteps(skin._model); } catch (e) {}   // same fittings as the gun it replaces
         skin._model.visible = false;
         camera.add(skin._model);
@@ -62500,7 +62552,7 @@ socket.on('bulletFired', b => {
     fireHellfireBeam(origin,new THREE.Vector3(b.dx,b.dy,b.dz));
     playWeaponSound('hellfire',{baseWeapon:w,remote:true,position:origin});return;
   }
-  playWeaponSound(b.weapon || w.id, { baseWeapon: w, remote: true, position: origin });
+  playWeaponSound(b.weapon || w.id, { baseWeapon: w, remote: true, position: origin, source: b.ownerId });
   kickCharacter(remoteMeshes[b.ownerId]);
   const opts = b.weapon === 'storm_bloom_ball'
     ? { ballLightning: true, auraRadius: 3.0, auraCooldown: 1000, directRootMs: 3000, auraRootMs: 1000, maxRange: 42 }
@@ -70162,7 +70214,7 @@ function updateBotAI(dt) {
               aimUpY / Math.max(aimLen, 0.01) + vErr,
               aimDz / aimLen + (Math.random()-0.5)*spread
             ).normalize();
-            playWeaponSound(w.id, { baseWeapon: w, remote: true, position: origin });
+            playWeaponSound(w.id, { baseWeapon: w, remote: true, position: origin, source: bot.id });
             kickCharacter(remoteMeshes[bot.id]);
             spawnLocalBullet(origin, dir, `bot_${bot.id}_${now}`, false, w.bulletSpeed || 120,
                              w.bulletColor, w.bulletSize, w.id, { botId: bot.id, botTeam: bot.team });

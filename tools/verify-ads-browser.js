@@ -50,14 +50,30 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         const q=new THREE.Quaternion().setFromEuler(s.rotation);
         for(const v of [s.rear,s.front]){const p=v.clone().applyQuaternion(q).add(s.position);if(Math.hypot(p.x,p.y)>1e-8)throw Error('Skin optic alignment '+id);}
       }
-      return {checked,authored,stealthOptics:3};
+      const p90Index=WEAPONS.findIndex(w=>w.id==='p90');
+      if(!weaponModels[p90Index]._sightLine.space.userData.squareReflex)throw Error('P90 missing square reflex');
+      let p90Skins=0;
+      for(const skin of MODEL_SKINS.filter(s=>s.weapon==='p90')) {
+        const original=weaponModels[p90Index],m=prepViewModel(_smoothModelSkin(skin.build()),null,'p90');
+        if(!m._sightLine || !m._aimOnlySight || m._aimOnlySight.visible)throw Error('Missing aim-only skin sight '+skin.id);
+        weaponModels[p90Index]=m;currentWeaponIdx=p90Index;m.visible=true;
+        try {
+          isADS=true;setWeaponADSPos(true);for(let f=0;f<90;f++)updateRealismFeedback(1/60);
+          const pose=weaponSightPose(m),q=new THREE.Quaternion().setFromEuler(m.rotation);
+          for(const v of [pose.rear,pose.front]){const p=v.clone().applyQuaternion(q).add(m.position);if(Math.hypot(p.x,p.y)>.001)throw Error('Skin sight off centre '+skin.id);}
+          if(!m._aimOnlySight.visible)throw Error('Sight hidden during aim');
+          isADS=false;setWeaponADSPos(false);if(m._aimOnlySight.visible)throw Error('Sight visible at hip');
+          p90Skins++;
+        } finally {weaponModels[p90Index]=original;}
+      }
+      return {checked,authored,stealthOptics:3,p90Skins};
     }));
     for(const [id,width,height] of [['ak20',1280,800],['pistol',1280,800],['vector',1280,800],['p90',390,844]]) {
       await page.setViewportSize({width,height});
       const result=await page.evaluate(id=>{
         document.querySelectorAll('body > :not(canvas)').forEach(e=>e.style.display='none');
         camera.children.forEach(o=>{if(!o.isLight)o.visible=false;});
-        currentWeaponIdx=WEAPONS.findIndex(w=>w.id===id);const m=weaponModels[currentWeaponIdx];m.visible=true;
+        currentWeaponIdx=WEAPONS.findIndex(w=>w.id===id);const m=weaponModels[currentWeaponIdx];m.visible=true;isADS=true;
         setWeaponADSPos(true);for(let i=0;i<90;i++)updateRealismFeedback(1/60);
         camera.position.set(0,3,20);camera.rotation.set(0,0,0);camera.fov=WEAPONS[currentWeaponIdx].adsZoom;camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
         renderer.setSize(innerWidth,innerHeight);renderer.render(scene,camera);
