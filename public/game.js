@@ -45695,23 +45695,13 @@ function setADS(on) {
 }
 
 function drawCrossbowScope(ctx, W, H) {
-  const cx=W/2,cy=H/2,rx=Math.min(W*.45,H*.59),ry=Math.min(H*.40,W*.34);
-  ctx.fillStyle='#05090b';ctx.fillRect(0,0,W,H);
-  ctx.globalCompositeOperation='destination-out';ctx.beginPath();ctx.ellipse(cx,cy,rx,ry,0,0,Math.PI*2);ctx.fill();ctx.globalCompositeOperation='source-over';
-  ctx.strokeStyle='#253238';ctx.lineWidth=8;ctx.beginPath();ctx.ellipse(cx,cy,rx-3,ry-3,0,0,Math.PI*2);ctx.stroke();
-  ctx.strokeStyle='rgba(255,190,91,.95)';ctx.fillStyle='rgba(255,190,91,.95)';ctx.lineWidth=1.6;ctx.lineJoin='round';
-  const tip=Math.max(5,Math.min(10,ry*.04));
-  // The chevron tip is the shot centre. Lower marks are unnumbered holdovers.
-  ctx.beginPath();ctx.moveTo(cx-tip,cy+tip);ctx.lineTo(cx,cy);ctx.lineTo(cx+tip,cy+tip);ctx.stroke();
-  for(const [height,width]of [[.13,.13],[.25,.095],[.39,.06]]){
-    const y=cy+ry*height,half=rx*width;
-    ctx.beginPath();ctx.moveTo(cx-half,y);ctx.lineTo(cx+half,y);ctx.moveTo(cx,y-3);ctx.lineTo(cx,y+3);ctx.stroke();
-  }
-  ctx.strokeStyle='rgba(255,190,91,.55)';
-  for(const sign of [-1,1]){
-    const x=cx+sign*rx*.64;
-    ctx.beginPath();ctx.moveTo(x,cy-ry*.1);ctx.lineTo(x,cy+ry*.1);ctx.moveTo(x,cy);ctx.lineTo(x-sign*rx*.14,cy);ctx.stroke();
-  }
+  const cx=W/2,cy=H/2,r=Math.min(W,H)*.40;
+  ctx.fillStyle='#000';ctx.fillRect(0,0,W,H);
+  ctx.globalCompositeOperation='destination-out';ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fill();ctx.globalCompositeOperation='source-over';
+  ctx.strokeStyle='#111';ctx.lineWidth=8;ctx.beginPath();ctx.arc(cx,cy,r-3,0,Math.PI*2);ctx.stroke();
+  ctx.strokeStyle='#000';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(cx-r+4,cy);ctx.lineTo(cx+r-4,cy);ctx.moveTo(cx,cy-r+4);ctx.lineTo(cx,cy+r-4);ctx.stroke();
+  ctx.fillStyle='#ff3030';ctx.beginPath();ctx.arc(cx,cy,3,0,Math.PI*2);ctx.fill();
 }
 function drawScope() {
   const canvas = document.getElementById('scope-canvas');

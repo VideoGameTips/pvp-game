@@ -11,12 +11,16 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         const result=await page.evaluate(id=>{
           currentWeaponIdx=WEAPONS.findIndex(w=>w.id===id);currentWeapon=WEAPONS[currentWeaponIdx];drawScope();
           const c=document.getElementById('scope-canvas'),ctx=c.getContext('2d'),pixels=ctx.getImageData(0,0,c.width,c.height).data;
-          let amber=0,green=0,clear=0;
-          for(let i=0;i<pixels.length;i+=4){if(!pixels[i+3])clear++;if(pixels[i+3]>100&&pixels[i]>150&&pixels[i+1]>90&&pixels[i+2]<140)amber++;if(pixels[i+3]>100&&pixels[i+1]>150&&pixels[i]<80)green++;}
-          return {style:c.dataset.scopeStyle,amber,green,clear,image:c.toDataURL()};
+          let red=0,green=0,clear=0;
+          for(let i=0;i<pixels.length;i+=4){if(!pixels[i+3])clear++;if(pixels[i+3]>100&&pixels[i]>150&&pixels[i+1]<90&&pixels[i+2]<90)red++;if(pixels[i+3]>100&&pixels[i+1]>150&&pixels[i]<80)green++;}
+          const sample=(dx,dy)=>Array.from(ctx.getImageData(Math.floor(c.width/2+dx),Math.floor(c.height/2+dy),1,1).data);
+          return {style:c.dataset.scopeStyle,red,green,clear,center:sample(0,0),horizontal:sample(30,0),vertical:sample(0,30),open:sample(30,30),image:c.toDataURL()};
         },id);
         assert.equal(result.style,id==='srx'?'sniper':'crossbow');assert(result.clear>10000);
-        if(id==='crossbow'){assert(result.amber>100);assert.equal(result.green,0);}else assert(result.green>100);
+        if(id==='crossbow'){
+          assert(result.red>15);assert.equal(result.green,0);assert(result.center[0]>200);
+          assert.deepEqual(result.horizontal,[0,0,0,255]);assert.deepEqual(result.vertical,[0,0,0,255]);assert.equal(result.open[3],0);
+        }else assert(result.green>100);
         outputs[id]=result;fs.writeFileSync('/tmp/'+id+'-scope-'+size.width+'.png',Buffer.from(result.image.split(',')[1],'base64'));
       }
       assert.notEqual(outputs.crossbow.image,outputs.srx.image);console.log(size.width,{crossbowClear:outputs.crossbow.clear,sniperClear:outputs.srx.clear});
