@@ -47755,13 +47755,13 @@ function isKnifeBackstabTarget(mesh) {
 // ── 🗡️ BACKSTAB: glide round behind them, then stab ─────────────────────────────────────────────────────────────────────
 // The ability used to kill on the keypress and then run you in from the FRONT, which looked like a dash into someone's face.
 // Now you slide in an arc around the target to the spot behind them (following them if they move), turn to face their back,
-// the knife comes up, and the stab lands as you arrive. If a wall stops you short of reach, nothing is killed.
+// the knife comes up, and the stab lands as you arrive -- a kill only if you are at their back. Nothing blocks the glide.
 let backstabGlide = null;   // { pid, item, t, dur, a0, r0, now, blocked, stabbed, epoch }
 const BACKSTAB_GAP = 0.95;  // how close behind them you end up
 function startBackstabGlide(item, pid, mesh, now) {
   cancelInspect();
   const dx = camera.position.x - mesh.position.x, dz = camera.position.z - mesh.position.z, r0 = Math.hypot(dx, dz);
-  backstabGlide = { pid, item, t: 0, dur: Math.min(0.5, 0.28 + 0.04 * r0), a0: Math.atan2(dx, dz), r0, now, blocked: 0, stabbed: false, fx: 0, epoch: matchEpoch };
+  backstabGlide = { pid, item, t: 0, dur: Math.min(0.5, 0.28 + 0.04 * r0), a0: Math.atan2(dx, dz), r0, now, stabbed: false, fx: 0, epoch: matchEpoch };
   meleeSwingT = 1;
   _fovPunch = Math.max(_fovPunch, 8);
 }
@@ -47770,10 +47770,12 @@ function _backstabStrike(g) {
   if (!mesh || players[g.pid]?.dead) return;
   const hp = mesh.position.clone().setY(1.0);
   const dummy = TRAINING_DUMMIES.find(d => d.id === g.pid);
-  if (dummy) handleDummyHit(dummy, mesh, { damage: 9999 }, hp);
-  else emitHit(g.pid, `knife_ab_${myId}_${g.now}`, 'knife_instakill', hp);
+  // It only kills from behind. Arrive and they have turned round (or you are not at their back for any reason): an ordinary stab.
+  const behind = isKnifeBackstabTarget(mesh);
+  if (dummy) handleDummyHit(dummy, mesh, { damage: behind ? 9999 : g.item.damage }, hp);
+  else emitHit(g.pid, `knife_ab_${myId}_${g.now}`, behind ? 'knife_instakill' : (g.item.baseId || g.item.id), hp);
   spawnHitParticle(hp);
-  flashScreen('rgba(255,0,0,0.40)', 300);
+  if (behind) flashScreen('rgba(255,0,0,0.40)', 300);
   playSoundEvent('melee_impact', { material: MELEE_SWING_SOUND[g.item.baseId || g.item.id] || 'blade', volume: 1.0, minGap: 0 });
 }
 function updateBackstabGlide(dt) {
@@ -47787,21 +47789,18 @@ function updateBackstabGlide(dt) {
   const th = g.a0 + d * k, r = g.r0 + (BACKSTAB_GAP - g.r0) * k;
   const delta = new THREE.Vector3(tx + Math.sin(th) * r - camera.position.x, 0, tz + Math.cos(th) * r - camera.position.z);
   const len = delta.length();
-  if (len > 0.001) {
-    const before = camera.position.clone();
-    moveWithWalls(delta.normalize(), len); resolveWallCollisions();
-    g.blocked = (len > 0.05 && camera.position.distanceTo(before) < len * 0.25) ? g.blocked + 1 : 0;
-  }
+  camera.position.x += delta.x; camera.position.z += delta.z;                        // no collision: nothing stops the glide (the walls are sorted out once it ends)
   playerYVel = 0; slamState = null; _extVel.x = 0; _extVel.z = 0; window._blastCarry = false;
   _aimToward(new THREE.Vector3(tx, mesh.position.y + 1.3, tz), 1500, dt);          // turned to face their back
   if (isOutOfBoundsXZ(camera.position.x, camera.position.z)) { killLocalOutOfBounds(); backstabGlide = null; return; }
   g.fx -= dt;
   if (g.fx <= 0) { g.fx = 0.05; spawnAbilityAOEFX(camera.position.clone().setY(camera.position.y - 0.85), 0.35, 0xbfc4cc); }
   if (!g.stabbed && g.t >= g.dur - 0.12) { g.stabbed = true; startUseAnim('melee', g.item, 'stab'); }
-  if (g.t >= g.dur || g.blocked >= 3) {
+  if (g.t >= g.dur) {
     backstabGlide = null;
+    resolveWallCollisions();                                                       // do not finish inside a wall
     if (Math.hypot(tx - camera.position.x, tz - camera.position.z) <= g.item.range + 0.6) _backstabStrike(g);
-    else meleeAbilityBuff = { type: 'instakill', usesLeft: 1 };                    // could not get there: the next swing is still the kill
+    else meleeAbilityBuff = { type: 'instakill', usesLeft: 1 };                    // could not get there: the next swing is still the kill, from behind
   }
 }
 
@@ -50704,7 +50703,7 @@ function meleeStrikeScan(item, soundId, sawDry, now) {
     if (item.id === 'knife' && isKnifeBackstabTarget(mesh)) {
       effectiveWeaponId = 'knife_instakill';
       flashScreen('rgba(255,0,0,0.35)', 250);
-    } else if (meleeAbilityBuff?.type === 'instakill' && meleeAbilityBuff.usesLeft > 0) {
+    } else if (meleeAbilityBuff?.type === 'instakill' && meleeAbilityBuff.usesLeft > 0 && isKnifeBackstabTarget(mesh)) {
       effectiveWeaponId = 'knife_instakill';
       meleeAbilityBuff.usesLeft--;
       if (meleeAbilityBuff.usesLeft <= 0) meleeAbilityBuff = null;
