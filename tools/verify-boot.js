@@ -2312,7 +2312,7 @@ if (ok && process.argv.includes('--flare')) {
     if (!f || !(f.bulletSize >= 0.15)) issues.push('the flare should be large (bulletSize >= 0.15)');
     if (!f || !(f.arcGravity > 0 && f.arcGravity < 0.6)) issues.push('the flare should fall slower than the usual arc');
     if (!f || !(f.flightMs >= 3500)) issues.push('the flare has to be allowed to stay up for a few seconds');
-    if (!f || !(f.bulletSpeed <= 30)) issues.push('the flare should be slow');
+    if (!f || !(f.bulletSpeed <= 40)) issues.push('the flare should be slower than a rifle round');
     const keepWalls = wallColliders.slice(); wallColliders.length = 0;
     const savedSound = playSoundEvent; playSoundEvent = () => {};
     const savedFlares = groundFlares.length;

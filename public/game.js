@@ -221,11 +221,12 @@ const WEAPONS = [
   {
     id: 'flare',    name: 'Flare',    type: 'Secondary', slot: 'secondary',
     mag: 1,   reserve: 6,   damage: 85, fireRate: 200,  reloadTime: 2500,
-    // A flare you can see coming and could walk into: slower (44 -> 26), falling at about a third of the usual
-    // arc gravity so it drifts down instead of dropping, and a big glowing body (the bullet's size is also its
-    // hit radius). It stays up for up to five seconds instead of the 1.8 a normal shot lives.
-    auto: false, pellets: 1, spread: 0,    adsZoom: 55, bulletSpeed: 26, noReload: false,
-    bulletColor: 0xff5500, bulletSize: 0.22, arcShot: true, arcGravity: 0.36, flightMs: 5000, // lobs and falls, doesn't fly flat like a bullet
+    // A flare you can see coming: a bit slower than a rifle round (44 -> 38), falling at under a fifth of the usual arc
+    // gravity so it flies almost flat, and a big glowing body (the bullet's size is also its hit radius). It stays up for
+    // up to five seconds instead of the 1.8 a normal shot lives. It was 26 m/s at 0.36 gravity, which dropped 2.8 m by
+    // 20 m and took 0.8 s to get there: it hit the floor in front of anyone past 12 m and missed anyone who moved.
+    auto: false, pellets: 1, spread: 0,    adsZoom: 55, bulletSpeed: 38, noReload: false,
+    bulletColor: 0xff5500, bulletSize: 0.22, arcShot: true, arcGravity: 0.18, flightMs: 5000, // lobs and falls, doesn't fly flat like a bullet
     ability: { name: 'Signal Flare', cd: 22000, desc: 'Reveal all enemies 4 s + AOE 50 dmg', type: 'aoe', radius: 8, damage: 50, color: 0xff5500, reveal: true, revealDur: 4000 },
   },
   {
