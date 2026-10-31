@@ -41445,30 +41445,54 @@ const SOLID_PROJECTILES = new Set(['pickle', 'spear_throw']);  // paintball gets
 // geometry and materials are shared per (colour, size) instead of allocating a
 // fresh set for every round. Nothing ever mutates a bullet's material, so
 // sharing is safe, and it also means removing a bullet leaks nothing.
-const _tracerParts = new Map();
-function _tracerFor(tint, r) {
-  const key = tint + '|' + r;
-  let p = _tracerParts.get(key);
+// 🔫 A round in flight is drawn as the cartridge it is (brass case, copper nose; a rifle round is long, bottle-necked and
+// sharp with a red tip, a pistol round short and blunt) and drags a long thin afterburn behind it: a tapered sheath that goes
+// from white-hot at the bullet to orange to nothing, never wider than the bullet itself. Slow motion showed the old
+// translucent beads for what they were; a round at 100+ m/s covers metres between two frames, so the trail is what reads.
+const _bulletParts = new Map();
+function _bulletFor(tint, r, rifle) {
+  const key = tint + '|' + r + '|' + (rifle ? 'r' : 'p');
+  let p = _bulletParts.get(key);
   if (p) return p;
-  // A real tracer is a streak, not a bead: a round at 100+ m/s covers metres between two frames, so a 0.4 m blob read as a
-  // row of translucent frog eggs in slow motion. Two to three metres of tapered glow with a white-hot core along its front.
-  const len = Math.min(3, Math.max(2, r * 30)), w = Math.max(r * 0.9, 0.03);
-  p = {
-    len,
-    // Tapered sheath: fat at the nose, thinning to nothing behind. Additive so
-    // overlapping tracers bloom together instead of flattening each other, and
-    // depthWrite off so they don't punch holes in one another.
-    glowGeo: new THREE.CylinderGeometry(w, 0.004, len, 6, 1, true),
-    glowMat: new THREE.MeshBasicMaterial({
-      color: tint, transparent: true, opacity: 0.8,
-      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
-    }),
-    // Short white-hot core riding at the nose — this is what reads as "bullet"
-    // at speed, with the coloured sheath trailing it.
-    coreGeo: new THREE.CylinderGeometry(w * 0.45, 0.003, len * 0.6, 6),
-    coreMat: new THREE.MeshBasicMaterial({ color: 0xfff3d6 }),
+  const R = Math.min(0.04, Math.max(0.02, r * 0.5));           // the bullet's radius (a little over scale: it has to be seen)
+  const Lc = R * (rifle ? 7.2 : 3.2), Lb = R * (rifle ? 6.0 : 2.6);          // case length, bullet (nose) length
+  const caseProfile = rifle
+    ? [[R*0.95, 0], [R*1.08, 0], [R*1.08, R*0.35], [R*0.95, R*0.4], [R*0.95, Lc*0.78], [R*0.62, Lc*0.93], [R*0.58, Lc]]   // bottle neck
+    : [[R*0.92, 0], [R*1.06, 0], [R*1.06, R*0.3], [R*0.92, R*0.36], [R*0.92, Lc]];
+  const noseR = rifle ? R*0.58 : R*0.92;
+  const nose = [];
+  for (let i = 0; i <= 8; i++) {
+    const t = i / 8;
+    nose.push([Math.max(0.0005, noseR * (rifle ? Math.pow(1 - t, 0.72) : Math.sqrt(Math.max(0, 1 - t * t * 0.92)))), Lb * t]);
+  }
+  const lathe = pts => new THREE.LatheGeometry(pts.map(([x, y]) => new THREE.Vector2(x, y)), 10);
+  const trailLen = rifle ? 8 : 6;
+  const mkTrail = (radius, len, white) => {
+    const g = new THREE.CylinderGeometry(radius, 0.003, len, 8, 8, true);
+    g.translate(0, -len / 2, 0);                                // the head sits at the origin, the trail runs back from it
+    const pos = g.attributes.position, col = new Float32Array(pos.count * 3), c = new THREE.Color(tint);
+    for (let i = 0; i < pos.count; i++) {
+      const t = Math.max(0, Math.min(1, 1 + pos.getY(i) / len));  // 0 at the tail, 1 at the bullet
+      const k = Math.pow(t, 1.6), hot = Math.max(0, (t - 0.55) / 0.45);
+      const m = white ? 1 : 0.9;
+      col[i*3]   = Math.min(1, (c.r * (1 - hot) + hot) * k * m + (white ? hot * 0.2 : 0));
+      col[i*3+1] = Math.min(1, (c.g * (1 - hot) + hot * 0.96) * k * m + (white ? hot * 0.2 : 0));
+      col[i*3+2] = Math.min(1, (c.b * (1 - hot) + hot * 0.85) * k * m + (white ? hot * 0.2 : 0));
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    return g;
   };
-  _tracerParts.set(key, p);
+  const trailMat = () => new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  p = {
+    caseGeo: lathe(caseProfile), caseMat: new THREE.MeshLambertMaterial({ color: 0xd9a63e, emissive: 0x6a4a10 }),
+    noseGeo: lathe(nose),        noseMat: new THREE.MeshLambertMaterial({ color: 0xb8622e, emissive: 0x4a2208 }),
+    tipMat:  new THREE.MeshLambertMaterial({ color: 0xd8301f, emissive: 0x701008 }),
+    tipGeo:  new THREE.ConeGeometry(R*0.17, R*1.5, 8),
+    outerGeo: mkTrail(R * 0.92, trailLen), coreGeo: mkTrail(R * 0.36, trailLen * 0.55, true),
+    outerMat: trailMat(), coreMat: trailMat(),
+    Lc, Lb, R,
+  };
+  _bulletParts.set(key, p);
   return p;
 }
 
@@ -42662,18 +42686,21 @@ function makeBulletMesh(color, size, weaponId, own, lookArg) {
     case 'phase':   return _buildPhase(color, r);
     case 'donut':   return _buildDonutShot(color, r);
   }
-  // 'bullet' — a solid metal round. Orange/white tracer stretched along the path.
+  // 'bullet' — a metal round: the cartridge itself, trailing its afterburn (see _bulletFor).
   const tint = color || 0xff8a1e;
-  const p = _tracerFor(tint, r);
+  const rifle = /\bAR\b|Rifle|Sniper|Marksman|LMG|\bMG\b|Gatling|Anti-Material|Chain Gun|Mounted|Battle|Heavy/i.test((weapon && weapon.type) || '');
+  const p = _bulletFor(tint, r, rifle);
   const g = new THREE.Group();
-  const glow = new THREE.Mesh(p.glowGeo, p.glowMat);
-  glow.position.y = -p.len * 0.5;
-  g.add(glow);
-  const core = new THREE.Mesh(p.coreGeo, p.coreMat);
-  core.position.y = -p.len * 0.30;
-  g.add(core);
+  // local +Y is the flight direction (spawnLocalBullet turns it); the bullet's base sits behind the origin, its tip ahead
+  const trail = new THREE.Group();
+  trail.add(new THREE.Mesh(p.outerGeo, p.outerMat), new THREE.Mesh(p.coreGeo, p.coreMat));
+  trail.position.y = -(p.Lc + 0.0);
+  g.add(trail);
+  const casing = new THREE.Mesh(p.caseGeo, p.caseMat); casing.position.y = -p.Lc; g.add(casing);
+  const nose = new THREE.Mesh(p.noseGeo, p.noseMat); g.add(nose);
+  if (rifle) { const tip = new THREE.Mesh(p.tipGeo, p.tipMat); tip.position.y = p.Lb - p.R * 0.55; g.add(tip); }
   g._alignToDir = true;
-  g._growMs = 70;     // the streak lengthens out of the muzzle (see updateBullets) instead of starting as a rod pointing back at you
+  g._growTrail = trail;   // the afterburn lengthens out of the muzzle (see updateBullets) instead of starting as a rod pointing back at you
   return g;
 }
 
@@ -59751,7 +59778,7 @@ function updateBullets(dt) {
       }
     }
     b.mesh.position.addScaledVector(b.dir, b.speed * dt);
-    if (b.mesh._growMs) b.mesh.scale.y = 0.12 + 0.88 * Math.min(1, (now - b.createdAt) / b.mesh._growMs);
+    if (b.mesh._growTrail) b.mesh._growTrail.scale.y = 0.08 + 0.92 * Math.min(1, (now - b.createdAt) / 90);
     if (b.mesh._donutTrail) _emitDonutTrail(b.mesh._donutTrail.tint, b.mesh._donutTrail.r, _bulletPrevTrail.set(px0, py0, pz0), b.mesh.position);
     if (b.mesh._bloodTrail) _emitBloodTrail(b.mesh._bloodTrail.tint, b.mesh._bloodTrail.r, _bulletPrevTrail.set(px0, py0, pz0), b.mesh.position);
     // Grenades, blobs and shards tumble; tracers and rockets hold their line.
