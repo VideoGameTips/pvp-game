@@ -4182,6 +4182,43 @@ if (ok && process.argv.includes('--irregular')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--dry')) {
+  // The compressed air rifle has no echo (Andy): a shot of it sends nothing to the reverb, plays no long report and none of the muzzle blast's tail, with any skin on it and for the
+  // people who hear it; and the guns that are loud keep theirs (a sniper rifle still sends to the room and rolls away).
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const param = (k) => ({ set value(v) {}, setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {}, setTargetAtTime() {} });
+    const node = () => new Proxy({ connect(x) { return x; }, disconnect() {}, start() {}, stop() {}, type: '', buffer: null },
+      { get(t, k) { return k in t ? t[k] : (typeof k === 'string' ? param(k) : undefined); }, set(t, k, v) { t[k] = v; return true; } });
+    const ctx = new Proxy({ currentTime: 5, sampleRate: 4000, state: 'running', destination: node(), resume() {}, createBuffer(ch, len) { return { getChannelData() { return new Float32Array(len); } }; } },
+      { get(t, k) { return k in t ? t[k] : (typeof k === 'string' && k.startsWith('create') ? node : undefined); }, set(t, k, v) { t[k] = v; return true; } });
+    const keep = { ctx: getAudioCtx, rev: getReverbBus, long: longReport, noise: playFilteredNoise, last: weaponSoundLastAt };
+    const shot = (id, opts) => {
+      const seen = { reverb: 0, report: 0, tails: 0 };
+      getAudioCtx = () => ctx; getReverbBus = () => { seen.reverb++; return node(); }; longReport = () => { seen.report++; };
+      playFilteredNoise = (c, start, dur, out, vol, type) => { if (type === 'lowpass' && dur >= 0.25) seen.tails++; };
+      for (const k of Object.keys(weaponSoundLastAt)) delete weaponSoundLastAt[k];
+      try { playWeaponSound(id, Object.assign({ minGap: 0 }, opts || {})); } finally { getAudioCtx = keep.ctx; getReverbBus = keep.rev; longReport = keep.long; playFilteredNoise = keep.noise; }
+      return seen;
+    };
+    try {
+      const loud = shot('srx');
+      if (!(loud.reverb > 0 && loud.report > 0)) issues.push('a sniper rifle should still send to the room and roll away: ' + JSON.stringify(loud));
+      for (const [label, opts] of [['own shot', {}], ['somebody else', { remote: true }]]) {
+        const dry = shot('air_rifle', opts);
+        if (dry.reverb || dry.report || dry.tails) issues.push('the air rifle (' + label + ') should have no echo: ' + JSON.stringify(dry));
+      }
+      const skin = MODEL_SKINS.find(m => m.weapon === 'air_rifle'), save = _activeModelSkin.air_rifle;
+      if (skin) { _activeModelSkin.air_rifle = skin; const d = shot('air_rifle'); if (d.reverb || d.report || d.tails) issues.push('the air rifle wearing ' + skin.id + ' should have no echo: ' + JSON.stringify(d)); if (save) _activeModelSkin.air_rifle = save; else delete _activeModelSkin.air_rifle; }
+      if (_wpnDry) issues.push('a shot left the dry flag set');
+      if (weaponAudioProfile('air_rifle').tail) issues.push('the air rifle profile should have no tail of its own');
+    } finally { getAudioCtx = keep.ctx; getReverbBus = keep.rev; longReport = keep.long; playFilteredNoise = keep.noise; }
+    return issues;
+  })()`);
+  console.log('dry shot checks: the compressed air rifle has no echo (no reverb send, no long report, no tail layer) for anyone and with any skin, and a sniper rifle still does');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.argv.includes('--skinshot')) {
   // Skin shots (Andy: "each skin should affect the projectile: the Glaze Launcher launches doughnuts, the explosion looks different and has the same effect"): every gun skin has
   // a look for its shots (at the least a tint from its swatch); the table names real skins, real shapes and real bursts; a themed shot builds; the burst of a skin reaches

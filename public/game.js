@@ -4108,7 +4108,7 @@ function weaponAudioProfile(id, baseWeapon) {
   if (lowerId.includes('paint')) return { kind:'pop', vol:0.28, dur:0.13, f1:520, f2:190 };
   if (lowerId.includes('knife') || lowerId.includes('throwing')) return { kind:'throw', vol:0.23, dur:0.12, f1:780, f2:260 };
   if (type.includes('shotgun') || lowerId.includes('shotgun') || lowerId.includes('sg8') || lowerId.includes('sg8') || lowerId.includes('shorty') || lowerId.includes('sawed') || lowerId === 'boomstick' || lowerId.includes('spas')) return { kind:'boom', vol:0.56, dur:0.22, f1:150, f2:55, action:'shotgun', tail:0.55 };
-  if (type.includes('sniper') || type.includes('marksman') || lowerId.includes('srx') || lowerId.includes('lever') || lowerId === 'amr' || lowerId === 'm1_garand' || lowerId === 'air_rifle' || lowerId === 'duelist_pistol') return { kind:'crack', vol:0.66, dur:0.18, f1:680, f2:95, action:'bolt', tail: lowerId === 'amr' ? 1.35 : 1.0 };
+  if (type.includes('sniper') || type.includes('marksman') || lowerId.includes('srx') || lowerId.includes('lever') || lowerId === 'amr' || lowerId === 'm1_garand' || lowerId === 'air_rifle' || lowerId === 'duelist_pistol') return { kind:'crack', vol:0.66, dur:0.18, f1:680, f2:95, action:'bolt', tail: lowerId === 'amr' ? 1.35 : lowerId === 'air_rifle' ? 0 : 1.0 };
   if (type.includes('smg') || lowerId.includes('vector') || lowerId.includes('mp40') || lowerId === 'machine_pistol' || lowerId === 'hkmp7' || lowerId === 'smart_smg') return { kind:'smg_metal', vol:0.20, dur:0.06, f1:430, f2:160, action:'smg_metal' };
   if (type.includes('lmg') || type.includes('heavy') || lowerId.includes('minigun') || lowerId.includes('rpd') || lowerId === 'gau19' || lowerId === 'm134') return { kind:'auto_blast_heavy', vol:0.30, dur:0.11, f1:230, f2:80, action:'water_belt', tail:0.30 };
   if (type.includes('secondary') || lowerId.includes('pistol') || lowerId.includes('revolver') || lowerId.includes('hand_cannon') || lowerId === 'mauser' || lowerId === 'nail_gun') return { kind:'pistol', vol:0.34, dur:0.12, f1:540, f2:120, action: lowerId.includes('revolver') ? 'revolver' : 'slide' };
@@ -4119,6 +4119,10 @@ function weaponAudioProfile(id, baseWeapon) {
 // the four primitives below plus the recorded-clip player, all inside one synchronous call to playWeaponSound, which sets this for the length of
 // that call and puts it back to 1. Everything else in the game (a footstep, a pickup, a grenade) is made with it at 1.
 let _wpnPitch = 1;
+// 🔇 A dry shot has no echo: no room send to the reverb, no long report rolling away, no tail layer in the muzzle blast. The compressed air rifle is one (Andy: "it should not have
+// echo"): it is a silent rifle, a puff of air in a barrel, and nothing in it carries across a valley. Same scheme as the pitch: playWeaponSound sets it for the call and clears it.
+const DRY_WEAPONS = new Set(['air_rifle']);
+let _wpnDry = false;
 function playNoise(ctx, start, dur, outNode, volume, tone = 0.5) {
   const len = Math.max(1, Math.floor(ctx.sampleRate * dur));
   const buffer = ctx.createBuffer(1, len, ctx.sampleRate);
@@ -4291,7 +4295,7 @@ function playMuzzleBlast(ctx, start, outNode, kind, volume) {
                       'bandpass', freq * FX.pitch * vary, 0.45, 0.0002, 0);
   // The report rolling away. Quiet, long, and the reason it sounds like it
   // happened somewhere rather than inside a box.
-  const TAIL = (gain, dur, freq) =>
+  const TAIL = (gain, dur, freq) => _wpnDry ? undefined :
     playFilteredNoise(ctx, start + 0.012, dur * FX.dur, outNode, gain * FX.attack,
                       'lowpass', freq * FX.pitch, 0.5, 0.004, 1.1);
 
@@ -4817,7 +4821,7 @@ function playWeaponSample(ctx, start, S, level, distGain, remote) {
   src.buffer = S.buf; src.playbackRate.value = r;
   g.gain.setValueAtTime(level * d.gain, start); g.gain.setValueAtTime(level * d.gain, Math.max(start, t1 - d.fade)); g.gain.linearRampToValueAtTime(0.0001, t1);
   src.connect(g); g.connect(sampleBus(ctx));
-  try {                                                             // and a whisper of the room, as the made-up shots get (someone else's, across the map, gets more of it)
+  if (!_wpnDry) try {                                               // and a whisper of the room, as the made-up shots get (someone else's, across the map, gets more of it)
     const indoor = INDOOR_MAPS.has(typeof activeMapName !== 'undefined' ? activeMapName : ''), send = ctx.createGain();
     send.gain.value = (remote ? 0.070 : 0.037) * distGain * (indoor ? 1 : 1.15); g.connect(send).connect(getReverbBus(ctx, indoor));
   } catch (e) {}
@@ -4842,7 +4846,8 @@ function burstClipStillSounding(id, opts) {
 function playWeaponSound(idOrWeapon, opts = {}) {
   const wid = typeof idOrWeapon === 'object' ? idOrWeapon && idOrWeapon.id : idOrWeapon;
   _wpnPitch = (opts.remote || !wid) ? 1 : skinPitchFor(wid);              // somebody else's shot is the gun's own voice: what they wear is not yours to know
-  try { return _playWeaponSound(idOrWeapon, opts); } finally { _wpnPitch = 1; }
+  _wpnDry = DRY_WEAPONS.has(wid);                                         // (the gun, whatever it wears, and for everybody who hears it)
+  try { return _playWeaponSound(idOrWeapon, opts); } finally { _wpnPitch = 1; _wpnDry = false; }
 }
 function _playWeaponSound(idOrWeapon, opts = {}) {
   const ctx = getAudioCtx();
@@ -4877,7 +4882,7 @@ function _playWeaponSound(idOrWeapon, opts = {}) {
   else { const comp = ctx.createDynamicsCompressor(); mainGain.connect(comp).connect(ctx.destination); }
   // Send to the shared echo bus. Someone else's shot across the map gets more
   // of it than your own does, because that is what distance sounds like.
-  try {
+  if (!_wpnDry) try {
     const indoor = INDOOR_MAPS.has(typeof activeMapName !== 'undefined' ? activeMapName : '');
     const send = ctx.createGain();
     // A gun with a long report also puts far more into the room.
@@ -4887,7 +4892,7 @@ function _playWeaponSound(idOrWeapon, opts = {}) {
     mainGain.connect(send).connect(getReverbBus(ctx, indoor));
   } catch (e) {}
   // Outdoors the crack keeps going. Indoors there is nowhere for it to go.
-  if (p.tail) {
+  if (p.tail && !_wpnDry) {
     const indoorNow = INDOOR_MAPS.has(typeof activeMapName !== 'undefined' ? activeMapName : '');
     longReport(ctx, start, mainGain, p.vol * mult, p.tail * (indoorNow ? 0.35 : 1));
   }
