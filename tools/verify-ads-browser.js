@@ -52,6 +52,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       }
       const p90Index=WEAPONS.findIndex(w=>w.id==='p90');
       if(!weaponModels[p90Index]._sightLine.space.userData.squareReflex)throw Error('P90 missing square reflex');
+      let liveSights=0;
+      for(let i=0;i<WEAPONS.length;i++)if(weaponNeedsAimingSight(WEAPONS[i],weaponModels[i])) {
+        if(!weaponModels[i]._sightLine)throw Error('Live weapon still missing sights '+WEAPONS[i].id);
+        liveSights++;
+      }
       let p90Skins=0;
       for(const skin of MODEL_SKINS.filter(s=>s.weapon==='p90')) {
         const original=weaponModels[p90Index],m=prepViewModel(_smoothModelSkin(skin.build()),null,'p90');
@@ -66,9 +71,17 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
           p90Skins++;
         } finally {weaponModels[p90Index]=original;}
       }
-      return {checked,authored,stealthOptics:3,p90Skins};
+      let singleShotSkins=0;
+      for(const id of ['sg8_singularity','lever_fishing_rod','revolver_cap_gun','hand_cannon_megaphone','railgun_metal_detector','grenade_launcher_mgl']) {
+        const skin=MODEL_SKINS.find(s=>s.id===id),m=prepViewModel(_smoothModelSkin(skin.build()),null,skin.weapon);
+        if(!m._sightLine)throw Error('Single-shot skin missing sight '+id);
+        const s=weaponSightPose(m);if(!s.position.toArray().every(Number.isFinite))throw Error('Invalid skin aim pose '+id);
+        if(m._aimOnlySight?.visible)throw Error('Skin sight visible while holstered '+id);
+        singleShotSkins++;
+      }
+      return {checked,authored,liveSights,stealthOptics:3,p90Skins,singleShotSkins};
     }));
-    for(const [id,width,height] of [['ak20',1280,800],['pistol',1280,800],['vector',1280,800],['p90',390,844]]) {
+    for(const [id,width,height] of [['ak20',1280,800],['pistol',1280,800],['vector',1280,800],['sg8',1280,800],['hand_cannon',390,844],['p90',390,844]]) {
       await page.setViewportSize({width,height});
       const result=await page.evaluate(id=>{
         document.querySelectorAll('body > :not(canvas)').forEach(e=>e.style.display='none');

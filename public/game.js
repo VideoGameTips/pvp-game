@@ -52147,15 +52147,20 @@ function addViewArms(root) {
   if (H.front && H.front !== H.rear) one(H.front, [-0.50, -0.40, 0.77]);
   refreshViewArms();
 }
+function weaponNeedsAimingSight(w, model) {
+  return !!w && !w.archived && !w.skinOnly && !w.adminItem && !w.modeOnly && !w.ddayOnly
+    && !isScopedWeapon(w) && !model._akimbo && !model._throwable
+    && !['boombow','slingshot','gunslinger','javelin_launcher','hellfire'].includes(w.id);
+}
 function ensureWeaponAimingSight(model, weaponId) {
   const w=WEAPONS.find(w=>w.id===weaponId);
-  if(!w?.auto || w.archived || w.skinOnly || model._sightLine || model._akimbo) return;
+  if(!weaponNeedsAimingSight(w,model) || model._sightLine) return;
   let top=-.02;
   for(const p of _localPartBoxes(model)) {
     const mat=Array.isArray(p.obj.material)?p.obj.material[0]:p.obj.material;
     let skip=false;
     for(let o=p.obj;o && o!==model;o=o.parent)if(o.userData.vmHand || o.userData.eqFx || o===model._flash)skip=true;
-    if(skip || !mat || mat.transparent || mat.isMeshBasicMaterial || p.box.min.x>.012 || p.box.max.x<-.012)continue;
+    if(skip || !mat || p.obj.isSprite || mat.blending===THREE.AdditiveBlending || mat.opacity<.2 || p.box.min.x>.012 || p.box.max.x<-.012)continue;
     top=Math.max(top,p.box.max.y);
   }
   model._aimOnlySight=gpReflexSight(model,0,top+.029,.025,top,true);
