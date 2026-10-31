@@ -1025,7 +1025,7 @@ const MELEE_ITEMS = [
         { name: 'RISING SLASH', kind: 'uppercut', anim: 'slashUp', lock: 360, ms: 420, id: 'sabre_rise', damage: 55, up: 8, hop: 2.5, reach: 3.0, popVel: 9, color: 0xe0f0ff, power: 1.5, whip: -0.05, kick: 0.07, kickMs: 360, whoosh: 1.6, slash: { roll: -0.75, dir: -1, size: 1.3 } },
       ] },
     plainAbility: { name: 'Lunge',        cd: 7000,  desc: 'Dash forward · hit all in path', type: 'melee_lunge', distance: 6 } },
-  { id: 'frying_pan', name: 'Frying Pan', type: 'Melee',       damage: 32, range: 1.8, cooldown: 420,
+  { id: 'frying_pan', name: 'Frying Pan', type: 'Melee',       damage: 100, range: 1.8, cooldown: 900, windupMs: 300, lingerMs: 200,   // one swing is a third of a life: it comes down 0.3 s after you click and stays dangerous for 0.2 s more (see meleeStrike)
     ability: { name: 'Pan Combo', cd: 1500, desc: 'E clang · E clang · E DONG (the last one pops them up)', type: 'melee_combo',
       comboCd: 1500, comboWindow: 1200, comboPartialCd: 700,
       combo: [
@@ -50447,6 +50447,20 @@ function tryMelee() {
   if (soundId === 'chain_hammer') { startChainMaulSwing(item); return; }
   const forward = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion).normalize();
   if (window.PVP_BACKROOMS?.active) { window.PVP_BACKROOMS.melee(item, forward); return; }
+  if (item.windupMs) {
+    // 🍳 A blow that lands later: the swing starts now (sound, animation, cooldown), the hit is looked for from windupMs on and
+    // keeps being looked for for lingerMs, so the strike comes down where you are looking WHEN it lands, and a target that
+    // steps into it late still gets hit. One target per swing, as ever. updateMeleeStrike() runs the window.
+    meleeStrike = { item, soundId, sawDry, at: now + item.windupMs, until: now + item.windupMs + (item.lingerMs || 0) };
+    return;
+  }
+  const struck = meleeStrikeScan(item, soundId, sawDry, now);
+  spawnHitParticle(struck || camera.position.clone().addScaledVector(forward, Math.min(item.range, 1.6)));
+}
+
+// The part of a melee swing that finds and hurts the target. Returns where it landed, or null for a miss.
+function meleeStrikeScan(item, soundId, sawDry, now) {
+  const forward = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion).normalize();
   let hitPos = null;
   for (const [pid, mesh] of Object.entries(remoteMeshes)) {
     if ((!mesh.visible && !mesh._ragdoll) || players[pid]?.dead || friendlyFireBlocked(pid, myId)) continue;
@@ -50556,7 +50570,23 @@ function tryMelee() {
     }
     break;
   }
-  spawnHitParticle(hitPos || camera.position.clone().addScaledVector(forward, Math.min(item.range, 1.6)));
+  return hitPos;
+}
+
+let meleeStrike = null;   // { item, soundId, sawDry, at, until }: a blow still on its way down (the Frying Pan)
+function updateMeleeStrike() {
+  const st = meleeStrike;
+  if (!st) return;
+  const now = Date.now();
+  if (isDead || activeSlot !== 'melee' || equippedMeleeItem()?.id !== st.item.id) { meleeStrike = null; return; }   // put away, or you died: it never lands
+  if (now < st.at) return;
+  const hit = meleeStrikeScan(st.item, st.soundId, st.sawDry, now);
+  if (hit) { spawnHitParticle(hit); meleeStrike = null; }
+  else if (now >= st.until) {
+    meleeStrike = null;
+    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+    spawnHitParticle(camera.position.clone().addScaledVector(fwd, Math.min(st.item.range, 1.6)));
+  }
 }
 
 // Items that use arc (grenade) physics instead of straight bullets
@@ -64158,7 +64188,7 @@ const MELEE_SWING = {
   vampire_blade: { ms: 460, keys: [_MS(.15,[.08,.14,.02],[.90,-.50,-.60]), _MS(.34,[-.14,-.10,-.24],[-.60,1.00,.70]), _MS(.44,[-.14,-.10,-.24],[-.62,1.02,.72]),
             _MS(.64,[.16,.08,-.22],[.70,-.90,-.50]), _MS(.82,[.06,-.04,-.12],[.20,-.20,0])] },
   // a flat backhand: the pan swung level, across, with a wobble as it rings
-  frying_pan: { ms: 380, keys: [_MS(.24,[.10,.05,.06],[.25,-.80,-.10]), _MS(.46,[-.04,0,-.24],[.10,.30,0]), _MS(.58,[-.18,-.02,-.20],[.05,.95,.10]),
+  frying_pan: { ms: 640, keys: [_MS(.24,[.10,.05,.06],[.25,-.80,-.10]), _MS(.46,[-.04,0,-.24],[.10,.30,0]), _MS(.58,[-.18,-.02,-.20],[.05,.95,.10]),
             _MS(.68,[-.16,-.02,-.20],[.05,.85,.25]), _MS(.78,[-.14,-.02,-.18],[.05,.92,-.05]), _MS(.92,[-.04,-.04,-.08],[0,.30,0])] },
   // two hands, over the head, a pause at the top, and everything coming down
   sledge:  { ms: 640, keys: [_MS(.30,[.02,.14,-.12],[1.25,-.05,0]), _MS(.42,[.02,.15,-.12],[1.32,0,0]), _MS(.54,[0,-.20,-.36],[-.85,0,0]),
@@ -70669,6 +70699,7 @@ function loop() {
   safeLoopStep('movement', () => updateMovement(dt));
   safeLoopStep('player-vel', () => updatePlayerVel(dt)); // measured speed, read by applyBlastImpulse's blast surf
   safeLoopStep('walk-lean', () => updateHeldWalkLean(dt));
+  safeLoopStep('melee-strike', () => updateMeleeStrike());   // a Frying Pan blow coming down
   safeLoopStep('quick-melee', () => updateQuickMelee());  // and back to what you were holding
   safeLoopStep('held-item', () => broadcastHeldWeapon());   // no-op unless it actually changed
   // Auto-fire used to poll on a fixed 50ms setInterval, independent of the
