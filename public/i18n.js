@@ -138,7 +138,7 @@
     'Leave this match? It counts as a loss.': '这局还没打完，现在离开算输。确定离开吗？',
     '← BACK': '← 返回', '🚪 LEAVE MATCH': '🚪 离开比赛',
     // the simpler mode screen (#24)
-    'SHOP': '商店', 'SKINS': '皮肤', 'GUN SKINS': '枪械皮肤', 'CHAT': '聊天', 'MORE': '更多',
+    'SHOP': '商店', 'SKINS': '皮肤', '🎨 SKINS': '🎨 皮肤', '✕ DONE': '✕ 完成', 'WRAP': '涂装', 'WEAPON MODEL': '武器模型', 'MODEL': '模型', 'DEFAULT WRAP': '默认涂装', 'No skin': '无皮肤', 'GUN SKINS': '枪械皮肤', 'CHAT': '聊天', 'MORE': '更多',
     'QUICK START': '快速开始', 'ALL MODES': '全部模式',
     '5 bots · all vs all': '5 个机器人 · 各自为战', 'TEAM 5v5': '团队 5v5', '1v1 DUEL': '1v1 单挑', 'GUN GAME': '枪王之路',
     '🗺️ MAP': '🗺️ 地图', '🤖 BOT DIFFICULTY': '🤖 机器人难度',

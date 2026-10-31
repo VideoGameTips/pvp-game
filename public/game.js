@@ -34839,6 +34839,19 @@ const WEAPON_SKINS = [
 const WEAPON_SKINS_BY_ID = Object.fromEntries(WEAPON_SKINS.map(s => [s.id, s]));
 let selectedWeaponSkin = 'default';
 try { selectedWeaponSkin = localStorage.getItem('pvp_weapon_skin') || 'default'; } catch (e) {}
+// 🎨 A wrap belongs to a WEAPON: every gun, melee and utility can wear its own at the same time (picked in that
+// weapon's SKINS screen). selectedWeaponSkin is only the default, for a weapon that has none of its own.
+let equippedWraps = {};
+try { equippedWraps = JSON.parse(localStorage.getItem('pvp_item_wraps') || '{}') || {}; } catch (e) { equippedWraps = {}; }
+function saveItemWraps() { try { localStorage.setItem('pvp_item_wraps', JSON.stringify(equippedWraps)); } catch (e) {} }
+function wrapIdFor(itemId) {
+  const own = itemId && equippedWraps[itemId];
+  if (own && WEAPON_SKINS_BY_ID[own]) {
+    let ok = false; try { ok = wrapUnlocked(own); } catch (e) { ok = false; }   // (also runs at load, before the account is known)
+    if (ok) return own;
+  }
+  return selectedWeaponSkin;
+}
 
 const _weaponWrapSurfaces = new Map();
 function getWeaponWrapSurface(kind) {
@@ -36215,7 +36228,7 @@ function gunSkinLookFor(weaponId) {
   try { skin = (typeof gunStatSkinFor === 'function') ? gunStatSkinFor(weaponId) : null; }
   catch (e) { skin = null; }   // too early to know — the global look will do
   if (skin && skin.body != null) return skin;
-  return WEAPON_SKINS_BY_ID[selectedWeaponSkin] || WEAPON_SKINS_BY_ID.default;
+  return WEAPON_SKINS_BY_ID[wrapIdFor(weaponId)] || WEAPON_SKINS_BY_ID.default;
 }
 function applyGunSkinLook(weaponId) {
   const idx = WEAPONS.findIndex(w => w.id === weaponId);
@@ -36235,9 +36248,15 @@ function applySelectedWeaponSkinToAll() {
 // 🔪🧪 The wrap you picked goes on melees and utilities too, not only guns. They are dressed when they are first held
 // (and again if the wrap changes while they are put away), so nothing is done for the ninety models you never carry.
 // Skin-tone parts (the fists' hands) are left as they are.
+function _itemIdOfModel(model) {
+  let i = meleeModels.indexOf(model); if (i >= 0) return MELEE_ITEMS[i] && MELEE_ITEMS[i].id;
+  i = supportModels.indexOf(model); if (i >= 0) return SUPPORT_ITEMS[i] && SUPPORT_ITEMS[i].id;
+  return null;
+}
 function ensureHeldWrap(model) {
   if (!model) return;
-  const skin = WEAPON_SKINS_BY_ID[selectedWeaponSkin] || WEAPON_SKINS_BY_ID.default;
+  let itemId = null; try { itemId = _itemIdOfModel(model); } catch (e) {}
+  const skin = WEAPON_SKINS_BY_ID[wrapIdFor(itemId)] || WEAPON_SKINS_BY_ID.default;
   if ((model._wrapKey || 'default') === skin.id) return;     // already wearing it; stock and never touched counts too
   model._wrapKey = skin.id;
   try { applyWeaponSkin(model, skin); } catch (e) { console.warn('[wrap]', e); }
@@ -38987,7 +39006,13 @@ function _pxShowSubs() {
 let _sentWrapId;
 function emitMyWrap() {
   let id = 'default';
-  try { if (wrapUnlocked(selectedWeaponSkin)) id = selectedWeaponSkin; } catch (e) {}
+  let held = null;
+  try {
+    held = activeSlot === 'melee' ? MELEE_ITEMS[selectedMeleeIdx]?.id
+         : activeSlot === 'support' ? SUPPORT_ITEMS[selectedSupportIdx]?.id
+         : currentWeapon?.id;
+  } catch (e) {}
+  try { const want = wrapIdFor(held); if (wrapUnlocked(want)) id = want; } catch (e) {}
   const sk = WEAPON_SKINS_BY_ID[id];
   if (sk && sk.custom && !sk.approvedBy) id = 'default';
   if (id === _sentWrapId) return;
@@ -71560,51 +71585,12 @@ function showLoadoutScreen(mode) {
   }
 
   const rerenderLoadout = () => showLoadoutScreen(loadoutMode); // re-paint with fresh state
-  function addGunSkinChips(card, w) {
-    const skins = GUN_STAT_SKINS_BY_WEAPON[w.id] || [];
-    if (!skins.length) return;
-    const on = equippedGunStatSkins[w.id] || 'stock';
-    const row = document.createElement('div');
-    row.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;';
-    skins.forEach(s => {
-      const b = document.createElement('button');
-      const unlocked = ownsSkin(s.id);
-      b.textContent = s.id === 'stock' ? 'STOCK' : s.name.replace(/^AK20 | AK /, '');
-      if (!unlocked) b.textContent = '🔒 ' + b.textContent;
-      b.style.cssText = `padding:3px 5px;font-size:8px;font-family:inherit;border-radius:4px;cursor:${unlocked?'pointer':'not-allowed'};opacity:${unlocked?1:0.5};background:${on===s.id?'#173044':'#151515'};color:${on===s.id?'#88ccff':'#aaa'};border:1px solid ${on===s.id?'#88ccff':'#444'};`;
-      b.addEventListener('click', e => {
-        e.stopPropagation();
-        if (!unlocked) { alert('You have not pulled that skin yet. Open Gen 1 cases in Lobby 13.'); return; }
-        setGunStatSkin(w.id, s.id); rerenderLoadout();
-      });
-      row.appendChild(b);
-    });
-    card.appendChild(row);
-  }
-  function addMeleeSkinChips(card, m) {
-    const skins = MELEE_SKINS_BY_BASE[m.id] || [];
-    if (!skins.length) return;
-    const on = equippedMeleeSkins[m.id] || '';
-    const row = document.createElement('div');
-    row.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;';
-    const stock = document.createElement('button');
-    stock.textContent = 'STOCK';
-    stock.style.cssText = `padding:3px 5px;font-size:8px;font-family:inherit;border-radius:4px;cursor:pointer;background:${!on?'#332414':'#151515'};color:${!on?'#ffcc99':'#aaa'};border:1px solid ${!on?'#ffcc99':'#444'};`;
-    stock.addEventListener('click', e => { e.stopPropagation(); setMeleeSkin(m.id, null); rerenderLoadout(); });
-    row.appendChild(stock);
-    skins.forEach(s => {
-      const b = document.createElement('button');
-      const unlocked = ownsSkin(s.id);
-      b.textContent = unlocked ? s.name : '🔒 ' + s.name;
-      b.style.cssText = `padding:3px 5px;font-size:8px;font-family:inherit;border-radius:4px;cursor:${unlocked?'pointer':'not-allowed'};opacity:${unlocked?1:0.5};background:${on===s.id?'#332414':'#151515'};color:${on===s.id?'#ffcc99':'#aaa'};border:1px solid ${on===s.id?'#ffcc99':'#444'};`;
-      b.addEventListener('click', e => {
-        e.stopPropagation();
-        if (!unlocked) { alert('You have not pulled that skin yet. Open Gen 1 cases in Lobby 13.'); return; }
-        setMeleeSkin(m.id, s.id); rerenderLoadout();
-      });
-      row.appendChild(b);
-    });
-    card.appendChild(row);
+  // The SKINS button: shows on the card you have picked. Everything that can dress that weapon is behind it.
+  function addSkinsButton(card, kind, id) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'lc-skins-btn'; b.textContent = '🎨 SKINS';
+    b.addEventListener('click', e => { e.stopPropagation(); openItemSkins(kind, id, rerenderLoadout); });
+    card.querySelector('.lc-copy').appendChild(b);
   }
 
   WEAPONS.forEach((w, i) => {
@@ -71629,6 +71615,7 @@ function showLoadoutScreen(mode) {
       <div class="lc-stats">DMG ${w.damageLabel||dw.damage}${w.pellets > 1 ? '×' + w.pellets : ''} · MAG ${w.mag} · ${fireTag} · ${rateTag}</div>
     </div>`;
     const usable = decorateOwnedBadge(card, w.id, !!w.adminItem);
+    if (usable) addSkinsButton(card, 'gun', w.id);
     const handler = () => { if (usable) pickLoadoutWeapon(i, isPrimary, card);else openShopWeaponPreview(w.id); };
     card.addEventListener('click',      handler);
     (isPrimary ? pList : sList).appendChild(card);
@@ -71651,6 +71638,7 @@ function showLoadoutScreen(mode) {
       <div class="lc-stats">DMG ${dm.damage} · RANGE ${dm.range} · ${Math.round(1000/dm.cooldown)}/s</div>
     </div>`;
     const usable = decorateOwnedBadge(card, m.id, !!m.adminItem);
+    if (usable) addSkinsButton(card, 'melee', m.id);
     const handler = () => { if (usable) pickMelee(i, card);else openShopWeaponPreview(m.id); };
     card.addEventListener('click',      handler);
     mList.appendChild(card);
@@ -71672,6 +71660,7 @@ function showLoadoutScreen(mode) {
       <div class="lc-stats">${stat} · ${s.recharge ? 'RECHARGE '+s.cooldown/1000+'s' : 'USES '+s.uses}</div>
     </div>`;
     const usable = decorateOwnedBadge(card, s.id, !!s.adminItem);
+    if (usable) addSkinsButton(card, 'support', s.id);
     const handler = () => { if (usable) pickSupport(i, card);else openShopWeaponPreview(s.id); };
     card.addEventListener('click',      handler);
     uList.appendChild(card);
@@ -73209,7 +73198,7 @@ document.addEventListener('langchange', () => {
 // One dialog at a time (#21): each of these used to open on top of whatever was already open, all in
 // different sizes. Closing is only hiding — every dialog rebuilds from current state when it opens.
 // index.html gives them one shared frame.
-const DIALOG_IDS = ['player-record-panel', 'stealth-panel', 'settings-hub-panel', 'controls-panel', 'touch-controls-panel', 'crosshair-panel', 'shoot-fx-panel', 'aim-assist-panel', 'weapon-skins-panel',
+const DIALOG_IDS = ['player-record-panel', 'stealth-panel', 'settings-hub-panel', 'controls-panel', 'touch-controls-panel', 'crosshair-panel', 'shoot-fx-panel', 'aim-assist-panel', 'weapon-skins-panel', 'item-skins-panel',
                     'skins-panel', 'kill-log-panel', 'char-chat-panel', 'map-dialog', 'diff-dialog', 'duel-panel', 'lobby-service-panel','weapon-inspect-panel'];
 function anyDialogOpen() {
   return DIALOG_IDS.some(id => { const el = document.getElementById(id); return el && getComputedStyle(el).display !== 'none'; });
@@ -74319,6 +74308,138 @@ if (_aaBtn) {
 }
 
 // 🎨 GUN SKINS picker — pick one skin that applies to every weapon.
+// ── 🎨 SKINS FOR ONE WEAPON ─────────────────────────────────────────────────────────────────────────────────────────────
+// Pick a weapon in the loadout and press SKINS: everything that can dress THAT weapon is on one screen -- its skins, its
+// model skins and its wrap -- instead of hunting for it through every weapon's section of the big wraps screen. The wrap
+// is the weapon's own (equippedWraps), so each gun, melee and utility can wear a different one at once.
+function setItemWrap(kind, id, wrapId) {
+  if (wrapId) equippedWraps[id] = wrapId; else delete equippedWraps[id];
+  saveItemWraps();
+  if (kind === 'gun') applyGunSkinLook(id);
+  else {
+    const list = kind === 'melee' ? MELEE_ITEMS : SUPPORT_ITEMS, models = kind === 'melee' ? meleeModels : supportModels;
+    const m = models[list.findIndex(x => x.id === id)];
+    if (m) ensureHeldWrap(m);
+  }
+}
+function openItemSkins(kind, id, onClose) {
+  const item = (kind === 'gun' ? WEAPONS : kind === 'melee' ? MELEE_ITEMS : SUPPORT_ITEMS).find(x => x.id === id);
+  if (!item) return;
+  closeOtherDialogs('item-skins-panel');
+  let panel = document.getElementById('item-skins-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'item-skins-panel';
+    panel.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9950;background:#16140e;border:2px solid #ccaa44;border-radius:8px;padding:18px 20px;color:#fff;font-family:"Courier New",monospace;width:min(760px,94vw);max-height:88vh;overflow-y:auto;box-sizing:border-box;';
+    document.body.appendChild(panel);
+  }
+  panel.style.display = 'block';
+  let changed = false;
+  const picks = [];
+  const bg = sw => `linear-gradient(90deg, ${sw[0]} 0 50%, ${sw[1]} 50% 100%)`;
+  const cell = o => {
+    const n = picks.push(o) - 1, edge = o.on ? '#ffdd55' : '#444';
+    return `<div class="is-cell" data-pick="${n}" style="cursor:${o.locked ? 'not-allowed' : 'pointer'};opacity:${o.locked ? 0.5 : 1};border:2px solid ${edge};border-radius:6px;padding:8px;background:${o.on ? '#2a2410' : '#1d1a12'};">
+      <div style="height:30px;border-radius:4px;border:1px solid #000;margin-bottom:6px;background:${o.bg};"></div>
+      <div style="font-size:11px;letter-spacing:1px;color:${o.on ? '#ffdd55' : '#ddd'};">${o.locked ? '🔒 ' : ''}${escHtml(o.name)}${o.on ? ' ✔' : ''}</div>
+      ${o.sub ? `<div style="font-size:9px;color:#998;margin-top:3px;line-height:1.3;">${escHtml(o.sub)}</div>` : ''}
+      ${o.note ? `<div style="font-size:9px;color:#ffb347;margin-top:4px;line-height:1.3;">${escHtml(o.note)}</div>` : ''}
+    </div>`;
+  };
+  const section = (title, blurb, cells) => cells.length ? `<div style="margin-top:16px;border-top:1px solid #6a5520;padding-top:12px;">
+      <div style="font-size:13px;letter-spacing:2px;color:#ffdd88;">${title}</div>
+      <div style="font-size:10px;color:#aa9966;margin:4px 0 8px;line-height:1.4;">${blurb}</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;">${cells.join('')}</div></div>` : '';
+  const stockCell = (on, run) => ({ name: 'STOCK', sub: 'No skin', bg: '#2b2b2b', on, run });
+  const buildCells = () => {
+    picks.length = 0;
+    const sections = [];
+    if (kind === 'gun') {
+      const stat = GUN_STAT_SKINS_BY_WEAPON[id] || [], onStat = equippedGunStatSkins[id] || 'stock';
+      if (stat.length) {
+        const cells = stat.filter(s => s.id !== 'stock').map(s => ({ name: s.name, sub: s.blurb, bg: bg(s.sw), on: onStat === s.id, locked: !ownsSkin(s.id),
+          note: ownsSkin(s.id) ? '' : 'Open Gen 1 cases in Lobby 13.',
+          run: () => { setGunStatSkin(id, s.id); } }));
+        sections.push(section('SKINS', 'Pulled from Gen 1 cases. Same damage and handling, a different look.', [cell(stockCell(onStat === 'stock', () => setGunStatSkin(id, null))), ...cells.map(cell)]));
+      }
+      const models = MODEL_SKINS_BY_WEAPON[id] || [], onModel = equippedModelSkins[id];
+      if (models.length) {
+        const cells = models.map(ms => {
+          const legend = isLegendLocked(ms), locked = (GATED_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id)) || legend;
+          const note = legend ? ffaLegendProgressText() : GEN2_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id) ? 'Pull from Gen 2 cases.'
+            : TOWER_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id) ? 'Escape the Zombie Tower to get this one.' : locked ? 'Open Gen 1 cases in Lobby 13.' : '';
+          return { name: ms.name, sub: ms.blurb, bg: bg(ms.sw), on: onModel === ms.id, locked, note,
+            run: () => { if (locked) { alert(note || 'Locked.'); return false; } setModelSkin(id, ms.id); } };
+        });
+        sections.push(section('WEAPON MODEL', 'Replaces the gun itself, not its colour. Same stats and reload.', [cell(stockCell(!onModel, () => setModelSkin(id, null))), ...cells.map(cell)]));
+      }
+    } else if (kind === 'melee') {
+      const stat = MELEE_SKINS_BY_BASE[id] || [], onStat = equippedMeleeSkins[id] || '';
+      if (stat.length) {
+        const cells = stat.map(s => ({ name: s.name, sub: s.blurb, bg: s.sw ? bg(s.sw) : '#333', on: onStat === s.id, locked: !ownsSkin(s.id),
+          note: ownsSkin(s.id) ? '' : 'Open Gen 1 cases in Lobby 13.', run: () => { setMeleeSkin(id, s.id); } }));
+        sections.push(section('SKINS', 'Pulled from Gen 1 cases. Same damage and reach, a different look.', [cell(stockCell(!onStat, () => setMeleeSkin(id, null))), ...cells.map(cell)]));
+      }
+      const models = MELEE_MODEL_SKINS_BY_BASE[id] || [], onModel = equippedMeleeModelSkins[id];
+      if (models.length) {
+        const cells = models.map(ms => {
+          const legend = isLegendLocked(ms), gen2 = GEN2_MELEE_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id), locked = legend || gen2;
+          const note = legend ? 'FFA Legend skins are earned in FFA.' : gen2 ? 'Pull from Gen 2 cases.' : '';
+          return { name: ms.name, sub: ms.blurb, bg: bg(ms.sw), on: onModel === ms.id, locked, note,
+            run: () => { if (locked) { alert(note); return false; } setMeleeModelSkin(id, ms.id); } };
+        });
+        sections.push(section('MODEL', 'Replaces the weapon itself. Same damage, reach and ability.', [cell(stockCell(!onModel, () => setMeleeModelSkin(id, null))), ...cells.map(cell)]));
+      }
+    } else {
+      const models = SUPPORT_MODEL_SKINS_BY_BASE[id] || [], onModel = equippedSupportModelSkins[id];
+      if (models.length) {
+        const cells = models.map(ms => ({ name: ms.name, sub: ms.blurb, bg: bg(ms.sw), on: onModel === ms.id, run: () => { setSupportModelSkin(id, ms.id); } }));
+        sections.push(section('MODEL', 'A different thing in your hand. Same throw, same blast, same uses.', [cell(stockCell(!onModel, () => setSupportModelSkin(id, null))), ...cells.map(cell)]));
+      }
+    }
+    // the wrap: this weapon's own
+    const own = equippedWraps[id] && WEAPON_SKINS_BY_ID[equippedWraps[id]] ? equippedWraps[id] : '';
+    const dflt = WEAPON_SKINS_BY_ID[selectedWeaponSkin] || WEAPON_SKINS_BY_ID.default;
+    const swatchBg = s => s.wrap ? `url('${getWeaponWrapSurface(s.wrap).canvas.toDataURL()}') center / 128px 128px`
+      : _wsSwatchURL(s.id) ? `url('${_wsSwatchURL(s.id)}') center / 64px 64px` : bg(s.sw);
+    const wraps = [cell({ name: 'DEFAULT WRAP', sub: 'Whatever the wraps screen has: ' + dflt.name, bg: swatchBg(dflt), on: !own, run: () => setItemWrap(kind, id, '') })];
+    for (const s of WEAPON_SKINS) {
+      if (s.contract || (s.custom && !wrapUnlocked(s.id)) || (s.approvedBy && !wrapUnlocked(s.id))) continue;
+      wraps.push(cell({ name: s.name, bg: swatchBg(s), on: own === s.id, run: () => setItemWrap(kind, id, s.id) }));
+    }
+    for (const ct of CONTRACTS) {
+      const s = WEAPON_SKINS_BY_ID[ct.wrap]; if (!s) continue;
+      const open = wrapUnlocked(ct.wrap), need = contractNeed(ct), have = Math.min(need, contractProgress(ct));
+      wraps.push(cell({ name: s.name, bg: swatchBg(s), on: own === ct.wrap, locked: !open,
+        note: open ? '' : `Contract: ${have.toLocaleString()} / ${need.toLocaleString()}`,
+        run: () => { if (!open) { contractToast('🔒 CONTRACT', ct.kind === 'everyWeapon' ? `${ct.n} kills with every weapon` : ct.text, '#ffb347'); return false; } setItemWrap(kind, id, ct.wrap); } }));
+    }
+    const ownPaint = kind === 'gun' && (() => { const sk = gunStatSkinFor(id); return sk && sk.body != null; })();
+    sections.push(section('WRAP', 'This weapon\'s own wrap: every weapon can wear a different one at the same time.'
+      + (ownPaint ? ' <span style="color:#ffb347;">This gun\'s skin has its own paint, so the wrap will not show until you pick STOCK above.</span>' : ''), wraps));
+    return sections.join('');
+  };
+  const render = () => {
+    const html = buildCells();
+    panel.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;border-bottom:1px solid #6a5520;padding-bottom:10px;">
+        <div style="font-size:17px;letter-spacing:3px;color:#ffdd88;">🎨 ${escHtml(item.name.toUpperCase())}</div>
+        <button id="is-close" type="button" style="background:#3a1a1a;color:#ff8888;border:1px solid #ff4444;padding:6px 12px;cursor:pointer;font-family:inherit;border-radius:3px;">✕ DONE</button>
+      </div>${html}`;
+    panel.querySelector('#is-close').addEventListener('click', close);
+    panel.querySelectorAll('.is-cell').forEach(el => el.addEventListener('click', () => {
+      const o = picks[+el.dataset.pick];
+      if (o.locked && !o.run) return;
+      const r = o.run();
+      if (r === false) return;
+      changed = true;
+      const top = panel.scrollTop;
+      render(); panel.scrollTop = top;
+    }));
+  };
+  const close = () => { panel.style.display = 'none'; if (changed && onClose) onClose(); };
+  render();
+}
+
 function openWeaponSkinsPanel() {
   closeOtherDialogs('weapon-skins-panel');
   let panel = document.getElementById('weapon-skins-panel');
@@ -74530,7 +74651,7 @@ function openWeaponSkinsPanel() {
     ${meleeModelSkinSection()}
     ${supportModelSkinSection()}
     <div style="font-size:12px;letter-spacing:2px;color:#ffdd88;margin:20px 0 6px;border-top:1px solid #6a5520;padding-top:14px;">🎨 WEAPON WRAPS <button id="ws-pixelizer" style="margin-left:10px;padding:4px 8px;background:#2a1030;color:#ff99dd;border:1px solid #ff66cc;border-radius:4px;cursor:pointer;font-family:inherit;font-size:10px;letter-spacing:1px;">🎨 PAINT YOUR OWN</button></div>
-    <div style="font-size:10px;color:#aa9966;margin-bottom:12px;line-height:1.4;">One pick applies to every gun, melee and utility. Country themes use real national flags; the German theme is the Iron Cross military mark (no Nazi imagery).</div>
+    <div style="font-size:10px;color:#aa9966;margin-bottom:12px;line-height:1.4;">One pick here applies to every gun, melee and utility (to give ONE weapon its own, pick it in the loadout and press SKINS). Country themes use real national flags; the German theme is the Iron Cross military mark (no Nazi imagery).</div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">${WEAPON_SKINS.filter(s => !s.contract && (!s.approvedBy || wrapUnlocked(s.id))).map(swatch).join('')}</div>
     <div style="font-size:10px;color:#9a8aa8;margin:8px 0 2px;line-height:1.45;">🔒 A wrap you paint yourself is a draft: send it for approval in the pixelizer, and once an admin has said yes it is yours to use and everyone sees it on your gun.
       <button id="ws-idea" style="margin-left:6px;padding:3px 8px;background:#1a2430;color:#bfe6ff;border:1px solid #4a8ac0;border-radius:3px;cursor:pointer;font-family:inherit;font-size:10px;">💡 SEND A WEAPON IDEA</button></div>
@@ -74604,6 +74725,7 @@ function openWeaponSkinsPanel() {
       if (!wrapUnlocked(id)) { contractToast('🔒 CONTRACT', ct ? (ct.kind === 'everyWeapon' ? `${ct.n} kills with every weapon: ${contractRaw(ct)} / ${contractNeed(ct)} done` : ct.text) : 'Locked', '#ffb347'); return; }
       selectedWeaponSkin = id;
       try { localStorage.setItem('pvp_weapon_skin', selectedWeaponSkin); } catch (e) {}
+      equippedWraps = {}; saveItemWraps();             // "every gun, melee and utility": whatever was set one by one is replaced
       applySelectedWeaponSkinToAll();
       openWeaponSkinsPanel();
     });
@@ -74613,6 +74735,7 @@ function openWeaponSkinsPanel() {
       if (!wrapUnlocked(cell.dataset.skin)) { contractToast('⏳ NOT APPROVED YET', 'An admin has to approve a wrap you painted before you can use it', '#ffb347'); return; }
       selectedWeaponSkin = cell.dataset.skin;
       try { localStorage.setItem('pvp_weapon_skin', selectedWeaponSkin); } catch (e) {}
+      equippedWraps = {}; saveItemWraps();
       applySelectedWeaponSkinToAll();
       openWeaponSkinsPanel(); // refresh highlight
     });
