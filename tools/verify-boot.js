@@ -4182,6 +4182,42 @@ if (ok && process.argv.includes('--irregular')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--saw')) {
+  // The chainsaw's Rev Up is a HELD ability (Andy): press E and the saw revs, swinging by itself faster than a click and burning fuel the whole time; the instant E comes
+  // up it stops. No dash, no 3 s timer, no 12 s cooldown, nothing for the press to cost on its own, and no rev on an empty tank.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const it = MELEE_ITEMS.find(m => m.id === 'chainsaw'), ab = it.ability;
+    if (ab.type !== 'melee_revup' || !ab.hold) issues.push('the chainsaw ability should be a held rev (type melee_revup, hold true)');
+    if (ab.dash || ab.duration || ab.fuelCost) issues.push('a held rev has no dash, no timer and no cost for the press: ' + JSON.stringify({ dash: ab.dash, duration: ab.duration, fuelCost: ab.fuelCost }));
+    if (!(ab.autoMs > 0 && ab.autoMs < it.cooldown)) issues.push('the rev should swing faster than a click (autoMs ' + ab.autoMs + ' against a ' + it.cooldown + ' ms cooldown)');
+    if (!(ab.fuelDrain > CHAINSAW_SWING_FUEL * 1000 / it.cooldown)) issues.push('revving should burn fuel faster than clicking does (' + ab.fuelDrain + '/s against ' + (CHAINSAW_SWING_FUEL * 1000 / it.cooldown).toFixed(1) + '/s)');
+    if (abilityCooldownFor(it, ab) !== 0 || ab.cd !== 0) issues.push('a held rev has no cooldown, got ' + abilityCooldownFor(it, ab));
+    const save = { sel: selectedMeleeIdx, slot: activeSlot, started: gameStarted, dead: isDead, count: countdownActive, fuel: chainsawFuel, buff: meleeAbilityBuff, dash: meleeDash, snd: playSoundEvent };
+    try {
+      playSoundEvent = () => {};                                  // (no sound is made here)
+      selectedMeleeIdx = MELEE_ITEMS.indexOf(it); activeSlot = 'melee'; gameStarted = true; isDead = false; countdownActive = false; meleeDash = null;
+      chainsawFuel = CHAINSAW_FUEL_MAX; meleeAbilityBuff = null; for (const k of Object.keys(abilityCDs)) abilityCDs[k] = 0;
+      activateMeleeAbility();
+      if (!(meleeAbilityBuff && meleeAbilityBuff.type === 'revup' && meleeAbilityBuff.hold)) issues.push('pressing E should start the rev');
+      else if (meleeAbilityBuff.endTime) issues.push('the rev should have no timer, it lasts as long as the key');
+      if (meleeDash) issues.push('the rev should not dash');
+      if (chainsawFuel !== CHAINSAW_FUEL_MAX) issues.push('the press itself should cost no fuel (the burn is per second): ' + chainsawFuel);
+      releaseHeldAbility();
+      if (meleeAbilityBuff) issues.push('letting go should stop the rev at once');
+      chainsawFuel = 0; activateMeleeAbility();
+      if (meleeAbilityBuff) issues.push('no fuel, no rev');
+      chainsawFuel = CHAINSAW_FUEL_MAX; meleeAbilityBuff = { type: 'combo_frenzy_like', endTime: Date.now() + 1000 }; releaseHeldAbility();
+      if (!meleeAbilityBuff) issues.push('letting go of E should not cancel an ordinary timed buff');
+    } finally {
+      selectedMeleeIdx = save.sel; activeSlot = save.slot; gameStarted = save.started; isDead = save.dead; countdownActive = save.count; chainsawFuel = save.fuel; meleeAbilityBuff = save.buff; meleeDash = save.dash; playSoundEvent = save.snd;
+    }
+    return issues;
+  })()`);
+  console.log('chainsaw checks: Rev Up is held (no timer, no dash, no cooldown, no cost for the press), swings faster than a click and burns more fuel, stops the instant it is released, will not start on an empty tank');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.argv.includes('--skinpitch')) {
   // Every gun skin has a pitch of its own (Andy: "modify every gun skin's shooting sound's frequency by a bit; the AUG, more low-pitched"): each model skin that does not
   // have a recording of its own is a few percent off the gun's pitch, never so far that it distorts; the AUG is the low one; only YOUR shot wears it (not somebody else's, not the

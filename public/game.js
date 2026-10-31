@@ -1062,7 +1062,7 @@ const MELEE_ITEMS = [
   { id: 'knife',      name: 'Knife',      type: 'Melee',       damage: 28, range: 1.6, cooldown: 260, speedMult: 2.0,
     ability: { name: 'Backstab',  cd: 7500, desc: 'Glide behind a target · instant kill from behind', type: 'melee_instakill' } },
   { id: 'chainsaw',   name: 'Chainsaw',   type: 'Heavy Melee', damage: 45, range: 1.9, cooldown: 150,
-    ability: { name: 'Rev Up',       cd: 12000, desc: 'Dash forward · rev 3 s · 10× swing speed · 3× move speed · burns fuel', type: 'melee_revup', duration: 3000, fuelCost: 12, fuelDrain: 12, dash: 5 } },
+    ability: { name: 'Rev Up',       cd: 0, desc: 'HOLD E · the saw revs: it swings by itself, 2.5× as fast, and burns fuel · let go and it stops', type: 'melee_revup', hold: true, autoMs: 60, fuelDrain: 12 } },
   { id: 'lightsabre', archived: true, name: 'Lightsabre', type: 'Melee · Jedi',  damage: 72, range: 2.5, cooldown: 420, doubleJump: true,
     ability: { name: 'Parry',        cd: 10000, desc: '1.5s · absorb all incoming bullets · DOUBLE JUMP', type: 'melee_parry', duration: 1500 } },
   { id: 'riot_shield',name: 'Riot Shield',type: 'Shield',      damage: 18, range: 1.7, cooldown: 700, shield: true,
@@ -43890,11 +43890,13 @@ document.addEventListener('keyup', e => {
   keys[e.code] = false;
   if (e.code==='Tab') showScoreboard(false);
   if (e.code === 'KeyE') minigunBraceHeld = false;
+  if (e.code === 'KeyE' || e.code === 'KeyG') releaseHeldAbility();           // the instant you let go, a rev stops
   if (e.code === 'KeyE' && GAMEPLAY_SETTINGS.adsMode === 'hold'
       && isADS && activeSlot !== 'melee' && activeSlot !== 'support') {
     setADS(false);
   }
 });
+window.addEventListener('blur', () => { keys.KeyE = false; keys.KeyG = false; _touchAbilityDown = false; releaseHeldAbility(); });   // a key that comes up while the window is not looking never says so
 document.addEventListener('mousedown', e => {
   if (SOCIAL_VIEW.mode) {
     if (SOCIAL_VIEW.mode === 'emote') stopSocialView();
@@ -45684,8 +45686,8 @@ function quickMelee() {
   activeSlot = 'melee';
   _equipInstant = true; try { equipActiveSlot(); } finally { _equipInstant = false; }   // quick melee is quick: no equip time, there or back
   // Use the ability if it has one and it is ready; otherwise just swing. (A melee whose ability was still cooling down
-  // used to do nothing at all.)
-  if (hasAbility(m) && meleeAbilityReady(m)) activateAbility();
+  // used to do nothing at all.) A HELD ability (the chainsaw's rev) is not one B can use: it lasts as long as a key is down, so B just saws.
+  if (hasAbility(m) && !(m.ability && m.ability.hold) && meleeAbilityReady(m)) activateAbility();
   else tryMelee();
 }
 function meleeAbilityReady(item) {
@@ -47062,7 +47064,7 @@ function updateMovement(dt, socialBlocked = false) {
                : (equippedItem && equippedItem.weight != null) ? equippedItem.weight : getDefaultWeaponWeight(equippedItem);
   const weightMult = Math.max(0.15, 1 - weight); // floor at 15% so you're never frozen
   const baseSpeedMult = (activeSlot === 'melee'
-    ? (meleeAbilityBuff?.type === 'revup' ? 3.0 : (equippedMeleeItem()?.speedMult || 1.5))
+    ? (meleeAbilityBuff?.type === 'revup' && !meleeAbilityBuff.hold ? 3.0 : (equippedMeleeItem()?.speedMult || 1.5))
     : 1) * weightMult;
   const adrenalineActive = Date.now() < adrenalineUntil;
   // Frost slow: 100 = normal, 0 = frozen. Linear scale.
@@ -47455,6 +47457,7 @@ function abilityReady(w) {
 
 function abilityCooldownFor(item, ab = equippedAbility(item) || item?.ability) {
   if (!ab) return 0;
+  if (ab.hold) return 0;                                   // a held ability (the chainsaw's rev) lasts as long as the key does: nothing to wait for
   if (ab.comboCd) return ab.comboCd;                       // a combo: the full cooldown after the finishing blow
   if (item?.id === 'baguette') return 10000;
   const isMelee = MELEE_ITEMS.some(m => m.id === item?.id);
@@ -48255,6 +48258,11 @@ function updateAutoLunge(dt) {
 }
 
 // ⛽ The saw coughing: the message, once every couple of seconds, and a dry-fire click.
+// 🪚 A held ability (the chainsaw's Rev Up) lasts exactly as long as the key does: the instant E, G or the touch button comes up it stops.
+let _touchAbilityDown = false;
+function releaseHeldAbility() {
+  if (meleeAbilityBuff && meleeAbilityBuff.hold) { meleeAbilityBuff = null; updateAbilityHUD(); }
+}
 function chainsawSputter(pressed) {
   const now = performance.now();
   if (now - _chainsawDryAt < 2200) return;
@@ -48843,6 +48851,17 @@ function activateMeleeAbility() {
   }
   else if (ab.type === 'melee_revup') {
     const isSaw = (item.baseId || item.id) === 'chainsaw';
+    if (ab.hold) {
+      // 🪚 Hold E: the saw revs for exactly as long as the key is down (releaseHeldAbility, and the per-frame check beside the buff updates),
+      // swinging by itself at the item's autoMs and burning fuel the whole time (updateChainsawFuel). No fuel, no rev: the pull-cord and nothing else.
+      if (chainsawFuel <= 0) { chainsawSputter(true); return; }
+      if (!meleeAbilityBuff?.hold) {
+        meleeAbilityBuff = { type: 'revup', hold: true };
+        playSoundEvent('chainsaw_rev', { volume: 1.1, minGap: 0 });
+        updateAbilityHUD();
+      }
+      return;
+    }
     if (isSaw) {
       // No fuel, no rev: the pull-cord and nothing else. (The cooldown is not spent on a saw that would not start.)
       if (chainsawFuel < (ab.fuelCost || 12)) { chainsawSputter(true); abilityCDs[item.id] = 0; return; }
@@ -49916,6 +49935,13 @@ function _updateAbilityHUD() {
     nameEl.textContent = ab.name;
     if (descEl) descEl.textContent = ab.desc || '';
     if (keyEl) { keyEl.textContent = '[E]'; keyEl.style.opacity = '1'; }
+    if (ab.hold) {                                         // the chainsaw: hold the key, the saw revs; the fuel gauge is the row under this box
+      const on = !!meleeAbilityBuff?.hold;
+      nameEl.textContent = on ? ab.name + ' · REVVING' : ab.name;
+      fillEl.style.width = '100%'; fillEl.style.background = on ? '#ff9a2a' : (chainsawFuel > 0 ? '#4caf50' : '#555');
+      if (keyEl) { keyEl.textContent = '[HOLD E]'; keyEl.style.opacity = chainsawFuel > 0 ? '1' : '0.4'; }
+      return;
+    }
     if (ab.type === 'melee_throw' && (item.baseId || item.id) === 'spear') {   // Throw Spear: the spears you have left
       nameEl.textContent = `${ab.name} · ${spearsLeft}/${SPEAR_THROWS}`;
       if (!spearsLeft) { if (descEl) descEl.textContent = 'No spears left this life'; fillEl.style.width = '100%'; fillEl.style.background = '#555'; if (keyEl) keyEl.style.opacity = '0.4'; return; }
@@ -50384,7 +50410,7 @@ function tryMelee() {
   // animation before it moved. Each ability names its own cadence (autoMs); the chainsaw keeps its chainsaw rate.
   const revving = meleeAbilityBuff?.type === 'revup';
   const isSaw = (item.baseId || item.id) === 'chainsaw';
-  const effectiveCooldown = !revving ? item.cooldown : isSaw ? 15 : (item.ability?.autoMs || 150);
+  const effectiveCooldown = !revving ? item.cooldown : isSaw ? (item.ability?.autoMs || 15) : (item.ability?.autoMs || 150);
   if (now - lastMelee < effectiveCooldown) return;
   lastMelee = now;
   // A skin renames the item — equippedMeleeItem() hands back the SKIN's id, with
@@ -70778,6 +70804,8 @@ function loop() {
   if (spectatorState) safeLoopStep('spectator-hud', () => updateSpectatorHUD()); // refresh HUD
   if (match?.type === 'range') safeLoopStep('range', () => updateRange(dt));
 
+  // A held ability ends with the key, whatever else happens: the key comes up while the window is not looking, the saw goes back in the pocket, you die.
+  if (meleeAbilityBuff && meleeAbilityBuff.hold && (isDead || activeSlot !== 'melee' || !(keys.KeyE || keys.KeyG || _touchAbilityDown))) releaseHeldAbility();
   // ── Melee ability buff updates ─────────────────────────────────────────────
   if (meleeAbilityBuff) {
     const mab = meleeAbilityBuff;
@@ -75980,7 +76008,9 @@ if (btnAbility) {
     if (placedC4s.length > 0 && activeSlot === 'support' && SUPPORT_ITEMS[selectedSupportIdx]?.id === 'c4') detonateAllC4();
     else activateAbility();
   };
-  btnAbility.addEventListener('touchstart', e => { e.stopPropagation(); e.preventDefault(); useAbility(); }, { passive: false });
+  btnAbility.addEventListener('touchstart', e => { e.stopPropagation(); e.preventDefault(); _touchAbilityDown = true; useAbility(); }, { passive: false });
+  const letGo = () => { _touchAbilityDown = false; releaseHeldAbility(); };
+  btnAbility.addEventListener('touchend', letGo); btnAbility.addEventListener('touchcancel', letGo);
   btnAbility.addEventListener('click', useAbility);
 }
 

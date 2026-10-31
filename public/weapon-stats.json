@@ -1285,7 +1285,7 @@
    "reloadStyle": "magazine",
    "noReload": false,
    "timeToEmptySec": 0,
-   "bulletSpeed": 26,
+   "bulletSpeed": 38,
    "adsZoom": 55,
    "falloff": {
     "nearM": 9999,
@@ -4128,33 +4128,33 @@
    "type": "Cryo Ray",
    "slot": "secondary",
    "archived": false,
-   "damage": 3,
+   "damage": 5,
    "pellets": 1,
    "headshotMult": 2,
-   "headDamage": 6,
-   "damagePerShot": 3,
-   "fireRateMs": 100,
-   "shotsPerSec": 10,
-   "auto": true,
-   "dps": 30,
-   "magazine": 50,
+   "headDamage": 10,
+   "damagePerShot": 5,
+   "fireRateMs": 700,
+   "shotsPerSec": 1.429,
+   "auto": false,
+   "dps": 7.143,
+   "magazine": 1,
    "reserve": 0,
    "reloadSec": 99.999,
    "reloadStyle": "magazine",
    "noReload": true,
-   "timeToEmptySec": 4.9,
+   "timeToEmptySec": 0,
    "bulletSpeed": 260,
    "adsZoom": 50,
    "falloff": {
-    "nearM": 28,
-    "farM": 70,
-    "minPct": 55
+    "nearM": 18,
+    "farM": 50,
+    "minPct": 45
    },
    "damageByRange": [
-    3,
-    3,
-    3,
-    3,
+    5,
+    5,
+    5,
+    4,
     3,
     2,
     2,
@@ -4164,21 +4164,21 @@
     2
    ],
    "shotsToKill": {
-    "body": 100,
-    "head": 50
+    "body": 60,
+    "head": 30
    },
-   "ttkBodySec": 9.9,
+   "ttkBodySec": 41.3,
    "scatterDeg": 0,
    "bloom": null,
    "recoil": {
     "kickPerShotDeg": 0.238,
     "sideKickDeg": 0.145,
-    "climbPerShotPct": 3,
-    "climbMaxX": 1.631,
-    "steadyKickDeg": 0.388,
-    "shotsToMaxClimb": 22,
-    "recoverPerSec": 8.5,
-    "adsKickPct": 12
+    "climbPerShotPct": 7,
+    "climbMaxX": 1.413,
+    "steadyKickDeg": 0.336,
+    "shotsToMaxClimb": 6,
+    "recoverPerSec": 9.5,
+    "adsKickPct": 13
    },
    "screenKick": 0.45,
    "ability": {
@@ -4186,7 +4186,7 @@
     "desc": "Frost AOE · -25 speed all targets in 5 m"
    },
    "traits": [
-    "Hitscan: hits the instant you fire, out to 26 m",
+    "Hitscan: hits the instant you fire, out to 32 m",
     "Ammo slowly regenerates"
    ]
   },
@@ -6328,11 +6328,11 @@
    "name": "Frying Pan",
    "type": "Melee",
    "archived": false,
-   "damage": 32,
+   "damage": 100,
    "reachM": 1.8,
-   "swingMs": 420,
-   "swingsPerSec": 2.381,
-   "dps": 76.19,
+   "swingMs": 900,
+   "swingsPerSec": 1.111,
+   "dps": 111.111,
    "speedMult": 1,
    "ability": {
     "name": "Pan Clang",
@@ -6431,7 +6431,7 @@
    "speedMult": 2,
    "ability": {
     "name": "Backstab",
-    "desc": "Lunge at a target · instant kill if it lands",
+    "desc": "Glide behind a target · instant kill from behind",
     "cooldownSec": 1.5,
     "steps": null
    },
@@ -6450,8 +6450,8 @@
    "speedMult": 1,
    "ability": {
     "name": "Rev Up",
-    "desc": "Dash forward · rev 3 s · 10× swing speed · 3× move speed · burns fuel",
-    "cooldownSec": 10,
+    "desc": "HOLD E · the saw revs: it swings by itself, 2.5× as fast, and burns fuel · let go and it stops",
+    "cooldownSec": 0,
     "steps": null
    },
    "defaultAbility": null
