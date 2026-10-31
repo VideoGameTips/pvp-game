@@ -1060,7 +1060,7 @@ const MELEE_ITEMS = [
   { id: 'baguette',   name: 'Baguette',   type: 'Melee',       damage: 28, range: 2.0, cooldown: 300,
     ability: { name: 'Eat It',       cd: 10000, desc: 'Munch the baguette · restore 40 HP', type: 'melee_eat', heal: 40 } },
   { id: 'knife',      name: 'Knife',      type: 'Melee',       damage: 28, range: 1.6, cooldown: 260, speedMult: 2.0,
-    ability: { name: 'Backstab',  cd: 7500, desc: 'Lunge at a target · instant kill if it lands', type: 'melee_instakill' } },
+    ability: { name: 'Backstab',  cd: 7500, desc: 'Glide behind a target · instant kill from behind', type: 'melee_instakill' } },
   { id: 'chainsaw',   name: 'Chainsaw',   type: 'Heavy Melee', damage: 45, range: 1.9, cooldown: 150,
     ability: { name: 'Rev Up',       cd: 12000, desc: 'Dash forward · rev 3 s · 10× swing speed · 3× move speed · burns fuel', type: 'melee_revup', duration: 3000, fuelCost: 12, fuelDrain: 12, dash: 5 } },
   { id: 'lightsabre', archived: true, name: 'Lightsabre', type: 'Melee · Jedi',  damage: 72, range: 2.5, cooldown: 420, doubleJump: true,
@@ -45477,7 +45477,7 @@ function resetCombatResources() {
   window._ladderDetachUntil = 0;
   finishBatCrowdClear();
   chainsawFuel = CHAINSAW_FUEL_MAX;   // a fresh tank each life
-  finishMeleeSlam(); finishMeleeDash(); autoLunge = null; scytheDash = null;
+  finishMeleeSlam(); finishMeleeDash(); autoLunge = null; scytheDash = null; backstabGlide = null;
   clearBlinkPearls();
   cancelMedkitHeal();
   for (const b of localBullets) scene.remove(b.mesh);
@@ -45698,7 +45698,7 @@ function meleeAbilityReady(item) {
 // gun back while one is running cancelled it. That is what stopped quick melee for the bat, the Battle Axe, the
 // Sledge, the Shield and the rest.
 function meleeSequenceBusy() {
-  return !!(batCrowdCharge || meleeSlam || meleeDash || scytheDash || autoLunge || _grappleRide
+  return !!(batCrowdCharge || meleeSlam || meleeDash || scytheDash || autoLunge || _grappleRide || backstabGlide
             || (typeof chainMaulSwing !== 'undefined' && chainMaulSwing));
 }
 
@@ -47036,6 +47036,7 @@ function updateMovement(dt, socialBlocked = false) {
     return;
   }
   if (updateGrappleRide(dt)) return;
+  if (backstabGlide) return;                    // the glide moves you; the keys do not
 
   // WASD movement
   const fwd   = new THREE.Vector3(-Math.sin(euler.y), 0, -Math.cos(euler.y));
@@ -47548,6 +47549,59 @@ function isKnifeBackstabTarget(mesh) {
   toAttacker.normalize();
   const targetForward = new THREE.Vector3(-Math.sin(mesh.rotation.y), 0, -Math.cos(mesh.rotation.y)).normalize();
   return targetForward.dot(toAttacker) < -0.45;
+}
+
+// ── 🗡️ BACKSTAB: glide round behind them, then stab ─────────────────────────────────────────────────────────────────────
+// The ability used to kill on the keypress and then run you in from the FRONT, which looked like a dash into someone's face.
+// Now you slide in an arc around the target to the spot behind them (following them if they move), turn to face their back,
+// the knife comes up, and the stab lands as you arrive. If a wall stops you short of reach, nothing is killed.
+let backstabGlide = null;   // { pid, item, t, dur, a0, r0, now, blocked, stabbed, epoch }
+const BACKSTAB_GAP = 0.95;  // how close behind them you end up
+function startBackstabGlide(item, pid, mesh, now) {
+  cancelInspect();
+  const dx = camera.position.x - mesh.position.x, dz = camera.position.z - mesh.position.z, r0 = Math.hypot(dx, dz);
+  backstabGlide = { pid, item, t: 0, dur: Math.min(0.5, 0.28 + 0.04 * r0), a0: Math.atan2(dx, dz), r0, now, blocked: 0, stabbed: false, fx: 0, epoch: matchEpoch };
+  meleeSwingT = 1;
+  _fovPunch = Math.max(_fovPunch, 8);
+}
+function _backstabStrike(g) {
+  const mesh = remoteMeshes[g.pid];
+  if (!mesh || players[g.pid]?.dead) return;
+  const hp = mesh.position.clone().setY(1.0);
+  const dummy = TRAINING_DUMMIES.find(d => d.id === g.pid);
+  if (dummy) handleDummyHit(dummy, mesh, { damage: 9999 }, hp);
+  else emitHit(g.pid, `knife_ab_${myId}_${g.now}`, 'knife_instakill', hp);
+  spawnHitParticle(hp);
+  flashScreen('rgba(255,0,0,0.40)', 300);
+  playSoundEvent('melee_impact', { material: MELEE_SWING_SOUND[g.item.baseId || g.item.id] || 'blade', volume: 1.0, minGap: 0 });
+}
+function updateBackstabGlide(dt) {
+  const g = backstabGlide;
+  if (!g) return;
+  const mesh = remoteMeshes[g.pid];
+  if (isDead || !gameStarted || SOCIAL_VIEW.mode || g.epoch !== matchEpoch || activeSlot !== 'melee' || !mesh || players[g.pid]?.dead) { backstabGlide = null; return; }
+  g.t += dt;
+  const k = _easeK(g.t / g.dur), tx = mesh.position.x, tz = mesh.position.z;
+  let d = mesh.rotation.y - g.a0; d = Math.atan2(Math.sin(d), Math.cos(d));        // (the spot behind them is at angle rotation.y round them)
+  const th = g.a0 + d * k, r = g.r0 + (BACKSTAB_GAP - g.r0) * k;
+  const delta = new THREE.Vector3(tx + Math.sin(th) * r - camera.position.x, 0, tz + Math.cos(th) * r - camera.position.z);
+  const len = delta.length();
+  if (len > 0.001) {
+    const before = camera.position.clone();
+    moveWithWalls(delta.normalize(), len); resolveWallCollisions();
+    g.blocked = (len > 0.05 && camera.position.distanceTo(before) < len * 0.25) ? g.blocked + 1 : 0;
+  }
+  playerYVel = 0; slamState = null; _extVel.x = 0; _extVel.z = 0; window._blastCarry = false;
+  _aimToward(new THREE.Vector3(tx, mesh.position.y + 1.3, tz), 1500, dt);          // turned to face their back
+  if (isOutOfBoundsXZ(camera.position.x, camera.position.z)) { killLocalOutOfBounds(); backstabGlide = null; return; }
+  g.fx -= dt;
+  if (g.fx <= 0) { g.fx = 0.05; spawnAbilityAOEFX(camera.position.clone().setY(camera.position.y - 0.85), 0.35, 0xbfc4cc); }
+  if (!g.stabbed && g.t >= g.dur - 0.12) { g.stabbed = true; startUseAnim('melee', g.item, 'stab'); }
+  if (g.t >= g.dur || g.blocked >= 3) {
+    backstabGlide = null;
+    if (Math.hypot(tx - camera.position.x, tz - camera.position.z) <= g.item.range + 0.6) _backstabStrike(g);
+    else meleeAbilityBuff = { type: 'instakill', usesLeft: 1 };                    // could not get there: the next swing is still the kill
+  }
 }
 
 // 🌀 A dash along the look direction, not along the ground: pointing up carries you up, pointing down drives you into
@@ -48767,29 +48821,21 @@ function activateMeleeAbility() {
   }
   else if (ab.type === 'melee_instakill') {
     playSoundEvent('instakill_zip', { volume: 1.0 });
-    // Immediately lunge and instakill nearest enemy in 2× range; buff next swing if miss
+    // Backstab: you glide round behind the nearest target in front of you, then stab. (It used to kill them the instant you
+    // pressed the key and run you in from the front.) A miss buffs your next manual swing instead.
     const fwd2 = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
-    let hitSomeone = false;
+    let target = null, bestDist = Infinity;
     for (const [pid, mesh] of Object.entries(remoteMeshes)) {
+      if (!mesh.visible || players[pid]?.dead || friendlyFireBlocked(pid, myId)) continue;
       const toT = mesh.position.clone().sub(camera.position); toT.y = 0;
       const dist = toT.length();
-      if (dist > item.range * 2.5 || dist < 0.05) continue;
+      if (dist > item.range * 3.5 || dist < 0.05 || dist >= bestDist) continue;
       if (fwd2.dot(toT.normalize()) < 0.4) continue;
-      const hp = mesh.position.clone().setY(1.0);
-      const dummy2 = TRAINING_DUMMIES.find(d => d.id === pid);
-      if (dummy2) handleDummyHit(dummy2, mesh, { damage: 9999 }, hp);
-      else emitHit(pid, `knife_ab_${myId}_${now}`, 'knife_instakill', hp);
-      spawnHitParticle(hp);
-      flashScreen('rgba(255,0,0,0.40)', 300);
-      hitSomeone = true;
-      // ...and the body goes in after it: a quick lunge that closes the gap, the stab pose out in front. (The kill has
-      // landed already, so the dash is told to leave this target alone.)
-      const gap = dist - 0.9;
-      if (gap > 0.4) startMeleeDash(item, { type: 'melee_lunge', distance: Math.min(gap, item.range * 2.5), dashTime: 0.12, quiet: true }, item.id, now, [pid]);
-      break;
+      if (!hasLineOfSight(camera.position.x, camera.position.z, mesh.position.x, mesh.position.z)) continue;
+      target = { pid, mesh }; bestDist = dist;
     }
-    if (!hitSomeone) {
-      // Miss — buff the next manual swing instead (and the knife still goes out in a stab at the air)
+    if (target) startBackstabGlide(item, target.pid, target.mesh, now);
+    else {
       meleeAbilityBuff = { type: 'instakill', usesLeft: 1 };
       startUseAnim('melee', item, 'stab');
     }
@@ -70769,6 +70815,7 @@ function loop() {
   updateBatCrowdClear(dt);
   updateMeleeSlam(dt);
   updateMeleeDash(dt);
+  updateBackstabGlide(dt);
   updateMeleeCombo(dt);
   updateScytheDash(dt);
   updateChainsawFuel(dt);
