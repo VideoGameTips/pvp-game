@@ -26070,101 +26070,94 @@ function buildAK20() {
 }
 
 function buildAUG() {
-  // 🔫 AUG — a model skin for the AK-20, and deliberately not a recolour. It is
-  // a bullpup: the magazine sits BEHIND the trigger, inside the stock, so the
-  // whole silhouette is different from the rifle it replaces. Olive polymer
-  // shell, the integrated optic in its carry handle, and the folding vertical
-  // foregrip under the barrel.
-  const g = new THREE.Group();
-  const steel = GUN_MATS.steel(), blued = GUN_MATS.blued(), bright = GUN_MATS.bright();
-  const inner = GUN_MATS.inner();
-  // The green is the whole point of the gun, so it is mixed here rather than
-  // taken from GUN_MATS, which is all blacks and greys.
-  const shell = new THREE.MeshPhongMaterial({ color: 0x4c5339, shininess: 24, specular: 0x6e7758 });
-  const dark  = new THREE.MeshPhongMaterial({ color: 0x2b2e26, shininess: 18, specular: 0x4a4d42 });
-  const mag   = new THREE.MeshPhongMaterial({ color: 0x6c7a46, shininess: 60, specular: 0xb6c288,
-                                              transparent: true, opacity: 0.72 });
+  // 🔫 AK-20 -> Steyr AUG, remade. Still a bullpup, so the silhouette is nothing like the rifle it replaces: one olive polymer
+  // body from the butt to the barrel's root, the magazine BEHIND the trigger, the full hoop trigger guard, and the folding
+  // vertical foregrip. What changed is two things that used to be painted on. The magazine is now one long banana, bent
+  // forward toward the muzzle, smoked polymer with the brass showing through. And the sight is a real scope (gpOptic): a
+  // tube with a glass at each end in its carry handle, the same optic the SCAR-H carries, so aiming lines up through it.
+  const g = new THREE.Group(), M = _milMats();
+  const mag = new THREE.MeshPhongMaterial({ color: 0x59664a, shininess: 70, specular: 0xb6c288, transparent: true, opacity: 0.62, depthWrite: false });
+  const brass = gpFinish(0xc39a3c, .30, .85, 'steel');
 
-  // ── The shell: one continuous polymer body from butt to muzzle end ───────
-  gpPlate(g, shell, [
+  // ── The body: one continuous polymer shell from butt to muzzle end ───────
+  gpContouredPart(g, M.od, [
     [0.300,-0.030],[0.300,0.036],[0.130,0.048],[-0.070,0.046],[-0.150,0.030],
     [-0.150,-0.012],[-0.040,-0.026],[0.120,-0.034],
-  ], 0.052, 0);
-  gpBox(g, dark,  0.054, 0.010, 0.070, 0, 0.006, 0.296, 0.10);      // butt plate
-  gpBox(g, inner, 0.055, 0.005, 0.150, 0, 0.046, 0.140);            // shell seam
-  gpBox(g, dark,  0.056, 0.030, 0.028, 0, 0.004, 0.246);            // sling loop block
-  gpBox(g, bright, 0.010, 0.006, 0.022, 0, -0.026, 0.250);          // sling loop
+  ], 0.052, 0, 0.006);
+  gpBox(g, M.black, 0.054, 0.058, 0.014, 0, 0.004, 0.304, 0.10);    // rubber butt pad
+  gpBox(g, M.dark, 0.055, 0.005, 0.150, 0, 0.0465, 0.140);          // shell seam
+  gpBox(g, M.black, 0.056, 0.030, 0.028, 0, 0.004, 0.246);          // sling loop block
+  gpBox(g, M.bright, 0.010, 0.006, 0.022, 0, -0.026, 0.250);        // sling loop
+  gpBox(g, M.dark, 0.0525, 0.003, 0.230, 0, -0.012, 0.150);         // the lower shell seam
+  gpBox(g, M.dark, 0.006, 0.026, 0.060, 0.027, 0.014, 0.066);       // ejection port, right side
+  gpBox(g, M.black, 0.008, 0.030, 0.064, 0.026, 0.014, 0.066);      // its dust-cover lip
 
-  // ── Magazine, behind the grip. This is what makes it a bullpup ───────────
-  gpBox(g, mag,   0.028, 0.130, 0.052, 0, -0.082, 0.150, 0.06);
-  gpBox(g, inner, 0.029, 0.006, 0.054, 0, -0.020, 0.150, 0.06);     // feed lips
-  gpBox(g, dark,  0.031, 0.014, 0.056, 0, -0.146, 0.154, 0.06);     // floorplate
-  for (let i = 0; i < 4; i++)                                        // witness holes
-    gpBox(g, inner, 0.029, 0.005, 0.008, 0, -0.048 - i * 0.024, 0.176, 0.06);
-  gpBox(g, dark,  0.040, 0.026, 0.030, 0, -0.014, 0.150);           // magwell throat
-  gpBox(g, bright, 0.010, 0.012, 0.010, 0.022, -0.020, 0.126);      // paddle release
+  // ── The magazine: one banana, bent forward, behind the grip ──────────────
+  // Six segments of smoked polymer, each tilted a little more than the last so the bottom swings forward toward the muzzle; two brass
+  // rounds visible in each, a witness rib across it, and a throat where it enters the stock.
+  gpBox(g, M.black, 0.040, 0.026, 0.034, 0, -0.016, 0.156);         // magwell throat
+  gpBox(g, M.bright, 0.010, 0.012, 0.010, 0.022, -0.020, 0.128);    // paddle release
+  let top = { y: -0.014, z: 0.160 }, ang = 0.03;
+  const SEG = 0.030;
+  for (let i = 0; i < 6; i++) {
+    const cy = top.y - 0.5 * SEG * Math.cos(ang), cz = top.z - 0.5 * SEG * Math.sin(ang);
+    gpBox(g, mag, 0.027, SEG + 0.001, 0.050, 0, cy, cz, ang);
+    gpBox(g, M.dark, 0.0285, 0.0030, 0.0515, 0, cy + 0.011 * Math.cos(ang), cz + 0.011 * Math.sin(ang), ang);      // the rib between rounds
+    [-0.007, 0.008].forEach(d => gpBox(g, brass, 0.016, 0.0095, 0.024, 0, cy + d * Math.cos(ang), cz + d * Math.sin(ang) + 0.002, ang));   // the rounds in the stack
+    top = { y: top.y - SEG * Math.cos(ang), z: top.z - SEG * Math.sin(ang) };
+    ang += 0.075;
+  }
+  gpBox(g, M.black, 0.030, 0.012, 0.054, 0, top.y - 0.004, top.z + 0.003, ang + 0.05);   // floorplate
 
   // ── Grip and the wrap-around trigger guard the AUG is known for ──────────
-  gpPlate(g, dark, [
+  gpContouredPart(g, M.od, [
     [0.060,-0.030],[0.086,-0.052],[0.088,-0.148],[0.058,-0.164],[0.028,-0.092],[0.026,-0.036],
-  ], 0.036, 0);
-  for (let i = 0; i < 5; i++) gpBox(g, inner, 0.038, 0.004, 0.008, 0, -0.058 - i * 0.020, 0.056 + i * 0.004, 0.30);
+  ], 0.036, 0, 0.005);
+  for (let i = 0; i < 5; i++) gpBox(g, M.dark, 0.038, 0.004, 0.008, 0, -0.058 - i * 0.020, 0.056 + i * 0.004, 0.30);
   // The guard is a full hoop enclosing the whole hand, not a finger loop.
-  gpPlate(g, dark, [
+  gpContouredPart(g, M.od, [
     [0.024,-0.030],[0.026,-0.106],[-0.030,-0.110],[-0.032,-0.030],[-0.020,-0.026],[0.012,-0.026],
-  ], 0.034, 0);
-  gpBox(g, inner, 0.036, 0.076, 0.044, 0, -0.068, -0.002);          // the opening through it
-  gpBox(g, bright, 0.006, 0.016, 0.006, 0, -0.040, 0.010, 0.20);    // trigger
+  ], 0.034, 0, 0.004);
+  gpBox(g, M.dark, 0.036, 0.076, 0.044, 0, -0.068, -0.002);         // the opening through it
+  gpBox(g, M.bright, 0.006, 0.016, 0.006, 0, -0.040, 0.010, 0.20);  // trigger
 
-  // ── Carry handle with the optic inside it ────────────────────────────────
-  gpCyl(g, dark, 0.019, 0.019, 0.230, 12, 0, 0.078, 0.020);
-  gpCyl(g, inner, 0.0150, 0.0150, 0.012, 12, 0, 0.078, 0.136);      // eyepiece
-  gpCyl(g, bright, 0.0165, 0.0165, 0.006, 12, 0, 0.078, -0.092);    // objective ring
-  gpCyl(g, inner, 0.0140, 0.0140, 0.010, 12, 0, 0.078, -0.088);     // objective glass
-  [0.055, -0.020, -0.070].forEach(z => gpBox(g, dark, 0.030, 0.034, 0.016, 0, 0.056, z));  // handle legs
-  gpBox(g, inner, 0.032, 0.006, 0.190, 0, 0.096, 0.020);            // rib along the top
+  // ── The sight: a carry handle with a real scope in it ────────────────────
+  gpBox(g, M.od, 0.036, 0.012, 0.250, 0, 0.052, 0.012);             // the housing the handle rises from
+  gpBox(g, M.black, 0.030, 0.004, 0.236, 0, 0.060, 0.012);          // a flat for it to sit on
+  gpOptic(g, 0, 0.078, 0.020, 0.215, 0.0185, 0.060);
 
   // ── Barrel, gas system, foregrip ─────────────────────────────────────────
-  gpCyl(g, blued, 0.0115, 0.0115, 0.250, 14, 0, 0.006, -0.268);
-  gpCyl(g, steel, 0.0165, 0.0165, 0.042, 14, 0, 0.006, -0.176);     // barrel trunnion
-  gpCyl(g, blued, 0.0075, 0.0075, 0.120, 10, 0, 0.032, -0.230);     // gas tube
-  gpBox(g, steel, 0.026, 0.030, 0.030, 0, 0.020, -0.294);           // gas block
-  gpCyl(g, inner, 0.0060, 0.0060, 0.014, 8, 0, 0.040, -0.294);      // gas port
-  gpCyl(g, blued, 0.0150, 0.0150, 0.034, 12, 0, 0.006, -0.388);     // flash hider
-  for (let i = 0; i < 3; i++) gpBox(g, inner, 0.032, 0.005, 0.006, 0, 0.006, -0.380 + i * 0.010);
-  gpCyl(g, inner, 0.0085, 0.0085, 0.012, 10, 0, 0.006, -0.402);     // bore
+  gpCyl(g, M.park, 0.0115, 0.0115, 0.250, 16, 0, 0.006, -0.268);
+  gpCyl(g, M.steel, 0.0165, 0.0165, 0.042, 16, 0, 0.006, -0.176);   // barrel trunnion
+  gpCyl(g, M.park, 0.0075, 0.0075, 0.120, 12, 0, 0.032, -0.230);    // gas tube
+  gpBox(g, M.steel, 0.026, 0.030, 0.030, 0, 0.020, -0.294);         // gas block
+  gpCyl(g, M.dark, 0.0060, 0.0060, 0.014, 8, 0, 0.040, -0.294);     // gas port
+  gpOpenMuzzle(g, 0.0150, 0.0085, 0.040, 0, 0.006, -0.392, M.park, M.dark, true);   // the slotted flash hider
   // Folding vertical foregrip, down and slightly forward.
-  gpPlate(g, dark, [
+  gpContouredPart(g, M.od, [
     [-0.214,-0.012],[-0.196,-0.030],[-0.214,-0.132],[-0.246,-0.128],[-0.248,-0.026],[-0.238,-0.010],
-  ], 0.030, 0);
-  gpBox(g, inner, 0.032, 0.012, 0.030, 0, -0.136, -0.232, 0.10);    // grip cap
-  gpBox(g, dark, 0.040, 0.020, 0.070, 0, -0.006, -0.232);           // grip hinge block
+  ], 0.030, 0, 0.004);
+  gpBox(g, M.black, 0.032, 0.012, 0.030, 0, -0.136, -0.232, 0.10);  // grip cap
+  gpBox(g, M.black, 0.040, 0.020, 0.070, 0, -0.006, -0.232);        // grip hinge block
 
-  // ── Charging handle down the left, and the ejection port ─────────────────
-  gpBox(g, bright, 0.012, 0.012, 0.070, -0.032, 0.030, 0.022);
-  gpBox(g, bright, 0.020, 0.014, 0.018, -0.036, 0.030, 0.058);      // the knob
-  gpBox(g, inner, 0.006, 0.028, 0.060, 0.027, 0.014, 0.066);        // ejection port, right side
-  gpBox(g, dark,  0.008, 0.032, 0.064, 0.026, 0.014, 0.066);        // port cover lip
+  // ── Charging handle down the left (it is the part the reload works) ──────
+  gpBox(g, M.steel, 0.012, 0.012, 0.070, -0.032, 0.030, 0.022);
+  gpPart(g, 'main', () => { gpBox(g, M.bright, 0.020, 0.014, 0.018, -0.036, 0.030, 0.058); });   // the knob
+  g._parts.main.userData.chargingHandle = true;
+  _milPlaque(g, 'STEYR AUG', 'A1  /  5.56x45 NATO', 0.090, 0.024, 0.0268, 0.020, 0.196);
 
   const flash = makeMuzzleFlash();
   flash.position.set(0, 0.006, -0.412);
   g.add(flash);
   g._flash = flash; g._kickZ = 0.014;
-  // Hand-built, so the greebler and welder leave it alone: the optic tube and
-  // the charging handle are meant to stand proud.
+  // Hand-built, so the greebler and welder leave it alone: the scope and the charging handle are meant to stand proud.
   g._greebled = true; g._handDetailed = true;
-  // Bullpup: the magazine is behind the grip, so a reload prop flying to the
-  // usual magwell offset would arrive in front of the trigger, at nothing.
+  // Bullpup: the magazine is behind the grip, so a reload prop flying to the usual magwell offset would arrive in front of
+  // the trigger, at nothing.
   g._anchorOverride = { mag: { x: 0, y: -0.075, z: 0.150 } };
   g.position.set(0.12, -0.1, -0.25);
   return g;
 }
-
-// ── 🎭 Concept skins ────────────────────────────────────────────────────────
-// A skin should be a different OBJECT, not a different colour. Each of these
-// replaces the weapon's model outright while its stats stay exactly as they
-// were, so a Water Balloon Launcher fires grenades on the grenade launcher's
-// numbers and simply looks like a garden toy while doing it.
 
 function buildWaterBalloonLauncher() {
   // 🎈 Grenade launcher -> water balloon launcher. Clear plastic drum with six
@@ -52569,7 +52562,7 @@ const MODEL_SKINS = [
   {id:'sg8_waffle',weapon:'sg8',name:'Waffle Iron',rarity:'good',sw:['#d99a48','#ffdf76'],build:()=>buildSnackSkin('waffle'),blurb:'Toasted waffle panels, syrup and a pat of butter. Breakfast Club bundle.'},
   { id: 'aug', weapon: 'ak20', name: 'AUG', rarity: 'rare',
     sw: ['#4c5339', '#6c7a46'], build: buildAUG,
-    blurb: 'Bullpup. The magazine sits behind the trigger.' },
+    blurb: 'Bullpup. A banana magazine curving forward behind the trigger, and a real scope with glass at both ends in the carry handle.' },
   { id: 'ak20_twin_barrel', weapon: 'ak20', name: 'Twin Barrel AK', rarity: 'basic',
     sw: ['#3c3540', '#ffcc66'], build: buildTwinAR,
     blurb: 'Two barrels where there was one. Fires the same rounds.' },
