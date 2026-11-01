@@ -53077,9 +53077,6 @@ const MODEL_SKINS = [
   { id: 'freeze_slushie', weapon: 'freeze_gun', name: 'Slushie Machine', rarity: 'good',
     sw: ['#3aa8e8', '#e03a5a'], build: buildSlushieMachine,
     blurb: 'Blue raspberry, turning in a clear hopper. Chrome tap.' },
-  { id: 'lever_fishing_rod', weapon: 'lever', name: 'Fishing Rod', rarity: 'good',
-    sw: ['#23282e', '#8a1c2a'], build: buildFishingRod,
-    blurb: 'The lever is the reel. There is a float on the line.' },
   { id: 'burst_staple_gun', weapon: 'burst', name: 'Staple Gun', rarity: 'good',
     sw: ['#1f5f8a', '#bfa03a'], build: buildStapleGun,
     blurb: 'Heavy duty. You can see the staples through the slot.' },
@@ -55817,6 +55814,8 @@ const SUPPORT_MODEL_SKINS = [
     blurb: 'Corner pocket. You go with it.' },
   { id: 'mine_whoopee',    support: 'land_mine',   name: 'Whoopee Cushion',  rarity: 'good', sw: ['#ff7aa8', '#d04a7a'], build: buildWhoopeeCushion,
     blurb: 'Somebody is about to sit down.' },
+  { id: 'grapple_fishing_rod', support: 'grapple_hook', name: 'Fishing Rod',   rarity: 'good', sw: ['#23282e', '#8a1c2a'], build: buildFishingRod,   // (it was the Lever Rifle's; a rod and reel is a grapple)
+    blurb: 'Cast it at a wall and reel yourself in. There is a float on the line.' },
 ];
 const SUPPORT_MODEL_SKINS_BY_BASE = {};
 for (const ms of SUPPORT_MODEL_SKINS) (SUPPORT_MODEL_SKINS_BY_BASE[ms.support] ||= []).push(ms);
