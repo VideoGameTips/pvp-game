@@ -54064,30 +54064,24 @@ function _gojoPortalTex(kind) {
   const t = new THREE.CanvasTexture(c);
   return (_gojoTex[kind] = t);
 }
-function buildLimitlessFist(kind) {
-  const g = new THREE.Group();
-  const skin = new THREE.MeshLambertMaterial({ color: 0xeac39a });
-  skin.userData.skinTone = true;
-  const block = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.10, 0.14), skin);
-  block.position.set(0, 0, -0.05); g.add(block);
-  const sleeve = new THREE.Mesh(new THREE.BoxGeometry(0.112, 0.112, 0.060), new THREE.MeshLambertMaterial({ color: 0x141a2e }));   // the dark uniform cuff
-  sleeve.position.set(0, 0, 0.05); g.add(sleeve);
+// The hand is the ordinary one (a clone of the default Fists, so it is exactly the same fist); only the portal is added.
+function addLimitlessPortal(g, kind) {
   const hex = kind === 'blue' ? 0x4aa8ff : 0xff3a2a;
   const additive = (map, opacity) => new THREE.MeshBasicMaterial({ map, color: 0xffffff, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
   const P = new THREE.Group(); P.position.set(0, 0, -0.175); g.add(P);                    // the portal, hovering at the knuckles
   const disc = new THREE.Mesh(new THREE.CircleGeometry(0.062, 40), additive(_gojoPortalTex(kind), 1)); P.add(disc);
   const halo = new THREE.Mesh(new THREE.CircleGeometry(0.115, 32), additive(_gojoPortalTex(kind), 0.28)); halo.position.z = -0.004; P.add(halo);
   const ring = new THREE.Mesh(new THREE.TorusGeometry(0.066, 0.006, 8, 40), new THREE.MeshBasicMaterial({ color: hex, transparent: true, opacity: 0.95, depthWrite: false, blending: THREE.AdditiveBlending })); P.add(ring);
-  const cuffGlow = new THREE.Mesh(new THREE.TorusGeometry(0.058, 0.004, 6, 24), new THREE.MeshBasicMaterial({ color: hex, transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending }));
-  cuffGlow.position.z = 0.02; g.add(cuffGlow);
   g._portal = P; g._disc = disc; g._halo = halo; g._ring = ring; g._kind = kind; g._boost = 0;
   g.userData.noWrap = true;
   return g;
 }
 function buildLimitless() {
-  const g = buildLimitlessFist('blue');
-  g.position.set(0.16, -0.10, -0.22);
-  const off = buildLimitlessFist('red');
+  const idx = MELEE_ITEMS.findIndex(m => m.id === 'fists');
+  const base = _baseMeleeModels[idx] || meleeModels[idx];              // the default fists, with everything the default skin has
+  const g = addLimitlessPortal(base.clone(), 'blue');
+  g.position.copy(base.position);
+  const off = addLimitlessPortal((base._offHand || base).clone(), 'red');
   off.position.copy(MELEE_OFFHAND_REST_POS);
   off.visible = false;
   g._offHand = off; g._gojo = true; g._distinctHands = true;
@@ -54151,8 +54145,8 @@ function gojoInspectBegin() {
 }
 function _gojoPoseHand(h, rest, u, towards) {                           // u: 0 at rest, 1 raised in front of the eyes
   h.rotation.order = 'YXZ';
-  h.position.set(rest.x + towards * u, rest.y + 0.135 * u, rest.z - 0.075 * u);
-  h.rotation.set(-0.12 * u, -towards * 1.2 * u, 0);
+  h.position.set(rest.x + towards * u, rest.y + 0.07 * u, rest.z - 0.04 * u);      // up and a little in, not into the middle of the screen
+  h.rotation.set(-0.10 * u, -towards * 3.0 * u, 0);
   h._boost = u;
 }
 function gojoInspectStep(s) {
@@ -54167,7 +54161,7 @@ function gojoInspectStep(s) {
     while (st.beat < 2 * st.K && t >= st.period * (0.5 + st.beat * 0.5)) {      // a tone as each one reaches the eyes
       _itemInspectBeat(st.beat % 2 === 0 ? 780 : 520, 0.05); st.beat++;
     }
-    _gojoPoseHand(m, restM, ub, -0.085); _gojoPoseHand(off, restO, ur, 0.095);
+    _gojoPoseHand(m, restM, ub, -0.025); _gojoPoseHand(off, restO, ur, 0.025);
   } else if (st.merge) {
     const orb = _gojoOrb(), tm = t - st.alt;
     if (tm < st.gather) {                                              // both come to the middle, and the portals lean into each other
