@@ -4383,6 +4383,13 @@ if (ok && process.argv.includes('--hacker')) {
     if (lines < 3) issues.push('the model should be outlined in green line segments, found ' + lines);
     if (screens < 1) issues.push('the model should carry a screen (a textured plane)');
     if (!g._flash || typeof g._tick !== 'function' || typeof g._calm !== 'function') issues.push('the model needs a muzzle flash and its tick (the slide and the screen)');
+    // the black is a void, not a plastic: every solid part of the gun is an unlit material (no PBR, no Phong, so no sheen), and the black ones are 0x000000
+    let lit = 0, nonBlack = 0, blacks = 0; const flashSet = new Set(); if (g._flash) g._flash.traverse(o => flashSet.add(o));
+    g.traverse(o => { if (!o.isMesh || flashSet.has(o) || !o.material) return; if (!o.material.isMeshBasicMaterial) lit++; else if (o.material.color.getHex() === 0x000000) blacks++; else nonBlack++; });
+    if (lit) issues.push(lit + ' parts of the Hacker Pistol are lit materials: the black would show a sheen (use MeshBasicMaterial)');
+    if (blacks < 8) issues.push('the body should be pure black (MeshBasicMaterial 0x000000), found only ' + blacks + ' such parts');
+    // and a shot of its own, not the gun's: a laser blaster
+    if (typeof SKIN_VOICE.pistol_hacker !== 'function') issues.push('the Hacker Pistol should make its own shot (SKIN_VOICE), a laser blaster, not the pistol recording');
     // who gets the hit look and the crash: only the pistol wearing it
     const keep = _modelSkinLook.pistol;
     try {
@@ -4457,7 +4464,7 @@ if (ok && process.argv.includes('--skinpitch')) {
     const got = [];
     for (const m of MODEL_SKINS) {
       if (!guns.has(m.weapon)) continue;
-      if (SKIN_SAMPLES[m.id]) { if (skinPitchOf(m.id) === undefined) issues.push(m.id + ': no pitch'); continue; }
+      if (SKIN_SAMPLES[m.id] || SKIN_VOICE[m.id]) continue;                       // (its own recording, or its own voice: no pitch factor)
       const f = skinPitchOf(m.id); got.push(f);
       if (!(f >= LO && f <= HI)) issues.push(m.id + ' has pitch ' + f + ': outside ' + LO + ' to ' + HI + ' it distorts');
       if (!(Math.abs(f - 1) >= MIN_OFF)) issues.push(m.id + ' has pitch ' + f + ': within ' + MIN_OFF * 100 + ' % of the gun it sounds just the same');

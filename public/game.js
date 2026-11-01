@@ -4767,7 +4767,7 @@ const SKIN_PITCH = {
   aug: 0.88,
   rpd_m249: 0.90, flamethrower_m2: 0.92, grenade_launcher_mgl: 0.92, srx_dragunov: 0.90, srx_m24: 0.92, sg8_remington870: 0.92, lever_winchester94: 0.93,
   revolver_python: 0.92, m1_garand_fal: 0.93, burst_scar_h: 0.94, m4a1_arena_hk416: 1.05, ak20_aks74u: 1.08, flechette_bullpup: 1.06, vector_mp5: 1.06, pistol_m9: 1.06,
-  pistol_hacker: 1.10, akimbo_1911: 0.94, akimbo_micro_uzi: 1.10, akimbo_water_pistols: 1.12, akimbo_staplers: 1.10, akimbo_bananas: 0.92, machine_pistol_uzi: 0.94,
+  akimbo_1911: 0.94, akimbo_micro_uzi: 1.10, akimbo_water_pistols: 1.12, akimbo_staplers: 1.10, akimbo_bananas: 0.92, machine_pistol_uzi: 0.94,
 };
 function _skinPitchHash(id) {
   let h = 2166136261;
@@ -4777,7 +4777,7 @@ function _skinPitchHash(id) {
 }
 function skinPitchOf(skinId) { return SKIN_PITCH[skinId] || _skinPitchHash(skinId); }
 function skinPitchFor(weaponId) {                                   // the pitch of the skin this gun wears (1 for the stock gun, or a skin that has its own recording)
-  try { const sk = _activeModelSkin[weaponId]; return !sk || SKIN_SAMPLES[sk.id] ? 1 : skinPitchOf(sk.id); }
+  try { const sk = _activeModelSkin[weaponId]; return !sk || SKIN_SAMPLES[sk.id] || SKIN_VOICE[sk.id] ? 1 : skinPitchOf(sk.id); }
   catch (e) { return 1; }                                           // (_activeModelSkin is declared far below: a sound before the script has loaded must not throw)
 }
 function weaponSamplesPreload(ctx) {                                // (one fetch per file: the rest find it loading)
@@ -4849,6 +4849,22 @@ function playWeaponSound(idOrWeapon, opts = {}) {
   _wpnDry = DRY_WEAPONS.has(wid);                                         // (the gun, whatever it wears, and for everybody who hears it)
   try { return _playWeaponSound(idOrWeapon, opts); } finally { _wpnPitch = 1; _wpnDry = false; }
 }
+// 🟩 A skin's own shot, made on the spot instead of the gun's recording (SKIN_VOICE: skin id -> a function of (ctx, start, level)). The Hacker Pistol is a laser blaster, not a pistol (Andy:
+// "it should sound more like a laser blaster, scrap the default shooting sound"): a click, a saw sweeping down through the whole range, a square one an octave under it for the digital edge,
+// a bright ping on top, and three little square pulses stuttering after it, as if the shot were glitching. Nothing in it is a gunshot: no blast, no casing, no echo. Your own shot only (like every
+// skin's sound); it is built from the same sound primitives as the rest, so a skin pitch, if one is ever given to it, applies.
+function playHackerBlaster(ctx, start, level) {
+  // Its own gentle compressor straight to the output, not the gun bus: the gun bus levels everything to one gunfire loudness (a quarter of the level it was given or ten times that came out within half a dB), which made it 3 dB louder than the Laser Blaster skin's recording.
+  const out = ctx.createGain(), comp = ctx.createDynamicsCompressor(); comp.threshold.value = -12; comp.ratio.value = 4; comp.knee.value = 8; out.connect(comp).connect(ctx.destination);
+  const v = 0.9 * level;                                                    // level-matched offline: its peak is -5.4 dB, the Laser Blaster skin's recording peaks at -6.6 (this one is short, so its 0.3 s RMS sits 2 dB under)
+  playFilteredNoise(ctx, start, 0.010, out, v * 0.9, 'highpass', 5200, 0.7, 0.0002, 0);                        // the click it starts with
+  playTone(ctx, start, 0.20, out, 2800, 230, v, 'sawtooth');                                                   // the zap
+  playTone(ctx, start + 0.004, 0.17, out, 1400, 115, v * 0.65, 'square');                                      // an octave under it, digital
+  playTone(ctx, start + 0.010, 0.11, out, 5600, 880, v * 0.30, 'sine');                                        // a bright ping on top
+  [0.105, 0.145, 0.182].forEach((d, i) => playTone(ctx, start + d, 0.018, out, 980 - i * 230, 760 - i * 230, v * 0.38, 'square'));   // the glitch stutter
+}
+const SKIN_VOICE = { pistol_hacker: playHackerBlaster };
+function skinVoiceFor(id) { try { const sk = _activeModelSkin[id]; return sk ? SKIN_VOICE[sk.id] || null : null; } catch (e) { return null; } }
 function _playWeaponSound(idOrWeapon, opts = {}) {
   const ctx = getAudioCtx();
   if (!ctx) return;
@@ -4869,6 +4885,8 @@ function _playWeaponSound(idOrWeapon, opts = {}) {
   const distGain = soundDistanceGain(opts.position, opts.remote);
   const mult = (opts.volume ?? 1) * distGain * (opts.remote ? 0.75 : 1) * SOUND_MIX;
   const start = ctx.currentTime + 0.002;
+  const voice = !opts.remote && id ? skinVoiceFor(id) : null;                     // a skin that makes its own shot (SKIN_VOICE): that, and nothing of the gun's
+  if (voice) { voice(ctx, start, mult); return; }
   // A recorded shot (see WEAPON_SAMPLES): the gun is the gun whatever skin is on it, so every skin plays the recording too (the skins' own made-up sounds are not used for a weapon that has one). Its own path, none of the made-up layers
   if (id) {
     const stealth = !opts.remote && _activeModelSkin[id]?.series === 'stealth';
@@ -28648,14 +28666,15 @@ function buildHackerPistol() {
   // 🟩 Pistol -> Hacker Pistol. Matte black, every edge outlined in green (the outlines are real line segments on the boxes' edges), a screen on the slide that
   // runs random 1s and 0s and flashes bright when it fires, circuit traces down the side, green tritium dots on the sights, and the slide runs back on every shot.
   const g = new THREE.Group();
-  const black = gpFinish(0x08090a, .55, .35, 'polymer'), dark = gpFinish(0x121416, .5, .5, 'steel'), inner = GUN_MATS.inner();
-  const green = new THREE.MeshBasicMaterial({ color: 0x2dff6a }), dim = new THREE.MeshBasicMaterial({ color: 0x14a043 });
-  const edge = new THREE.LineBasicMaterial({ color: 0x2dff6a });
+  // The black is a void: MeshBasicMaterial 0x000000, which takes no light and shows no sheen, so it reads as a hole in the shape rather than a plastic. The shape is the green outlines.
+  const black = new THREE.MeshBasicMaterial({ color: 0x000000 }), dark = black, inner = black;
+  const green = new THREE.MeshBasicMaterial({ color: 0x2dff6a }), dim = new THREE.MeshBasicMaterial({ color: 0x14a043 }), faint = new THREE.MeshBasicMaterial({ color: 0x0b6a2a });
+  const edge = new THREE.LineBasicMaterial({ color: 0x2dff6a }), edgeDim = new THREE.LineBasicMaterial({ color: 0x14a043 });
   const slide = new THREE.Group(); g.add(slide);
   const outline = (host, mesh, angle = 30) => { const e = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, angle), edge); e.position.copy(mesh.position); e.rotation.copy(mesh.rotation); e.userData.noSmooth = true; host.add(e); return e; };
   const sBody = gpBox(slide, black, 0.028, 0.030, 0.152, 0, 0.036, -0.008); outline(slide, sBody);                 // the slide, outlined
-  for (let i = 0; i < 5; i++) gpBox(slide, inner, 0.0295, 0.020, 0.0028, 0, 0.037, 0.050 - i * 0.0075);            // rear serrations
-  gpBox(slide, inner, 0.006, 0.014, 0.034, 0.0143, 0.042, 0.016);                                                  // ejection port
+  for (let i = 0; i < 5; i++) gpBox(slide, faint, 0.0295, 0.020, 0.0016, 0, 0.037, 0.050 - i * 0.0075);            // rear serrations, faint green lines (black on black would not show)
+  { const port = gpBox(slide, black, 0.006, 0.014, 0.034, 0.0143, 0.042, 0.016); const e = new THREE.LineSegments(new THREE.EdgesGeometry(port.geometry, 30), edgeDim); e.position.copy(port.position); e.userData.noSmooth = true; slide.add(e); }   // ejection port, outlined
   gpBox(slide, green, 0.0014, 0.0014, 0.100, 0.0145, 0.049, -0.020);                                               // a green line along the top of the slide
   gpBox(slide, dark, 0.012, 0.007, 0.012, 0, 0.0545, 0.052); gpBox(slide, green, 0.0026, 0.0026, 0.0026, -0.0030, 0.0585, 0.052); gpBox(slide, green, 0.0026, 0.0026, 0.0026, 0.0030, 0.0585, 0.052);   // rear sight, two dots
   gpBox(slide, dark, 0.005, 0.008, 0.008, 0, 0.0545, -0.072); gpBox(slide, green, 0.0028, 0.0028, 0.0028, 0, 0.0595, -0.072);                                                                           // front sight, one
@@ -28669,15 +28688,15 @@ function buildHackerPistol() {
   const draw = (bright) => { cx.fillStyle = bright ? '#0e3a1e' : '#021208'; cx.fillRect(0, 0, 128, 32); cx.font = 'bold 11px monospace'; cx.fillStyle = bright ? '#d4ffe0' : '#2dff6a'; for (let r = 0; r < 3; r++) { let t = ''; for (let c = 0; c < 14; c++) t += Math.random() < 0.5 ? '0' : '1'; cx.fillText(t, 3, 10 + r * 10); } tex.needsUpdate = true; };
   draw(false);
   const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.056, 0.014), new THREE.MeshBasicMaterial({ map: tex })); screen.position.set(-0.0148, 0.0355, 0.022); screen.rotation.y = -Math.PI / 2; screen.userData.noSmooth = true; slide.add(screen);
-  gpCyl(g, dark, 0.0068, 0.0068, 0.016, 14, 0, 0.034, -0.086);                                                     // the muzzle end of the barrel
+  { const bar = gpCyl(g, dark, 0.0068, 0.0068, 0.016, 14, 0, 0.034, -0.086); const e = new THREE.LineSegments(new THREE.EdgesGeometry(bar.geometry, 30), edge); e.position.copy(bar.position); e.rotation.copy(bar.rotation); e.userData.noSmooth = true; g.add(e); }   // the muzzle end of the barrel, outlined
   const ring = new THREE.Mesh(new THREE.TorusGeometry(0.0072, 0.0009, 5, 16), green); ring.position.set(0, 0.034, -0.0945); ring.userData.noSmooth = true; g.add(ring);
   const frame = gpBox(g, black, 0.026, 0.058, 0.130, 0, 0.006, -0.006); outline(g, frame);                          // the frame
   const grip = gpPlate(g, black, [[0.048, -0.020], [0.048, -0.108], [0.026, -0.122], [-0.006, -0.110], [-0.006, -0.018]], 0.028, -0.010);
   { const e = new THREE.LineSegments(new THREE.EdgesGeometry(grip.geometry, 40), edge); e.userData.noSmooth = true; g.add(e); }   // the grip's outline
-  for (let i = 0; i < 5; i++) gpBox(g, dim, 0.0012, 0.0024, 0.020, -0.0243, -0.034 - i * 0.016, 0.026, 0, 0, 0.15);     // green grooves down the left of the grip
+  for (let i = 0; i < 5; i++) gpBox(g, faint, 0.0012, 0.0024, 0.020, -0.0243, -0.034 - i * 0.016, 0.026, 0, 0, 0.15);   // green grooves down the left of the grip
   gpBox(g, green, 0.0016, 0.060, 0.0030, -0.0245, -0.064, 0.044);                                                  // and an LED strip down the back strap's edge
   gpBox(g, green, 0.005, 0.012, 0.005, 0, -0.018, -0.014, 0.22);                                                   // trigger, a green key
-  gpBox(g, dark, 0.022, 0.024, 0.006, 0, -0.128, -0.002); gpBox(g, green, 0.016, 0.0016, 0.0016, 0, -0.1255, 0.002);   // mag floorplate with its light
+  { const fp = gpBox(g, dark, 0.022, 0.024, 0.006, 0, -0.128, -0.002); outline(g, fp); } gpBox(g, green, 0.016, 0.0016, 0.0016, 0, -0.1255, 0.002);   // mag floorplate, outlined, with its light
   const flash = makeMuzzleFlash(); flash.position.set(0, 0.034, -0.100);
   flash.traverse(o => { if (o.material) { o.material = o.material.clone(); if (o.material.color) o.material.color.setHex(0x55ff88); } });
   g.add(flash);
