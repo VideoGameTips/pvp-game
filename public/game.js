@@ -74415,9 +74415,21 @@ async function trialWeapon(weaponId) {
   return true;
 }
 
+// 🗄️ A skin belongs to its weapon: when the gun, melee or item is archived (out of the shop, the loadouts and the chests),
+// its skins are archived with it. They leave the cases (the server's SKIN_CASES drops them too: ARCHIVED_SKIN_IDS) and the
+// picker; whoever already pulled one keeps it, and the admin still sees everything.
+function skinIsArchived(s) {
+  if (!s) return false;
+  const it = s.weapon ? WEAPONS.find(w => w.id === s.weapon)
+    : s.melee ? MELEE_ITEMS.find(m => m.id === s.melee)
+    : s.skinFor ? (MELEE_ITEMS.find(m => m.id === s.skinFor) || WEAPONS.find(w => w.id === s.skinFor)) : null;
+  return !!(it && it.archived);
+}
+const skinShown = s => !skinIsArchived(s) || !!currentUser?.isAdmin;
+
 const CLIENT_SKIN_CASES = {
-  gen1_basic: { name: 'Skin Case Gen 1', shortName: 'GEN 1', cost: SKIN_CASE_GEN1_COST, defs: () => GEN1_SKIN_DEFS, accent: '#88ccff' },
-  gen2_entrances: { name: 'Skin Case Gen 2', shortName: 'GEN 2', cost: SKIN_CASE_GEN2_COST, defs: () => GEN2_SKIN_DEFS, accent: '#c9a6ff' },
+  gen1_basic: { name: 'Skin Case Gen 1', shortName: 'GEN 1', cost: SKIN_CASE_GEN1_COST, defs: () => GEN1_SKIN_DEFS.filter(skinShown), accent: '#88ccff' },
+  gen2_entrances: { name: 'Skin Case Gen 2', shortName: 'GEN 2', cost: SKIN_CASE_GEN2_COST, defs: () => GEN2_SKIN_DEFS.filter(skinShown), accent: '#c9a6ff' },
 };
 function skinCaseDef(caseId) { return CLIENT_SKIN_CASES[caseId] || CLIENT_SKIN_CASES.gen1_basic; }
 function skinDefById(skinId) {
@@ -75107,7 +75119,7 @@ function openWeaponSkinsPanel() {
     const rows = [];
     for (const wid of Object.keys(MODEL_SKINS_BY_WEAPON)) {
       const w = WEAPONS.find(x => x.id === wid);
-      if (!w) continue;
+      if (!w || (w.archived && !currentUser?.isAdmin)) continue;
       const on = equippedModelSkins[wid];
       const cells = MODEL_SKINS_BY_WEAPON[wid].map(ms => {
         const legendLocked = isLegendLocked(ms);
@@ -75151,7 +75163,7 @@ function openWeaponSkinsPanel() {
     const rows = [];
     for (const bid of Object.keys(MELEE_MODEL_SKINS_BY_BASE)) {
       const base = MELEE_ITEMS.find(x => x.id === bid);
-      if (!base) continue;
+      if (!base || (base.archived && !currentUser?.isAdmin)) continue;
       const on = equippedMeleeModelSkins[bid];
       const cells = MELEE_MODEL_SKINS_BY_BASE[bid].map(ms => {
         const gen2Locked = GEN2_MELEE_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id);
@@ -75227,7 +75239,7 @@ function openWeaponSkinsPanel() {
     const ownedCount = ownedSkinCountFor(GEN1_SKIN_DEFS);
     const gunRows = Object.entries(GUN_STAT_SKINS_BY_WEAPON).map(([wid, skins]) => {
       const w = WEAPONS.find(x => x.id === wid);
-      if (!w) return '';
+      if (!w || (w.archived && !currentUser?.isAdmin)) return '';
       const on = equippedGunStatSkins[wid] || 'stock';
       return `<div style="margin-top:12px;">
         <div style="font-size:11px;letter-spacing:2px;color:#99ccff;margin-bottom:6px;">${w.name.toUpperCase()} STAT SKINS</div>
@@ -75245,7 +75257,7 @@ function openWeaponSkinsPanel() {
     }).join('');
     const meleeRows = Object.entries(MELEE_SKINS_BY_BASE).map(([baseId, skins]) => {
       const base = MELEE_ITEMS.find(x => x.id === baseId);
-      if (!base) return '';
+      if (!base || (base.archived && !currentUser?.isAdmin)) return '';
       const on = equippedMeleeSkins[baseId] || '';
       return `<div style="margin-top:10px;">
         <div style="font-size:10px;letter-spacing:1px;color:#ffcc99;margin-bottom:5px;">${base.name.toUpperCase()}</div>

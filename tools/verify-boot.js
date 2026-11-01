@@ -2404,6 +2404,33 @@ if (ok && process.argv.includes('--strategy')) {
 
 
 
+// Skins of archived weapons: the client works the list out from the `archived` flags, the server keeps a copy
+// (ARCHIVED_SKIN_IDS, which decides what a case may drop). They must be the same, and no case may offer one.
+if (ok && process.argv.includes('--archivedskins')) {
+  const derived = vm.runInThisContext(`(() => {
+    const ids = [];
+    for (const s of MODEL_SKINS) if (skinIsArchived(s)) ids.push(s.id);
+    for (const s of MELEE_MODEL_SKINS) if (skinIsArchived(s)) ids.push(s.id);
+    for (const s of [...BASIC_GUN_STAT_SKINS, ...BASIC_MELEE_SKINS]) if (skinIsArchived(s)) ids.push(s.id);
+    const was = currentUser; currentUser = null;
+    const offered = [...CLIENT_SKIN_CASES.gen1_basic.defs(), ...CLIENT_SKIN_CASES.gen2_entrances.defs()].filter(skinIsArchived).map(s => s.id);
+    currentUser = { isAdmin: true }; const adminSees = CLIENT_SKIN_CASES.gen1_basic.defs().length + CLIENT_SKIN_CASES.gen2_entrances.defs().length;
+    currentUser = was;
+    return { ids, offered, adminSees };
+  })()`);
+  const text = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  const m = /const ARCHIVED_SKIN_IDS = new Set\(\[([\s\S]*?)\]\);/.exec(text);
+  const server = m ? [...m[1].matchAll(/'([^']+)'/g)].map(x => x[1]) : null;
+  if (!server) { ok = false; console.log('server.js has no ARCHIVED_SKIN_IDS'); }
+  else {
+    const a = new Set(derived.ids), b = new Set(server);
+    const onlyClient = [...a].filter(x => !b.has(x)), onlyServer = [...b].filter(x => !a.has(x));
+    if (onlyClient.length || onlyServer.length) { ok = false; console.log('archived skins differ. Only the client has: ' + onlyClient.join(', ') + ' | only the server has: ' + onlyServer.join(', ')); }
+    if (derived.offered.length) { ok = false; console.log('a case still offers archived skins: ' + derived.offered.join(', ')); }
+    console.log('archived skins: ' + a.size + ' (client and server agree); no case offers one; the admin sees ' + derived.adminSees + ' case skins');
+  }
+}
+
 if (ok && process.argv.includes('--mappick')) {
   // The map vote: a picture of every duel map (a grid drawn from its real colliders), a bot that decides by
   // reading that picture, no pre-pick on the mode screen, a screenshot of every map for the cards, a vote in every

@@ -473,9 +473,25 @@ for (const id of GEN2_MYTHIC_SKIN_IDS) GEN2_SKIN_WEIGHTS[id] = 1;
 for (const id of GEN2_LEGENDARY_SKIN_IDS) GEN2_SKIN_WEIGHTS[id] = 2;
 for (const id of GEN2_RARE_SKIN_IDS) GEN2_SKIN_WEIGHTS[id] = 3;
 for (const id of GEN2_GOOD_SKIN_IDS) GEN2_SKIN_WEIGHTS[id] = 6;
+// 🗄️ A skin belongs to its weapon. Once the weapon is archived (out of the shop, the loadouts and the chests) its skins go
+// with it: no case drops them any more. Anyone who already pulled one keeps it (it is still in their inventory, and
+// the admin still gets everything). Mirrors the skins of every `archived: true` item in public/game.js (gotcha #4);
+// tools/verify-boot.js --archivedskins fails if the two lists ever differ.
+const ARCHIVED_SKIN_IDS = new Set([
+  'arc_rifle_jumper_cables', 'firework_champagne', 'potato_cannon_crisp_tube', 'foam_cannon_extinguisher',
+  'harpoon_selfie_stick', 'boomstick_binoculars', 'signal_pistol_bike_horn', 'amr_pool_net', 'glassmaker_squeegee',
+  'painter_beam_roller', 'seismic_pogo_stick', 'traffic_stop_sign', 'switchblade_pocket_knife', 'flechette_bullpup',
+  'firework_showman', 'plasma_carbine_fishbowl', 'coilgun_clockwork', 'smart_smg_neon',
+  'portal_launcher_constellation', 'burst_cannon_phantom', 'lancer_fencing_foil', 'arc_torrent_cord_reel',
+  'prism_launcher_kaleidoscope', 'shockwave_launcher_boombox', 'storm_cannon_vacuum', 'sticker_blaster_hole_punch',
+  'nunchucks_sausage', 'fire_axe_guitar', 'crowbar_candy_cane', 'screwdriver_pencil', 'lightsabre_fluoro_tube',
+  'titan_hammer_inflatable', 'vampire_blade_ketchup', 'umbrella_satellite_dish', 'yoyo_tea_bag',
+  'shock_baton_tv_remote', 'volt_whip_fairy_lights', 'gravity_hammer_tenderizer', 'phase_blade_toy_sword',
+  'lightsabre_singularity', 'shock_baton_thunder', 'wrench', 'crowbar_tyre_iron',
+]);
 const SKIN_CASES = {
-  gen1_basic: { cost: SKIN_CASE_GEN1_COST, pool: GEN1_SKIN_IDS },
-  gen2_entrances: { cost: SKIN_CASE_GEN2_COST, pool: GEN2_SKIN_IDS, weights: GEN2_SKIN_WEIGHTS },
+  gen1_basic: { cost: SKIN_CASE_GEN1_COST, pool: GEN1_SKIN_IDS.filter(id => !ARCHIVED_SKIN_IDS.has(id)) },
+  gen2_entrances: { cost: SKIN_CASE_GEN2_COST, pool: GEN2_SKIN_IDS.filter(id => !ARCHIVED_SKIN_IDS.has(id)), weights: GEN2_SKIN_WEIGHTS },
 };
 for (const id of Object.keys(WEAPON_COSTS)) {
   if (WEAPON_COSTS[id] > 0) WEAPON_COSTS[id] *= P2W_ITEM_IDS.has(id) ? WEAPON_PRICE_MULT : NORMAL_WEAPON_PRICE_MULT;
