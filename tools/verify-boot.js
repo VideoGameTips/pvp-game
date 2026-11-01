@@ -4361,6 +4361,55 @@ if (ok && process.argv.includes('--skinshot')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--hacker')) {
+  // The Hacker Pistol (one skin on the pistol): black with green outlines; its round is black on a green glowing trail; a hit flashes and throws 1s and 0s; the damage counter is green
+  // and scrambles before it settles; a body it kills crashes (it is the skin's own finisher, not one anybody can pick). It is all look: no stat is touched (--skinshot checks that).
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [], skin = MODEL_SKINS.find(m => m.id === 'pistol_hacker');
+    if (!skin) return ['there is no pistol_hacker skin'];
+    if (skin.weapon !== 'pistol') issues.push('the Hacker Pistol is a skin of the pistol, not of ' + skin.weapon);
+    if (GATED_MODEL_SKIN_IDS.has(skin.id)) issues.push('it is not in a case: a free skin, so it can be tried at once');
+    const look = skinLookFor(skin), T = SKIN_SHOT[skin.id];
+    if (look.hit !== 'hack') issues.push('its look should carry hit: "hack"');
+    if (!T || !T.shot || T.shot.shape !== 'hackbullet' || !SKIN_SHAPES.hackbullet) issues.push('its round should be the hackbullet shape');
+    else {
+      if (!(SKIN_SHAPES.hackbullet(0x0a0a0a, 0x2dff6a, 0.06).wakeLen >= 12)) issues.push('the green trail should be long (wakeLen 12 or more)');
+      const mesh = makeBulletMesh(0xffffff, 0.045, 'pistol', true, look);
+      let cyl = 0; mesh.traverse(o => { if (o.geometry && o.geometry.type === 'CylinderGeometry') cyl++; });
+      if (cyl < 2) issues.push('the round should be a black cartridge and its trail (two cylinders at least), found ' + cyl);
+    }
+    // the model: outlines in green, a screen, and the parts the game needs of a gun
+    const g = buildHackerPistol(); let lines = 0, screens = 0; g.traverse(o => { if (o.isLineSegments) lines++; if (o.isMesh && o.material && o.material.map) screens++; });
+    if (lines < 3) issues.push('the model should be outlined in green line segments, found ' + lines);
+    if (screens < 1) issues.push('the model should carry a screen (a textured plane)');
+    if (!g._flash || typeof g._tick !== 'function' || typeof g._calm !== 'function') issues.push('the model needs a muzzle flash and its tick (the slide and the screen)');
+    // who gets the hit look and the crash: only the pistol wearing it
+    const keep = _modelSkinLook.pistol;
+    try {
+      _modelSkinLook.pistol = look; if (!_hackerHit('pistol')) issues.push('a pistol wearing it should count as a Hacker Pistol hit');
+      if (_hackerHit('ak20')) issues.push('another gun should not');
+      delete _modelSkinLook.pistol; if (_hackerHit('pistol')) issues.push('a stock pistol should not');
+      // the damage counter scrambles at once (a fake element: the real one is a div)
+      const el = { style: {}, textContent: '25', isConnected: true };
+      _hackFlicker(el, '25');
+      if (el.style.color !== '#39ff6a' || !/^[0-9]{2,}$/.test(el.textContent) || el.textContent === '25' && Math.random() < 0) issues.push('the counter should turn green and show scrambled digits first: ' + JSON.stringify(el));
+      el._hackToken = null;                                             // (this one is done with)
+      // the crash belongs to the skin: it is a move, but not a pickable finisher; a kill with the pistol wearing it calls it, any other does not
+      if (typeof FINISHER_MOVES.glitch !== 'function') issues.push('there is no glitch move');
+      if (FINISHER_IDS.includes('glitch')) issues.push('the glitch should belong to the skin, not be a finisher anybody can pick');
+      const calls = [], keepPlay = playGlitchFinisher;
+      playGlitchFinisher = (id) => { calls.push(id); return true; };
+      try {
+        _modelSkinLook.pistol = look; triggerFinisher('victim', 'pistol', myId); triggerFinisher('victim', 'ak20', myId); delete _modelSkinLook.pistol; triggerFinisher('victim', 'pistol', myId);
+      } finally { playGlitchFinisher = keepPlay; }
+      if (calls.length !== 1) issues.push('only a kill with the Hacker Pistol should crash the body (called ' + calls.length + ' times)');
+    } finally { if (keep) _modelSkinLook.pistol = keep; else delete _modelSkinLook.pistol; }
+    return issues;
+  })()`);
+  console.log('hacker pistol checks: a free pistol skin, outlined black model with a screen, a black round on a long green trail, a hit look only it has, a green scrambling damage counter, and a kill that crashes the body (the skin\'s own, not pickable)');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.argv.includes('--saw')) {
   // The chainsaw's Rev Up is a HELD ability (Andy): press E and the saw revs, swinging by itself faster than a click and burning fuel the whole time; the instant E comes
   // up it stops. No dash, no 3 s timer, no 12 s cooldown, nothing for the press to cost on its own, and no rev on an empty tank.
