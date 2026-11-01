@@ -4853,17 +4853,17 @@ function playWeaponSound(idOrWeapon, opts = {}) {
 // "it should sound more like a laser blaster, scrap the default shooting sound"): a click, a saw sweeping down through the whole range, a square one an octave under it for the digital edge,
 // a bright ping on top, and three little square pulses stuttering after it, as if the shot were glitching. Nothing in it is a gunshot: no blast, no casing, no echo. Your own shot only (like every
 // skin's sound); it is built from the same sound primitives as the rest, so a skin pitch, if one is ever given to it, applies.
-function playHackerBlaster(ctx, start, level) {
+function playHackerBlaster(ctx, start, level, o = {}) {
   // Its own gentle compressor straight to the output, not the gun bus: the gun bus levels everything to one gunfire loudness (a quarter of the level it was given or ten times that came out within half a dB), which made it 3 dB louder than the Laser Blaster skin's recording.
   const out = ctx.createGain(), comp = ctx.createDynamicsCompressor(); comp.threshold.value = -12; comp.ratio.value = 4; comp.knee.value = 8; out.connect(comp).connect(ctx.destination);
-  const v = 0.9 * level;                                                    // level-matched offline: its peak is -5.4 dB, the Laser Blaster skin's recording peaks at -6.6 (this one is short, so its 0.3 s RMS sits 2 dB under)
+  const v = (o.v || 0.9) * level, k = o.k || 1;                             // k < 1: a shorter zap (a rifle fires it ten times a second). Level-matched offline: its peak is -5.4 dB, the Laser Blaster skin's recording peaks at -6.6 (this one is short, so its 0.3 s RMS sits 2 dB under)
   playFilteredNoise(ctx, start, 0.010, out, v * 0.9, 'highpass', 5200, 0.7, 0.0002, 0);                        // the click it starts with
-  playTone(ctx, start, 0.20, out, 2800, 230, v, 'sawtooth');                                                   // the zap
-  playTone(ctx, start + 0.004, 0.17, out, 1400, 115, v * 0.65, 'square');                                      // an octave under it, digital
-  playTone(ctx, start + 0.010, 0.11, out, 5600, 880, v * 0.30, 'sine');                                        // a bright ping on top
-  [0.105, 0.145, 0.182].forEach((d, i) => playTone(ctx, start + d, 0.018, out, 980 - i * 230, 760 - i * 230, v * 0.38, 'square'));   // the glitch stutter
+  playTone(ctx, start, 0.20 * k, out, 2800, 230, v, 'sawtooth');                                                   // the zap
+  playTone(ctx, start + 0.004, 0.17 * k, out, 1400, 115, v * 0.65, 'square');                                      // an octave under it, digital
+  playTone(ctx, start + 0.010, 0.11 * k, out, 5600, 880, v * 0.30, 'sine');                                        // a bright ping on top
+  if (!o.noStutter) [0.105, 0.145, 0.182].forEach((d, i) => playTone(ctx, start + d, 0.018, out, 980 - i * 230, 760 - i * 230, v * 0.38, 'square'));   // the glitch stutter
 }
-const SKIN_VOICE = { pistol_hacker: playHackerBlaster };
+const SKIN_VOICE = { pistol_hacker: playHackerBlaster, ak20_hacker: (ctx, start, level) => playHackerBlaster(ctx, start, level, { v: 0.62, k: 0.5, noStutter: true }) };   // the AK's: the same zap, half as long, no stutter, under it
 function skinVoiceFor(id) { try { const sk = _activeModelSkin[id]; return sk ? SKIN_VOICE[sk.id] || null : null; } catch (e) { return null; } }
 function _playWeaponSound(idOrWeapon, opts = {}) {
   const ctx = getAudioCtx();
@@ -28662,16 +28662,70 @@ function buildM9Beretta() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+// 🟩 The hacker look, shared by every Hacker skin (pistol, AK, grenade, axe). The black is a void: MeshBasicMaterial 0x000000 takes no light and shows no sheen, so it
+// reads as a hole in the shape rather than a plastic. The shape is the green outlines (real line segments on the edges) and a few lit green details.
+function _hackKit() {
+  const mat = c => new THREE.MeshBasicMaterial({ color: c }), lin = c => new THREE.LineBasicMaterial({ color: c });
+  const kit = { black: mat(0x000000), green: mat(0x2dff6a), dim: mat(0x14a043), faint: mat(0x0b6a2a), edge: lin(0x2dff6a), edgeDim: lin(0x14a043) };
+  kit.outline = (host, mesh, angle = 30, lm = kit.edge) => { const e = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, angle), lm); e.position.copy(mesh.position); e.rotation.copy(mesh.rotation); e.userData.noSmooth = true; host.add(e); return e; };
+  return kit;
+}
+// What a part's outline is made of. A cylinder gets six lines along it and a ring at each end, a sphere its rings and meridians (EdgesGeometry would give a smooth
+// round part nothing at all, and it would vanish into the dark); anything else gets the edges that turn more than 35 degrees (null = do that).
+function _hackLines(geo) {
+  const P = geo.parameters || {}, v = [];
+  const ring = (r, y, n = 16) => { for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2, b = (i + 1) / n * Math.PI * 2; v.push(r * Math.cos(a), y, r * Math.sin(a), r * Math.cos(b), y, r * Math.sin(b)); } };
+  if (geo.type === 'CylinderGeometry' || geo.type === 'ConeGeometry') {
+    const cone = geo.type === 'ConeGeometry', rt = cone ? 0 : P.radiusTop, rb = cone ? P.radius : P.radiusBottom, h = P.height;
+    if (rt > 0) ring(rt, h / 2); if (rb > 0) ring(rb, -h / 2);
+    for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; v.push(rt * Math.cos(a), h / 2, rt * Math.sin(a), rb * Math.cos(a), -h / 2, rb * Math.sin(a)); }
+  } else if (geo.type === 'SphereGeometry') {
+    const r = P.radius;
+    for (const f of [-0.55, 0, 0.55]) ring(r * Math.sqrt(1 - f * f), r * f, 20);
+    for (let k = 0; k < 4; k++) { const a = k / 4 * Math.PI, ca = Math.cos(a), sa = Math.sin(a); for (let i = 0; i < 20; i++) { const s = i / 20 * Math.PI * 2, t = (i + 1) / 20 * Math.PI * 2; v.push(r * Math.cos(s) * ca, r * Math.sin(s), r * Math.cos(s) * sa, r * Math.cos(t) * ca, r * Math.sin(t), r * Math.cos(t) * sa); } }
+  } else return null;
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3)); return g;
+}
+// A finished stock model made into the hacker one: every part the void with its outline, rings (a sight's, a trigger guard) lit green. The muzzle flash and the hands are left alone.
+function _hackerize(root, kit) {
+  const parts = [];
+  root.traverse(o => { if (o.isMesh && o.geometry) parts.push(o); });
+  for (const m of parts) {
+    let flash = false; for (let p = m; p; p = p.parent) if (p === root._flash) flash = true;
+    if (flash || (m.userData && (m.userData.vmHand || m.userData.hackKeep))) continue;
+    const ring = m.geometry.type === 'TorusGeometry';
+    m.material = ring ? kit.green : kit.black; m.castShadow = false; m.userData.noSmooth = true;
+    if (ring) continue;
+    const e = new THREE.LineSegments(_hackLines(m.geometry) || new THREE.EdgesGeometry(m.geometry, 35), kit.edge); e.userData.noSmooth = true; m.add(e);
+  }
+  root._greebled = true; root._handDetailed = true; root._blended = true;                  // the passes that would repaint or add to it keep out
+  return root;
+}
+// A screen of random 1s and 0s: draw(bright) writes a fresh page of it, brighter while the gun is firing.
+function _hackScreen(w, h, cols, rows, o = {}) {
+  const px = o.px || 128, font = o.font || 11, line = o.line || 10, cv = document.createElement('canvas'); cv.width = px; cv.height = Math.round(px * h / w);
+  const cx = cv.getContext('2d'), tex = new THREE.CanvasTexture(cv); tex.minFilter = THREE.LinearFilter;
+  const draw = (bright) => { cx.fillStyle = bright ? '#0e3a1e' : '#021208'; cx.fillRect(0, 0, cv.width, cv.height); cx.font = `bold ${font}px monospace`; cx.fillStyle = bright ? '#d4ffe0' : '#2dff6a'; for (let r = 0; r < rows; r++) { let t = ''; for (let c = 0; c < cols; c++) t += Math.random() < 0.5 ? '0' : '1'; cx.fillText(t, 3, font - 1 + r * line); } tex.needsUpdate = true; };
+  draw(false);
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex })); mesh.userData.noSmooth = true;
+  return { mesh, draw };
+}
+function _hackScreenTick(g, draw) {                                                        // the screen runs on the model's own per-frame hook, after whatever it already had
+  const rec = g._tick; let acc = 0;
+  g._tick = (dt, now, assembling) => { if (rec) rec(dt, now, assembling); acc += dt; const fired = !!(g._flash && g._flash.visible); if (fired || acc > 0.14) { acc = 0; draw(fired); } };
+}
+function _hackTrace(host, kit, x, pts) {                                                   // a circuit trace on a side face: pts = [[z, y], ...], a node at every corner
+  for (let i = 1; i < pts.length; i++) { const [z0, y0] = pts[i - 1], [z1, y1] = pts[i], dz = z1 - z0, dy = y1 - y0; gpBox(host, kit.dim, 0.0012, Math.hypot(dz, dy) + 0.0014, 0.0014, x, (y0 + y1) / 2, (z0 + z1) / 2, Math.atan2(dz, dy)); }   // each leg a thin box laid along it, slanted or not
+  for (const [z, y] of pts) gpBox(host, kit.green, 0.0015, 0.0034, 0.0034, x * 1.007, y, z);
+}
+function _hackFlash(flash) { if (flash) flash.traverse(o => { if (o.material) { o.material = o.material.clone(); if (o.material.color) o.material.color.setHex(0x55ff88); } }); }
+
 function buildHackerPistol() {
   // 🟩 Pistol -> Hacker Pistol. Matte black, every edge outlined in green (the outlines are real line segments on the boxes' edges), a screen on the slide that
   // runs random 1s and 0s and flashes bright when it fires, circuit traces down the side, green tritium dots on the sights, and the slide runs back on every shot.
   const g = new THREE.Group();
-  // The black is a void: MeshBasicMaterial 0x000000, which takes no light and shows no sheen, so it reads as a hole in the shape rather than a plastic. The shape is the green outlines.
-  const black = new THREE.MeshBasicMaterial({ color: 0x000000 }), dark = black, inner = black;
-  const green = new THREE.MeshBasicMaterial({ color: 0x2dff6a }), dim = new THREE.MeshBasicMaterial({ color: 0x14a043 }), faint = new THREE.MeshBasicMaterial({ color: 0x0b6a2a });
-  const edge = new THREE.LineBasicMaterial({ color: 0x2dff6a }), edgeDim = new THREE.LineBasicMaterial({ color: 0x14a043 });
+  const kit = _hackKit(), { black, green, dim, faint, edge, edgeDim, outline } = kit, dark = black, inner = black;
   const slide = new THREE.Group(); g.add(slide);
-  const outline = (host, mesh, angle = 30) => { const e = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, angle), edge); e.position.copy(mesh.position); e.rotation.copy(mesh.rotation); e.userData.noSmooth = true; host.add(e); return e; };
   const sBody = gpBox(slide, black, 0.028, 0.030, 0.152, 0, 0.036, -0.008); outline(slide, sBody);                 // the slide, outlined
   for (let i = 0; i < 5; i++) gpBox(slide, faint, 0.0295, 0.020, 0.0016, 0, 0.037, 0.050 - i * 0.0075);            // rear serrations, faint green lines (black on black would not show)
   { const port = gpBox(slide, black, 0.006, 0.014, 0.034, 0.0143, 0.042, 0.016); const e = new THREE.LineSegments(new THREE.EdgesGeometry(port.geometry, 30), edgeDim); e.position.copy(port.position); e.userData.noSmooth = true; slide.add(e); }   // ejection port, outlined
@@ -28679,15 +28733,12 @@ function buildHackerPistol() {
   gpBox(slide, dark, 0.012, 0.007, 0.012, 0, 0.0545, 0.052); gpBox(slide, green, 0.0026, 0.0026, 0.0026, -0.0030, 0.0585, 0.052); gpBox(slide, green, 0.0026, 0.0026, 0.0026, 0.0030, 0.0585, 0.052);   // rear sight, two dots
   gpBox(slide, dark, 0.005, 0.008, 0.008, 0, 0.0545, -0.072); gpBox(slide, green, 0.0028, 0.0028, 0.0028, 0, 0.0595, -0.072);                                                                           // front sight, one
   // circuit traces down the left side: three paths with nodes
-  const trace = (pts) => { for (let i = 1; i < pts.length; i++) { const [z0, y0] = pts[i - 1], [z1, y1] = pts[i]; gpBox(slide, dim, 0.0012, Math.abs(y1 - y0) + 0.0014, Math.abs(z1 - z0) + 0.0014, -0.0146, (y0 + y1) / 2, (z0 + z1) / 2); } for (const [z, y] of pts) gpBox(slide, green, 0.0015, 0.0034, 0.0034, -0.0147, y, z); };
+  const trace = (pts) => _hackTrace(slide, kit, -0.0146, pts);
   trace([[-0.070, 0.028], [-0.052, 0.028], [-0.052, 0.036], [-0.034, 0.036]]);
   trace([[-0.066, 0.046], [-0.050, 0.046], [-0.044, 0.041], [-0.030, 0.041]]);
   trace([[0.040, 0.026], [0.056, 0.026], [0.056, 0.032]]);
   // the screen: random 1s and 0s on the slide, bright when it fires
-  const cv = document.createElement('canvas'); cv.width = 128; cv.height = 32; const cx = cv.getContext('2d'), tex = new THREE.CanvasTexture(cv); tex.minFilter = THREE.LinearFilter;
-  const draw = (bright) => { cx.fillStyle = bright ? '#0e3a1e' : '#021208'; cx.fillRect(0, 0, 128, 32); cx.font = 'bold 11px monospace'; cx.fillStyle = bright ? '#d4ffe0' : '#2dff6a'; for (let r = 0; r < 3; r++) { let t = ''; for (let c = 0; c < 14; c++) t += Math.random() < 0.5 ? '0' : '1'; cx.fillText(t, 3, 10 + r * 10); } tex.needsUpdate = true; };
-  draw(false);
-  const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.056, 0.014), new THREE.MeshBasicMaterial({ map: tex })); screen.position.set(-0.0148, 0.0355, 0.022); screen.rotation.y = -Math.PI / 2; screen.userData.noSmooth = true; slide.add(screen);
+  const { mesh: screen, draw } = _hackScreen(0.056, 0.014, 14, 3); screen.position.set(-0.0148, 0.0355, 0.022); screen.rotation.y = -Math.PI / 2; slide.add(screen);
   { const bar = gpCyl(g, dark, 0.0068, 0.0068, 0.016, 14, 0, 0.034, -0.086); const e = new THREE.LineSegments(new THREE.EdgesGeometry(bar.geometry, 30), edge); e.position.copy(bar.position); e.rotation.copy(bar.rotation); e.userData.noSmooth = true; g.add(e); }   // the muzzle end of the barrel, outlined
   const ring = new THREE.Mesh(new THREE.TorusGeometry(0.0072, 0.0009, 5, 16), green); ring.position.set(0, 0.034, -0.0945); ring.userData.noSmooth = true; g.add(ring);
   const frame = gpBox(g, black, 0.026, 0.058, 0.130, 0, 0.006, -0.006); outline(g, frame);                          // the frame
@@ -28697,14 +28748,67 @@ function buildHackerPistol() {
   gpBox(g, green, 0.0016, 0.060, 0.0030, -0.0245, -0.064, 0.044);                                                  // and an LED strip down the back strap's edge
   gpBox(g, green, 0.005, 0.012, 0.005, 0, -0.018, -0.014, 0.22);                                                   // trigger, a green key
   { const fp = gpBox(g, dark, 0.022, 0.024, 0.006, 0, -0.128, -0.002); outline(g, fp); } gpBox(g, green, 0.016, 0.0016, 0.0016, 0, -0.1255, 0.002);   // mag floorplate, outlined, with its light
-  const flash = makeMuzzleFlash(); flash.position.set(0, 0.034, -0.100);
-  flash.traverse(o => { if (o.material) { o.material = o.material.clone(); if (o.material.color) o.material.color.setHex(0x55ff88); } });
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.034, -0.100); _hackFlash(flash);
   g.add(flash);
   g._flash = flash; g._kickZ = 0.010; g._greebled = true; g._handDetailed = true;
   _milRecoil(g, slide, 0.028);
-  const rec = g._tick; let acc = 0;
-  g._tick = (dt, now, assembling) => { rec(dt, now, assembling); acc += dt; const fired = !!(g._flash && g._flash.visible); if (fired || acc > 0.14) { acc = 0; draw(fired); } };
+  _hackScreenTick(g, draw);
   g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildHackerAK() {
+  // 🟩 AK-20 -> Hacker AK. The stock rifle's own shape with every part turned to the void and outlined in green (_hackerize), and the hacker's fittings on it: a screen of running
+  // 1s and 0s down the receiver that flashes bright when it fires, circuit traces on the handguard, a lit line down the magazine, edge lights along the top cover, a green front sight.
+  const kit = _hackKit(), g = _hackerize(buildAK20(), kit);
+  const { mesh: screen, draw } = _hackScreen(0.120, 0.032, 34, 6, { px: 256 });
+  screen.position.set(-0.0262, 0.018, -0.040); screen.rotation.y = -Math.PI / 2; g.add(screen);
+  _hackTrace(g, kit, -0.0262, [[-0.190, 0.004], [-0.226, 0.004], [-0.240, 0.020], [-0.292, 0.020]]);      // down the handguard
+  _hackTrace(g, kit, -0.0262, [[-0.196, 0.040], [-0.250, 0.040], [-0.262, 0.030], [-0.310, 0.030]]);
+  _hackTrace(g, kit, -0.0160, [[-0.059, -0.060], [-0.071, -0.105], [-0.080, -0.150], [-0.090, -0.190]]);   // and the magazine
+  [-1, 1].forEach(s => gpBox(g, kit.green, 0.0012, 0.0012, 0.300, s * 0.0236, 0.0555, -0.010));            // the top cover's edge lights
+  gpBox(g, kit.green, 0.0042, 0.0042, 0.0042, 0, 0.0855, -0.505);                                         // tritium on the front sight
+  _hackFlash(g._flash);
+  _hackScreenTick(g, draw);
+  return g;
+}
+
+function buildHackerGrenade() {
+  // 🟩 Frag grenade -> Hacker Grenade. The stock grenade turned to the void (a black ball wired in green rings and meridians, the spoon outlined, the pull ring and the pin lit), with a band of
+  // running 1s and 0s round its middle and a green lamp on the fuse.
+  const kit = _hackKit(), g = _hackerize(buildFragGrenade(), kit);
+  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 32; const cx = cv.getContext('2d'), tex = new THREE.CanvasTexture(cv); tex.minFilter = THREE.LinearFilter; tex.wrapS = THREE.RepeatWrapping;
+  const draw = () => { cx.fillStyle = '#000'; cx.fillRect(0, 0, 256, 32); cx.font = 'bold 22px monospace'; cx.fillStyle = '#2dff6a'; let t = ''; for (let i = 0; i < 22; i++) t += Math.random() < 0.5 ? '0' : '1'; cx.fillText(t, 2, 24); tex.needsUpdate = true; };
+  draw();
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.0462, 0.0462, 0.020, 28, 1, true), new THREE.MeshBasicMaterial({ map: tex })); band.userData.noSmooth = true; g.add(band);
+  const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.0062, 8, 6), kit.green); lamp.position.set(0, 0.0705, 0); lamp.userData.noSmooth = true; g.add(lamp);
+  let acc = 0;
+  g._tick = (dt, now) => { acc += dt; if (acc > 0.12) { acc = 0; draw(); } band.rotation.y += dt * 0.9; lamp.scale.setScalar(0.8 + 0.5 * (Math.sin(now * 9) > 0 ? 1 : 0)); };
+  return g;
+}
+
+function buildHackerAxe() {
+  // 🟩 Battle Axe -> Hacker Axe. A black haft with lit grip rings, a crescent blade in the void outlined in green, a bright green cutting edge, and a screen of running 1s and 0s on both faces of the blade.
+  const kit = _hackKit(), g = new THREE.Group();
+  gpCyl(g, kit.black, 0.0125, 0.0125, 0.370, 12, 0, 0, 0.010);                                           // the haft
+  gpCyl(g, kit.black, 0.0165, 0.0165, 0.034, 12, 0, 0, 0.200);                                           // the pommel
+  gpBox(g, kit.black, 0.026, 0.036, 0.032, 0, 0, -0.158);                                                // the socket the blade sits in
+  const E = [[-0.205, 0.106], [-0.238, 0.090], [-0.262, 0.050], [-0.272, 0.000], [-0.262, -0.050], [-0.238, -0.090], [-0.198, -0.128]];   // the blade's edge, top horn to the beard's tip: [z, y]
+  gpContouredPart(g, kit.black, [[-0.150, 0.020], [-0.172, 0.040], [-0.192, 0.070], ...E, [-0.186, -0.092], [-0.168, -0.050], [-0.150, -0.020]], 0.010, 0, 0.001);   // the head: narrow at the socket, flaring to the edge, a hooked beard under it
+  _hackerize(g, kit);
+  for (const z of [0.088, 0.118, 0.148]) { const r = new THREE.Mesh(new THREE.TorusGeometry(0.0138, 0.0016, 5, 14), kit.green); r.position.z = z; r.userData.noSmooth = true; g.add(r); }   // grip rings
+  gpBox(g, kit.green, 0.0040, 0.0040, 0.0040, 0, 0, 0.219);                                              // a light in the pommel
+  const edge = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(E.map(([z, y]) => new THREE.Vector3(0, y, z))), 28, 0.0024, 6), kit.green); edge.userData.noSmooth = true; g.add(edge);   // the cutting edge, lit
+  const { mesh: screen, draw } = _hackScreen(0.056, 0.040, 14, 4, { px: 128, font: 13, line: 21 });     // a screen on each face of the blade (the head is 1 cm thick, so the faces are 6.5 mm out with its bevel)
+  screen.position.set(-0.0075, 0.0, -0.218); screen.rotation.y = -Math.PI / 2; g.add(screen);
+  const back = screen.clone(); back.position.x = 0.0075; back.rotation.y = Math.PI / 2; g.add(back);
+  for (const sd of [-1, 1]) {                                                                              // circuit traces round it on both faces
+    _hackTrace(g, kit, sd * 0.0075, [[-0.185, 0.040], [-0.215, 0.040], [-0.230, 0.064], [-0.252, 0.064]]);
+    _hackTrace(g, kit, sd * 0.0075, [[-0.185, -0.040], [-0.210, -0.040], [-0.222, -0.068], [-0.238, -0.068]]);
+  }
+  let acc = 0;
+  g._tick = (dt) => { acc += dt; if (acc > 0.16) { acc = 0; draw(false); } };
+  g.position.set(0.14, -0.12, -0.3);
+  return g;
 }
 
 function buildRemington870() {
@@ -42559,6 +42663,7 @@ const SKIN_SHAPES = (() => {
     orb:    (a, b, R) => ({ parts: [part(Sp(R * 0.8), K(a)), part(Sp(R * 1.5), new THREE.MeshBasicMaterial({ color: b, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }))] }),
     bolt:   (a, b, R) => ({ parts: [part(Cy(R * 0.22, R * 0.22, R * 4.6, 8), K(a)), part(Cy(R * 0.1, R * 0.1, R * 4.7, 6), K(0xffffff))], wake: b }),
     hackbullet: (a, b, R) => ({ parts: [part(Cy(R * 0.26, R * 0.26, R * 1.3, 8), L(0x0a0a0a)), part(new THREE.ConeGeometry(R * 0.26, R * 0.7, 8), L(0x0a0a0a), [0, R * 1.0, 0]), part(Cy(R * 0.3, R * 0.3, R * 0.22, 8), K(b), [0, -R * 0.55, 0])], wake: b, wakeLen: 16 }),
+    hackball: (a, b, R) => ({ parts: [part(Sp(R), L(0x0a0a0a)), part(new THREE.TorusGeometry(R * 1.08, R * 0.13, 5, 14), K(b), null, [Math.PI / 2, 0, 0])], wake: b, wakeLen: 7 }),
     carrot: (a, b, R) => ({ parts: [part(new THREE.ConeGeometry(R * 1.0, R * 4, 10), L(a), [0, R * 0.2, 0]), part(new THREE.ConeGeometry(R * 0.3, R * 1.1, 6), L(b), [R * 0.3, -R * 2.2, 0], [0, 0, 0.3]), part(new THREE.ConeGeometry(R * 0.3, R * 1.1, 6), L(b), [-R * 0.3, -R * 2.2, 0], [0, 0, -0.3])] }),
   };
 })();
@@ -42585,6 +42690,7 @@ function _skinShotMesh(spec, r) {
 // 💥 The bursts: colours for the fireball, the white core, the smoke and the bits that fly, and what a bit is. The ring is the flat shockwave on the floor.
 const BOOM_THEMES = {
   glaze:    { fire: 0xff78bd, core: 0xfff0f8, smoke: 0xe8a0c0, bits: [0xff78bd, 0xffd27a, 0xc8844a, 0xffffff, 0xff9ac8], bit: 'sprinkle', ring: 0xff9ad0, flash: [255, 120, 190] },
+  hacker:   { fire: 0x1fdc55, core: 0xd4ffe0, smoke: 0x061a0c, bits: [0x2dff6a, 0x0a0a0a, 0x7dffa6], bit: 'cube', ring: 0x2dff6a, flash: [70, 255, 140] },
   crumbs:   { fire: 0xe8a838, core: 0xfff0c0, smoke: 0xb8935a, bits: [0xe8a838, 0xc0392b, 0xf2c14e, 0x8a5a2a], bit: 'chunk', ring: 0xf2c14e, flash: [255, 200, 90] },
   soda:     { fire: 0xe8dcc0, core: 0xffffff, smoke: 0xf4f4f4, bits: [0xffffff, 0xcfe8ff, 0xe8c07a], bit: 'ball', ring: 0xffffff, flash: [255, 255, 255] },
   water:    { fire: 0x55bbff, core: 0xe8f8ff, smoke: 0xcfeeff, bits: [0x55bbff, 0xaadcff, 0xffffff], bit: 'drop', ring: 0x66ccff, flash: [90, 170, 255] },
@@ -42650,7 +42756,8 @@ const SKIN_SHOT = {};
   G({ shape: 'star', c: [0xfff0a0, 0x8ab4ff] }, 'star', ['railgun_constellation', 'portal_launcher_constellation']);
   G({ shape: 'gear', c: [0xc8a030, 0x6b4a2c], min: 0.07 }, 'gears', ['coilgun_clockwork', 'rpd_clockwork_belt', 'grenade_launcher_cuckoo']);
   G({ shape: 'bolt', c: [0x4aa8ff, 0xffffff] }, 'cyber', ['ak20_blueprint']);
-  G({ shape: 'hackbullet', c: [0x0a0a0a, 0x2dff6a], k: 1.5 }, null, ['pistol_hacker']);                // the Hacker Pistol: a black round on a green glowing trail
+  G({ shape: 'hackbullet', c: [0x0a0a0a, 0x2dff6a], k: 1.5 }, null, ['pistol_hacker', 'ak20_hacker']);   // the Hacker Pistol and AK: a black round on a green glowing trail
+  G({ shape: 'hackball', c: [0x0a0a0a, 0x2dff6a], k: 1.3 }, 'hacker', ['frag_hacker']);               // the Hacker Grenade: a black ball in a green ring, trailing code
   G({ shape: 'cube', c: [0xe74c3c, 0x2ecc71] }, 'pixel', ['p90_rubiks_cube']);
   G({ shape: 'shard', c: [0xb0b8ff, 0x6a6aff] }, 'star', ['ak20_hyperspace', 'deagle_phantom', 'burst_cannon_phantom', 'deagle_glitch']);
   // more of the house
@@ -42703,14 +42810,14 @@ function skinLookFor(skin) {                                                // t
 let _skinById = null;
 function skinLookById(id) {                                                 // for somebody else's shot: the skin id they sent
   if (typeof id !== 'string') return null;
-  try { if (!_skinById) _skinById = new Map(MODEL_SKINS.map(m => [m.id, m])); return skinLookFor(_skinById.get(id)); } catch (e) { return null; }
+  try { if (!_skinById) _skinById = new Map([...MODEL_SKINS, ...SUPPORT_MODEL_SKINS].map(m => [m.id, m])); return skinLookFor(_skinById.get(id)); } catch (e) { return null; }
 }
 // The skin you wear rides on every shot you take, so the others see the same round and the same burst (server.js checks it is a plain id and passes it on).
 {
   const _emit = socket.emit.bind(socket);
   socket.emit = function (ev, d, ...rest) {
     if (ev === 'shoot' && d && typeof d === 'object' && d.weapon && d.skin === undefined) {
-      try { const sk = _activeModelSkin[d.weapon]; if (sk) d.skin = sk.id; } catch (e) {}     // (_activeModelSkin is declared far below)
+      try { const sk = _activeModelSkin[d.weapon]; if (sk) d.skin = sk.id; else { const ss = SUPPORT_MODEL_SKINS.find(m => m.id === equippedSupportModelSkins[d.weapon]); if (ss && ss.look) d.skin = ss.id; } } catch (e) {}     // (_activeModelSkin is declared far below); a grenade skin with a look of its own (the Hacker Grenade) rides along too
     }
     return _emit(ev, d, ...rest);
   };
@@ -42742,8 +42849,10 @@ function _hackDigits(pos, n, spread, up, life, size) {
     requestAnimationFrame(tick);
   }
 }
+let _hackFxAt = 0; const _hackFxPos = new THREE.Vector3();
 function skinHitFX(kind, pos, onTarget) {
   if (kind !== 'hack' || !pos) return;
+  if (onTarget) { const t = performance.now(); if (t - _hackFxAt < 60 && _hackFxPos.distanceToSquared(pos) < 0.25) return; _hackFxAt = t; _hackFxPos.copy(pos); }   // a hit reaches here from the round and from the damage number: one burst
   const peak = onTarget ? 0.95 : 0.55, mat = new THREE.MeshBasicMaterial({ color: onTarget ? 0xd4ffe0 : 0x7dffa6, transparent: true, opacity: peak, blending: THREE.AdditiveBlending, depthWrite: false });
   const flash = new THREE.Mesh(new THREE.SphereGeometry(onTarget ? 0.30 : 0.13, 10, 8), mat); flash.position.copy(pos); scene.add(flash);
   const born = performance.now(), life = onTarget ? 190 : 120;
@@ -42753,7 +42862,9 @@ function skinHitFX(kind, pos, onTarget) {
   _hackDigits(pos, onTarget ? 16 : 7, onTarget ? 4.2 : 2.6, onTarget ? 2.6 : 1.4, onTarget ? 620 : 420, onTarget ? 0.26 : 0.18);
 }
 // ...and the damage counter of a Hacker Pistol hit: green, scrambling digits for a quarter of a second, then the real number.
-function _hackerHit(weaponId) { try { const L = weaponId && _modelSkinLook[weaponId]; return !!(L && L.hit === 'hack'); } catch (e) { return false; } }
+// Whatever carries a hit look (a gun's skin, the grenade's, the axe's): its entry in _modelSkinLook, by the id the hit is reported under. The axe's combo moves are the axe's.
+const _LOOK_OF = { axe_upper: 'combat_axe', axe_airwhirl: 'combat_axe', axe_chop: 'combat_axe' };
+function _hackerHit(weaponId) { try { const L = weaponId && (_modelSkinLook[weaponId] || _modelSkinLook[_LOOK_OF[weaponId]]); return !!(L && L.hit === 'hack'); } catch (e) { return false; } }
 function _hackFlicker(el, real) {                                // real: a string, or a function giving it (a running total may have moved on)
   const ms = 220 + Math.random() * 90, t0 = performance.now(), final = () => String(typeof real === 'function' ? real() : real);
   el.style.color = '#39ff6a'; el.style.textShadow = '0 0 8px #00ff55, 0 0 2px #003a14, -1px -1px 0 #021a0a, 1px 1px 0 #021a0a';
@@ -53307,6 +53418,9 @@ const MODEL_SKINS = [
   { id: 'pistol_hacker', weapon: 'pistol', name: 'Hacker Pistol', rarity: 'rare', look: { hit: 'hack' },
     sw: ['#08090a', '#2dff6a'], build: buildHackerPistol,
     blurb: 'Matte black with a green outline and a screen of 1s and 0s on the slide. Black rounds on a green trail; a hit flashes and spills code; the damage number scrambles before it settles; what it kills glitches into an ERROR and is gone.' },
+  { id: 'ak20_hacker', weapon: 'ak20', name: 'Hacker AK', rarity: 'rare', look: { hit: 'hack' },
+    sw: ['#08090a', '#2dff6a'], build: buildHackerAK,
+    blurb: 'The Hacker Pistol, full size: a void-black AK with green outlines and a screen of 1s and 0s down the receiver. Black rounds on a green trail, a laser-blaster crack, the same flash and scrambling damage number, and what it kills glitches into an ERROR and is gone.' },
   { id: 'pistol_m9', weapon: 'pistol', name: 'M9 Beretta', rarity: 'good',
     sw: ['#3a3f47', '#8d959d'], build: buildM9Beretta,
     blurb: 'Open-top slide, barrel visible underneath. Standard issue for a reason.' },
@@ -55518,6 +55632,9 @@ const MELEE_MODEL_SKINS = [
     sw: ['#8ae8ff', '#3a2818'], build: buildFrostAxe,
     blurb: 'Drawn, it is tossed up, turns end over end twice, and caught.',
     equip: 'flip', equipMs: 900, equipSfx: ['whoosh', 'clink'] },
+  { id: 'combat_axe_hacker', melee: 'combat_axe', name: 'Hacker Axe', rarity: 'rare', raw: true, look: { hit: 'hack' },
+    sw: ['#08090a', '#2dff6a'], build: buildHackerAxe,
+    blurb: 'A void-black axe with a lit green edge and 1s and 0s running across the blade. Every hit flashes and spills code, the damage number scrambles before it settles, and what it kills glitches into an ERROR and is gone.' },
   // 🔥 FFA Legend blades: they burn, so drawing one flares the fire up.
   { id: 'knife_legend', melee: 'knife', name: 'FFA Legend Knife', rarity: 'legend',
     sw: ['#17121a', '#ff2a1a'], build: buildLegendKnife,
@@ -55597,6 +55714,7 @@ function applyMeleeModelSkin(baseId) {
   if (!(idx in _baseMeleeModels)) _baseMeleeModels[idx] = meleeModels[idx];
   const want = equippedMeleeModelSkins[baseId];
   const skin = MELEE_MODEL_SKINS.find(s => s.id === want && s.melee === baseId && !isLegendLocked(s) && !isCaseSkinLocked(s));
+  if (skin && skin.look) _modelSkinLook[baseId] = skin.look; else delete _modelSkinLook[baseId];         // what its hits do (the Hacker Axe's)
   let next;
   if (!skin) next = _baseMeleeModels[idx];
   else {
@@ -55819,6 +55937,8 @@ const SUPPORT_MODEL_SKINS = [
     blurb: 'Army slang, taken literally. The pin is real.' },
   { id: 'frag_disco',      support: 'frag',        name: 'Disco Ball',       rarity: 'good', sw: ['#dfe7f0', '#ff4fd8'], build: buildDiscoBall,
     blurb: 'Everybody dances. One of them leaves early.' },
+  { id: 'frag_hacker',     support: 'frag',        name: 'Hacker Grenade',   rarity: 'rare', look: { hit: 'hack' }, sw: ['#08090a', '#2dff6a'], build: buildHackerGrenade,
+    blurb: 'A black ball in a green wire cage with a band of 1s and 0s. It flies trailing code, bursts in green, every man it catches flashes, scrambles his damage number, and a kill glitches into an ERROR.' },
   { id: 'smoke_kettle',    support: 'smoke',       name: 'Tea Kettle',       rarity: 'good', sw: ['#b9c2cc', '#2a2a2e'], build: buildTeaKettle,
     blurb: 'It was always going to be a bit of a cloud.' },
   { id: 'medkit_tablet',   support: 'medkit',      name: 'MedPad',           rarity: 'good', sw: ['#c9ced6', '#d6283a'], build: buildMedPad,
@@ -55848,6 +55968,7 @@ function applySupportModelSkin(baseId) {
   if (!(idx in _baseSupportModels)) _baseSupportModels[idx] = supportModels[idx];
   const want = equippedSupportModelSkins[baseId];
   const skin = SUPPORT_MODEL_SKINS.find(s => s.id === want && s.support === baseId);
+  if (skin && skin.look) _modelSkinLook[baseId] = skin.look; else delete _modelSkinLook[baseId];       // what its hits do (the Hacker Grenade's)
   let next;
   if (!skin) next = _baseSupportModels[idx];
   else {
@@ -59528,6 +59649,7 @@ function hitFeedback(targetId, mesh, hitPos, damage, headshot, falloff, headMiss
   const at = hitPos || (mesh ? mesh.position.clone().setY(mesh.position.y + 1.2) : null);
   const label = weaponId === 'omega_pistol' ? '\u03a9' : null;
   const hack = _hackerHit(weaponId);
+  if (hack && at) skinHitFX('hack', at, true);                          // a blade or a blast has no round to do it: every hacker hit does it here (skinHitFX drops the twin from a round)
   spawnHitNumber(targetId, at, damage, tier, label, hack);
   if (mesh) trackTotalDamage(targetId, damage, mesh, tier, label, hack);
   if (damage > 0) {
@@ -64047,6 +64169,14 @@ function makeWorldGrenadeMesh() {
   return g;
 }
 
+function makeHackerWorldGrenade() {                                           // the Hacker Grenade in the air: a black ball in a green wire cage, a halo, a lamp on the fuse
+  const kit = _hackKit(), g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 8), kit.black); body.add(new THREE.LineSegments(_hackLines(body.geometry), kit.edge)); g.add(body);
+  g.add(new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), new THREE.MeshBasicMaterial({ color: 0x2dff6a, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false })));
+  const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 6), new THREE.MeshBasicMaterial({ color: 0x2dff6a })); lamp.position.y = 0.078; g.add(lamp); g._lamp = lamp;
+  return g;
+}
+
 function doThrowGrenade() {
   const origin = new THREE.Vector3();
   camera.getWorldPosition(origin);
@@ -64056,13 +64186,14 @@ function doThrowGrenade() {
   // Aim slightly upward from look direction for a natural arc
   const aimDir = new THREE.Vector3(0, 0.18, -1).applyQuaternion(camera.quaternion).normalize();
 
-  const mesh = makeWorldGrenadeMesh();
+  const hack = _hackerHit('frag');                                           // the Hacker Grenade: a black ball that flies trailing code
+  const mesh = hack ? makeHackerWorldGrenade() : makeWorldGrenadeMesh();
   mesh.position.copy(origin);
   scene.add(mesh);
 
   const id = `gren_${myId}_${Date.now()}`;
   activeGrenades.push({
-    mesh,
+    mesh, hack,
     velX: aimDir.x * 20,
     velY: aimDir.y * 20,
     velZ: aimDir.z * 20,
@@ -64145,6 +64276,10 @@ function updateGrenades(dt) {
     }
     if(g.mesh.position.y < -100){scene.remove(g.mesh);activeGrenades.splice(i,1);continue;}
 
+    if (g.hack) {                                                           // the Hacker Grenade: a trail of 1s and 0s, and a lamp that blinks
+      if (now - (g._trailAt || 0) > 45) { g._trailAt = now; _hackDigits(g.mesh.position, 1, 0.5, 0.2, 520, 0.15); }
+      if (g.mesh._lamp) g.mesh._lamp.material.color.setHex(Math.floor(now / 110) % 2 ? 0xd4ffe0 : 0x14a043);
+    }
     // Tumble spin
     g.mesh.rotation.x += dt * 5;
     g.mesh.rotation.z += dt * 3;
@@ -64179,7 +64314,8 @@ function damageStructuresInBlast(pos,weaponId,radius) {
 }
 function explodeGrenade(g) {
   const pos = g.mesh.position.clone();
-  spawnExplosion(pos);
+  spawnExplosion(pos, g.hack ? BOOM_THEMES.hacker : null);
+  if (g.hack) { skinHitFX('hack', pos, false); _hackDigits(pos, 34, 7.5, 4, 820, 0.32); }   // the Hacker Grenade bursts in green and throws code
   const RADIUS = 5.5;
   if (g.isOwn) {
     damageStructuresInBlast(pos,'frag',RADIUS);

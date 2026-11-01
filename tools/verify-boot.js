@@ -4313,7 +4313,7 @@ if (ok && process.argv.includes('--skinshot')) {
   // a look for its shots (at the least a tint from its swatch); the table names real skins, real shapes and real bursts; a themed shot builds; the burst of a skin reaches
   // rocketExplode and changes nothing but the look (the radius, the damage, the speed and the hit size are the weapon's); the realistic ones keep the ordinary fire.
   const issues = vm.runInThisContext(`(() => {
-    const issues = [], ids = new Set(MODEL_SKINS.map(m => m.id));
+    const issues = [], ids = new Set([...MODEL_SKINS, ...SUPPORT_MODEL_SKINS].map(m => m.id));      // a grenade skin can have a round of its own too (the Hacker Grenade)
     for (const [id, T] of Object.entries(SKIN_SHOT)) {
       if (!ids.has(id)) issues.push('SKIN_SHOT names "' + id + '": there is no such model skin');
       if (T.shot) { if (!SKIN_SHAPES[T.shot.shape]) issues.push(id + ' has a shot shape that does not exist: ' + T.shot.shape); if (!Array.isArray(T.shot.c) || !T.shot.c.length) issues.push(id + ' has no colours for its shot'); }
@@ -4414,6 +4414,108 @@ if (ok && process.argv.includes('--hacker')) {
     return issues;
   })()`);
   console.log('hacker pistol checks: a free pistol skin, outlined black model with a screen, a black round on a long green trail, a hit look only it has, a green scrambling damage counter, and a kill that crashes the body (the skin\'s own, not pickable)');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
+if (ok && process.argv.includes('--hacker')) {
+  // The rest of the Hacker family, "the same concept": a Hacker AK (a gun skin), a Hacker Grenade (a skin of the frag grenade) and a Hacker Axe (a skin of the Battle Axe). Each is a void-black unlit
+  // model outlined in green; whatever it hits flashes and spills code and gets the scrambling damage counter, and a kill with it crashes the body. The AK shoots like the pistol; the grenade flies
+  // trailing code and bursts in green; only the one wearing the skin gets the look (a stock frag, a stock axe, another gun do not).
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const unlit = (g, flashOf, min, what) => {
+      let lit = 0, blacks = 0, lines = 0; const skip = new Set(); if (flashOf) flashOf.traverse(o => skip.add(o));
+      g.traverse(o => { if (o.isLineSegments) lines++; if (!o.isMesh || skip.has(o) || !o.material) return; if (!o.material.isMeshBasicMaterial) lit++; else if (o.material.color.getHex() === 0x000000) blacks++; });
+      if (lit) issues.push(what + ': ' + lit + ' parts are lit materials, the black would show a sheen');
+      if (blacks < min) issues.push(what + ': should be pure black (MeshBasicMaterial 0x000000) in at least ' + min + ' parts, found ' + blacks);
+      if (lines < min) issues.push(what + ': every part should carry a green outline, found only ' + lines + ' line sets for ' + min + '+ parts');
+      return { lines, blacks };
+    };
+    const screens = g => { let n = 0; g.traverse(o => { if (o.isMesh && o.material && o.material.map) n++; }); return n; };
+    // ── the AK ──
+    const ak = MODEL_SKINS.find(m => m.id === 'ak20_hacker');
+    if (!ak) issues.push('there is no ak20_hacker skin');
+    else {
+      if (ak.weapon !== 'ak20') issues.push('the Hacker AK is a skin of the ak20, not of ' + ak.weapon);
+      if (GATED_MODEL_SKIN_IDS.has(ak.id)) issues.push('the Hacker AK is a free skin, like the Hacker Pistol');
+      const look = skinLookFor(ak), T = SKIN_SHOT[ak.id];
+      if (look.hit !== 'hack') issues.push('the Hacker AK look should carry hit: "hack"');
+      if (!T || !T.shot || T.shot.shape !== 'hackbullet') issues.push('the Hacker AK round should be the hackbullet shape, black on a green trail');
+      if (typeof SKIN_VOICE.ak20_hacker !== 'function') issues.push('the Hacker AK should make its own shot (SKIN_VOICE), a laser blaster');
+      const g = buildHackerAK(); unlit(g, g._flash, 30, 'Hacker AK');
+      if (screens(g) < 1) issues.push('the Hacker AK should carry a screen of 1s and 0s');
+      if (!g._flash || typeof g._tick !== 'function') issues.push('the Hacker AK needs its muzzle flash and its screen tick');
+      if (!g._sightLine || !g._hasDefaultAimer) issues.push('the Hacker AK lost the stock rifle sights (ADS lines up through them)');
+    }
+    // ── the grenade ──
+    const gr = SUPPORT_MODEL_SKINS.find(m => m.id === 'frag_hacker');
+    if (!gr) issues.push('there is no frag_hacker support skin');
+    else {
+      if (gr.support !== 'frag') issues.push('the Hacker Grenade is a skin of the frag grenade, not of ' + gr.support);
+      if (!gr.look || gr.look.hit !== 'hack') issues.push('the Hacker Grenade look should carry hit: "hack"');
+      const rl = skinLookById('frag_hacker');
+      if (!rl || rl.hit !== 'hack' || !rl.shot || rl.shot.shape !== 'hackball' || rl.boom !== BOOM_THEMES.hacker) issues.push('a Hacker Grenade thrown by somebody else should be a black ball in a green ring bursting in green: ' + JSON.stringify(rl && { hit: rl.hit, shape: rl.shot && rl.shot.shape, boom: !!rl.boom }));
+      const m = makeBulletMesh(0x4d7f36, 0.14, 'frag', false, rl); let ball = 0; m.traverse(o => { if (o.geometry && o.geometry.type === 'SphereGeometry') ball++; });
+      if (ball < 1) issues.push('their grenade should be drawn as the hackball (a sphere in a ring), found ' + ball + ' spheres');
+      const g = buildHackerGrenade(); unlit(g, null, 4, 'Hacker Grenade'); if (screens(g) < 1) issues.push('the Hacker Grenade should carry its band of 1s and 0s');
+      if (typeof g._tick !== 'function') issues.push('the Hacker Grenade band should run (a tick)');
+      const w = makeHackerWorldGrenade(); if (!w._lamp) issues.push('the grenade in the air should carry its lamp'); let wl = 0; w.traverse(o => { if (o.isLineSegments) wl++; }); if (!wl) issues.push('the grenade in the air should be wired in green');
+      // it bursts in green, the stock one does not
+      const keepBoom = spawnExplosion, keepFx = skinHitFX, got = [];
+      spawnExplosion = (pos, boom) => { got.push(boom); }; skinHitFX = () => {};
+      try {
+        const mk = hack => ({ hack, mesh: { position: new THREE.Vector3(1, 1, 1) }, isOwn: true, id: 'g' });
+        explodeGrenade(mk(true)); explodeGrenade(mk(false));
+      } finally { spawnExplosion = keepBoom; skinHitFX = keepFx; }
+      if (got[0] !== BOOM_THEMES.hacker) issues.push('the Hacker Grenade should burst in the hacker colours');
+      if (got[1] != null) issues.push('a stock frag should keep its own burst');
+    }
+    // ── the axe ──
+    const ax = MELEE_MODEL_SKINS.find(m => m.id === 'combat_axe_hacker');
+    if (!ax) issues.push('there is no combat_axe_hacker melee skin');
+    else {
+      if (ax.melee !== 'combat_axe') issues.push('the Hacker Axe is a skin of the Battle Axe (combat_axe), not of ' + ax.melee);
+      if (!ax.look || ax.look.hit !== 'hack') issues.push('the Hacker Axe look should carry hit: "hack"');
+      if (!MELEE_ITEMS.some(m => m.id === 'combat_axe' && !m.archived)) issues.push('the Battle Axe should be a live melee (not archived), or the skin is unreachable');
+      const g = buildHackerAxe(); unlit(g, null, 4, 'Hacker Axe'); if (screens(g) < 2) issues.push('the Hacker Axe should carry a screen on both faces of the blade');
+      let tube = 0; g.traverse(o => { if (o.geometry && o.geometry.type === 'TubeGeometry') tube++; }); if (!tube) issues.push('the Hacker Axe should have its lit cutting edge');
+      if (typeof g._tick !== 'function') issues.push('the Hacker Axe blade screen should run (a tick)');
+    }
+    // ── who gets the look: only the one wearing it ──
+    const keep = { frag: _modelSkinLook.frag, combat_axe: _modelSkinLook.combat_axe };
+    try {
+      delete _modelSkinLook.frag; delete _modelSkinLook.combat_axe;
+      if (_hackerHit('frag') || _hackerHit('combat_axe')) issues.push('a stock frag and a stock axe should not count as hacker hits');
+      _modelSkinLook.frag = gr.look; _modelSkinLook.combat_axe = ax.look;
+      if (!_hackerHit('frag')) issues.push('a frag wearing the Hacker Grenade should count');
+      if (!_hackerHit('combat_axe')) issues.push('an axe wearing the Hacker Axe should count');
+      for (const move of ['axe_upper', 'axe_airwhirl', 'axe_chop']) if (!_hackerHit(move)) issues.push('the axe combo move ' + move + ' counts as a Hacker Axe hit too');
+      if (_hackerHit('knife') || _hackerHit('smoke')) issues.push('another blade or another support item should not count');
+      // a hit reports to hitFeedback with the id of what hit: a blade or a blast gets the flash and the code itself (a round does it in updateBullets, and the twin is dropped)
+      const keepNum = spawnHitNumber, keepTrack = trackTotalDamage, keepSnd = playSoundEvent, keepD = _hackDigits;
+      let bursts = 0, hackNums = 0;
+      spawnHitNumber = (a, b, c, d, e, hack) => { if (hack) hackNums++; }; trackTotalDamage = () => {}; playSoundEvent = () => {}; _hackDigits = () => { bursts++; };
+      try {
+        const at = new THREE.Vector3(5, 1, 5);
+        hitFeedback('t', null, at.clone(), 78, false, 1, null, 'combat_axe');
+        if (bursts !== 1 || hackNums !== 1) issues.push('an axe hit should flash once and scramble its number (bursts ' + bursts + ', numbers ' + hackNums + ')');
+        bursts = 0; _hackFxAt = 0; skinHitFX('hack', at.clone(), true); skinHitFX('hack', at.clone(), true);
+        if (bursts !== 1) issues.push('the same hit reaching the flash twice (the round and the damage number) should burst once, not ' + bursts);
+        bursts = 0; _hackFxAt = 0; hitFeedback('t', null, at.clone(), 80, false, 1, null, 'knife');
+        if (bursts) issues.push('a stock blade hit should not burst');
+      } finally { spawnHitNumber = keepNum; trackTotalDamage = keepTrack; playSoundEvent = keepSnd; _hackDigits = keepD; }
+      // and a kill with any of them crashes the body; a kill with the stock ones does not
+      const calls = [], keepPlay = playGlitchFinisher;
+      playGlitchFinisher = (id) => { calls.push(id); return true; };
+      try {
+        triggerFinisher('v', 'frag', myId); triggerFinisher('v', 'combat_axe', myId); triggerFinisher('v', 'axe_chop', myId); triggerFinisher('v', 'knife', myId);
+        delete _modelSkinLook.frag; delete _modelSkinLook.combat_axe; triggerFinisher('v', 'frag', myId); triggerFinisher('v', 'combat_axe', myId);
+      } finally { playGlitchFinisher = keepPlay; }
+      if (calls.length !== 3) issues.push('a kill with the Hacker Grenade or the Hacker Axe should crash the body, and only then (called ' + calls.length + ' times, wanted 3)');
+    } finally { for (const k of Object.keys(keep)) { if (keep[k]) _modelSkinLook[k] = keep[k]; else delete _modelSkinLook[k]; } }
+    return issues;
+  })()`);
+  console.log('hacker family checks: a Hacker AK (void-black, outlined, a screen, the pistol\'s round and laser shot), a Hacker Grenade (wired black ball, trailing code, green burst) and a Hacker Axe (lit edge, a screen on both faces), the hit flash + scrambling number for a blade or a blast, one burst per hit, and the crash on a kill, only for the one wearing them');
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
