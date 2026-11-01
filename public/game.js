@@ -36337,7 +36337,7 @@ function _itemIdOfModel(model) {
   return null;
 }
 function ensureHeldWrap(model) {
-  if (!model) return;
+  if (!model || (model.userData && model.userData.noWrap)) return;
   let itemId = null; try { itemId = _itemIdOfModel(model); } catch (e) {}
   const skin = WEAPON_SKINS_BY_ID[wrapIdFor(itemId)] || WEAPON_SKINS_BY_ID.default;
   if ((model._wrapKey || 'default') === skin.id) return;     // already wearing it; stock and never touched counts too
@@ -38812,7 +38812,7 @@ function _fuseModel(root) {
 // and skin-finished and the other a sharp block with a different material. Give it the main hand's geometry and material.
 function syncOffHands() {
   for (const m of meleeModels) {
-    const off = m && m._offHand; if (!off) continue;
+    const off = m && m._offHand; if (!off || m._distinctHands) continue;
     const a = [], b = [];
     m.traverse(o => a.push(o)); off.traverse(o => b.push(o));
     if (a.length !== b.length) continue;
@@ -54038,6 +54038,224 @@ function buildOvenMitts() {
 // hand (the base model's is what alternates), so every punch comes from this one.
 function buildSingleFist() { return buildFists(); }
 
+// ═════════════════════════════════════════════════════════════════════
+// ♾️ FISTS → LIMITLESS. A pair, and not the same pair: a blue portal on the right fist, a red one on the left (they swirl, and
+// the punch that lands flashes in the colour of the fist that threw it). Inspect (T) is the show: you look at the blue one, then
+// the red one, raising each to your eyes in turn, back and forth (the six-seven); do it a couple of times and the third inspect
+// goes on -- the two are brought together into one purple ball, and HOW MUCH they are merged is a throw of the dice (it sets
+// how big the ball gets and how long it lasts). It bends your view while it burns; then it splits back into red and blue, you
+// are thrown back a step, and everything returns to normal. Cosmetic only: the same fists, the same punches.
+// ═════════════════════════════════════════════════════════════════════
+const _gojoTex = {};
+function _gojoPortalTex(kind) {
+  if (_gojoTex[kind]) return _gojoTex[kind];
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const x = c.getContext('2d');
+  const pal = kind === 'blue' ? ['#f2fbff', '#52b0ff', '#1238d0', '#04104a'] : ['#fff0e8', '#ff5a44', '#b00010', '#3a0004'];
+  const g = x.createRadialGradient(64, 64, 2, 64, 64, 62);
+  g.addColorStop(0, pal[0]); g.addColorStop(0.25, pal[1]); g.addColorStop(0.7, pal[2]); g.addColorStop(1, 'rgba(0,0,0,0)');
+  x.fillStyle = g; x.beginPath(); x.arc(64, 64, 62, 0, 7); x.fill();
+  x.globalCompositeOperation = 'lighter'; x.lineCap = 'round';          // the spiral arms
+  for (let a = 0; a < 4; a++) {
+    x.beginPath();
+    for (let i = 0; i <= 40; i++) { const t = i / 40, r = 6 + t * 54, an = a * 1.5708 + t * 4.2; const px = 64 + Math.cos(an) * r, py = 64 + Math.sin(an) * r; i ? x.lineTo(px, py) : x.moveTo(px, py); }
+    x.strokeStyle = kind === 'blue' ? 'rgba(190,230,255,.55)' : 'rgba(255,200,180,.5)'; x.lineWidth = 3.5; x.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  return (_gojoTex[kind] = t);
+}
+function buildLimitlessFist(kind) {
+  const g = new THREE.Group();
+  const skin = new THREE.MeshLambertMaterial({ color: 0xeac39a });
+  skin.userData.skinTone = true;
+  const block = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.10, 0.14), skin);
+  block.position.set(0, 0, -0.05); g.add(block);
+  const sleeve = new THREE.Mesh(new THREE.BoxGeometry(0.112, 0.112, 0.060), new THREE.MeshLambertMaterial({ color: 0x141a2e }));   // the dark uniform cuff
+  sleeve.position.set(0, 0, 0.05); g.add(sleeve);
+  const hex = kind === 'blue' ? 0x4aa8ff : 0xff3a2a;
+  const additive = (map, opacity) => new THREE.MeshBasicMaterial({ map, color: 0xffffff, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+  const P = new THREE.Group(); P.position.set(0, 0, -0.175); g.add(P);                    // the portal, hovering at the knuckles
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(0.062, 40), additive(_gojoPortalTex(kind), 1)); P.add(disc);
+  const halo = new THREE.Mesh(new THREE.CircleGeometry(0.115, 32), additive(_gojoPortalTex(kind), 0.28)); halo.position.z = -0.004; P.add(halo);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.066, 0.006, 8, 40), new THREE.MeshBasicMaterial({ color: hex, transparent: true, opacity: 0.95, depthWrite: false, blending: THREE.AdditiveBlending })); P.add(ring);
+  const cuffGlow = new THREE.Mesh(new THREE.TorusGeometry(0.058, 0.004, 6, 24), new THREE.MeshBasicMaterial({ color: hex, transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending }));
+  cuffGlow.position.z = 0.02; g.add(cuffGlow);
+  g._portal = P; g._disc = disc; g._halo = halo; g._ring = ring; g._kind = kind; g._boost = 0;
+  g.userData.noWrap = true;
+  return g;
+}
+function buildLimitless() {
+  const g = buildLimitlessFist('blue');
+  g.position.set(0.16, -0.10, -0.22);
+  const off = buildLimitlessFist('red');
+  off.position.copy(MELEE_OFFHAND_REST_POS);
+  off.visible = false;
+  g._offHand = off; g._gojo = true; g._distinctHands = true;
+  return g;
+}
+const _gojoFlare = { blue: 0, red: 0 };
+const GOJO = { count: 0, last: 0, st: null, ui: null, orb: null };
+function _gojoFxMult() { try { return gameplaySettingMult('screenFx'); } catch (e) { return 1; } }
+function _gojoUi() {
+  if (GOJO.ui) return GOJO.ui;
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg'); svg.setAttribute('width', '0'); svg.setAttribute('height', '0'); svg.style.cssText = 'position:absolute;pointer-events:none;';
+  svg.innerHTML = '<filter id="gojo-warp" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence id="gojo-turb" type="fractalNoise" baseFrequency="0.004 0.007" numOctaves="2" seed="4" result="n"/><feDisplacementMap id="gojo-disp" in="SourceGraphic" in2="n" scale="0" xChannelSelector="R" yChannelSelector="G"/></filter>';
+  document.body.appendChild(svg);
+  const veil = document.createElement('div');
+  veil.style.cssText = 'position:fixed;inset:0;z-index:900;pointer-events:none;opacity:0;background:radial-gradient(circle at 50% 50%, rgba(190,120,255,0.10) 0%, rgba(120,40,235,0.42) 55%, rgba(40,0,90,0.78) 100%);mix-blend-mode:screen;';
+  document.body.appendChild(veil);
+  return (GOJO.ui = { svg, veil, turb: svg.querySelector('#gojo-turb'), disp: svg.querySelector('#gojo-disp'), on: false });
+}
+// strength 0..1: how hard the view is bent
+function gojoWarp(strength, tsec) {
+  const U = _gojoUi(), k = Math.max(0, Math.min(1, strength)) * _gojoFxMult(), cv = renderer.domElement;
+  if (k < 0.01) { gojoWarpClear(); return; }
+  U.on = true;
+  U.disp.setAttribute('scale', String(Math.round(70 * k * (0.75 + 0.25 * Math.sin(tsec * 13)))));
+  U.turb.setAttribute('baseFrequency', (0.004 + 0.004 * Math.sin(tsec * 2.1)).toFixed(4) + ' ' + (0.007 + 0.005 * Math.cos(tsec * 1.7)).toFixed(4));
+  cv.style.filter = `url(#gojo-warp) saturate(${(1 + 0.5 * k).toFixed(2)}) hue-rotate(${(28 * k).toFixed(0)}deg)`;
+  cv.style.transform = `scale(${(1 + 0.035 * k * Math.sin(tsec * 11)).toFixed(4)})`;
+  U.veil.style.opacity = String((0.55 * k).toFixed(3));
+}
+function gojoWarpClear() {
+  const U = GOJO.ui; if (!U || !U.on) return;
+  U.on = false; renderer.domElement.style.filter = ''; renderer.domElement.style.transform = ''; U.veil.style.opacity = '0';
+}
+function _gojoOrb() {
+  if (GOJO.orb) return GOJO.orb;
+  const g = new THREE.Group(); g.visible = false; g.renderOrder = 999;
+  const mk = (r, color, op) => { const m = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 18), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: op, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending })); m.renderOrder = 999; m.frustumCulled = false; return m; };
+  g._core = mk(0.07, 0xfaf0ff, 1); g._mid = mk(0.105, 0xa050ff, 0.85); g._halo = mk(0.17, 0x6a22e0, 0.38);
+  g._ring = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.008, 8, 48), new THREE.MeshBasicMaterial({ color: 0xd8a8ff, transparent: true, opacity: 0.9, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending }));
+  g._ring.renderOrder = 999; g._ring.frustumCulled = false;
+  g._blue = mk(0.05, 0x4aa8ff, 0.95); g._red = mk(0.05, 0xff3a2a, 0.95); g._blue.visible = g._red.visible = false;
+  g.add(g._halo, g._mid, g._core, g._ring, g._blue, g._red);
+  g.position.set(0, -0.02, -0.52);
+  camera.add(g);
+  return (GOJO.orb = g);
+}
+const _gE = x => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
+function gojoInspectBegin() {
+  const now = performance.now();
+  if (now - GOJO.last > 15000) GOJO.count = 0;
+  GOJO.count++;
+  const merge = GOJO.count >= 3;                                       // the first two are the ordinary look; the third goes on
+  const amount = merge ? 0.5 + Math.random() * 0.5 : 0;               // how much they are merged: how big, how long
+  const K = merge ? 2 : 3, period = 0.72;
+  const st = { merge, amount, K, period, alt: (K + 0.5) * period, gather: 0.95, hold: 1.4 + 1.8 * amount, split: 0.95, t0: now, beat: 0, jumped: false, said: false };
+  st.total = st.alt + (merge ? st.gather + st.hold + st.split : 0.15);
+  if (merge) GOJO.count = 0;
+  GOJO.st = st;
+  return st;
+}
+function _gojoPoseHand(h, rest, u, towards) {                           // u: 0 at rest, 1 raised in front of the eyes
+  h.rotation.order = 'YXZ';
+  h.position.set(rest.x + towards * u, rest.y + 0.135 * u, rest.z - 0.075 * u);
+  h.rotation.set(-0.12 * u, -towards * 1.2 * u, 0);
+  h._boost = u;
+}
+function gojoInspectStep(s) {
+  const st = s.gojo, m = s.model, off = m._offHand, now = performance.now(), t = (now - st.t0) / 1000;
+  if (t >= st.total) return false;
+  const restM = s.base, restO = MELEE_OFFHAND_REST_POS;
+  let ub = 0, ur = 0, strength = 0;
+  if (t < st.alt) {                                                    // blue first, then red, up and down in turn
+    const tau = t / st.period;
+    ub = tau <= st.K ? 0.5 - 0.5 * Math.cos(2 * Math.PI * tau) : 0;
+    ur = tau < 0.5 ? 0 : 0.5 - 0.5 * Math.cos(2 * Math.PI * (tau - 0.5));
+    while (st.beat < 2 * st.K && t >= st.period * (0.5 + st.beat * 0.5)) {      // a tone as each one reaches the eyes
+      _itemInspectBeat(st.beat % 2 === 0 ? 780 : 520, 0.05); st.beat++;
+    }
+    _gojoPoseHand(m, restM, ub, -0.085); _gojoPoseHand(off, restO, ur, 0.095);
+  } else if (st.merge) {
+    const orb = _gojoOrb(), tm = t - st.alt;
+    if (tm < st.gather) {                                              // both come to the middle, and the portals lean into each other
+      const k = _gE(tm / st.gather);
+      m.rotation.order = off.rotation.order = 'YXZ';
+      m.position.set(restM.x + (0.035 - restM.x) * k, restM.y + (-0.03 - restM.y) * k, restM.z + (-0.30 - restM.z) * k);
+      off.position.set(restO.x + (-0.035 - restO.x) * k, restO.y + (-0.03 - restO.y) * k, restO.z + (-0.30 - restO.z) * k);
+      m.rotation.set(-0.10 * k, 0.5 * k, 0); off.rotation.set(-0.10 * k, -0.5 * k, 0);
+      m._boost = off._boost = 0.5 + 0.8 * k;
+      orb.visible = k > 0.55;
+      const g2 = Math.max(0, (k - 0.55) / 0.45);
+      orb.scale.setScalar(0.15 + 0.85 * g2); orb._blue.visible = orb._red.visible = g2 < 1;
+      orb._blue.position.set(-0.10 * (1 - g2), 0, 0); orb._red.position.set(0.10 * (1 - g2), 0, 0);
+      strength = 0.25 * g2 * st.amount;
+      if (!st.said && k > 0.9) { st.said = true; try { showAnnouncement('HOLLOW PURPLE', '', '#c08cff', 1500); } catch (e) {} }
+    } else if (tm < st.gather + st.hold) {                             // it burns, and bends everything
+      const th = (tm - st.gather) / st.hold, k = _gE(Math.min(1, th * 2.5));
+      const jit = 0.004 * st.amount;
+      m.position.set(0.035 + (Math.random() - 0.5) * jit, -0.03 + (Math.random() - 0.5) * jit, -0.30); off.position.set(-0.035 + (Math.random() - 0.5) * jit, -0.03 + (Math.random() - 0.5) * jit, -0.30);
+      orb.visible = true; orb._blue.visible = orb._red.visible = false;
+      orb.scale.setScalar(1 + (1.2 + 2.6 * st.amount) * _gE(th));
+      orb._ring.rotation.z = t * 5; orb._ring.rotation.x = t * 2.3;
+      orb._halo.material.opacity = 0.32 + 0.12 * Math.sin(t * 17);
+      strength = st.amount * (0.25 + 0.75 * k);
+      if (th < 0.05 && !st.flashed) { st.flashed = true; flashScreen('rgba(214,170,255,0.65)', 420); }
+    } else {                                                           // it comes apart: red and blue, and you are thrown back a step
+      const ts = (tm - st.gather - st.hold) / st.split, k = _gE(ts);
+      if (!st.jumped) {
+        st.jumped = true;
+        const f = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion); f.y = 0; if (f.lengthSq() > 1e-4) f.normalize();
+        _extVel.x -= f.x * 9; _extVel.z -= f.z * 9; playerYVel = Math.max(playerYVel, 5.2); window._blastCarry = false;
+        flashScreen('rgba(235,225,255,0.55)', 380);
+        try { playSoundEvent('air_burst', { volume: 0.9, minGap: 0 }); } catch (e) {}
+      }
+      const orb2 = _gojoOrb();
+      orb2._blue.visible = orb2._red.visible = true;
+      orb2._core.material.opacity = orb2._mid.material.opacity = orb2._halo.material.opacity = Math.max(0, 1 - k * 1.4) * 0.9;
+      orb2._ring.material.opacity = Math.max(0, 0.9 - k * 1.4);
+      orb2.scale.setScalar(Math.max(0.2, (1 + 1.2 + 2.6 * st.amount) * (1 - k * 0.55)));
+      orb2._blue.position.set(-0.30 * k / orb2.scale.x * 1.0, 0, 0); orb2._red.position.set(0.30 * k / orb2.scale.x, 0, 0);
+      orb2.visible = ts < 0.8;
+      const back = _gE(ts * 1.1);
+      m.rotation.order = off.rotation.order = 'YXZ';
+      m.position.set(0.035 + (restM.x - 0.035) * back, -0.03 + (restM.y + 0.03) * back, -0.30 + (restM.z + 0.30) * back);
+      off.position.set(-0.035 + (restO.x + 0.035) * back, -0.03 + (restO.y + 0.03) * back, -0.30 + (restO.z + 0.30) * back);
+      m.rotation.set(-0.10 * (1 - back), 0.5 * (1 - back), 0); off.rotation.set(-0.10 * (1 - back), -0.5 * (1 - back), 0);
+      m._boost = off._boost = 1.3 * (1 - back);
+      strength = st.amount * (1 - k);
+    }
+    gojoWarp(strength, t);
+    return true;
+  } else {
+    m.position.copy(restM); off.position.copy(restO); m.rotation.set(0, 0, 0); off.rotation.set(0, 0, 0); m._boost = off._boost = 0;
+  }
+  return true;
+}
+function gojoEnd(st) {
+  GOJO.last = performance.now(); GOJO.st = null;
+  if (GOJO.orb) { GOJO.orb.visible = false; GOJO.orb._core.material.opacity = 1; GOJO.orb._mid.material.opacity = 0.85; GOJO.orb._halo.material.opacity = 0.38; GOJO.orb._ring.material.opacity = 0.9; }
+  gojoWarpClear();
+  const i = MELEE_ITEMS.findIndex(x => x.id === 'fists'), m = meleeModels[i];
+  if (m && m._gojo) { m._boost = 0; if (m._offHand) m._offHand._boost = 0; }
+}
+// every frame: the portals swirl and breathe, and flare when a punch lands
+function updateGojoFx(dt) {
+  const i = MELEE_ITEMS.findIndex(x => x.id === 'fists'), m = meleeModels[i];
+  if (GOJO.ui && GOJO.ui.on && !(itemInspect && itemInspect.gojo)) gojoWarpClear();       // (an inspect cut short must not leave the view bent)
+  if (!m || !m._gojo || !m.visible) return;
+  const t = performance.now() / 1000;
+  for (const h of [m, m._offHand]) {
+    if (!h || !h._portal) continue;
+    const red = h._kind === 'red', fl = _gojoFlare[h._kind];
+    h._disc.rotation.z += dt * (red ? -2.8 : 2.4); h._halo.rotation.z -= dt * (red ? -1.2 : 1.0); h._ring.rotation.z += dt * 0.8;
+    const pulse = 1 + 0.07 * Math.sin(t * 5.5 + (red ? 1.7 : 0));
+    h._portal.scale.setScalar(pulse * (1 + 0.55 * (h._boost || 0) + fl * 0.9));
+    h._halo.material.opacity = 0.28 + 0.2 * (h._boost || 0) + 0.4 * fl;
+    _gojoFlare[h._kind] = Math.max(0, fl - dt * 3.5);
+  }
+}
+// a punch that lands: a flash in the colour of the fist that threw it
+function gojoOnFistHit(model, pos) {
+  if (!model || !model._gojo) return;
+  const red = !!model._punchLeft;                                       // (the left hand is the red one)
+  _gojoFlare[red ? 'red' : 'blue'] = 1.2;
+  flashScreen(red ? 'rgba(255,50,40,0.40)' : 'rgba(70,150,255,0.40)', 280);
+  try { spawnAbilityAOEFX(pos.clone(), 1.1, red ? 0xff2a2a : 0x4aa8ff); } catch (e) {}
+}
+
 // 🎱 Spear → Pool Cue. The reach was always the point.
 function buildPoolCue() {
   const g = new THREE.Group();
@@ -55105,6 +55323,9 @@ const MELEE_MODEL_SKINS = [
   { id: 'fists_oven_mitts', melee: 'fists', name: 'Oven Mitts', rarity: 'good',
     sw: ['#e4d8c0', '#b03a30'], build: buildOvenMitts,
     blurb: 'Quilted, scorched at the thumb. Gas mark nine.' },
+  { id: 'fists_limitless', melee: 'fists', name: 'Limitless', rarity: 'rare', raw: true,
+    sw: ['#2f7bff', '#ff2a2a'], build: buildLimitless,
+    blurb: 'Blue in the right hand, red in the left. Inspect them. Then inspect them again.' },
   { id: 'fists_one_fist', melee: 'fists', name: 'Fist', rarity: 'lame',
     sw: ['#eac39a', '#c83a30'], build: buildSingleFist,
     blurb: 'The normal fist, but only the one. The other one stayed home.' },
@@ -55274,13 +55495,16 @@ function applyMeleeModelSkin(baseId) {
     // would leak a group into the camera each time.
     if (!skin._model) {
       try {
-        const m = skin.rarity === 'donut' ? skin.build() : _smoothModelSkin(skin.build());   // a doughnut keeps its hard edges
-        try { greebleModel(m); } catch (e) {}
-        try { weldModelParts(m); } catch (e) {}
-        try { blendProudSteps(m); } catch (e) {}
-        try { shinifyModel(m); } catch (e) {}
+        const m = (skin.rarity === 'donut' || skin.raw) ? skin.build() : _smoothModelSkin(skin.build());   // a doughnut keeps its hard edges
+        if (!skin.raw) {
+          try { greebleModel(m); } catch (e) {}
+          try { weldModelParts(m); } catch (e) {}
+          try { blendProudSteps(m); } catch (e) {}
+          try { shinifyModel(m); } catch (e) {}
+        }
         m.visible = false;
         camera.add(m);
+        if (m._offHand) camera.add(m._offHand);                      // a pair (Limitless): the other hand is its own object
         skin._model = m;
       } catch (e) { console.warn('[melee skin]', e); return; }
     }
@@ -64740,6 +64964,11 @@ function startItemInspect() {
       || grenadeWindupT < 1 || _equip || spearThrown || useAnim) return false;
   const kind = itemInspectKind(slot, item), spec = ITEM_INSPECT[kind];
   if (model._park) model._park = null;
+  if (model._gojo) {                                                    // Limitless has its own show (see above)
+    itemInspect = { model, slot, idx, kind, t0: performance.now(), ms: 1e9, keys: null, beats: [], beat: 0,
+                    base: model.position.clone(), baseRot: model.rotation.clone(), order: model.rotation.order, gojo: gojoInspectBegin() };
+    return true;
+  }
   itemInspect = { model, slot, idx, kind, t0: performance.now(), ms: spec.ms, keys: spec.keys, beats: spec.beats, beat: 0,
                   base: model.position.clone(), baseRot: model.rotation.clone(), order: model.rotation.order };
   return true;
@@ -64751,6 +64980,7 @@ function cancelItemInspect() {
   const m = s.model;
   m.position.copy(s.base); m.rotation.copy(s.baseRot); m.rotation.order = s.order;
   if (m._offHand) { m._offHand.position.copy(MELEE_OFFHAND_REST_POS); m._offHand.rotation.set(0, 0, 0); }
+  if (s.gojo) gojoEnd(s.gojo);
 }
 function updateItemInspect() {
   const s = itemInspect;
@@ -64761,6 +64991,7 @@ function updateItemInspect() {
   const busy = meleeSwingT < 1 || meleeSlam || meleeDash || batCrowdCharge || scytheDash || meleeAbilityBuff
     || grenadeWindupT < 1 || _equip || useAnim;
   if (!held || busy) { cancelItemInspect(); return; }
+  if (s.gojo) { if (!gojoInspectStep(s)) cancelItemInspect(); return; }
   const t = Math.min(1, (performance.now() - s.t0) / s.ms);
   const P = _reloadPose(s.keys, t);
   m.rotation.order = 'YXZ';
@@ -71275,6 +71506,7 @@ function loop() {
   safeLoopStep('music', () => updateMusic(dt));           // the lobby's theme, and the maps that have one
   safeLoopStep('realism-feedback', () => updateRealismFeedback(dt));
   safeLoopStep('status-reset', () => watchStatusReset());
+  safeLoopStep('limitless-fx', () => updateGojoFx(dt));   // the Limitless portals
   safeLoopStep('wrap-sync', () => emitMyWrap());   // a changed wrap reaches the other players
   safeLoopStep('dots', () => updateDots());       // anything set alight keeps taking damage
   safeLoopStep('bullets', () => updateBullets(dt));
