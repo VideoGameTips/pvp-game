@@ -4863,7 +4863,8 @@ function playHackerBlaster(ctx, start, level, o = {}) {
   playTone(ctx, start + 0.010, 0.11 * k, out, 5600, 880, v * 0.30, 'sine');                                        // a bright ping on top
   if (!o.noStutter) [0.105, 0.145, 0.182].forEach((d, i) => playTone(ctx, start + d, 0.018, out, 980 - i * 230, 760 - i * 230, v * 0.38, 'square'));   // the glitch stutter
 }
-const SKIN_VOICE = { pistol_hacker: playHackerBlaster, ak20_hacker: (ctx, start, level) => playHackerBlaster(ctx, start, level, { v: 0.62, k: 0.5, noStutter: true }) };   // the AK's: the same zap, half as long, no stutter, under it
+const SKIN_VOICE = { pistol_hacker: playHackerBlaster, ak20_hacker: (ctx, start, level) => playHackerBlaster(ctx, start, level, { v: 0.62, k: 0.5, noStutter: true }),
+  grenade_launcher_hacker: (ctx, start, level) => playHackerBlaster(ctx, start, level, { v: 0.85, k: 1.5 }) };   // the launcher's: the same zap, longer and fatter   // the AK's: the same zap, half as long, no stutter, under it
 function skinVoiceFor(id) { try { const sk = _activeModelSkin[id]; return sk ? SKIN_VOICE[sk.id] || null : null; } catch (e) { return null; } }
 function _playWeaponSound(idOrWeapon, opts = {}) {
   const ctx = getAudioCtx();
@@ -26952,35 +26953,129 @@ function buildCarrotLauncher() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
-function buildTuba() {
-  // 🎺 Bazooka -> tuba. The bazooka was named after a comedian's homemade horn,
-  // so this is it going home. Bell forward, three valves on top, mouthpiece at
-  // the back, a loop of tubing round the side.
+function buildNukeLauncher() {
+  // ☢️ RPG -> Nuke Launcher. An olive tube with hazard bands and the radiation trefoil on both sides, and the warhead is a mushroom cloud: a glowing
+  // orange cap on a stalk, ringed with ash, nose forward.
   const g = new THREE.Group();
   const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
-  const brass = new THREE.MeshPhongMaterial({ color: 0xd8aa3a, shininess: 200, specular: 0xfff0b0, side: THREE.DoubleSide });
-  const dark  = new THREE.MeshPhongMaterial({ color: 0x9a7420, shininess: 120, specular: 0xe8c878 });
-  const pearl = new THREE.MeshPhongMaterial({ color: 0xf4eee0, shininess: 160, specular: 0xffffff });
-  gpCyl(g, brass, 0.026, 0.026, 0.260, 14, 0, 0.030, 0.000);           // main bore
-  gpCyl(g, brass, 0.080, 0.026, 0.130, 20, 0, 0.030, -0.190);          // flaring bell
-  gpCyl(g, dark, 0.082, 0.082, 0.008, 20, 0, 0.030, -0.256);           // bell rim
-  gpCyl(g, inner, 0.074, 0.074, 0.003, 20, 0, 0.030, -0.250);          // inside the bell
-  const loop = new THREE.Mesh(new THREE.TorusGeometry(0.060, 0.012, 8, 22), brass);
-  loop.rotation.y = Math.PI / 2; loop.position.set(0.034, 0.030, 0.010); g.add(loop);
-  for (let i = 0; i < 3; i++) {                                         // valves
-    gpCyl(g, brass, 0.012, 0.012, 0.060, 12, -0.004, 0.070, -0.030 + i * 0.030, 0);
-    gpCyl(g, dark, 0.004, 0.004, 0.014, 8, -0.004, 0.106, -0.030 + i * 0.030, 0);
-    gpCyl(g, pearl, 0.010, 0.010, 0.006, 12, -0.004, 0.115, -0.030 + i * 0.030, 0);
+  const tube   = new THREE.MeshPhongMaterial({ color: 0x4f5e2c, shininess: 60, specular: 0x9aa878 });
+  const yellow = new THREE.MeshPhongMaterial({ color: 0xf2c418, shininess: 80, specular: 0xfff0a0 });
+  const ash    = new THREE.MeshLambertMaterial({ color: 0x6a645c });
+  const stalk  = new THREE.MeshLambertMaterial({ color: 0x9a6a3a });
+  const glow   = new THREE.MeshBasicMaterial({ color: 0xff7a1a });
+  const hot    = new THREE.MeshBasicMaterial({ color: 0xffe27a });
+  gpCyl(g, tube, 0.034, 0.034, 0.380, 16, 0, 0.030, 0.020);                // launch tube
+  for (const z of [-0.150, -0.120, 0.180, 0.210]) gpCyl(g, yellow, 0.0365, 0.0365, 0.014, 16, 0, 0.030, z);     // hazard bands
+  gpCyl(g, inner, 0.030, 0.030, 0.004, 14, 0, 0.030, 0.222);
+  // the trefoil, three yellow sectors round a disc, one on each side of the tube
+  for (const sd of [-1, 1]) {
+    const f = new THREE.Group(); f.position.set(sd * 0.0345, 0.030, 0.045); f.rotation.y = sd * Math.PI / 2; g.add(f);
+    const plate = new THREE.Mesh(new THREE.CircleGeometry(0.026, 20), new THREE.MeshBasicMaterial({ color: 0x14170c })); f.add(plate);
+    for (let i = 0; i < 3; i++) { const a = new THREE.Mesh(new THREE.CircleGeometry(0.0235, 10, i * 2.0944 + 0.52, 1.0472), new THREE.MeshBasicMaterial({ color: 0xf2c418 })); a.position.z = 0.0006; f.add(a); }
+    const hub = new THREE.Mesh(new THREE.CircleGeometry(0.0046, 10), new THREE.MeshBasicMaterial({ color: 0xf2c418 })); hub.position.z = 0.0012; f.add(hub);
   }
-  gpCyl(g, brass, 0.010, 0.010, 0.080, 10, 0, 0.056, 0.160, 0.5);      // lead pipe
-  gpCyl(g, brass, 0.005, 0.014, 0.030, 10, 0, 0.078, 0.200, 0.5);      // mouthpiece
-  gpPlate(g, inner, [
-    [0.030,-0.004],[0.060,-0.020],[0.068,-0.120],[0.040,-0.134],[0.012,-0.042],[0.008,-0.006],
-  ], 0.034, 0);
+  // the warhead: a stalk, and a cap that glows, with a skirt of ash round it
+  gpCyl(g, stalk, 0.010, 0.017, 0.070, 12, 0, 0.030, -0.205, -Math.PI / 2);
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.046, 16, 12), glow); cap.scale.set(1, 1, 0.62); cap.position.set(0, 0.030, -0.262); g.add(cap);
+  const capHot = new THREE.Mesh(new THREE.SphereGeometry(0.030, 12, 8), hot); capHot.scale.set(1, 1, 0.6); capHot.position.set(0, 0.030, -0.272); g.add(capHot);
+  const crown = new THREE.Mesh(new THREE.SphereGeometry(0.026, 10, 8), ash); crown.position.set(0, 0.030, -0.292); g.add(crown);
+  const skirt = new THREE.Mesh(new THREE.TorusGeometry(0.044, 0.010, 8, 20), ash); skirt.position.set(0, 0.030, -0.236); g.add(skirt);
+  for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2, p = new THREE.Mesh(new THREE.SphereGeometry(0.009, 6, 5), ash); p.position.set(Math.cos(a) * 0.050, 0.030 + Math.sin(a) * 0.050, -0.250); g.add(p); }
+  gpBox(g, tube, 0.024, 0.030, 0.080, 0, 0.074, 0.020);                    // sight block
+  gpBox(g, yellow, 0.004, 0.018, 0.004, 0, 0.098, -0.010);
+  gpPlate(g, inner, [[0.030,-0.004],[0.060,-0.020],[0.068,-0.120],[0.040,-0.134],[0.012,-0.042],[0.008,-0.006]], 0.034, 0);   // rear grip
+  gpPlate(g, inner, [[-0.090,-0.004],[-0.066,-0.006],[-0.062,-0.090],[-0.086,-0.096]], 0.030, 0);                            // fore grip
   gpBox(g, bright, 0.006, 0.014, 0.006, 0, -0.016, 0.004, 0.22);
-  const flash = makeMuzzleFlash(); flash.position.set(0, 0.030, -0.262); g.add(flash);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.030, -0.340); g.add(flash);
   g._flash = flash; g._kickZ = 0.020; g._greebled = true; g._handDetailed = true;
   g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildHackerGrenadeLauncher() {
+  // 🟩 Grenade Launcher -> Hacker Launcher. The stock launcher turned to the void and outlined in green (_hackerize), like the Hacker Pistol and AK: a screen of running 1s and 0s on the
+  // receiver that flashes when it fires, circuit traces, a lit line round the drum and a green front sight.
+  const kit = _hackKit(), g = _hackerize(buildGrenadeLauncher(), kit);
+  const { mesh: screen, draw } = _hackScreen(0.112, 0.028, 28, 4, { px: 256 });
+  screen.position.set(-0.0252, 0.012, 0.088); screen.rotation.y = -Math.PI / 2; g.add(screen);
+  _hackTrace(g, kit, -0.0252, [[0.034, -0.010], [0.056, -0.010], [0.066, -0.000], [0.088, -0.000]]);        // under the screen
+  _hackTrace(g, kit, -0.0252, [[0.110, 0.030], [0.130, 0.030], [0.138, 0.022], [0.150, 0.022]]);
+  _hackTrace(g, kit, -0.0626, [[-0.060, 0.010], [-0.040, 0.034], [-0.010, 0.040], [0.010, 0.020]]);        // and across the drum
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.0606, 0.0011, 5, 28), kit.green); ring.position.set(0, 0.010, -0.020); ring.userData.noSmooth = true; g.add(ring);
+  gpBox(g, kit.green, 0.0040, 0.0040, 0.0040, 0, 0.0905, -0.078);                                            // tritium on the front sight
+  if (g._flash) _hackFlash(g._flash);
+  _hackScreenTick(g, draw);
+  return g;
+}
+
+function buildTuba() {
+  const g = new THREE.Group();
+  const brass = new THREE.MeshPhongMaterial({color:0xd6a644,shininess:230,specular:0xfff4d5});
+  const warm = new THREE.MeshPhongMaterial({color:0x94651e,shininess:120,specular:0xf7d686});
+  const silver = new THREE.MeshPhongMaterial({color:0xd9e0e7,shininess:250,specular:0xffffff});
+  const pearl = new THREE.MeshPhongMaterial({color:0xf6efe0,shininess:175,specular:0xffffff});
+  const tube = (points,radius=.006,material=brass) => {
+    const path=new THREE.CatmullRomCurve3(points.map(p=>new THREE.Vector3(...p)),false,'centripetal');
+    const mesh=new THREE.Mesh(new THREE.TubeGeometry(path,48,radius,10,false),material);
+    mesh.castShadow=true;g.add(mesh);return mesh;
+  };
+  const ring=(radius,thickness,x,y,z,material=brass)=>{
+    const mesh=new THREE.Mesh(new THREE.TorusGeometry(radius,thickness,8,40),material);
+    mesh.position.set(x,y,z);g.add(mesh);return mesh;
+  };
+  // A continuous double-wall profile leaves a genuinely open bell, not a black cap.
+  const profile=[],length=.150,throat=.014,mouth=.071,wall=.0014;
+  for(let i=0;i<=20;i++){const t=i/20;profile.push(new THREE.Vector2(throat+(mouth-throat)*Math.pow(t,2.8),t*length));}
+  for(let i=20;i>=0;i--){const t=i/20;profile.push(new THREE.Vector2(throat+(mouth-throat)*Math.pow(t,2.8)-wall,t*length));}
+  profile.push(profile[0].clone());
+  const bell=new THREE.Mesh(new THREE.LatheGeometry(profile,48),brass);
+  bell.rotation.x=-Math.PI/2;bell.position.set(0,.030,-.120);bell.castShadow=true;g.add(bell);
+  bell.userData.hollowBell=true;
+  ring(mouth,.0019,0,.030,-.270,silver);
+  ring(.0145,.0012,0,.030,-.120,warm);
+  gpCyl(g,brass,.014,.014,.205,24,0,.030,-.0175);
+  tube([[0,.030,.085],[0,.026,.126],[0,.005,.151],[0,-.025,.139],[0,-.040,.095],[0,-.040,-.075],[0,-.021,-.111],[0,.030,-.120]],.008);
+  tube([[.020,.030,.060],[.031,.040,.102],[.031,.049,.145],[.020,.049,.180]],.0055);
+  const mouthProfile=[[.004,0],[.005,.010],[.011,.021],[.012,.025],[.0095,.025],[.0075,.021],[.003,.008],[.003,0]].map(p=>new THREE.Vector2(...p));
+  const mouthpiece=new THREE.Mesh(new THREE.LatheGeometry(mouthProfile,32),silver);
+  mouthpiece.rotation.x=Math.PI/2;mouthpiece.position.set(.020,.049,.180);g.add(mouthpiece);
+  ring(.011,.001,.020,.049,.205,silver);
+  const valves=[];
+  for(let i=0;i<3;i++){
+    const z=-.036+i*.032;
+    gpCyl(g,brass,.010,.010,.051,20,0,.052,z,0);
+    gpCyl(g,warm,.011,.011,.004,20,0,.025,z,0);
+    gpCyl(g,silver,.0105,.0105,.004,20,0,.079,z,0);
+    tube([[0,.046,z-.006],[-.027,.046,z-.010],[-.043,.038,z],[-.027,.031,z+.010],[0,.031,z+.006]],.0045);
+    const button=new THREE.Group();button.position.set(0,.081,z);g.add(button);
+    gpCyl(button,silver,.003,.003,.014,12,0,.007,0,0);
+    gpCyl(button,brass,.009,.009,.004,24,0,.015,0,0);
+    gpCyl(button,pearl,.0078,.0078,.0015,24,0,.0178,0,0);
+    valves.push(button);
+  }
+  // Ferrules and braces join the pipework rather than decorating empty space.
+  for(const z of [-.090,.075]){
+    ring(.015,.0016,0,.030,z,warm);
+    gpCyl(g,silver,.002,.002,.062,10,0,-.005,z,0);
+    gpCyl(g,brass,.005,.005,.004,16,0,-.039,z,0);
+  }
+  const waterKey=gpBox(g,silver,.004,.003,.029,.008,-.048,-.080,0,.15);
+  waterKey.userData.waterKey=true;
+  g._hornValves=valves;g._hornNote=0;g._hornPress=0;
+  g._onFire=()=>{g._hornNote=(g._hornNote+1)%3;g._hornPress=1;};
+  g._tick=(dt,now,assembling)=>{
+    if(assembling)return;
+    g._hornPress=Math.max(0,g._hornPress-dt*6);
+    const t=g._reloadStart&&g._reloadDur?(Date.now()-g._reloadStart)/g._reloadDur:0;
+    const tuning=t>0&&t<.86;
+    valves.forEach((button,i)=>{
+      const press=tuning?Math.max(0,Math.sin(t*Math.PI*12-i*1.7)):i===g._hornNote?g._hornPress:0;
+      button.position.y=.081-.006*press;
+    });
+  };
+  g._calm=()=>{g._hornPress=0;valves.forEach(button=>button.position.y=.081);};
+  const flash=makeMuzzleFlash();flash.position.set(0,.030,-.274);g.add(flash);
+  g._flash=flash;g._kickZ=.020;g._greebled=true;g._handDetailed=true;
+  g.position.set(.10,-.10,-.32);return g;
 }
 
 function buildPressureWasher() {
@@ -42703,6 +42798,8 @@ const BOOM_THEMES = {
   paper:    { fire: 0xf2efe6, core: 0xffffff, smoke: 0xd8d4c8, bits: [0xf2efe6, 0xe74c3c, 0xffffff], bit: 'flake', ring: 0xf2efe6, flash: [255, 250, 235] },
   music:    { fire: 0xb08aff, core: 0xffffff, smoke: 0x4a3a7a, bits: [0xb08aff, 0xffd24a, 0xffffff], bit: 'ball', ring: 0xffd24a, flash: [190, 150, 255] },
   ice:      { fire: 0xbdf3ff, core: 0xffffff, smoke: 0xe8fbff, bits: [0xbdf3ff, 0xffffff], bit: 'shard', ring: 0x9ae8ff, flash: [170, 235, 255] },
+  cash:     { fire: 0xe0303a, core: 0xffe8e8, smoke: 0xb87074, bits: [0xe0303a, 0xf08a92, 0xe6d27a, 0xffffff], bit: 'flake', ring: 0xff6666, flash: [255, 90, 90] },
+  nuke:     { fire: 0xff7a1a, core: 0xfff4c8, smoke: 0x4a4540, bits: [0xff8a2a, 0xffd24a, 0x555048, 0xffffff], bit: 'chunk', ring: 0xff9a2a, flash: [255, 170, 70], mushroom: true },
   star:     { fire: 0xfff0a0, core: 0xffffff, smoke: 0x4a5a9a, bits: [0xfff0a0, 0x8ab4ff, 0xffffff], bit: 'shard', ring: 0x8ab4ff, flash: [255, 245, 170] },
 };
 function _boomFromTint(c) {                                                  // a burst in the colour of the skin, for a skin that has none of its own
@@ -42756,7 +42853,9 @@ const SKIN_SHOT = {};
   G({ shape: 'star', c: [0xfff0a0, 0x8ab4ff] }, 'star', ['railgun_constellation', 'portal_launcher_constellation']);
   G({ shape: 'gear', c: [0xc8a030, 0x6b4a2c], min: 0.07 }, 'gears', ['coilgun_clockwork', 'rpd_clockwork_belt', 'grenade_launcher_cuckoo']);
   G({ shape: 'bolt', c: [0x4aa8ff, 0xffffff] }, 'cyber', ['ak20_blueprint']);
-  G({ shape: 'hackbullet', c: [0x0a0a0a, 0x2dff6a], k: 1.5 }, null, ['pistol_hacker', 'ak20_hacker']);   // the Hacker Pistol and AK: a black round on a green glowing trail
+  G({ shape: 'hackbullet', c: [0x0a0a0a, 0x2dff6a], k: 1.5 }, null, ['pistol_hacker', 'ak20_hacker']);
+  G({ shape: 'hackbullet', c: [0x0a0a0a, 0x2dff6a], k: 1.5 }, 'hacker', ['grenade_launcher_hacker']);   // a black round on a green trail that bursts in green code
+  G(null, 'nuke', ['rpg_nuke'], 0xff8a2a);                                                                 // the ordinary rocket, and a mushroom cloud where it lands   // the Hacker Pistol and AK: a black round on a green glowing trail
   G({ shape: 'hackball', c: [0x0a0a0a, 0x2dff6a], k: 1.3 }, 'hacker', ['frag_hacker']);               // the Hacker Grenade: a black ball in a green ring, trailing code
   G({ shape: 'cube', c: [0xe74c3c, 0x2ecc71] }, 'pixel', ['p90_rubiks_cube']);
   G({ shape: 'shard', c: [0xb0b8ff, 0x6a6aff] }, 'star', ['ak20_hyperspace', 'deagle_phantom', 'burst_cannon_phantom', 'deagle_glitch']);
@@ -53264,6 +53363,12 @@ const MODEL_SKINS = [
   { id: 'rpg_carrot', weapon: 'rpg', name: 'Carrot Launcher', rarity: 'good',
     sw: ['#2f8a3a', '#f07a1a'], build: buildCarrotLauncher,
     blurb: 'Garden-hose tube, one giant carrot, leaves still on.' },
+  { id: 'rpg_nuke', weapon: 'rpg', name: 'Nuke Launcher', rarity: 'rare',
+    sw: ['#4f5e2c', '#ff7a1a'], build: buildNukeLauncher,
+    blurb: 'Olive tube, hazard bands, a mushroom cloud for a warhead. The blast is the same; the cloud is not.' },
+  { id: 'grenade_launcher_hacker', weapon: 'grenade_launcher', name: 'Hacker Launcher', rarity: 'rare', look: { hit: 'hack' },
+    sw: ['#08090a', '#2dff6a'], build: buildHackerGrenadeLauncher,
+    blurb: 'The Hacker Pistol, as a launcher: void black with green outlines and a screen of 1s and 0s on the receiver. Black rounds on a green trail that burst into code; a hit flashes and the damage number scrambles.' },
   { id: 'rpg_water_balloon', weapon: 'rpg', name: 'Water Balloon Launcher', rarity: 'good',
     sw: ['#2a9fd8', '#55bbff'], build: buildRPGWaterBalloonLauncher, look: { projectile: 'water_balloon', bulletColor: 0x55bbff },
     blurb: 'A shoulder launcher with one very doomed water balloon loaded.' },
@@ -64919,6 +65024,33 @@ function _boomBitGeo(kind) {                                                  //
     : kind === 'flake' ? new THREE.BoxGeometry(0.10, 0.012, 0.10) : kind === 'cube' ? new THREE.BoxGeometry(0.065, 0.065, 0.065)
     : kind === 'shard' ? new THREE.OctahedronGeometry(0.06) : new THREE.BoxGeometry(0.055, 0.055, 0.055));
 }
+// ☢️ The Nuke Launcher's blast (a skin's look only: the same radius and damage as any rocket). A stem climbs, a cap swells on top of it and
+// rolls out into a skirt, and the whole thing goes from orange to ash and fades. About two seconds.
+function spawnMushroomCloud(pos) {
+  const g = new THREE.Group(); g.position.copy(pos); scene.add(g);
+  const mk = (geo, color, op) => { const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: op, depthWrite: false })); g.add(m); return m; };
+  const stem = mk(new THREE.CylinderGeometry(0.55, 1.0, 1, 14, 1, true), 0xa86a30, 0.8);
+  const cap = mk(new THREE.SphereGeometry(1, 16, 12), 0xff7a1a, 0.9); cap.scale.y = 0.62;
+  const crown = mk(new THREE.SphereGeometry(0.72, 12, 8), 0x5a524a, 0.75);
+  const core = mk(new THREE.SphereGeometry(0.6, 10, 8), 0xfff0b0, 0.9);
+  const skirt = mk(new THREE.TorusGeometry(1, 0.26, 8, 20), 0xc8d0d8, 0.55); skirt.rotation.x = Math.PI / 2;
+  const hot = new THREE.Color(0xff7a1a), ash = new THREE.Color(0x5a5650), t0 = performance.now(), T = 2300;
+  const tick = () => {
+    const p = Math.min(1, (performance.now() - t0) / T), e = 1 - Math.pow(1 - p, 2), grow = 1 - Math.pow(1 - Math.min(1, p * 1.5), 3);
+    const H = 8 * e, R = 1.1 + 3.6 * grow;
+    stem.scale.set(1 + 0.5 * grow, Math.max(0.01, H), 1 + 0.5 * grow); stem.position.y = H / 2;
+    cap.position.y = H + R * 0.25; cap.scale.set(R, R * 0.62, R);
+    crown.position.y = H + R * 0.62; crown.scale.setScalar(R * 0.8);
+    core.position.y = H + R * 0.2; core.scale.setScalar(Math.max(0.01, R * 0.55 * (1 - p)));
+    skirt.position.y = H * 0.9; skirt.scale.setScalar(R * 0.88);
+    cap.material.color.copy(hot).lerp(ash, Math.min(1, p * 1.3));
+    const fade = p < 0.65 ? 1 : 1 - (p - 0.65) / 0.35;
+    stem.material.opacity = 0.8 * fade; cap.material.opacity = 0.9 * fade; crown.material.opacity = 0.75 * fade; skirt.material.opacity = 0.55 * fade; core.material.opacity = 0.9 * fade;
+    if (p < 1) requestAnimationFrame(tick);
+    else { scene.remove(g); g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); }
+  };
+  requestAnimationFrame(tick);
+}
 function spawnExplosion(pos, boom = null) {
   // 💥 Boom — positional volume based on distance from camera. `boom` (BOOM_THEMES, or a tint of a skin) changes only the colours and what the bits are:
   // the blast, the damage and the sound are the same for every skin.
@@ -64966,6 +65098,7 @@ function spawnExplosion(pos, boom = null) {
     }
   };
   requestAnimationFrame(tick);
+  if (boom && boom.mushroom) spawnMushroomCloud(pos);
 
   // ── Debris chunks ──
   const bits = boom ? boom.bits : null;
