@@ -1578,7 +1578,8 @@ const GAME_MODE_CONFIGS = {
   'ffa15': { type: 'ffa',  allies: 0, enemies: 15, timeLimit: 300 },
   // Special modes
   'frontlines': { type: 'frontlines', allies: 4, enemies: 5 },
-  'laststand':  { type: 'laststand',  allies: 0, enemies: 0 },
+  'boss':       { type: 'boss',       allies: 0, enemies: 0, forcedMap: 'battlefield', playerHp: 400 },   // 🤖 1v1 against THE WARDEN, a giant stationary robot
+  'laststand':  { type: 'laststand',  allies: 3, enemies: 0, forcedMap: 'battlefield', playerHp: 300 },   // 🧟 zombie waves, three teammates, the Battlefield's farmhouse
   'dday':       { type: 'dday',       allies: 3, enemies: 0 },
   'base_raid':  { type: 'race',       allies: 4, enemies: 16, killGoal: 16, timeLimit: 420,
     forcedMap: 'base_raid', botHp: 220, playerHp: 300 },
@@ -46053,7 +46054,14 @@ function loadoutReady() {
     selectedMeleeIdx >= 0 && selectedSupportIdx >= 0;
 }
 
+// Where you come back after a fall in a hold-the-line mode, and how long it takes: D-Day's bunker, or Last Stand's farmhouse.
+function holdRespawn() {
+  if (match?.type === 'laststand') return { x: LS_PLAYER[0], z: LS_PLAYER[1], fx: 0, fz: -30, ms: LS_RESPAWN_MS };
+  return { x: DDAY_BUNKER_XS[0], z: DDAY_BUNKER_Z, fx: DDAY_BUNKER_XS[0], fz: 0, ms: 3000 };
+}
+function holdMode() { return match?.type === 'dday' || match?.type === 'laststand'; }
 function resetCombatResources() {
+  fistStrike = null;
   for (const id of Object.keys(supportRechargeUntil)) delete supportRechargeUntil[id];
   window.PVP_RAGDOLL?.resetLocal();
   hellfireCores=3;
@@ -49664,14 +49672,15 @@ function _applyRootToTarget(pid, ms, color = 0x9fe8ff) {
 
 function _nearestAbilityRayHit(origin, dir, range, radius = 0.65) {
   let best = null;
-  const r2Body = radius * radius, r2Head = 0.32 * 0.32;
   for (const [pid, mesh] of Object.entries(remoteMeshes)) {
     if (!mesh.visible || players[pid]?.dead) continue;
     if (friendlyFireBlocked(pid, myId)) continue;
-    if (!hasLineOfSight(origin.x, origin.z, mesh.position.x, mesh.position.z)) continue;
+    const sc = mesh._bodyScale || 1;                                          // (a giant's spheres are as big as it is)
+    const r2Body = (radius * sc) * (radius * sc), r2Head = (0.32 * sc) * (0.32 * sc);
+    if (sc === 1 && !hasLineOfSight(origin.x, origin.z, mesh.position.x, mesh.position.z)) continue;
     const pts = [
-      { p: new THREE.Vector3(mesh.position.x, mesh.position.y + 1.55, mesh.position.z), r2: r2Head, head: true },
-      { p: new THREE.Vector3(mesh.position.x, mesh.position.y + 0.95, mesh.position.z), r2: r2Body, head: false },
+      { p: new THREE.Vector3(mesh.position.x, mesh.position.y + 1.55 * sc, mesh.position.z), r2: r2Head, head: true },
+      { p: new THREE.Vector3(mesh.position.x, mesh.position.y + 0.95 * sc, mesh.position.z), r2: r2Body, head: false },
     ];
     for (const s of pts) {
       const rel = s.p.clone().sub(origin);
@@ -62863,7 +62872,7 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ['acid_pool', 8], ['bee_sting', 5],   // 🧪 acid tick / 🐝 bee sting
   ['thunderstorm', 60],
   // Lazy weapons batch
-  ['frost_blaster', 3], ['air_grenade', 15], ['land_mine', 298], ['frost_freeze', 9999],
+  ['frost_blaster', 3], ['boss_minigun', 11], ['boss_missile', 55], ['boss_mortar', 70], ['boss_laser', 16], ['air_grenade', 15], ['land_mine', 298], ['frost_freeze', 9999],
   // 🔬 Tech / Physics batch
   ['prism_launcher', 38], ['foam_cannon', 18], ['airburst_projector', 22], ['glassmaker', 28],
   ['freeze_gun'], ['seismic_hammer', 70], ['painter_beam', 6], ['portal_launcher', 10],
@@ -63014,9 +63023,12 @@ function scheduleLocalOutOfBoundsRecovery() {
     setTimeout(() => { if (ds) ds.style.display = 'none'; }, 2400);
     return;
   }
-  if (match?.type === 'dday') {
-    if (dm) dm.textContent = 'Respawning in 3s...';
-    afterDeath(3000, () => {
+  if (match?.type === 'boss') { if (dm) dm.textContent = 'The Warden wins...'; return; }
+  if (holdMode()) {
+    const H = holdRespawn();
+    if (match.type === 'laststand' && !lsAlliesUp()) { if (dm) dm.textContent = 'Your team is down...'; return; }
+    if (dm) dm.textContent = `Respawning in ${H.ms / 1000}s...`;
+    afterDeath(H.ms, () => {
       if (!match || match.over || !isDead) return;
       if (ds) ds.style.display = 'none';
       isDead = false;
@@ -63266,14 +63278,17 @@ function applyBotDamageToPlayer(weaponId, botId, damageOverride) {
         // Hide death screen when respawn fires (handled in onEntityDied)
         setTimeout(() => { if (ds) ds.style.display = 'none'; }, 3800);
       }
-    } else if (match && match.type === 'dday') {
-      if (ds) { ds.style.display = 'flex'; const dm = document.getElementById('death-msg'); if (dm) dm.textContent = 'Respawning in 3s...'; }
-      afterDeath(3000, () => {
+    } else if (match && match.type === 'boss') {
+      if (ds) { ds.style.display = 'flex'; const dm = document.getElementById('death-msg'); if (dm) dm.textContent = 'The Warden wins...'; }
+    } else if (match && holdMode()) {
+      const H = holdRespawn();
+      if (ds) { ds.style.display = 'flex'; const dm = document.getElementById('death-msg'); if (dm) dm.textContent = (match.type === 'laststand' && !lsAlliesUp()) ? 'Your team is down...' : `Respawning in ${H.ms / 1000}s...`; }
+      if (!(match.type === 'laststand' && !lsAlliesUp())) afterDeath(H.ms, () => {
         if (!isDead) return;
         if (ds) ds.style.display = 'none';
         isDead = false;
         me.hp = 300; updateHealthHUD(300);
-        camera.position.set(DDAY_BUNKER_XS[0], 1.65, DDAY_BUNKER_Z); faceToward(DDAY_BUNKER_XS[0], 0);
+        camera.position.set(H.x, 1.65, H.z); faceToward(H.fx, H.fz);
         grantSpawnShield(3000);
         requestPointerLockSafe();
       });
@@ -63940,15 +63955,18 @@ socket.on('playerDied', data => {
       faceToward(0, 0);   // down the range, at the targets
       socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z, mode: currentModeId() });
       requestPointerLockSafe();
-    } else if (match && match.type === 'dday') {
-      // D-Day: auto-respawn at bunker 0 after 3 seconds, same weapons
-      document.getElementById('death-msg').textContent = 'Respawning in 3s...';
-      afterDeath(3000, () => {
+    } else if (match && match.type === 'boss') {
+      document.getElementById('death-msg').textContent = 'The Warden wins...';
+    } else if (match && holdMode()) {
+      // D-Day / Last Stand: back at the bunker (or the farmhouse) after a few seconds, same weapons
+      const H = holdRespawn();
+      document.getElementById('death-msg').textContent = (match.type === 'laststand' && !lsAlliesUp()) ? 'Your team is down...' : `Respawning in ${H.ms / 1000}s...`;
+      if (!(match.type === 'laststand' && !lsAlliesUp())) afterDeath(H.ms, () => {   // (nobody left to stand with you: the match is ending)
         if (!match || match.over || !isDead) return;
         ds.style.display = 'none';
         isDead = false;
-        camera.position.set(DDAY_BUNKER_XS[0], 1.65, DDAY_BUNKER_Z); // back to bunker 0 slit
-        faceToward(DDAY_BUNKER_XS[0], 0);   // out of the slit, toward the enemies (-Z)
+        camera.position.set(H.x, 1.65, H.z); // back to the bunker slit / the farmhouse
+        faceToward(H.fx, H.fz);   // toward the enemies
         socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z, mode: currentModeId() });
         grantSpawnShield(3000);
         requestPointerLockSafe();
@@ -63992,14 +64010,14 @@ socket.on('playerRespawned', p => {
   p = fromWire(p);
   if (p.autoRespawn && match?.type === 'campaign' && resolveBot(p.id)?.campaignActor) return;
   // Elim modes (1v1, 2v2, 3v3): bots stay dead until the round ends. Ignore server auto-respawns.
-  if (p.autoRespawn && p.isBot && (match?.type === 'elim' || match?.jugg)) return;
+  if (p.autoRespawn && p.isBot && (match?.type === 'elim' || match?.jugg || match?.type === 'laststand' || match?.type === 'boss')) return;   // (Last Stand: the fallen come back when the wave is over)
   players[p.id]=p;
   if (p.id===myId) {
     isDead = false;
     updateHealthHUD(p.hp || 300);
     resetCombatResources();
-    if (match && match.type === 'dday') {
-      // D-Day: position already set by the 3s respawn timer, just refresh HP
+    if (match && holdMode()) {
+      // D-Day / Last Stand: position already set by the respawn timer, just refresh HP
       if (p.forcedReset) camera.position.set(p.x, 1.65, p.z);
     } else {
       // Always teleport to the player's team side — never trust server's center-ish spawn.
@@ -66701,6 +66719,7 @@ function initMatch() {
   if (cfg.type === 'arcade') initArcadeMode(cfg.subtype);
   if (cfg.type === 'frontlines') initFrontlines();
   if (cfg.type === 'laststand')  initLastStand();
+  if (cfg.type === 'boss')       initBoss();
   if (cfg.type === 'dday')       initDDay();
   if (cfg.type === 'range')      initRange();
   if (cfg.type === 'wave_dash')  resetWaveDash();
@@ -66815,6 +66834,8 @@ function startMatchRound() {
     } else if (match.type === 'dday') {
       showAnnouncement('D-DAY', 'Defend the hill! Enemies incoming!', '#ff9944', 2800);
       setTimeout(() => startDDayPhase('grenades'), 3000);
+    } else if (match.type === 'boss') {
+      startBossFight();
     } else if (match.type === 'laststand') {
       // laststand waves are managed by initLastStand / startNextWave
     } else if (match.type === 'range') {
@@ -66947,11 +66968,18 @@ function updateMatchHUD() {
     L.textContent = dd ? `WAVE ${dd.wavesSent}/3` : '---';
     C.textContent = dd ? `${dd.enemiesAlive} ENEMIES` : '---';
     R.textContent = dd ? (dd.phase === 'complete' ? 'CLEAR!' : dd.phase.toUpperCase()) : '---';
+  } else if (match.type === 'boss') {
+    const B = match.boss, me = players[myId];
+    L.textContent = B ? `PHASE ${B.phase}/3` : '---';
+    C.textContent = B ? `🤖 THE WARDEN ${Math.max(0, Math.ceil(B.bot.hp / B.bot.maxHp * 100))}%` : '---';
+    R.textContent = `HP ${me ? Math.max(0, Math.ceil(me.hp)) : 0}`;
   } else if (match.type === 'laststand') {
     const ls = lastStandState;
+    const left = ls ? gameBots.filter(b => b.zombie && !b.dead).length + (ls.toSpawn || 0) : 0;
+    const team = gameBots.filter(b => !b.zombie && b.team === 'ally');
     L.textContent = ls ? `WAVE ${ls.wave}` : '---';
-    C.textContent = ls && ls.phase === 'fight' ? `${gameBots.filter(b=>b.team==='enemy'&&!b.dead).length} LEFT` : ls ? `BUY ${Math.ceil(ls.buyTimer)}s` : '---';
-    R.textContent = ls ? `COINS: ${ls.coins}` : '---';
+    C.textContent = ls && ls.phase === 'fight' ? `🧟 ${left} LEFT` : ls ? `NEXT WAVE ${Math.max(0, Math.ceil((ls.nextWaveAt - Date.now()) / 1000))}s` : '---';
+    R.textContent = ls ? `TEAM ${team.filter(b => !b.dead).length + (isDead ? 0 : 1)}/${team.length + 1}` : '---';
   } else if (match.type === 'range') {
     L.textContent = `SHOTS ${rangeStats.shots}`;
     C.textContent = match.cfg.rangeTitle || 'RANGE';
@@ -67756,6 +67784,8 @@ function onEntityDied(targetId, killerId) {
     updateMatchHUD();
   } else if (match.type === 'frontlines') {
     onFrontlinesKill(targetId, killerId);
+  } else if (match.type === 'boss') {
+    onBossKill(killerId, targetId);
   } else if (match.type === 'laststand') {
     onLastStandKill(killerId, targetId);
   } else if (match.type === 'dday') {
@@ -67933,8 +67963,370 @@ function onFrontlinesKill(targetId, killerId) {
 }
 
 // ── Last Stand stubs (not yet implemented) ─────────────────────────────────
-function initLastStand() {}
-function onLastStandKill() {}
+// ═════════════════════════════════════════════════════════════════════
+// 🤖 BOSS FIGHT: THE WARDEN. One against one: you, and a giant stationary robot that is every weapon at once. It cannot move, so the fight is
+// about where YOU stand: a minigun arm (a long stream you can strafe), a missile pod (arcing salvos that land where you were), a mortar (red
+// circles on the floor, then shells) and a chest laser (a line, then a sweep). Three phases by its health: the first is the minigun and the
+// missiles, the second adds the mortar and the laser, the third does it all with hardly a pause. Each phase change refills your ammo and gives
+// back some health. It is simulated on this machine like every bot, and it is a bot to the server (a flag keeps it from being one-shot).
+// ═════════════════════════════════════════════════════════════════════
+const BOSS = { scale: 4.5, hp: 12000, pos: [0, -52], player: [-22, 44] };
+function buildWarden() {
+  const g = new THREE.Group();
+  const steel = new THREE.MeshPhongMaterial({ color: 0x3d4450, shininess: 60, specular: 0x8a94a4 });
+  const dark  = new THREE.MeshPhongMaterial({ color: 0x1c2027, shininess: 40, specular: 0x505866 });
+  const orange = new THREE.MeshPhongMaterial({ color: 0xff8a1a, shininess: 80, specular: 0xffd090 });
+  const redGlow = new THREE.MeshBasicMaterial({ color: 0xff2a2a });
+  const box = (w, h, d, x, y, z, m, par) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); (par || g).add(o); return o; };
+  const cyl = (r0, r1, h, x, y, z, m, par, rx = 0, rz = 0, seg = 14) => { const o = new THREE.Mesh(new THREE.CylinderGeometry(r0, r1, h, seg), m); o.position.set(x, y, z); o.rotation.set(rx, 0, rz); (par || g).add(o); return o; };
+  cyl(1.2, 1.3, 0.35, 0, 0.175, 0, dark);                                                           // the pedestal it is bolted to
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(1.15, 0.05, 6, 32), orange); ring.rotation.x = Math.PI / 2; ring.position.y = 0.37; g.add(ring);
+  for (const sx of [-1, 1]) { box(0.6, 0.95, 0.7, sx * 0.55, 0.82, 0, steel); box(0.66, 0.16, 0.76, sx * 0.55, 1.12, 0, orange); }   // legs, with knee guards
+  box(1.55, 0.4, 1.05, 0, 1.45, 0, dark);                                                           // pelvis
+  const T = new THREE.Group(); T.position.y = 1.65; g.add(T);                                       // the torso: the part that turns
+  box(1.5, 1.05, 1.0, 0, 0.5, 0, steel, T);
+  box(1.2, 0.7, 0.06, 0, 0.5, 0.52, dark, T);
+  for (let i = 0; i < 4; i++) box(0.9, 0.05, 0.04, 0, 0.25 + i * 0.14, 0.56, orange, T);          // chest vents
+  const lens = new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 12), redGlow); lens.position.set(0, 0.62, 0.58); T.add(lens);   // the laser
+  const lensRing = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.04, 8, 24), dark); lensRing.position.set(0, 0.62, 0.55); T.add(lensRing);
+  box(0.58, 0.42, 0.5, 0, 1.3, 0.04, dark, T);                                                      // the head
+  const eye = box(0.5, 0.1, 0.05, 0, 1.33, 0.3, redGlow, T);
+  cyl(0.02, 0.02, 0.5, 0.2, 1.7, 0, steel, T); cyl(0.02, 0.02, 0.35, -0.2, 1.65, 0, steel, T);       // antennae
+  for (const sx of [-1, 1]) { const sh = new THREE.Mesh(new THREE.SphereGeometry(0.34, 14, 10), orange); sh.position.set(sx * 0.98, 0.88, 0); T.add(sh); }
+  // left arm: the minigun
+  box(0.32, 0.6, 0.32, -1.0, 0.45, 0.05, steel, T);
+  const MG = new THREE.Group(); MG.position.set(-1.05, 0.2, 0.45); T.add(MG);
+  cyl(0.17, 0.17, 0.55, 0, 0, 0, dark, MG, Math.PI / 2);
+  const barrels = new THREE.Group(); barrels.position.z = 0.5; MG.add(barrels);
+  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; cyl(0.035, 0.035, 1.0, Math.cos(a) * 0.1, Math.sin(a) * 0.1, 0.1, steel, barrels, Math.PI / 2, 0, 8); }
+  const mgMuzzle = new THREE.Object3D(); mgMuzzle.position.set(0, 0, 1.15); MG.add(mgMuzzle);
+  // right arm: the missile pod
+  box(0.32, 0.6, 0.32, 1.0, 0.45, 0.05, steel, T);
+  const POD = new THREE.Group(); POD.position.set(1.08, 0.25, 0.5); T.add(POD);
+  box(0.62, 0.58, 0.9, 0, 0, 0, orange, POD);
+  const podMuzzles = [];
+  for (let i = 0; i < 6; i++) { const x = (i % 3 - 1) * 0.18, y = (i < 3 ? 0.14 : -0.14); cyl(0.085, 0.085, 0.2, x, y, 0.46, dark, POD, Math.PI / 2, 0, 10); const m = new THREE.Object3D(); m.position.set(x, y, 0.58); POD.add(m); podMuzzles.push(m); }
+  // on the shoulder: the mortar, tilted up and back
+  const mortar = cyl(0.15, 0.17, 0.85, 0.55, 1.35, -0.3, dark, T, -0.5, 0);
+  const mortarMuzzle = new THREE.Object3D(); mortarMuzzle.position.set(0.55, 1.75, -0.45); T.add(mortarMuzzle);
+  g.userData = { torso: T, lens, eye, barrels, mgMuzzle, podMuzzles, mortarMuzzle, redGlow };
+  return g;
+}
+function bossBarUi() {
+  const B = match && match.boss; if (!B) return;
+  const U = juggBossUi(), bot = B.bot, max = bot.maxHp, hp = Math.max(0, Math.min(max, bot.hp));
+  U.root.style.display = bot.dead ? 'none' : 'block';
+  const label = `🤖 THE WARDEN · PHASE ${B.phase}`;
+  if (U.name.textContent !== label) U.name.textContent = label;
+  const pct = (hp / max * 100).toFixed(2) + '%';
+  U.fill.style.width = pct; U.ghost.style.width = pct;
+  U.num.textContent = Math.ceil(hp).toLocaleString('en-US') + ' / ' + max.toLocaleString('en-US'); U.num.style.textAlign = 'center';
+}
+function initBoss() { match.boss = null; }
+function startBossFight() {
+  const hp = BOSS.hp, id = `boss_warden_${Date.now()}`;
+  const pData = { id, name: 'THE WARDEN', isBot: true, team: 'enemy', weaponId: null, ownerId: myId, skin: 'default', x: BOSS.pos[0], y: 1, z: BOSS.pos[1], rotY: 0, rotX: 0, hp, maxHp: hp, dead: false, kills: 0, deaths: 0 };
+  players[id] = pData;
+  spawnRemotePlayer(pData);
+  const mesh = remoteMeshes[id];
+  mesh.position.set(BOSS.pos[0], 0, BOSS.pos[1]); mesh.rotation.y = 0;      // (a bot's body faces -z at 0; the robot is built facing +z, and turns its own torso)
+  mesh.traverse(o => { if (o !== mesh) o.visible = false; });                    // the human body it was made with: gone
+  const robot = buildWarden(); mesh.add(robot);
+  mesh.scale.setScalar(BOSS.scale); mesh._bodyScale = BOSS.scale;                  // (the hit spheres follow the scale, as the juggernaut's do)
+  const bot = { id, team: 'enemy', weaponId: null, x: BOSS.pos[0], z: BOSS.pos[1], rotY: 0, hp, maxHp: hp, prevHp: hp, dead: false, state: 'boss', boss: true, floor: 0, floorY: 0,
+                y: 0, yVel: 0, frostSlow: 100, kbVX: 0, kbVZ: 0, wanderAngle: 0, wanderTimer: 0, lastShot: 0, stuckTimer: 0, strafeDir: 1, strafeFlipTimer: 0, tacTimer: 0, coverPt: null,
+                difficulty: selectedDifficulty, tune: botTuning(selectedDifficulty), activeSlot: 'primary' };
+  gameBots.push(bot);
+  socket.emit('spawnBots', [{ id, name: 'THE WARDEN', team: absTeam('enemy'), weaponId: null, spawnX: BOSS.pos[0], spawnZ: BOSS.pos[1], hp, skin: 'default', boss: true }]);
+  match.boss = { bot, robot, mesh, phase: 1, atk: null, nextAt: Date.now() + 3500, proj: [], marks: [], beam: null, yaw: 0, spin: 0, started: Date.now(), done: false };
+  showAnnouncement('THE WARDEN', 'A giant robot, and every weapon it owns · 3 phases', '#ff6a2a', 3200);
+  bossBarUi();
+}
+function bossCleanup() {
+  const B = match && match.boss; if (!B) return;
+  for (const q of B.proj) scene.remove(q.mesh);
+  for (const m of B.marks) scene.remove(m.mesh);
+  if (B.beam) scene.remove(B.beam.mesh);
+  B.proj.length = 0; B.marks.length = 0; B.beam = null;
+  try { juggBossUi().root.style.display = 'none'; } catch (e) {}
+  zombieRemove(B.bot);
+  match.boss = null;
+}
+const _bossBulletGeo = new THREE.SphereGeometry(0.13, 8, 6), _bossBulletMat = new THREE.MeshBasicMaterial({ color: 0xffb23a });
+function _bossSegHitsWall(a, b) {
+  const d = b.clone().sub(a), len = d.length(); if (len < 1e-4) return false;
+  const ray = new THREE.Ray(a, d.multiplyScalar(1 / len)), hit = new THREE.Vector3();
+  for (const box of wallColliders) { if (ray.intersectBox(box, hit) && hit.distanceTo(a) <= len) return true; }
+  return false;
+}
+function _bossBoom(pos, radius, dmg, weapon) {
+  spawnExplosion(pos);
+  const c = camera.position, d = Math.hypot(c.x - pos.x, c.z - pos.z, (c.y - 0.8) - pos.y);
+  if (d < radius && !isDead) applyBotDamageToPlayer(weapon, match.boss.bot.id, Math.round(dmg * (1 - 0.6 * d / radius)));
+}
+function bossShoot(kind, origin, vel, opts = {}) {
+  const B = match.boss;
+  const mesh = kind === 'missile'
+    ? (() => { const g = new THREE.Group(); const b = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.9, 8), new THREE.MeshBasicMaterial({ color: 0xffd8a0 })); b.rotation.x = Math.PI / 2; g.add(b);
+        const f = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.7, 8), new THREE.MeshBasicMaterial({ color: 0xff5a1a })); f.rotation.x = -Math.PI / 2; f.position.z = -0.7; g.add(f); return g; })()
+    : new THREE.Mesh(_bossBulletGeo, _bossBulletMat);
+  mesh.position.copy(origin); scene.add(mesh);
+  B.proj.push({ kind, mesh, pos: origin.clone(), vel: vel.clone(), g: opts.g || 0, life: opts.life || 4, dmg: opts.dmg || 10 });
+}
+function _bossUpdateProj(B, dt) {
+  const c = camera.position;
+  for (let i = B.proj.length - 1; i >= 0; i--) {
+    const q = B.proj[i]; q.life -= dt;
+    const prev = q.pos.clone(); q.vel.y -= q.g * dt; q.pos.addScaledVector(q.vel, dt); q.mesh.position.copy(q.pos);
+    if (q.kind === 'missile') q.mesh.lookAt(q.pos.clone().add(q.vel));
+    let dead = q.life <= 0, boom = false;
+    if (!dead && (q.pos.y <= 0.15 || _bossSegHitsWall(prev, q.pos))) { dead = true; boom = true; }
+    if (!dead && !isDead) {
+      const dx = c.x - q.pos.x, dz = c.z - q.pos.z, dy = (c.y - 0.7) - q.pos.y, near = Math.hypot(dx, dz);
+      if (q.kind === 'missile' ? Math.hypot(dx, dy, dz) < 1.6 : (near < 0.55 && dy > -1.0 && dy < 1.1)) { dead = true; boom = true; }
+    }
+    if (dead) {
+      if (boom) { if (q.kind === 'missile') _bossBoom(q.pos, 4.6, 55, 'boss_missile'); else if (!isDead) { const dx = c.x - q.pos.x, dz = c.z - q.pos.z; if (Math.hypot(dx, dz) < 0.7 && Math.abs((c.y - 0.7) - q.pos.y) < 1.1) applyBotDamageToPlayer('boss_minigun', B.bot.id); } }
+      scene.remove(q.mesh); B.proj.splice(i, 1);
+    }
+  }
+}
+// ── the four attacks: each is a { t, tick(dt) -> true when finished } ──────────────────────────────────────────────────────────────
+function _bossWorld(obj) { const v = new THREE.Vector3(); obj.getWorldPosition(v); return v; }
+function bossAtkMinigun(B) {
+  const U = B.robot.userData, dur = 2.2 + 0.4 * B.phase; let t = 0, next = 0.7;
+  return { name: 'minigun', tick(dt) {
+    t += dt; B.spin = Math.min(1, t / 0.7);
+    while (t >= next && t < dur) {
+      next += 0.075;
+      const o = _bossWorld(U.mgMuzzle), target = camera.position.clone(); target.y -= 0.4;
+      const dir = target.sub(o).normalize(); dir.x += (Math.random() - 0.5) * 0.07; dir.y += (Math.random() - 0.5) * 0.05; dir.z += (Math.random() - 0.5) * 0.07; dir.normalize();
+      bossShoot('bullet', o, dir.multiplyScalar(78), { life: 2.6 });
+    }
+    if (Math.floor(t * 13) !== Math.floor((t - dt) * 13) && t > 0.7 && t < dur) { try { playWeaponSound('minigun', { remote: true, position: _bossWorld(U.mgMuzzle), volume: 0.8, minGap: 30 }); } catch (e) {} }
+    if (t >= dur) { B.spin = 0; return true; }
+    return false;
+  } };
+}
+function bossAtkMissiles(B) {
+  const U = B.robot.userData, n = B.phase === 3 ? 8 : 6; let t = 0, fired = 0;
+  return { name: 'missiles', tick(dt) {
+    t += dt;
+    while (fired < n && t >= 0.5 + fired * 0.22) {
+      const o = _bossWorld(U.podMuzzles[fired % 6]), T = 1.55, g = 16;
+      const tg = camera.position.clone(); tg.x += (Math.random() - 0.5) * 7; tg.z += (Math.random() - 0.5) * 7; tg.y = 0.3;
+      const v = new THREE.Vector3((tg.x - o.x) / T, (tg.y - o.y + 0.5 * g * T * T) / T, (tg.z - o.z) / T);
+      bossShoot('missile', o, v, { g, life: 4 });
+      try { playSoundEvent('air_burst', { position: o, remote: true, volume: 0.8, minGap: 60 }); } catch (e) {}
+      fired++;
+    }
+    return fired >= n && t > 0.5 + n * 0.22 + 1.9;
+  } };
+}
+function bossAtkMortar(B) {
+  const U = B.robot.userData, n = B.phase === 3 ? 7 : 5; let t = 0, made = 0;
+  return { name: 'mortar', tick(dt) {
+    t += dt;
+    while (made < n && t >= 0.3 + made * 0.28) {
+      const a = Math.random() * Math.PI * 2, r = made === 0 ? 0 : 3 + Math.random() * 8;
+      const x = camera.position.x + Math.cos(a) * r, z = camera.position.z + Math.sin(a) * r;
+      const mesh = new THREE.Group();
+      const ring = new THREE.Mesh(new THREE.RingGeometry(3.3, 3.9, 40), new THREE.MeshBasicMaterial({ color: 0xff3a2a, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; mesh.add(ring);
+      const fill = new THREE.Mesh(new THREE.CircleGeometry(3.3, 40), new THREE.MeshBasicMaterial({ color: 0xff3a2a, transparent: true, opacity: 0.2, side: THREE.DoubleSide, depthWrite: false })); fill.rotation.x = -Math.PI / 2; fill.scale.setScalar(0.05); mesh.add(fill);
+      mesh.position.set(x, 0.12, z); scene.add(mesh);
+      B.marks.push({ mesh, fill, x, z, t: 0, fuse: 1.5 });
+      try { playSoundEvent('air_burst', { position: _bossWorld(U.mortarMuzzle), remote: true, volume: 0.9, minGap: 0 }); } catch (e) {}
+      made++;
+    }
+    return made >= n && t > 0.3 + n * 0.28 + 1.6;
+  } };
+}
+function bossAtkLaser(B) {
+  const U = B.robot.userData, bot = B.bot, o0 = _bossWorld(U.lens);
+  const dx = camera.position.x - bot.x, dz = camera.position.z - bot.z, R = Math.max(25, Math.min(100, Math.hypot(dx, dz)));
+  const a0 = Math.atan2(dx, dz), side = Math.random() < 0.5 ? -1 : 1, span = 24 / R;               // a 24 m sweep, however far away you are
+  let t = 0, tick = 0; const charge = B.phase === 3 ? 0.8 : 1.1, sweep = B.phase === 3 ? 1.9 : 2.4;
+  const mk = (color, op, w) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(w, w, 1, 8), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: op, depthWrite: false, blending: THREE.AdditiveBlending })); scene.add(m); return m; };
+  const beam = mk(0xff4a3a, 0.35, 0.12), core = mk(0xffffff, 0.9, 0.05); core.visible = false;
+  B.beam = { mesh: beam, core };
+  const aim = (ang) => { const gx = bot.x + Math.sin(ang) * R, gz = bot.z + Math.cos(ang) * R, a = new THREE.Vector3(gx, 0.4, gz), mid = a.clone().add(o0).multiplyScalar(0.5), len = o0.distanceTo(a);
+    for (const m of [beam, core]) { m.position.copy(mid); m.scale.set(1, len, 1); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), a.clone().sub(o0).normalize()); } return a; };
+  return { name: 'laser', tick(dt) {
+    t += dt;
+    if (t < charge) { aim(a0 - side * span / 2); beam.material.opacity = 0.18 + 0.3 * (t / charge); beam.scale.x = 0.4; }       // a thin line first: where it will start
+    else {
+      const k = Math.min(1, (t - charge) / sweep), ang = a0 + side * (-span / 2 + span * k), end = aim(ang);
+      core.visible = true; beam.material.opacity = 0.55; beam.scale.x = 1; B.yaw = ang;
+      tick += dt;
+      if (tick >= 0.12 && !isDead) {
+        tick = 0;
+        const c = camera.position, ab = end.clone().sub(o0), ap = new THREE.Vector3(c.x, c.y - 0.7, c.z).sub(o0), tt = Math.max(0, Math.min(1, ap.dot(ab) / ab.lengthSq()));
+        if (o0.clone().addScaledVector(ab, tt).distanceTo(new THREE.Vector3(c.x, c.y - 0.7, c.z)) < 1.3) applyBotDamageToPlayer('boss_laser', bot.id);
+      }
+      if (k >= 1) { scene.remove(beam); scene.remove(core); B.beam = null; return true; }
+    }
+    return false;
+  } };
+}
+function bossPickAttack(B) {
+  const p = B.phase, pool = p === 1 ? [['minigun', 3], ['missiles', 2]] : p === 2 ? [['minigun', 2], ['missiles', 2], ['mortar', 2], ['laser', 1.5]] : [['minigun', 2], ['missiles', 2], ['mortar', 2], ['laser', 2]];
+  let r = Math.random() * pool.reduce((a, x) => a + x[1], 0);
+  for (const [n, w] of pool) { r -= w; if (r < 0) { if (n === B.last && Math.random() < 0.7) return bossPickAttack(B); return n; } }
+  return 'minigun';
+}
+function bossPhaseUp(B, phase) {
+  B.phase = phase;
+  showAnnouncement(`PHASE ${phase}`, phase === 2 ? 'The Warden opens the mortar and the laser' : 'The Warden is enraged', '#ff5a2a', 2600);
+  flashScreen('rgba(255,120,40,0.4)', 500); try { viewKick(0, 0.05, 500); } catch (e) {}
+  B.robot.userData.redGlow.color.setHex(phase === 2 ? 0xffa21a : 0xff00aa);
+  const me = players[myId];                                                                   // a breath: full ammo, and some health back
+  if (me && !isDead) { const to = Math.min(matchMaxHp(), me.hp + 100); socket.emit('healSelf', { amount: to - me.hp }); me.hp = to; updateHealthHUD(to); try { resetCombatResources(); } catch (e) {} }
+  B.nextAt = Date.now() + 2200; B.atk = null;
+}
+function updateBoss(dt) {
+  const B = match.boss; if (!B || match.over || B.done) return;
+  const bot = B.bot, now = Date.now(), U = B.robot.userData;
+  _bossUpdateProj(B, dt);
+  for (let i = B.marks.length - 1; i >= 0; i--) {                                                // the mortar circles fill, then the shell lands
+    const m = B.marks[i]; m.t += dt; const k = Math.min(1, m.t / m.fuse);
+    m.fill.scale.setScalar(Math.max(0.05, k)); m.fill.material.opacity = 0.2 + 0.4 * k; m.mesh.children[0].material.opacity = 0.5 + 0.5 * Math.abs(Math.sin(m.t * 12));
+    if (m.t >= m.fuse) { _bossBoom(new THREE.Vector3(m.x, 0.3, m.z), 3.8, 70, 'boss_mortar'); scene.remove(m.mesh); B.marks.splice(i, 1); }
+  }
+  if (bot.dead) return;
+  const frac = bot.hp / bot.maxHp, ph = frac > 0.66 ? 1 : frac > 0.33 ? 2 : 3;
+  if (ph > B.phase) bossPhaseUp(B, ph);
+  U.barrels.rotation.z += dt * 30 * B.spin;
+  U.lens.scale.setScalar(1 + 0.15 * Math.sin(now / 120));
+  if (!B.beam) {                                                                                  // it turns to look at you (the laser steers itself while it sweeps)
+    const dx = camera.position.x - bot.x, dz = camera.position.z - bot.z, want = Math.atan2(dx, dz);
+    let d = want - B.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); B.yaw += d * Math.min(1, dt * (B.phase === 3 ? 3.2 : 2));
+  }
+  U.torso.rotation.y = B.yaw;
+  if (B.atk) { if (B.atk.tick(dt)) { B.last = B.atk.name; B.atk = null; B.nextAt = now + (B.phase === 1 ? 1700 : B.phase === 2 ? 1200 : 700); } }
+  else if (now >= B.nextAt && !isDead) {
+    const n = bossPickAttack(B);
+    B.atk = n === 'minigun' ? bossAtkMinigun(B) : n === 'missiles' ? bossAtkMissiles(B) : n === 'mortar' ? bossAtkMortar(B) : bossAtkLaser(B);
+  }
+  bossBarUi();
+  updateMatchHUD();
+}
+function onBossKill(killerId, targetId) {
+  const B = match && match.boss; if (!B) return;
+  if (targetId === myId) {                                                                     // you fell: the Warden wins
+    B.done = true; const m = match;
+    showAnnouncement('DEFEAT', 'THE WARDEN stands', '#ff4444', 2600);
+    setTimeout(() => { if (match === m && !m.over) endMatch('enemy', `🤖 THE WARDEN stands · it was down to ${Math.max(0, Math.round(B.bot.hp / B.bot.maxHp * 100))}%`); }, 1800);
+    return;
+  }
+  if (targetId === B.bot.id) {                                                                 // the Warden falls
+    B.done = true; const m = match, at = _bossWorld(B.robot.userData.torso);
+    for (const q of B.proj) scene.remove(q.mesh); B.proj.length = 0;
+    for (const k of B.marks) scene.remove(k.mesh); B.marks.length = 0;
+    if (B.beam) { scene.remove(B.beam.mesh); scene.remove(B.beam.core); B.beam = null; }
+    showAnnouncement('VICTORY', 'THE WARDEN HAS FALLEN', '#4cff4c', 3200);
+    for (let i = 0; i < 9; i++) setTimeout(() => { if (match !== m) return; spawnExplosion(new THREE.Vector3(at.x + (Math.random() - 0.5) * 8, 2 + Math.random() * 9, at.z + (Math.random() - 0.5) * 6)); }, i * 260);
+    const secs = Math.round((Date.now() - B.started) / 1000);
+    setTimeout(() => { if (match === m && !m.over) endMatch('ally', `🤖 THE WARDEN HAS FALLEN · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`); }, 3400);
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// 🧟 LAST STAND. Endless waves of the dead (the same zombies as Zombie Tower: they skip the bot AI, walk the route to whatever is
+// nearest and claw it) against you and three teammates, who are bots with ordinary guns and fight back. You hold the Battlefield's
+// farmhouse. The dead go for whichever of you is closest, so the team is a wall, not a crowd of targets. A teammate who falls stays
+// down until the wave is over, then comes back ("reinforcements"), and you come back 6 s after you fall as long as one of them is
+// still up; the match is lost when you are down and nobody is left to stand. Between waves: a little health, and a full magazine.
+// ═════════════════════════════════════════════════════════════════════
+const LS_PLAYER = [0, 0], LS_ALLIES = [[-6, -3], [6, -3], [0, 5]];
+const LS_FIRST_MS = 5000, LS_BREAK_MS = 7000, LS_CAP = 30, LS_HEAL = 60, LS_RESPAWN_MS = 6000, LS_MAX_MS = 75000;
+function lsWaveSize(w) { return Math.round(zombieWaveSize(w) * 1.5); }       // four of you: more of them
+function initLastStand() {
+  let best = 0; try { best = parseInt(localStorage.getItem('pvp_laststand_best') || '0', 10) || 0; } catch (e) {}
+  lastStandState = { wave: 0, phase: 'break', started: false, nextWaveAt: 0, toSpawn: 0, nextSpawnAt: 0, waveStartedAt: 0, kills: 0, best };
+  match.zombie = { wave: 0, kills: 0, n: 0, tower: null, storyLock: false };   // (zombieSpawn counts its zombies on this)
+}
+function lsAlliesUp() { return gameBots.some(b => !b.zombie && b.team === 'ally' && !b.dead); }
+function lsCleanup() { for (const b of gameBots.slice()) if (b.zombie) zombieRemove(b); lastStandState = null; }
+function lsWipeCheck() {
+  const L = lastStandState;
+  if (!L || !match || match.over || L.wiped || !isDead || lsAlliesUp()) return;
+  L.wiped = true;
+  setTimeout(() => {
+    if (!match || match.over) return;
+    showAnnouncement('OVERRUN', `Your team is down · wave ${L.wave}`, '#ff2222', 3000);
+    setTimeout(() => { if (match && !match.over) endMatch('enemy', `🧟 OVERRUN on wave ${L.wave} · ${L.kills} zombies killed`); }, 1600);
+  }, 900);
+}
+function onLastStandKill(killerId, targetId) {
+  const L = lastStandState; if (!L || !match) return;
+  const bot = gameBots.find(b => b.id === targetId);
+  if (bot && bot.zombie) {
+    L.kills++; match.zombie.kills = L.kills;
+    if (killerId === myId) match.ffaKills[myId] = (match.ffaKills[myId] || 0) + 1;
+    setTimeout(() => zombieRemove(bot), 2600);                  // the body lies there a moment
+    updateMatchHUD();
+    return;
+  }
+  lsWipeCheck();
+}
+function zombieClawsBot(z, a) {
+  if (!a || a.dead) return;
+  a.hp = Math.max(0, a.hp - 30);
+  if (a.hp <= 0) {
+    a.dead = true;
+    socket.emit('hitBot', { botId: a.id, weapon: 'zombie_claw', bulletId: `zc_${Date.now()}`, killerId: z.id, headshot: true, instakill: true });
+  }
+}
+function lsRevive() {                                                  // reinforcements: the fallen come back at the farmhouse
+  let i = 0;
+  for (const bot of gameBots) {
+    if (bot.zombie || bot.team !== 'ally') continue;
+    const sp = LS_ALLIES[(i++) % LS_ALLIES.length];
+    const was = bot.dead;
+    bot.hp = Math.min(bot.maxHp || 300, was ? (bot.maxHp || 300) : bot.hp + LS_HEAL * 2);
+    if (!was) { if (players[bot.id]) players[bot.id].hp = bot.hp; continue; }
+    bot.dead = false; bot.prevHp = bot.hp; bot.stuckTimer = 0; bot.state = 'chase'; bot.x = sp[0]; bot.z = sp[1];
+    if (players[bot.id]) { players[bot.id].hp = bot.hp; players[bot.id].dead = false; }
+    syncBotMesh(bot, { visible: true, resetPose: true });
+    socket.emit('forceRespawnBot', { id: bot.id, x: bot.x, z: bot.z, weaponId: bot.weaponId });
+  }
+}
+function updateLastStand(dt) {
+  const L = lastStandState; if (!L || !match || match.over) return;
+  const now = Date.now();
+  if (!L.started) {
+    L.started = true; L.nextWaveAt = now + LS_FIRST_MS;
+    showAnnouncement('LAST STAND', 'Hold the farmhouse · your team is with you', '#ff9944', 2800);
+  }
+  lsWipeCheck();
+  const alive = gameBots.filter(b => b.zombie && !b.dead).length;
+  if (L.phase === 'break') {
+    if (now >= L.nextWaveAt) {
+      L.wave++; L.phase = 'fight'; L.toSpawn = lsWaveSize(L.wave); L.waveStartedAt = now; L.nextSpawnAt = now; match.zombie.wave = L.wave;
+      if (L.wave > L.best) { L.best = L.wave; try { localStorage.setItem('pvp_laststand_best', String(L.best)); } catch (e) {} }
+      showAnnouncement(`🧟 WAVE ${L.wave}`, `${L.toSpawn} zombies · ${Math.round(zombieHpFor(L.wave))} HP each`, '#66dd66', 2200);
+      playSoundEvent('hitmarker', { volume: 0.8, minGap: 0, tier: 'orange' });
+    }
+    updateMatchHUD();
+    return;
+  }
+  if (L.toSpawn > 0 && alive < LS_CAP && now >= L.nextSpawnAt) {
+    zombieSpawn(); L.toSpawn--;
+    L.nextSpawnAt = now + Math.max(300, 900 - L.wave * 35);
+  }
+  const waveOver = L.toSpawn === 0 && alive === 0;
+  if (waveOver || (L.toSpawn === 0 && now - L.waveStartedAt > LS_MAX_MS)) {
+    L.phase = 'break'; L.nextWaveAt = now + (waveOver ? LS_BREAK_MS : 800);
+    if (waveOver) {
+      const me = players[myId];
+      if (me && me.hp > 0 && !isDead) { const to = Math.min(matchMaxHp(), me.hp + LS_HEAL); socket.emit('healSelf', { amount: to - me.hp }); me.hp = to; updateHealthHUD(to); }
+      lsRevive();
+      if (!isDead) { try { resetCombatResources(); } catch (e) {} }                        // a full magazine, and the pockets filled
+      showAnnouncement(`WAVE ${L.wave} CLEARED`, `+${LS_HEAL} HP · full ammo · teammates back on their feet`, '#aaffaa', 2200);
+    }
+  }
+  updateMatchHUD();
+}
 
 // ── D-Day mode ──────────────────────────────────────────────────────────────
 // The Battlefield is 120 x 160: the defenders now hold the south trench line and the attackers start from the far north
@@ -68176,6 +68568,8 @@ function updateMatchTimer(dt) {
     rouletteShuffle();
   }
   if (match.arcade === 'zombie' && match.roundActive) updateZombieMode(dt);
+  if (match.type === 'boss') { if (match.roundActive) updateBoss(dt); return; }
+  if (match.type === 'laststand') { if (match.roundActive) updateLastStand(dt); return; }
   if (match.jugg) { updateJugg(dt); return; }
   if (matchTimeUnlimited()) { updateMatchHUD(); return; }
   // ── Elim mode: per-round 60-second timer ─────────────────────────────────
@@ -68326,6 +68720,8 @@ function endMatch(winner, reason) {
   if (match.type === 'wave_dash') stopWaveDash();
   if (match.dice) diceCleanup();
   if (match.arcade === 'zombie') zombieCleanup();
+  if (match.type === 'laststand') lsCleanup();
+  if (match.type === 'boss') bossCleanup();
   if (match.jugg) juggCleanup();
   rngRestore(match.roulette);
   const isWin  = winner === 'ally';
@@ -68347,6 +68743,11 @@ function endMatch(winner, reason) {
     scoreText = match.cfg.forcedMap === 'base_raid'
       ? `Raid progress  Guards cleared ${match.teamKills.ally}/${match.cfg.killGoal}  ·  Team losses ${match.teamKills.enemy}`
       : `Kills  Your Team ${match.teamKills.ally}  ·  Enemy ${match.teamKills.enemy}  (goal ${match.cfg.killGoal})`;
+  } else if (match.type === 'boss') {
+    scoreText = match.boss ? `The Warden: ${Math.max(0, Math.ceil(match.boss.bot.hp / match.boss.bot.maxHp * 100))}% left  ·  Phase ${match.boss.phase}/3` : '';
+  } else if (match.type === 'laststand') {
+    const ls = lastStandState;
+    scoreText = ls ? `Waves survived: ${Math.max(0, ls.wave - 1)}  ·  Zombies killed: ${ls.kills}  ·  Best: wave ${ls.best}` : '';
   } else if (match.type === 'dday') {
     const dd = ddayState;
     scoreText = dd ? `Waves survived: ${dd.wavesSent}/3  ·  Enemies killed: ${dd.totalKills || 0}` : '';
@@ -68408,6 +68809,11 @@ function endMatch(winner, reason) {
 // ── Bot AI ─────────────────────────────────────────────────────────────────
 function botSideSpawn(idx, count, team) {
   if(selectedModeConfig?.type==='lobby')return lobbySpawnPoint(idx);
+  // Last Stand: the teammates stand in the farmhouse with you
+  if (selectedModeConfig && selectedModeConfig.type === 'laststand' && team === 'ally') {
+    const sp = LS_ALLIES[idx % LS_ALLIES.length];
+    return { x: sp[0], z: sp[1] };
+  }
   { const S = MAP_SPAWNS[activeMapName]; if (S) {   // a hand-built map names where each side starts
     const r = absTeam(team) === 'ally' ? S.ally : S.enemy, f = count <= 1 ? Math.random() : idx / (count - 1);
     return { x: r.x0 + (r.x1 - r.x0) * (0.1 + 0.8 * f) + (Math.random() - 0.5) * 2, z: r.z0 + Math.random() * (r.z1 - r.z0) }; } }
@@ -68701,7 +69107,11 @@ function spawnGameBots() {
   const botList = [];
 
   // Move the player to their team side before the round begins
-  if (selectedModeConfig && selectedModeConfig.type === 'dday') {
+  if (selectedModeConfig && selectedModeConfig.type === 'boss') {
+    camera.position.set(BOSS.player[0], 1.65, BOSS.player[1]); faceToward(BOSS.pos[0], BOSS.pos[1]);   // Boss fight: the far end, facing it
+  } else if (selectedModeConfig && selectedModeConfig.type === 'laststand') {
+    camera.position.set(LS_PLAYER[0], 1.65, LS_PLAYER[1]); faceToward(0, -30);   // Last Stand: in the farmhouse
+  } else if (selectedModeConfig && selectedModeConfig.type === 'dday') {
     camera.position.set(DDAY_BUNKER_XS[0], 1.65, DDAY_BUNKER_Z); faceToward(DDAY_BUNKER_XS[0], 0); // D-Day: inside bunker 0, facing enemies
   } else if (selectedModeConfig && selectedModeConfig.type === 'range') {
     camera.position.set(0, 1.65, 38); faceToward(0, 0); // Shooting range: down the range at the targets
@@ -69526,18 +69936,34 @@ function zombieRemove(bot) {
   delete players[bot.id];
   if (socket && socket.connected) socket.emit('despawnBots', [bot.id]);
 }
+// The nearest living thing a zombie can go for: you, and in Last Stand your teammates too.
+function zombieTargetFor(bot) {
+  let best = null, bd = Infinity;
+  if (!isDead) { bd = Math.hypot(camera.position.x - bot.x, camera.position.z - bot.z); best = { x: camera.position.x, y: camera.position.y, z: camera.position.z, isPlayer: true, bot: null }; }
+  if (match && match.type === 'laststand') {
+    for (const o of gameBots) {
+      if (o.zombie || o.dead || o.team !== 'ally') continue;
+      const d = Math.hypot(o.x - bot.x, o.z - bot.z);
+      if (d < bd) { bd = d; best = { x: o.x, y: (o.y || 0) + 1.65, z: o.z, isPlayer: false, bot: o }; }
+    }
+  }
+  return best;
+}
 function zombieThink(bot, dt, now) {
-  if (isDead || !match || match.over) { syncBotMesh(bot); return; }
+  const ls = !!(match && match.type === 'laststand');
+  if (!match || match.over || (isDead && !ls)) { syncBotMesh(bot); return; }
+  const tgt = zombieTargetFor(bot);
+  if (!tgt) { syncBotMesh(bot); return; }
   let spd = bot.zSpeed || 3.4;
   if (bot.frostSlow != null) spd *= Math.max(0.15, bot.frostSlow / 100);
   if (now < (bot._chillUntil || 0)) spd *= 0.5;
   if (now < (bot._rootUntil || 0)) spd = 0;
-  const me = camera.position, tower = !!(match.zombie && match.zombie.tower), fy = bot.floorY || 0;
+  const me = tgt, tower = !!(match.zombie && match.zombie.tower), fy = bot.floorY || 0;
   const dx = me.x - bot.x, dz = me.z - bot.z, dist = Math.hypot(dx, dz) || 0.001;
   bot.rotY = Math.atan2(-dx, -dz);
   if (dist > 1.25 && spd > 0 && (bot.y || 0) - fy < 0.6) {
     let tx = me.x, tz = me.z;
-    const wp = tower ? towerNavPoint(bot, me.x, me.z) : botNavPoint(bot, { x: me.x, z: me.z, isPlayer: true });
+    const wp = tower ? towerNavPoint(bot, me.x, me.z) : botNavPoint(bot, { x: me.x, z: me.z, isPlayer: tgt.isPlayer });
     if (wp) { tx = wp.x; tz = wp.z; }
     const ddx = tx - bot.x, ddz = tz - bot.z, dd = Math.hypot(ddx, ddz) || 1;
     let nx = bot.x + ddx / dd * spd * dt, nz = bot.z + ddz / dd * spd * dt;
@@ -69556,7 +69982,7 @@ function zombieThink(bot, dt, now) {
   if (bot._windup && now >= bot._windup) {
     bot._windup = 0; bot.lastAtk = now;
     if (dist < 2.2 && sameLevel) {
-      botHitsMe(bot.id, 'zombie_claw');
+      if (tgt.isPlayer) botHitsMe(bot.id, 'zombie_claw'); else zombieClawsBot(bot, tgt.bot);
       spawnHitParticle(new THREE.Vector3(bot.x + dx / dist * 0.9, 1.3, bot.z + dz / dist * 0.9));
     }
   }
@@ -70805,6 +71231,7 @@ function updateBotAI(dt) {
     // During countdown: bots walk toward the centre so they're in position when it ends
     if (!roundLive) continue; // frozen during countdown
     if (bot.squad) { zombieSquadThink(bot, dt); continue; }    // 🪖 the squad in Zombie Survival's opening: they walk with you
+    if (bot.boss) continue;                                      // 🤖 the Warden is driven by updateBoss (and does not move)
     if (bot.zombie) { zombieThink(bot, dt, now); continue; }   // 🧟 a zombie has no aim, no cover and no plan: it comes for you
     try {
 
@@ -74291,6 +74718,8 @@ function teardownMatchWorld() {
   inLobby = false;
   if (match && match.dice) diceCleanup();
   if (match && match.arcade === 'zombie') zombieCleanup();
+  if (match && match.type === 'laststand') lsCleanup();
+  if (match && match.type === 'boss') bossCleanup();
   if (match && match.jugg) juggCleanup();
   if (match && match.roulette) rngRestore(match.roulette);
   match = null;

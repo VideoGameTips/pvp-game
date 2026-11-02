@@ -2163,6 +2163,7 @@ function freezeRayHit(shooter, target) {
   target._freezeImmuneUntil = now + FREEZE.ms + FREEZE.immuneMs;
   emitToMatch(target.matchId, 'frozen', { targetId: target.id, shooterId: shooter.id, ms: FREEZE.ms });
 }
+const BOSS_HIT_CAP = 450;   // the Warden has 12,000 health: nothing takes a quarter of it at once
 function serverHitDamage(data, shooter, target) {
   const dmg = serverHitDamageBase(data, shooter, target);
   if (data?.weapon !== 'frost_blaster' && dmg > 0 && isFrozen(target)) { data._shattered = true; return Math.round(dmg * FREEZE.shatter); }
@@ -2184,7 +2185,7 @@ function serverHitDamageBase(data, shooter, target) {
     const hardMax = Math.max(1, Math.min(999, Math.max(DAMAGE_OVERRIDE_CAPS[weapon] || 0, Math.ceil(headMax * 1.6 + 4)))) * wallScale;
     return Math.max(0, Math.min(hardMax, Math.round(override)));
   }
-  if (data?.headshot) return data?.instakill ? target.hp : Math.round(tableDmg * (WEAPON_HS_MULT[weapon] || 2));
+  if (data?.headshot) return (data?.instakill && !target.boss) ? target.hp : Math.round(tableDmg * (WEAPON_HS_MULT[weapon] || 2));
   return tableDmg;
 }
 
@@ -2932,7 +2933,8 @@ io.on('connection', (socket) => {
     // The shooter's client already saw this bot die (#48). Client and server work damage out
     // differently (their own tables, zone bonuses, positions), and with other real players in
     // the match a kill that stays on one screen leaves a frozen, unkillable bot on everyone else's.
-    if (data.fatal && data.instakill) dmg = bot.hp;
+    if (data.fatal && data.instakill && !bot.boss) dmg = bot.hp;
+    if (bot.boss) dmg = Math.min(dmg, BOSS_HIT_CAP);
     const botHpBefore = bot.hp;
     bot.hp = Math.max(0, bot.hp - dmg);
     // Only what the PLAYER dealt counts -- not a friendly bot they own.
@@ -3249,6 +3251,7 @@ io.on('connection', (socket) => {
         hp: botHp, dead: false, kills: 0, deaths: 0, lastShot: 0,
         matchId: ownerMatchId, // bots inherit their owner's match
         matchMode: ownerMode,
+        boss: b.boss === true && ownerMode === 'boss',   // 🤖 THE WARDEN: no instakill, and no single hit above BOSS_HIT_CAP
       };
       emitToMatch(ownerMatchId, 'playerJoined', players[b.id]);
     }
