@@ -607,6 +607,9 @@ function sanitizeBotWeaponId(id, ownerMode = '') {
   return id;
 }
 
+// The skin on the shooter's weapon, passed on with a hit and a kill so every screen can show what the skin does to its victim (the Hacker skins' flash and crash). Cosmetic only: nothing reads it here, and only a plain id gets through.
+function cleanSkinId(v) { return typeof v === 'string' && /^[a-z0-9_]{1,48}$/.test(v) ? v : undefined; }
+
 function cleanKillTags(tags) {
   if (!Array.isArray(tags)) tags = tags ? [tags] : [];
   const seen = new Set(), out = [];
@@ -2902,11 +2905,11 @@ io.on('connection', (socket) => {
     creditFfaDamage(shooter, hpBefore - target.hp);
     // shooterId: the victim's screen points an arc at whoever fired (#36)
     const killTags = cleanKillTags(data.tags);
-    emitToMatch(target.matchId, 'playerHit', { targetId: target.id, hp: target.hp, environmentSeq: target.environmentSeq || 0, bulletId: data.bulletId, shooterId: socket.id, weapon: data.weapon, headshot: !!data.headshot, shattered: !!data._shattered, tags: killTags });
+    emitToMatch(target.matchId, 'playerHit', { targetId: target.id, hp: target.hp, environmentSeq: target.environmentSeq || 0, bulletId: data.bulletId, shooterId: socket.id, weapon: data.weapon, headshot: !!data.headshot, shattered: !!data._shattered, tags: killTags, skin: cleanSkinId(data.skin) });
     if (target.hp <= 0) {
       target.dead = true; target.deaths++; shooter.kills++;
       shooter.matchKills = (shooter.matchKills || 0) + 1;
-      emitToMatch(target.matchId, 'playerDied', { targetId: target.id, killerId: socket.id, weapon: data.weapon, headshot: !!data.headshot, tags: killTags });
+      emitToMatch(target.matchId, 'playerDied', { targetId: target.id, killerId: socket.id, weapon: data.weapon, headshot: !!data.headshot, tags: killTags, skin: cleanSkinId(data.skin) });
       // Respawn is triggered by the client sending 'readyRespawn' after loadout selection
     }
   });
@@ -2936,11 +2939,11 @@ io.on('connection', (socket) => {
     if (shooter === players[socket.id]) creditFfaDamage(shooter, botHpBefore - bot.hp);
     // shooterId: the host must not count another player's kill of its bot as its own (#48)
     const killTags = cleanKillTags(data.tags);
-    emitToMatch(bot.matchId, 'playerHit', { targetId: bot.id, hp: bot.hp, bulletId: data.bulletId, shooterId: shooter.id, weapon: data.weapon, headshot: !!data.headshot, shattered: !!data._shattered, tags: killTags });
+    emitToMatch(bot.matchId, 'playerHit', { targetId: bot.id, hp: bot.hp, bulletId: data.bulletId, shooterId: shooter.id, weapon: data.weapon, headshot: !!data.headshot, shattered: !!data._shattered, tags: killTags, skin: cleanSkinId(data.skin) });
     if (bot.hp <= 0) {
       bot.dead = true; bot.deaths++; shooter.kills++;
       if (shooter === players[socket.id]) shooter.matchKills = (shooter.matchKills || 0) + 1;
-      emitToMatch(bot.matchId, 'playerDied', { targetId: bot.id, killerId: shooter.id, weapon: data.weapon, headshot: !!data.headshot, tags: killTags });
+      emitToMatch(bot.matchId, 'playerDied', { targetId: bot.id, killerId: shooter.id, weapon: data.weapon, headshot: !!data.headshot, tags: killTags, skin: cleanSkinId(data.skin) });
       setTimeout(() => {
         if (!bot.dead) return; // already respawned via forceRespawnBot (elim round restart)
         if (bot.matchMode === 'underworld') return;

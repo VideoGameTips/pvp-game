@@ -12,11 +12,17 @@ const context = {
   emitToMatchExcept: (room, except, event, data) => events.push({ room, event, data, to: 'others' }),
   hellfireWeapon: () => false, canUseHellfire: () => false, blocksFriendlyFire: () => false,
   nextSpawn: () => ({ x: 0, y: 1, z: 0 }), maxHpFor: () => 300, SPAWN_SHIELD_MS: 1500,
+  serverHitDamage: (d) => d._dmg || 30, shielded: () => false, creditFfaDamage: () => {}, freezeRayHit: () => {}, setTimeout: () => 0, RESPAWN_DELAY: 1e9, respawnBot: () => {},
 };
 vm.createContext(context);
-for (const name of ['shoot', 'satchelEvent', 'spearPlant', 'readyRespawn', 'resetSelf']) {
+for (const name of ['shoot', 'satchelEvent', 'spearPlant', 'readyRespawn', 'resetSelf', 'hit', 'hitBot']) {
   const start = source.indexOf(`socket.on('${name}',`), end = source.indexOf('\n  });', start) + 7;
   assert(start > 0 && end > start, `handler ${name} not found`);
+  vm.runInContext(source.slice(start, end), context);
+}
+for (const fn of ['cleanSkinId', 'cleanKillTags']) {                                    // plain helpers the shoot and hit handlers call
+  const start = source.indexOf(`function ${fn}(`), end = source.indexOf('\n}\n', start) + 3;
+  assert(start > 0 && end > start, `function ${fn} not found`);
   vm.runInContext(source.slice(start, end), context);
 }
 const count = (event) => events.filter(e => e.event === event).length;
@@ -66,3 +72,30 @@ events.length = 0; p.lastShot = 0; handlers.shoot({ x: 0, y: 1, z: 0, dx: 0, dy:
 events.length = 0; p.lastShot = 0; handlers.shoot({ x: 0, y: 1, z: 0, dx: 0, dy: 0, dz: -1, weapon: 'grenade_launcher' }); assert.equal(fired().skin, undefined);
 for (const bad of ['<img src=x>', 'a'.repeat(60), 'Has Caps', '', 42, { x: 1 }, null]) { events.length = 0; p.lastShot = 0; handlers.shoot({ x: 0, y: 1, z: 0, dx: 0, dy: 0, dz: -1, weapon: 'rpg', skin: bad }); assert.equal(fired().skin, undefined, 'a skin of ' + JSON.stringify(bad) + ' is not passed on'); }
 console.log('Skin shots server: a plain skin id rides on the shot, anything else is dropped');
+
+// the skin on the weapon rides on a hit and on the kill it makes (playerHit, playerDied), so every screen can show what the skin does to its victim
+// (the Hacker skins' flash and crash): only a plain id is passed on, and a hit with none says none
+{
+  const victim = { id: 'victim', matchId: 'test', hp: 100, dead: false, deaths: 0, kills: 0, isBot: false };
+  const bot = { id: 'botv', matchId: 'test', hp: 100, dead: false, deaths: 0, kills: 0, isBot: true };
+  context.players.victim = victim; context.players.botv = bot; p.dead = false; p.kills = 0;
+  const last = (ev) => events.filter(e => e.event === ev).pop();
+  const reset = () => { victim.hp = 100; victim.dead = false; bot.hp = 100; bot.dead = false; events.length = 0; };
+  reset(); handlers.hit({ targetId: 'victim', weapon: 'combat_axe', skin: 'combat_axe_hacker', _dmg: 30 });
+  assert.equal(last('playerHit').data.skin, 'combat_axe_hacker', 'a hit passes the skin on'); assert.equal(last('playerHit').to, 'all');
+  assert.equal(last('playerDied'), undefined, 'a hit that does not kill says nothing of a death');
+  reset(); handlers.hit({ targetId: 'victim', weapon: 'ak20', skin: 'ak20_hacker', _dmg: 999 });
+  assert.equal(last('playerDied').data.skin, 'ak20_hacker', 'the kill passes the skin on too'); assert.equal(last('playerDied').data.killerId, 'self');
+  reset(); handlers.hit({ targetId: 'victim', weapon: 'ak20', _dmg: 999 });
+  assert.equal(last('playerHit').data.skin, undefined); assert.equal(last('playerDied').data.skin, undefined, 'no skin, none passed');
+  for (const bad of ['<img src=x>', 'a'.repeat(60), 'Has Caps', '', 42, { x: 1 }, null]) {
+    reset(); handlers.hit({ targetId: 'victim', weapon: 'ak20', skin: bad, _dmg: 999 });
+    assert.equal(last('playerHit').data.skin, undefined, 'not a plain id: ' + JSON.stringify(bad)); assert.equal(last('playerDied').data.skin, undefined);
+  }
+  reset(); handlers.hitBot({ botId: 'botv', weapon: 'frag', skin: 'frag_hacker', _dmg: 30 });
+  assert.equal(last('playerHit').data.skin, 'frag_hacker', 'a hit on a bot passes it on'); assert.equal(last('playerHit').data.targetId, 'botv');
+  reset(); handlers.hitBot({ botId: 'botv', weapon: 'frag', skin: 'frag_hacker', _dmg: 999 });
+  assert.equal(last('playerDied').data.skin, 'frag_hacker', 'and so does the kill of a bot');
+  reset(); handlers.hitBot({ botId: 'botv', weapon: 'frag', skin: 'x y', _dmg: 999 }); assert.equal(last('playerDied').data.skin, undefined);
+  console.log('Hit skins server: a plain skin id rides on playerHit and playerDied (players and bots), anything else is dropped');
+}

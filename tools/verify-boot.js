@@ -4519,6 +4519,80 @@ if (ok && process.argv.includes('--hacker')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--hacker')) {
+  // Other players see it too (Andy: "others should see the hit flash and glitch kill too"): the shooter's hit carries the id of the hacker skin behind it, the server passes it on with
+  // playerHit and playerDied (verify-spear-server.js), and every other screen flashes the victim and crashes the body of a kill. The shooter's own screen does not do it twice.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    // which skin is behind a hit, for the gun, the grenade and the axe alike
+    const keep = { pistol: _modelSkinLook.pistol, frag: _modelSkinLook.frag, combat_axe: _modelSkinLook.combat_axe };
+    const sent = [], keepEmit = socket.emit;
+    try {
+      _modelSkinLook.pistol = skinLookFor(MODEL_SKINS.find(m => m.id === 'pistol_hacker'));
+      _modelSkinLook.frag = Object.assign({ skinId: 'frag_hacker' }, SUPPORT_MODEL_SKINS.find(m => m.id === 'frag_hacker').look);
+      _modelSkinLook.combat_axe = Object.assign({ skinId: 'combat_axe_hacker' }, MELEE_MODEL_SKINS.find(m => m.id === 'combat_axe_hacker').look);
+      if (_hackSkinId('pistol') !== 'pistol_hacker') issues.push('a gun skin should tell its id: ' + _hackSkinId('pistol'));
+      if (_hackSkinId('frag') !== 'frag_hacker') issues.push('the Hacker Grenade should tell its id: ' + _hackSkinId('frag'));
+      if (_hackSkinId('axe_chop') !== 'combat_axe_hacker') issues.push('the axe combo should tell the Hacker Axe id: ' + _hackSkinId('axe_chop'));
+      if (_hackSkinId('knife') || _hackSkinId('ak20')) issues.push('a stock blade and a stock gun tell no skin');
+      for (const id of ['pistol_hacker', 'ak20_hacker', 'frag_hacker', 'combat_axe_hacker']) if (!_isHackSkin(id)) issues.push(id + ' should be known as a hacker skin');
+      for (const id of ['pistol_m9', 'frag_pineapple', 'combat_axe_frost', '', null, 7]) if (_isHackSkin(id)) issues.push(JSON.stringify(id) + ' is not a hacker skin');
+      // the hit carries it: the real emitHit, a hit on someone with the Hacker Axe in hand
+      players.hk1 = { id: 'hk1', hp: 100, team: 'enemy' }; remoteMeshes.hk1 = { visible: true, position: new THREE.Vector3(0, 0, -5), rotation: { y: 0 } };
+      socket.emit = (ev, d) => { sent.push([ev, d]); };
+      const spies = [spawnHitNumber, trackTotalDamage, playSoundEvent, skinHitFX], here = new THREE.Vector3(0, 1, -5);
+      spawnHitNumber = () => {}; trackTotalDamage = () => {}; playSoundEvent = () => {}; skinHitFX = () => {};
+      try {
+        emitHit('hk1', 'b1', 'combat_axe', here.clone());
+        emitHit('hk1', 'b2', 'knife', here.clone());
+      } finally { [spawnHitNumber, trackTotalDamage, playSoundEvent, skinHitFX] = spies; }
+      const hits = sent.filter(x => x[0] === 'hit');
+      if (hits.length !== 2) issues.push('emitHit should have sent two hits, sent ' + hits.length);
+      else {
+        if (hits[0][1].skin !== 'combat_axe_hacker') issues.push('a hit with the Hacker Axe should carry its skin id: ' + hits[0][1].skin);
+        if (hits[1][1].skin !== undefined) issues.push('a hit with a stock blade carries no skin: ' + hits[1][1].skin);
+      }
+    } finally { socket.emit = keepEmit; delete players.hk1; delete remoteMeshes.hk1; for (const k of Object.keys(keep)) { if (keep[k]) _modelSkinLook[k] = keep[k]; else delete _modelSkinLook[k]; } }
+    // what a screen that is not the shooter's does with the id it is given
+    const keepMe = myId; myId = 'me_test';                                 // (it is not set until a match starts)
+    const spied = [skinHitFX, flashScreen], at = [], flashes = [];
+    skinHitFX = (kind, pos, on) => { at.push([kind, pos.y, on]); }; flashScreen = () => { flashes.push(1); };
+    remoteMeshes.vic = { visible: true, position: new THREE.Vector3(3, 0, 3) };
+    try {
+      _othersHackHit({ shooterId: 'someone', targetId: 'vic', skin: 'ak20_hacker' });
+      if (at.length !== 1 || at[0][0] !== 'hack' || Math.abs(at[0][1] - 1.2) > 0.01 || at[0][2] !== true) issues.push('a hacker hit by somebody else should flash the victim at chest height: ' + JSON.stringify(at));
+      at.length = 0; _othersHackHit({ shooterId: myId, targetId: 'vic', skin: 'ak20_hacker' });
+      if (at.length) issues.push('the shooter does not flash it a second time from the server message');
+      _othersHackHit({ shooterId: 'someone', targetId: 'vic', skin: 'pistol_m9' }); _othersHackHit({ shooterId: 'someone', targetId: 'vic' }); _othersHackHit({ shooterId: 'someone', targetId: 'vic', skin: '<b>' });
+      if (at.length) issues.push('a stock skin, no skin and a made-up id flash nothing');
+      remoteMeshes.vic.visible = false; _othersHackHit({ shooterId: 'someone', targetId: 'vic', skin: 'ak20_hacker' }); if (at.length) issues.push('a hidden body is not flashed'); remoteMeshes.vic.visible = true;
+      _othersHackHit({ shooterId: 'someone', targetId: myId, skin: 'ak20_hacker' });
+      if (at.length || flashes.length !== 1) issues.push('when it is you they hit, you get a green blink and nothing is drawn in the world (flashes ' + flashes.length + ', draws ' + at.length + ')');
+    } finally { [skinHitFX, flashScreen] = spied; delete remoteMeshes.vic; myId = keepMe; }
+    // the crash on somebody else's kill: only for a hacker skin id, and the server's id decides (their weapon is whatever it was)
+    const calls = [], keepPlay = playGlitchFinisher;
+    playGlitchFinisher = (id) => { calls.push(id); return true; };
+    try {
+      triggerFinisher('v', 'ak20', 'someone', 'ak20_hacker'); triggerFinisher('v', 'combat_axe', 'someone', 'combat_axe_hacker'); triggerFinisher('v', 'frag', 'someone', 'frag_hacker');
+      if (calls.length !== 3) issues.push('a kill by somebody else with a hacker skin should crash the body (called ' + calls.length + ' times, wanted 3)');
+      calls.length = 0; triggerFinisher('v', 'ak20', 'someone', 'pistol_m9'); triggerFinisher('v', 'ak20', 'someone', null); triggerFinisher('v', 'ak20', 'someone', 'nonsense');
+      if (calls.length) issues.push('a kill with a stock skin or no skin should not crash the body');
+    } finally { playGlitchFinisher = keepPlay; }
+    // somebody else's Hacker Grenade throws its code when it bursts, and their rounds puff on a wall; yours does neither twice
+    const spied2 = [spawnExplosion, skinHitFX, _hackDigits, spawnAbilityAOEFX, playSoundEvent], got = { boom: 0, digits: 0, fx: 0 };
+    spawnExplosion = () => {}; skinHitFX = () => { got.fx++; }; _hackDigits = () => { got.digits++; }; spawnAbilityAOEFX = () => {}; playSoundEvent = () => {};
+    try {
+      rocketExplode(new THREE.Vector3(2, 0, -6), 'frag', null, { damageRemotes: false, skinLook: skinLookById('frag_hacker') });
+      if (got.digits !== 1 || got.fx !== 1) issues.push('their Hacker Grenade should throw its code when it bursts (digits ' + got.digits + ', fx ' + got.fx + ')');
+      got.digits = got.fx = 0; rocketExplode(new THREE.Vector3(2, 0, -6), 'frag', null, { damageRemotes: false, skinLook: skinLookById('frag_pineapple') });
+      if (got.digits) issues.push('a stock frag burst throws no code');
+    } finally { [spawnExplosion, skinHitFX, _hackDigits, spawnAbilityAOEFX, playSoundEvent] = spied2; }
+    return issues;
+  })()`);
+  console.log('hacker seen by others checks: the hit carries the hacker skin id (gun, grenade, axe), a screen that is not the shooter\'s flashes the victim and crashes a kill\'s body only for a hacker skin, once, and their grenade throws its code');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.argv.includes('--saw')) {
   // The chainsaw's Rev Up is a HELD ability (Andy): press E and the saw revs, swinging by itself faster than a click and burning fuel the whole time; the instant E comes
   // up it stops. No dash, no 3 s timer, no 12 s cooldown, nothing for the press to cost on its own, and no rev on an empty tank.

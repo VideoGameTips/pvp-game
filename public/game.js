@@ -42894,7 +42894,7 @@ function skinLookFor(skin) {                                                // t
   if (!skin) return null;
   if (_skinLookCache[skin.id]) return _skinLookCache[skin.id];
   const T = SKIN_SHOT[skin.id] || null, tint = (T && T.tint) || (T && T.shot && T.shot.c[0]) || _skinTintOf(skin);
-  const look = Object.assign({ bulletColor: tint }, skin.look || {});
+  const look = Object.assign({ bulletColor: tint, skinId: skin.id }, skin.look || {});
   if (T && T.shot && !(skin.look && skin.look.projectile)) look.shot = T.shot;
   let boom = null;
   if (skin.look && skin.look.projectile === 'donut') boom = BOOM_THEMES.glaze;
@@ -42964,6 +42964,19 @@ function skinHitFX(kind, pos, onTarget) {
 // Whatever carries a hit look (a gun's skin, the grenade's, the axe's): its entry in _modelSkinLook, by the id the hit is reported under. The axe's combo moves are the axe's.
 const _LOOK_OF = { axe_upper: 'combat_axe', axe_airwhirl: 'combat_axe', axe_chop: 'combat_axe' };
 function _hackerHit(weaponId) { try { const L = weaponId && (_modelSkinLook[weaponId] || _modelSkinLook[_LOOK_OF[weaponId]]); return !!(L && L.hit === 'hack'); } catch (e) { return false; } }
+// ...and what the other screens need to show it: the id of the hacker skin behind a hit (it rides on the hit, the server passes it on with playerHit and playerDied), and whether an id is one.
+function _hackSkinId(weaponId) { try { const L = weaponId && (_modelSkinLook[weaponId] || _modelSkinLook[_LOOK_OF[weaponId]]); return (L && L.hit === 'hack' && L.skinId) || null; } catch (e) { return null; } }
+let _hackSkinSet = null;
+function _isHackSkin(id) {
+  if (typeof id !== 'string') return false;
+  try { if (!_hackSkinSet) _hackSkinSet = new Set([...MODEL_SKINS, ...SUPPORT_MODEL_SKINS, ...MELEE_MODEL_SKINS].filter(m => m.look && m.look.hit === 'hack').map(m => m.id)); return _hackSkinSet.has(id); } catch (e) { return false; }
+}
+function _othersHackHit(data) {                                            // somebody else's hacker hit: the flash on the victim (the shooter's own screen does its own, see hitFeedback)
+  if (!data || !data.shooterId || data.shooterId === myId || !_isHackSkin(data.skin)) return;
+  if (data.targetId === myId) { try { flashScreen('rgba(70,255,140,0.16)', 110); } catch (e) {} return; }          // it is you they hit: a green blink, nothing to draw
+  const mesh = remoteMeshes[data.targetId]; if (!mesh || !mesh.visible) return;
+  skinHitFX('hack', mesh.position.clone().setY(mesh.position.y + 1.2), true);
+}
 function _hackFlicker(el, real) {                                // real: a string, or a function giving it (a running total may have moved on)
   const ms = 220 + Math.random() * 90, t0 = performance.now(), final = () => String(typeof real === 'function' ? real() : real);
   el.style.color = '#39ff6a'; el.style.textShadow = '0 0 8px #00ff55, 0 0 2px #003a14, -1px -1px 0 #021a0a, 1px 1px 0 #021a0a';
@@ -55896,7 +55909,7 @@ function applyMeleeModelSkin(baseId) {
   if (!(idx in _baseMeleeModels)) _baseMeleeModels[idx] = meleeModels[idx];
   const want = equippedMeleeModelSkins[baseId];
   const skin = MELEE_MODEL_SKINS.find(s => s.id === want && s.melee === baseId && !isLegendLocked(s) && !isCaseSkinLocked(s));
-  if (skin && skin.look) _modelSkinLook[baseId] = skin.look; else delete _modelSkinLook[baseId];         // what its hits do (the Hacker Axe's)
+  if (skin && skin.look) _modelSkinLook[baseId] = Object.assign({ skinId: skin.id }, skin.look); else delete _modelSkinLook[baseId];         // what its hits do (the Hacker Axe's)
   let next;
   if (!skin) next = _baseMeleeModels[idx];
   else {
@@ -56154,7 +56167,7 @@ function applySupportModelSkin(baseId) {
   if (!(idx in _baseSupportModels)) _baseSupportModels[idx] = supportModels[idx];
   const want = equippedSupportModelSkins[baseId];
   const skin = SUPPORT_MODEL_SKINS.find(s => s.id === want && s.support === baseId);
-  if (skin && skin.look) _modelSkinLook[baseId] = skin.look; else delete _modelSkinLook[baseId];       // what its hits do (the Hacker Grenade's)
+  if (skin && skin.look) _modelSkinLook[baseId] = Object.assign({ skinId: skin.id }, skin.look); else delete _modelSkinLook[baseId];       // what its hits do (the Hacker Grenade's)
   let next;
   if (!skin) next = _baseSupportModels[idx];
   else {
@@ -59470,8 +59483,8 @@ function _playClassicFinisher(mesh, targetId, fin, pos) {
     _spawnRaincloudFinisher(mesh, pos);
   }
 }
-function triggerFinisher(targetId, weaponId, killerId = myId) {
-  if (killerId === myId && _hackerHit(weaponId) && playGlitchFinisher(targetId)) return;     // killed with the Hacker Pistol: it crashes (whatever finisher you picked)
+function triggerFinisher(targetId, weaponId, killerId = myId, skinId = null) {
+  if ((killerId === myId ? _hackerHit(weaponId) : _isHackSkin(skinId)) && playGlitchFinisher(targetId)) return;     // killed with a Hacker skin (yours, or the id the server passed on for somebody else's): it crashes, whatever finisher was picked
   const chosen = finisherChoiceOf(killerId);                   // the finisher its killer picked, if they picked one
   if (chosen && playChosenFinisher(targetId, chosen, killerId)) return;
   if (killerId !== myId) return;                                // someone else's kill with no finisher chosen: nothing of ours to play
@@ -60006,7 +60019,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
   const fatal = !!(isBot && mpMatch() && botHp != null && instakill);
   socket.emit(isBot ? 'hitBot' : 'hit', {
     [isBot ? 'botId' : 'targetId']: pid,
-    bulletId, weapon: weaponId,
+    bulletId, weapon: weaponId, skin: _hackSkinId(weaponId) || undefined,
     headshot, instakill, fatal, tags: killTags, wallPenetrated: !!opts.wallPenetrated,
     damageOverride: dmg,
   });
@@ -60395,6 +60408,7 @@ function rocketExplode(pos, weaponId, excludePid, opts = {}) {
   const radius = w.splashRadius || 5;
   const boom = (opts.skinLook && opts.skinLook.boom) || null;               // the burst of the skin that fired it: what it LOOKS like, not what it does (same radius, same damage)
   spawnExplosion(pos, boom);
+  if (opts.skinLook && opts.skinLook.hit === 'hack') { skinHitFX('hack', pos, false); _hackDigits(pos, 34, 7.5, 4, 820, 0.32); }   // a hacker round that bursts (the Hacker Launcher's, or somebody else's Hacker Grenade; your own grenade bursts in explodeGrenade) throws its code
   spawnAbilityAOEFX(pos.clone().setY(0.2), radius, boom ? boom.ring : 0xff7722);
   playSoundEvent('explosion', { position: pos, volume: 1.1, minGap: 60 });
   const splashId = weaponId + '_splash';
@@ -60646,6 +60660,7 @@ function updateBullets(dt) {
           }
         }
         if (wallHit && !b.isOwn) {
+          if (b.skinLook && b.skinLook.hit && wallHitPt.distanceToSquared(camera.position) < 3600) skinHitFX(b.skinLook.hit, wallHitPt.clone(), false);   // their Hacker rounds puff on the wall too (close enough to see)
           spawnHitParticle(wallHitPt);
           if (EXPLOSIVE_KINDS.has(projectileKind(b.weaponId, WEAPONS.find(w => w.id === b.weaponId)))) {
             rocketExplode(wallHitPt, b.weaponId, null, { damageRemotes: false, damagePlayer: true, skinLook: b.skinLook });
@@ -63687,6 +63702,7 @@ socket.on('nameRefused', () => console.warn('[auth] the server refused this name
 socket.on('playerHit', data => {
   const healthOnly = data.healthEvent === 'environment' || data.healthEvent === 'heal';
   if (data.shooterId && data.weapon) noteKillInfo(data.targetId, data.shooterId, data.weapon, data.headshot, { tags: data.tags });   // for the kill feed
+  _othersHackHit(data);                                                // a Hacker skin's flash and code on the victim, for everyone who is not the shooter
   // Range mode: player is invincible — just ignore any damage (no healSelf to avoid server loop)
   if (data.targetId === myId && match?.type === 'range') {
     updateHealthHUD(300);
@@ -63798,7 +63814,7 @@ socket.on('playerHit', data => {
       // falls here; the credit comes with the server's playerDied, which names the killer.
       hitBot.dead = true;
       if (players[data.targetId]) players[data.targetId].dead = true;
-      if (finisherChoiceOf(data.shooterId)) triggerFinisher(data.targetId, data.weapon, data.shooterId);   // their finisher, as they chose it
+      if (finisherChoiceOf(data.shooterId) || _isHackSkin(data.skin)) triggerFinisher(data.targetId, data.weapon, data.shooterId, data.skin);   // their finisher, as they chose it (or the crash of their Hacker skin)
       dropBody(data.targetId);
     } else if (hitBot.hp <= 0) {
       hitBot.dead = true;
@@ -63958,7 +63974,7 @@ socket.on('playerDied', data => {
   }
   if (remoteMeshes[data.targetId]) {
     if (data.killerId === myId && data.targetId !== myId) triggerFinisher(data.targetId, data.weapon || currentEquippedId());
-    else if (data.killerId && data.killerId !== myId && data.targetId !== myId && finisherChoiceOf(data.killerId)) triggerFinisher(data.targetId, data.weapon, data.killerId);   // another player's finisher
+    else if (data.killerId && data.killerId !== myId && data.targetId !== myId && (finisherChoiceOf(data.killerId) || _isHackSkin(data.skin))) triggerFinisher(data.targetId, data.weapon, data.killerId, data.skin);   // another player's finisher, or the crash of their Hacker skin
     dropBody(data.targetId);   // falls, then hides (#34)
   }
   const bot = resolveBot(data.targetId);
