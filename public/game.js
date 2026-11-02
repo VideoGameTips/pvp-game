@@ -54479,6 +54479,80 @@ function gojoOnFistHit(model, pos) {
   try { spawnAbilityAOEFX(pos.clone(), 1.1, red ? 0xff2a2a : 0x4aa8ff); } catch (e) {}
 }
 
+// 🔱 Spear → Trident. Three points where there was one: a gold head with a teal gem, curling side prongs with barbs, and a few
+// drops of water that never quite fall.
+function buildTrident() {
+  const g = new THREE.Group();
+  const gold = new THREE.MeshPhongMaterial({ color: 0xd4a935, shininess: 130, specular: 0xfff0b0 });
+  const teal = new THREE.MeshPhongMaterial({ color: 0x1f9fae, shininess: 110, specular: 0xbffcff });
+  const gem  = new THREE.MeshBasicMaterial({ color: 0x7af0ff });
+  const drop = new THREE.MeshBasicMaterial({ color: 0xaaf4ff, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending });
+  const along = (geo, mat, z, x = 0, y = 0, tipForward = false) => { const m = new THREE.Mesh(geo, mat); m.rotation.x = tipForward ? -Math.PI / 2 : Math.PI / 2; m.position.set(x, y, z); g.add(m); return m; };
+  along(new THREE.CylinderGeometry(0.0085, 0.0085, 0.52, 10), teal, 0.040);                         // the shaft
+  for (let i = 0; i < 4; i++) along(new THREE.CylinderGeometry(0.0105, 0.0105, 0.010, 10), gold, 0.18 + i * 0.045);   // gold bands
+  along(new THREE.ConeGeometry(0.012, 0.030, 10), gold, 0.325, 0, 0, false);                       // the butt cap
+  along(new THREE.CylinderGeometry(0.014, 0.011, 0.020, 10), gold, -0.215);                         // collar under the head
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(0.086, 0.012, 0.014), gold); bar.position.set(0, 0, -0.232); g.add(bar);   // the crossbar
+  along(new THREE.ConeGeometry(0.0095, 0.070, 8), gold, -0.282, 0, 0, true);                       // centre prong
+  for (const sd of [-1, 1]) {
+    along(new THREE.CylinderGeometry(0.0055, 0.0055, 0.050, 8), gold, -0.258, sd * 0.040);          // side prongs
+    along(new THREE.ConeGeometry(0.0075, 0.034, 8), gold, -0.302, sd * 0.040, 0, true);
+    const barb = new THREE.Mesh(new THREE.ConeGeometry(0.0045, 0.020, 6), gold);                   // a barb on each, turned back
+    barb.rotation.set(Math.PI / 2 + 0.2, 0, -sd * 0.7); barb.position.set(sd * 0.030, 0, -0.288); g.add(barb);
+  }
+  const jewel = new THREE.Mesh(new THREE.OctahedronGeometry(0.0095, 0), gem); jewel.position.set(0, 0, -0.222); jewel.scale.set(1, 1, 1.3); g.add(jewel);
+  [[-0.030, 0.030, -0.205, 0.0050], [0.034, -0.026, -0.190, 0.0040], [0.012, 0.040, -0.175, 0.0045]].forEach(([x, y, z, r]) => {
+    const d = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6), drop); d.position.set(x, y, z); g.add(d);
+  });
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+// ⚡ Adrenaline Pack → Energy Drink. A tall neon can, a lightning bolt on the front, a fizz of bubbles over the open tab.
+function buildEnergyDrink() {
+  const g = new THREE.Group();
+  const alu  = new THREE.MeshPhongMaterial({ color: 0x15171c, shininess: 150, specular: 0xffffff });
+  const neon = new THREE.MeshPhongMaterial({ color: 0x7dff1c, shininess: 90, specular: 0xe8ffc0 });
+  const silver = new THREE.MeshPhongMaterial({ color: 0xcfd5dc, shininess: 180, specular: 0xffffff });
+  const bolt = new THREE.MeshBasicMaterial({ color: 0xfff23a });
+  const fizz = new THREE.MeshBasicMaterial({ color: 0xe9ffd0, transparent: true, opacity: 0.6, depthWrite: false });
+  const can = new THREE.Mesh(new THREE.CylinderGeometry(0.027, 0.027, 0.115, 18), alu); g.add(can);
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.0278, 0.0278, 0.034, 18), neon); band.position.y = -0.004; g.add(band);
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(0.0235, 0.027, 0.012, 18), silver); top.position.y = 0.0635; g.add(top);
+  const bot = new THREE.Mesh(new THREE.CylinderGeometry(0.0255, 0.0235, 0.008, 18), silver); bot.position.y = -0.0615; g.add(bot);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.0235, 0.0016, 6, 18), silver); rim.rotation.x = Math.PI / 2; rim.position.y = 0.0705; g.add(rim);
+  const tab = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.0016, 0.020), silver); tab.position.set(0, 0.0705, 0.004); tab.rotation.x = -0.35; g.add(tab);
+  for (const [bx, by, bz, rz] of [[0.004, 0.006, -0.0278, 0.5], [-0.004, -0.008, -0.0278, 0.5]]) {          // a bolt on the front: two slanted bars
+    const b = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.026, 0.002), bolt); b.position.set(bx, by, bz); b.rotation.z = rz; g.add(b);
+  }
+  [[0.004, 0.092, 0.002, 0.0055], [-0.008, 0.108, -0.004, 0.0045], [0.010, 0.122, 0.003, 0.0038], [-0.002, 0.134, -0.002, 0.0032]].forEach(([x, y, z, r]) => {
+    const f = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6), fizz); f.position.set(x, y, z); g.add(f);
+  });
+  g.rotation.set(0.28, 0.35, -0.12);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+// 🎁 Satchel Charge → Gift Bag. Tissue paper at the top, rope handles, a bow. It is, sadly, not a present.
+function buildGiftBag() {
+  const g = new THREE.Group();
+  const paper = new THREE.MeshLambertMaterial({ color: 0xc8283a });
+  const stripe = new THREE.MeshLambertMaterial({ color: 0xf2e6c8 });
+  const gold = new THREE.MeshPhongMaterial({ color: 0xe0b434, shininess: 120, specular: 0xfff0b0 });
+  const tissue = [0xffffff, 0xffd0e0, 0xc8f0e0].map(c => new THREE.MeshLambertMaterial({ color: c, side: THREE.DoubleSide }));
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.112, 0.130, 0.056), paper); g.add(body);
+  for (const sz of [-1, 1]) for (let i = 0; i < 3; i++) {                                                    // paper dots on both faces
+    const d = new THREE.Mesh(new THREE.CylinderGeometry(0.0075, 0.0075, 0.002, 10), stripe);
+    d.rotation.x = Math.PI / 2; d.position.set(-0.030 + i * 0.030, -0.025 + (i % 2) * 0.040, sz * 0.0282); g.add(d);
+  }
+  const band = new THREE.Mesh(new THREE.BoxGeometry(0.114, 0.014, 0.058), gold); band.position.y = 0.040; g.add(band);     // the ribbon round the top
+  tissue.forEach((m, i) => { const t = new THREE.Mesh(new THREE.PlaneGeometry(0.070, 0.060), m); t.position.set((i - 1) * 0.024, 0.092, (i - 1) * 0.006); t.rotation.set(0.2 * (i - 1), 0.4 * (i - 1), 0.25 * (i - 1)); g.add(t); });
+  for (const sz of [-1, 1]) { const h = new THREE.Mesh(new THREE.TorusGeometry(0.030, 0.0028, 6, 16, Math.PI), gold); h.position.set(0, 0.066, sz * 0.020); h.rotation.set(0, 0, 0); g.add(h); }
+  const bowL = new THREE.Mesh(new THREE.SphereGeometry(0.014, 10, 8), gold); bowL.scale.set(1.5, 1, 0.7); bowL.position.set(-0.014, 0.040, 0.034); bowL.rotation.z = 0.5; g.add(bowL);
+  const bowR = bowL.clone(); bowR.position.x = 0.014; bowR.rotation.z = -0.5; g.add(bowR);
+  const knot = new THREE.Mesh(new THREE.SphereGeometry(0.008, 8, 6), gold); knot.position.set(0, 0.040, 0.036); g.add(knot);
+  g.rotation.set(0.12, 0.35, 0);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
 // 🎱 Spear → Pool Cue. The reach was always the point.
 function buildPoolCue() {
   const g = new THREE.Group();
@@ -55549,6 +55623,9 @@ const MELEE_MODEL_SKINS = [
   { id: 'fists_limitless', melee: 'fists', name: 'Limitless', rarity: 'rare', raw: true,
     sw: ['#2f7bff', '#ff2a2a'], build: buildLimitless,
     blurb: 'Blue in the right hand, red in the left. Inspect them. Then inspect them again.' },
+  { id: 'spear_trident', melee: 'spear', name: 'Trident', rarity: 'good',
+    sw: ['#d4a935', '#1f9fae'], build: buildTrident,
+    blurb: 'Three points where there was one. Slightly damp.' },
   { id: 'fists_one_fist', melee: 'fists', name: 'Fist', rarity: 'lame',
     sw: ['#eac39a', '#c83a30'], build: buildSingleFist,
     blurb: 'The normal fist, but only the one. The other one stayed home.' },
@@ -55953,6 +56030,10 @@ const SUPPORT_MODEL_SKINS = [
     blurb: 'Corner pocket. You go with it.' },
   { id: 'mine_whoopee',    support: 'land_mine',   name: 'Whoopee Cushion',  rarity: 'good', sw: ['#ff7aa8', '#d04a7a'], build: buildWhoopeeCushion,
     blurb: 'Somebody is about to sit down.' },
+  { id: 'adrenaline_energy_drink', support: 'adrenaline', name: 'Energy Drink', rarity: 'good', sw: ['#15171c', '#7dff1c'], build: buildEnergyDrink,
+    blurb: 'Neon, fizzing, and the can says not to have three.' },
+  { id: 'satchel_gift_bag', support: 'satchel', name: 'Gift Bag', rarity: 'good', sw: ['#c8283a', '#e0b434'], build: buildGiftBag,
+    blurb: 'Tissue paper, a bow, a handle. Do not open it; press the button.' },
   { id: 'grapple_fishing_rod', support: 'grapple_hook', name: 'Fishing Rod',   rarity: 'good', sw: ['#23282e', '#8a1c2a'], build: buildFishingRod,   // (it was the Lever Rifle's; a rod and reel is a grapple)
     blurb: 'Cast it at a wall and reel yourself in. There is a float on the line.' },
 ];
