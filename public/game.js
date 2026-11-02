@@ -1527,7 +1527,9 @@ const GAME_MODE_CONFIGS = {
   'ffa15': { type: 'ffa',  allies: 0, enemies: 15, timeLimit: 300 },
   // Special modes
   'frontlines': { type: 'frontlines', allies: 4, enemies: 5 },
-  'boss':       { type: 'boss',       allies: 0, enemies: 0, forcedMap: 'battlefield', playerHp: 400 },   // 🤖 1v1 against THE WARDEN, a giant stationary robot
+  'boss':       { type: 'boss',       bossId: 'warden', allies: 0, enemies: 0, forcedMap: 'boss_arena', playerHp: 400 },   // 🤖 1v1 against THE WARDEN, a giant stationary robot
+  'boss_core':  { type: 'boss',       bossId: 'core',   allies: 0, enemies: 0, forcedMap: 'boss_arena', playerHp: 400 },   // 🔷 THE CORE: rings, shockwaves, beams
+  'boss_hydra': { type: 'boss',       bossId: 'hydra',  allies: 0, enemies: 0, forcedMap: 'boss_arena', playerHp: 400 },   // 🐍 THE HYDRA: acid, ice, lightning   // 🤖 1v1 against THE WARDEN, a giant stationary robot
   'laststand':  { type: 'laststand',  allies: 3, enemies: 0, forcedMap: 'battlefield', playerHp: 300 },   // 🧟 zombie waves, three teammates, the Battlefield's farmhouse
   'dday':       { type: 'dday',       allies: 3, enemies: 0 },
   'base_raid':  { type: 'race',       allies: 4, enemies: 16, killGoal: 16, timeLimit: 420,
@@ -15373,6 +15375,24 @@ function buildZombieTower() {
   G._skyColor = 0x020309;
 }
 _BESPOKE.zombie_tower = buildZombieTower;
+// ⭕ BOSS ARENA: a plain round pit, 62 m across the middle to the wall, with the Warden standing at the exact centre. Six pillars to hide behind,
+// six low blocks further out, rings painted on the floor. Like the Zombie Tower it is not in MAP_IDS: only the Boss Fight is ever dealt it.
+registerMap('boss_arena');
+MAP_THEMES.boss_arena = Object.assign(_T(0x2a2d34, 0x23262c, 0x3a3e46, 0x2b2f36, 0x3a2f2a, 0x54483a, 0xffb060, 0xffb060, 0x07080c, 'industrial', []), { keep: true, customDetail: true });
+function buildBossArenaLayout() {
+  const name = 'boss_arena', R = 62, K = _bkBegin(name, R * 2 + 16, R * 2 + 16, 0x2a2d34), G = MAP_GROUPS[name];
+  const flat = (geo, color, op, y) => { const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, transparent: op < 1, opacity: op, depthWrite: false, side: THREE.DoubleSide })); m.rotation.x = -Math.PI / 2; m.position.y = y; G.add(m); return m; };
+  flat(new THREE.CircleGeometry(R, 72), 0x30343c, 1, 0.02);                                              // the round floor
+  for (const [r, col] of [[10, 0xff8a1a], [22, 0x4a5362], [34, 0x4a5362], [46, 0x4a5362], [58, 0xff8a1a]]) flat(new THREE.RingGeometry(r - 0.25, r + 0.25, 96), col, 0.9, 0.04);
+  for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2, m = flat(new THREE.PlaneGeometry(0.4, 12), 0x4a5362, 0.8, 0.05); m.rotation.z = -a; m.position.set(Math.sin(a) * 28, 0.05, Math.cos(a) * 28); }   // spokes
+  const N = 56, seg = 2 * Math.PI * R / N + 0.8;                                                           // the wall: tangent boxes round a circle
+  for (let i = 0; i < N; i++) { const a = i / N * Math.PI * 2; K.box(Math.sin(a) * R, 0, Math.cos(a) * R, seg, 11, 2.4, i % 2 ? 0x2e323a : 0x353a43, a); }
+  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2 + 0.5236; K.box(Math.sin(a) * 27, 0, Math.cos(a) * 27, 3.4, 7, 3.4, 0x3d424c, a); }                    // pillars
+  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; K.box(Math.sin(a) * 44, 0, Math.cos(a) * 44, 7, 1.7, 1.6, 0x4a505b, a); }                         // low blocks
+  K.box(0, 0, 0, 7, 5, 7, 0x1c2027);                                                                       // under the Warden: solid, so you cannot walk through it
+  G._skyColor = 0x07080c;
+}
+_BESPOKE.boss_arena = buildBossArenaLayout;
 // What the dead route over: one grid per floor (1 m cells), made when a floor is first needed. A cell is shut where a thing of that floor
 // stands (and a body's width round it), round the hole, and along the walls.
 const _towerGrids = {};
@@ -18102,7 +18122,7 @@ const EGG_LINES = {
 };
 const EGG_CRANE = ['nice view', "don't look down", 'rope: 4 left', 'ahoy', 'tired of climbing', 'hi', 'shift ends at 5', 'hard hat: lost'];
 const EGG_SKIP = new Set(['blank', 'range', 'obby', 'm4_tower', 'm4_tower_big', 'm4_tower_super', 'big_harbor', 'storm_pier', 'pinball_arcade',
-  'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise', 'br_arena', 'base_raid', 'neon_tokyo', 'sky_arena', 'shipyard', 'battleground', 'atoll', 'zombie_tower']);
+  'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise', 'br_arena', 'base_raid', 'neon_tokyo', 'sky_arena', 'shipyard', 'battleground', 'atoll', 'zombie_tower', 'boss_arena']);
 const EGG_FLOATING = new Set(['space', 'orbital_station', 'gravity_lab', 'dreamscape', 'flying_moai', 'cyber', 'super_arena']);
 // Hand-drawn glyphs: a few wobbly strokes in a 256 square.
 function _eggGlyph(g, kind, rnd) {
@@ -21701,7 +21721,7 @@ const WEAR_UNTHEMED = { storm_pier: 'industrial', cargo_belts: 'industrial', las
 // Places that are not meant to look used: the neon and sci-fi maps (Cyber City, the station, the labs), the fairground
 // ones, an opera house and a shop. Rust, soot and grime on a hard-light city read as a different map; they get no wear.
 const WEAR_CLEAN_MOTIFS = new Set(['space', 'neon', 'carnival']);
-const WEAR_CLEAN_MAPS = new Set(['opera', 'supermarket', 'sky_arena', 'battleground', 'atoll', 'zombie_tower']);   // (the tower dresses itself: stains, numbers, hazard stripes)
+const WEAR_CLEAN_MAPS = new Set(['opera', 'supermarket', 'sky_arena', 'battleground', 'atoll', 'zombie_tower', 'boss_arena']);   // (the tower dresses itself: stains, numbers, hazard stripes)
 function wearIsClean(name) {
   const th = MAP_THEMES[name];
   return WEAR_CLEAN_MAPS.has(name) || WEAR_CLEAN_MOTIFS.has(th ? th.motif : WEAR_UNTHEMED[name]);
@@ -49625,7 +49645,8 @@ function _nearestAbilityRayHit(origin, dir, range, radius = 0.65) {
     if (!mesh.visible || players[pid]?.dead) continue;
     if (friendlyFireBlocked(pid, myId)) continue;
     const sc = mesh._bodyScale || 1;                                          // (a giant's spheres are as big as it is)
-    const r2Body = (radius * sc) * (radius * sc), r2Head = (0.32 * sc) * (0.32 * sc);
+    const hm = mesh._hitMul || 1;
+    const r2Body = (radius * sc * hm) * (radius * sc * hm), r2Head = (0.32 * sc * hm) * (0.32 * sc * hm);
     if (sc === 1 && !hasLineOfSight(origin.x, origin.z, mesh.position.x, mesh.position.z)) continue;
     const pts = [
       { p: new THREE.Vector3(mesh.position.x, mesh.position.y + 1.55 * sc, mesh.position.z), r2: r2Head, head: true },
@@ -51036,7 +51057,7 @@ function meleeStrikeScan(item, soundId, sawDry, now) {
     const toTarget = mesh.position.clone().sub(camera.position);
     toTarget.y = 0;
     const dist = toTarget.length();
-    if (dist > item.range + ((mesh._bodyScale || 1) - 1) * 0.7 || dist < 0.05) continue;
+    if (dist > item.range + ((mesh._bodyScale || 1) - 1) * 0.7 * (mesh._hitMul || 1) || dist < 0.05) continue;
     const dir = toTarget.normalize();
     if (forward.dot(dir) < 0.55) continue;
     hitPos = mesh.position.clone(); hitPos.y += 1.0 * (mesh._bodyScale || 1);
@@ -60673,7 +60694,8 @@ function updateBullets(dt) {
         // been animated yet.
         const _rg = mesh._rig;
         const bsc = mesh._bodyScale || 1;     // 🛡️ the juggernaut's spheres are as big as he is
-        const headR = 0.28 * bsc + bulletR, bodyR = 0.65 * bsc + bulletR;
+        const hm = mesh._hitMul || 1;
+        const headR = 0.28 * bsc * hm + bulletR, bodyR = 0.65 * bsc * hm + bulletR;
         const headOff = ((_rg && _rg.hitHeadOff !== undefined) ? _rg.hitHeadOff : 1.65) * bsc;
         const bodyOff = ((_rg && _rg.hitBodyOff !== undefined) ? _rg.hitBodyOff : 1.0) * bsc;
         const headZ = (_rg?.hitHeadZ || 0) * bsc, bodyZ = (_rg?.hitBodyZ || 0) * bsc;
@@ -60686,8 +60708,11 @@ function updateBullets(dt) {
           let t = Math.max(0, Math.min(1, (dox*sx + doy*sy + doz*sz) / segLenSq));
           let cx = px0 + t*sx - hx, cy = py0 + t*sy - (mesh.position.y+headOff), cz = pz0 + t*sz - hz;
           if (cx*cx + cy*cy + cz*cz < headR*headR) {
-            isHeadshot = true; hitX = px0+t*sx; hitY = py0+t*sy; hitZ = pz0+t*sz;
-            hitT = t;
+            // Where the bullet ENTERS the sphere, not where it passes closest to its centre: for a giant (the Warden) those are metres apart,
+            // and a wall between them (or inside it) must not win over a hit that happened first.
+            const te = Math.max(0, t - Math.sqrt(headR*headR - (cx*cx + cy*cy + cz*cz)) / Math.sqrt(segLenSq));
+            isHeadshot = true; hitX = px0+te*sx; hitY = py0+te*sy; hitZ = pz0+te*sz;
+            hitT = te;
             headMissD = Math.sqrt(cx*cx + cy*cy + cz*cz);
           }
           if (!isHeadshot) {
@@ -62821,7 +62846,7 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ['acid_pool', 8], ['bee_sting', 5],   // 🧪 acid tick / 🐝 bee sting
   ['thunderstorm', 60],
   // Lazy weapons batch
-  ['frost_blaster', 3], ['boss_minigun', 11], ['boss_missile', 55], ['boss_mortar', 70], ['boss_laser', 16], ['air_grenade', 15], ['land_mine', 298], ['frost_freeze', 9999],
+  ['frost_blaster', 3], ['boss_minigun', 11], ['boss_missile', 55], ['boss_mortar', 70], ['boss_laser', 16], ['boss_orb', 24], ['boss_shock', 45], ['boss_acid', 12], ['air_grenade', 15], ['land_mine', 298], ['frost_freeze', 9999],
   // 🔬 Tech / Physics batch
   ['prism_launcher', 38], ['foam_cannon', 18], ['airburst_projector', 22], ['glassmaker', 28],
   ['freeze_gun'], ['seismic_hammer', 70], ['painter_beam', 6], ['portal_launcher', 10],
@@ -66920,7 +66945,7 @@ function updateMatchHUD() {
   } else if (match.type === 'boss') {
     const B = match.boss, me = players[myId];
     L.textContent = B ? `PHASE ${B.phase}/3` : '---';
-    C.textContent = B ? `🤖 THE WARDEN ${Math.max(0, Math.ceil(B.bot.hp / B.bot.maxHp * 100))}%` : '---';
+    C.textContent = B ? `${B.def.icon} ${B.def.name} ${Math.max(0, Math.ceil(B.bot.hp / B.bot.maxHp * 100))}%` : '---';
     R.textContent = `HP ${me ? Math.max(0, Math.ceil(me.hp)) : 0}`;
   } else if (match.type === 'laststand') {
     const ls = lastStandState;
@@ -67919,7 +67944,10 @@ function onFrontlinesKill(targetId, killerId) {
 // missiles, the second adds the mortar and the laser, the third does it all with hardly a pause. Each phase change refills your ammo and gives
 // back some health. It is simulated on this machine like every bot, and it is a bot to the server (a flag keeps it from being one-shot).
 // ═════════════════════════════════════════════════════════════════════
-const BOSS = { scale: 4.5, hp: 12000, pos: [0, -52], player: [-22, 44] };
+const BOSS = { pos: [0, 0], player: [0, 52] };     // the arena's middle, and where you start (the far side of the ring)
+// ── what each boss is: its body, its size, its attacks by phase, and how it moves ─────────────────────────────────────────────────
+const BOSS_DEFS = {};
+function bossDef() { return BOSS_DEFS[(match && match.cfg && match.cfg.bossId) || 'warden']; }
 function buildWarden() {
   const g = new THREE.Group();
   const steel = new THREE.MeshPhongMaterial({ color: 0x3d4450, shininess: 60, specular: 0x8a94a4 });
@@ -67956,16 +67984,61 @@ function buildWarden() {
   const podMuzzles = [];
   for (let i = 0; i < 6; i++) { const x = (i % 3 - 1) * 0.18, y = (i < 3 ? 0.14 : -0.14); cyl(0.085, 0.085, 0.2, x, y, 0.46, dark, POD, Math.PI / 2, 0, 10); const m = new THREE.Object3D(); m.position.set(x, y, 0.58); POD.add(m); podMuzzles.push(m); }
   // on the shoulder: the mortar, tilted up and back
-  const mortar = cyl(0.15, 0.17, 0.85, 0.55, 1.35, -0.3, dark, T, -0.5, 0);
-  const mortarMuzzle = new THREE.Object3D(); mortarMuzzle.position.set(0.55, 1.75, -0.45); T.add(mortarMuzzle);
+  cyl(0.15, 0.17, 0.85, 0.55, 1.2, -0.3, dark, T, -0.5, 0);
+  const mortarMuzzle = new THREE.Object3D(); mortarMuzzle.position.set(0.55, 1.6, -0.45); T.add(mortarMuzzle);
   g.userData = { torso: T, lens, eye, barrels, mgMuzzle, podMuzzles, mortarMuzzle, redGlow };
   return g;
 }
+
+function buildCore() {
+  // 🔷 THE CORE: a caged star. A white-hot heart inside a lattice shell, three gimbal rings turning round it, four pylons in orbit, on a round plinth.
+  const g = new THREE.Group();
+  const dark = new THREE.MeshPhongMaterial({ color: 0x1c2027, shininess: 50, specular: 0x505866 });
+  const add = (c, op) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: op, depthWrite: false, blending: THREE.AdditiveBlending });
+  const plinth = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.3, 0.22, 24), dark); plinth.position.y = 0.11; g.add(plinth);
+  const mid = new THREE.Group(); mid.position.y = 1.05; g.add(mid);
+  const heart = new THREE.Mesh(new THREE.SphereGeometry(0.62, 20, 16), add(0xb77aff, 0.95)); mid.add(heart);
+  const hot = new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 12), add(0xffffff, 0.95)); mid.add(hot);
+  const halo = new THREE.Mesh(new THREE.SphereGeometry(0.95, 18, 14), add(0x7a3aff, 0.2)); mid.add(halo);
+  const shell = new THREE.Mesh(new THREE.IcosahedronGeometry(0.86, 1), new THREE.MeshBasicMaterial({ color: 0x9ad8ff, wireframe: true, transparent: true, opacity: 0.7 })); mid.add(shell);
+  const rings = [];
+  for (const [r, rx, rz] of [[1.15, 0, 0], [1.35, 1.0, 0.4], [1.55, -0.7, 1.1]]) { const holder = new THREE.Group(); holder.rotation.set(rx, 0, rz); mid.add(holder); const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.045, 8, 48), dark); holder.add(ring); const bead = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), add(0x4ad8ff, 1)); bead.position.x = r; holder.add(bead); rings.push(holder); }
+  const pylons = new THREE.Group(); mid.add(pylons);
+  for (let i = 0; i < 4; i++) { const a = i / 4 * Math.PI * 2, py = new THREE.Group(); py.position.set(Math.cos(a) * 1.75, 0, Math.sin(a) * 1.75); const b = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.7, 0.2), dark); py.add(b); const tip = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 6), add(0xff4ad8, 1)); tip.position.y = 0.42; py.add(tip); pylons.add(py); }
+  const muzzle = new THREE.Object3D(); mid.add(muzzle);
+  g.userData = { mid, heart, hot, halo, shell, rings, pylons, muzzle, color: heart.material };
+  return g;
+}
+function buildHydra() {
+  // 🐍 THE HYDRA: a squat armoured body with three heads on curving necks. The left head spits acid, the middle one breathes ice, the right one calls lightning.
+  const g = new THREE.Group();
+  const hide = new THREE.MeshPhongMaterial({ color: 0x2f4a36, shininess: 40, specular: 0x6a8a70 });
+  const belly = new THREE.MeshPhongMaterial({ color: 0x6a7a4a, shininess: 20 });
+  const bone = new THREE.MeshPhongMaterial({ color: 0xe8e0c8, shininess: 60 });
+  const glow = c => new THREE.MeshBasicMaterial({ color: c });
+  const body = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), hide); body.scale.set(1.5, 0.75, 1.25); body.position.y = 0.62; g.add(body);
+  const under = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 10), belly); under.scale.set(1.2, 0.5, 1.05); under.position.set(0, 0.42, 0.18); g.add(under);
+  for (let i = 0; i < 7; i++) { const sp = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.3, 6), bone); sp.position.set((i - 3) * 0.32, 1.28 - Math.abs(i - 3) * 0.06, -0.3); g.add(sp); }   // spines
+  const heads = [];
+  for (const [x, y, z, col, kind] of [[-0.85, 1.5, 0.35, 0x66ff44, 'acid'], [0, 1.72, 0.5, 0x66ddff, 'ice'], [0.85, 1.5, 0.35, 0xffee44, 'bolt']]) {
+    const H = new THREE.Group(); H.position.set(x, y, z); g.add(H);
+    const neckSteps = 5;                                                                                    // the neck: spheres from the body up to the head
+    for (let k = 0; k < neckSteps; k++) { const t = k / neckSteps, n = new THREE.Mesh(new THREE.SphereGeometry(0.22 - 0.02 * k, 10, 8), hide); n.position.set(-x * (1 - t) * 0.0 + x * -0.0, -(1 - t) * 0.75, -(1 - t) * 0.3); H.add(n); }
+    const skull = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.3, 0.6), hide); skull.position.set(0, 0.06, 0.2); H.add(skull);
+    const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.1, 0.5), belly); jaw.position.set(0, -0.12, 0.24); H.add(jaw);
+    for (const sx of [-1, 1]) { const eye = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 6), glow(col)); eye.position.set(sx * 0.15, 0.13, 0.35); H.add(eye); const horn = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.28, 6), bone); horn.position.set(sx * 0.18, 0.28, 0.0); horn.rotation.x = -0.4; H.add(horn); }
+    const mouth = new THREE.Object3D(); mouth.position.set(0, -0.02, 0.55); H.add(mouth);
+    heads.push({ group: H, mouth, kind, color: col, baseY: y });
+  }
+  g.userData = { heads };
+  return g;
+}
+
 function bossBarUi() {
   const B = match && match.boss; if (!B) return;
   const U = juggBossUi(), bot = B.bot, max = bot.maxHp, hp = Math.max(0, Math.min(max, bot.hp));
   U.root.style.display = bot.dead ? 'none' : 'block';
-  const label = `🤖 THE WARDEN · PHASE ${B.phase}`;
+  const label = `${B.def.icon} ${B.def.name} · PHASE ${B.phase}`;
   if (U.name.textContent !== label) U.name.textContent = label;
   const pct = (hp / max * 100).toFixed(2) + '%';
   U.fill.style.width = pct; U.ghost.style.width = pct;
@@ -67973,30 +68046,32 @@ function bossBarUi() {
 }
 function initBoss() { match.boss = null; }
 function startBossFight() {
-  const hp = BOSS.hp, id = `boss_warden_${Date.now()}`;
-  const pData = { id, name: 'THE WARDEN', isBot: true, team: 'enemy', weaponId: null, ownerId: myId, skin: 'default', x: BOSS.pos[0], y: 1, z: BOSS.pos[1], rotY: 0, rotX: 0, hp, maxHp: hp, dead: false, kills: 0, deaths: 0 };
+  const D = bossDef(), hp = D.hp, id = `boss_${D.id}_${Date.now()}`;
+  const pData = { id, name: D.name, isBot: true, team: 'enemy', weaponId: null, ownerId: myId, skin: 'default', x: BOSS.pos[0], y: 1, z: BOSS.pos[1], rotY: 0, rotX: 0, hp, maxHp: hp, dead: false, kills: 0, deaths: 0 };
   players[id] = pData;
   spawnRemotePlayer(pData);
   const mesh = remoteMeshes[id];
   mesh.position.set(BOSS.pos[0], 0, BOSS.pos[1]); mesh.rotation.y = 0;      // (a bot's body faces -z at 0; the robot is built facing +z, and turns its own torso)
   mesh.traverse(o => { if (o !== mesh) o.visible = false; });                    // the human body it was made with: gone
-  const robot = buildWarden(); mesh.add(robot);
-  mesh.scale.setScalar(BOSS.scale); mesh._bodyScale = BOSS.scale;                  // (the hit spheres follow the scale, as the juggernaut's do)
+  const robot = D.build(); mesh.add(robot);
+  mesh.scale.setScalar(D.scale); mesh._bodyScale = D.scale; mesh._hitMul = D.hitMul;   // (the hit spheres follow the scale, as the juggernaut's do, and a little more: it is wide)
   const bot = { id, team: 'enemy', weaponId: null, x: BOSS.pos[0], z: BOSS.pos[1], rotY: 0, hp, maxHp: hp, prevHp: hp, dead: false, state: 'boss', boss: true, floor: 0, floorY: 0,
                 y: 0, yVel: 0, frostSlow: 100, kbVX: 0, kbVZ: 0, wanderAngle: 0, wanderTimer: 0, lastShot: 0, stuckTimer: 0, strafeDir: 1, strafeFlipTimer: 0, tacTimer: 0, coverPt: null,
                 difficulty: selectedDifficulty, tune: botTuning(selectedDifficulty), activeSlot: 'primary' };
   gameBots.push(bot);
-  socket.emit('spawnBots', [{ id, name: 'THE WARDEN', team: absTeam('enemy'), weaponId: null, spawnX: BOSS.pos[0], spawnZ: BOSS.pos[1], hp, skin: 'default', boss: true }]);
-  match.boss = { bot, robot, mesh, phase: 1, atk: null, nextAt: Date.now() + 3500, proj: [], marks: [], beam: null, yaw: 0, spin: 0, started: Date.now(), done: false };
-  showAnnouncement('THE WARDEN', 'A giant robot, and every weapon it owns · 3 phases', '#ff6a2a', 3200);
+  socket.emit('spawnBots', [{ id, name: D.name, team: absTeam('enemy'), weaponId: null, spawnX: BOSS.pos[0], spawnZ: BOSS.pos[1], hp, skin: 'default', boss: true }]);
+  match.boss = { def: D, bot, robot, mesh, phase: 1, atk: null, nextAt: Date.now() + 3500, proj: [], marks: [], waves: [], pools: [], beam: null, yaw: 0, spin: 0, t: 0, started: Date.now(), done: false };
+  showAnnouncement(D.name, D.intro, D.color, 3200);
   bossBarUi();
 }
 function bossCleanup() {
   const B = match && match.boss; if (!B) return;
   for (const q of B.proj) scene.remove(q.mesh);
   for (const m of B.marks) scene.remove(m.mesh);
-  if (B.beam) scene.remove(B.beam.mesh);
-  B.proj.length = 0; B.marks.length = 0; B.beam = null;
+  for (const w of B.waves) scene.remove(w.mesh);
+  for (const w of B.pools) scene.remove(w.mesh);
+  if (B.beam) { scene.remove(B.beam.mesh); if (B.beam.core) scene.remove(B.beam.core); for (const x of (B.beam.extra || [])) scene.remove(x); }
+  B.proj.length = 0; B.marks.length = 0; B.waves.length = 0; B.pools.length = 0; B.beam = null;
   try { juggBossUi().root.style.display = 'none'; } catch (e) {}
   zombieRemove(B.bot);
   match.boss = null;
@@ -68013,14 +68088,21 @@ function _bossBoom(pos, radius, dmg, weapon) {
   const c = camera.position, d = Math.hypot(c.x - pos.x, c.z - pos.z, (c.y - 0.8) - pos.y);
   if (d < radius && !isDead) applyBotDamageToPlayer(weapon, match.boss.bot.id, Math.round(dmg * (1 - 0.6 * d / radius)));
 }
+// A shot: kind 'bullet' | 'missile' | 'acid' (lands as a pool of acid). opts: g, life, color, size, weapon (the damage table key), chill.
 function bossShoot(kind, origin, vel, opts = {}) {
-  const B = match.boss;
-  const mesh = kind === 'missile'
-    ? (() => { const g = new THREE.Group(); const b = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.9, 8), new THREE.MeshBasicMaterial({ color: 0xffd8a0 })); b.rotation.x = Math.PI / 2; g.add(b);
-        const f = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.7, 8), new THREE.MeshBasicMaterial({ color: 0xff5a1a })); f.rotation.x = -Math.PI / 2; f.position.z = -0.7; g.add(f); return g; })()
-    : new THREE.Mesh(_bossBulletGeo, _bossBulletMat);
+  const B = match.boss, col = opts.color != null ? opts.color : 0xffb23a;
+  let mesh;
+  if (kind === 'missile') { mesh = new THREE.Group(); const b = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.9, 8), new THREE.MeshBasicMaterial({ color: 0xffd8a0 })); b.rotation.x = Math.PI / 2; mesh.add(b);
+    const f = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.7, 8), new THREE.MeshBasicMaterial({ color: 0xff5a1a })); f.rotation.x = -Math.PI / 2; f.position.z = -0.7; mesh.add(f); }
+  else if (opts.size || opts.color != null) { mesh = new THREE.Mesh(new THREE.SphereGeometry(opts.size || 0.13, 10, 8), new THREE.MeshBasicMaterial({ color: col })); }
+  else mesh = new THREE.Mesh(_bossBulletGeo, _bossBulletMat);
   mesh.position.copy(origin); scene.add(mesh);
-  B.proj.push({ kind, mesh, pos: origin.clone(), vel: vel.clone(), g: opts.g || 0, life: opts.life || 4, dmg: opts.dmg || 10 });
+  B.proj.push({ kind, mesh, pos: origin.clone(), vel: vel.clone(), g: opts.g || 0, life: opts.life || 4, weapon: opts.weapon || 'boss_minigun', chill: !!opts.chill, hr: opts.hr || 0.55 });
+}
+function _bossAcidPool(B, x, z) {
+  const mesh = new THREE.Mesh(new THREE.CircleGeometry(3.2, 28), new THREE.MeshBasicMaterial({ color: 0x66ff33, transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false }));
+  mesh.rotation.x = -Math.PI / 2; mesh.position.set(x, 0.08, z); scene.add(mesh);
+  B.pools.push({ mesh, x, z, r: 3.2, t: 0, life: 5, tick: 0 });
 }
 function _bossUpdateProj(B, dt) {
   const c = camera.position;
@@ -68030,17 +68112,31 @@ function _bossUpdateProj(B, dt) {
     if (q.kind === 'missile') q.mesh.lookAt(q.pos.clone().add(q.vel));
     let dead = q.life <= 0, boom = false;
     if (!dead && (q.pos.y <= 0.15 || _bossSegHitsWall(prev, q.pos))) { dead = true; boom = true; }
+    let hitMe = false;
     if (!dead && !isDead) {
       const dx = c.x - q.pos.x, dz = c.z - q.pos.z, dy = (c.y - 0.7) - q.pos.y, near = Math.hypot(dx, dz);
-      if (q.kind === 'missile' ? Math.hypot(dx, dy, dz) < 1.6 : (near < 0.55 && dy > -1.0 && dy < 1.1)) { dead = true; boom = true; }
+      if (q.kind === 'missile') { if (Math.hypot(dx, dy, dz) < 1.6) { dead = true; boom = true; } }
+      else if (near < q.hr && dy > -1.0 && dy < 1.1) { dead = true; hitMe = true; }
     }
     if (dead) {
-      if (boom) { if (q.kind === 'missile') _bossBoom(q.pos, 4.6, 55, 'boss_missile'); else if (!isDead) { const dx = c.x - q.pos.x, dz = c.z - q.pos.z; if (Math.hypot(dx, dz) < 0.7 && Math.abs((c.y - 0.7) - q.pos.y) < 1.1) applyBotDamageToPlayer('boss_minigun', B.bot.id); } }
+      if (q.kind === 'missile') { if (boom) _bossBoom(q.pos, 4.6, 55, 'boss_missile'); }
+      else if (q.kind === 'acid') { if (boom) _bossAcidPool(B, q.pos.x, q.pos.z); }
+      else if (hitMe && !isDead) { applyBotDamageToPlayer(q.weapon, B.bot.id); if (q.chill) chillPlayer(1400); }
       scene.remove(q.mesh); B.proj.splice(i, 1);
     }
   }
+  for (let i = B.pools.length - 1; i >= 0; i--) {                                                // acid on the floor: it eats whoever stands in it
+    const w = B.pools[i]; w.t += dt; w.tick += dt; w.mesh.material.opacity = 0.45 * Math.min(1, (w.life - w.t) / 1.2 + 0.05);
+    if (w.tick >= 0.3 && !isDead && Math.hypot(c.x - w.x, c.z - w.z) < w.r && c.y < 2.3) { w.tick = 0; applyBotDamageToPlayer('boss_acid', B.bot.id); }
+    if (w.t >= w.life) { scene.remove(w.mesh); B.pools.splice(i, 1); }
+  }
+  for (let i = B.waves.length - 1; i >= 0; i--) {                                                // a ring along the floor: jump it
+    const w = B.waves[i]; w.r += w.speed * dt; w.mesh.scale.setScalar(w.r); w.mesh.material.opacity = Math.max(0, 0.9 - w.r / 90);
+    if (!w.hit && !isDead && c.y < 2.15 && Math.abs(Math.hypot(c.x - BOSS.pos[0], c.z - BOSS.pos[1]) - w.r) < 1.5) { w.hit = true; applyBotDamageToPlayer('boss_shock', B.bot.id); flashScreen('rgba(180,120,255,0.35)', 260); }
+    if (w.r > 70) { scene.remove(w.mesh); B.waves.splice(i, 1); }
+  }
 }
-// ── the four attacks: each is a { t, tick(dt) -> true when finished } ──────────────────────────────────────────────────────────────
+// ── the attacks: each is { name, tick(dt) -> true when finished } ──────────────────────────────────────────────────────────────────
 function _bossWorld(obj) { const v = new THREE.Vector3(); obj.getWorldPosition(v); return v; }
 function bossAtkMinigun(B) {
   const U = B.robot.userData, dur = 2.2 + 0.4 * B.phase; let t = 0, next = 0.7;
@@ -68065,31 +68161,34 @@ function bossAtkMissiles(B) {
       const o = _bossWorld(U.podMuzzles[fired % 6]), T = 1.55, g = 16;
       const tg = camera.position.clone(); tg.x += (Math.random() - 0.5) * 7; tg.z += (Math.random() - 0.5) * 7; tg.y = 0.3;
       const v = new THREE.Vector3((tg.x - o.x) / T, (tg.y - o.y + 0.5 * g * T * T) / T, (tg.z - o.z) / T);
-      bossShoot('missile', o, v, { g, life: 4 });
+      bossShoot('missile', o, v, { g, life: 4, weapon: 'boss_missile' });
       try { playSoundEvent('air_burst', { position: o, remote: true, volume: 0.8, minGap: 60 }); } catch (e) {}
       fired++;
     }
     return fired >= n && t > 0.5 + n * 0.22 + 1.9;
   } };
 }
-function bossAtkMortar(B) {
-  const U = B.robot.userData, n = B.phase === 3 ? 7 : 5; let t = 0, made = 0;
-  return { name: 'mortar', tick(dt) {
+// Marks on the floor: circles that fill, then something lands. o: { n, color, radius, fuse, spread, dmg, weapon, bolt }
+function bossAtkMarks(B, o) {
+  let t = 0, made = 0;
+  return { name: o.name, tick(dt) {
     t += dt;
-    while (made < n && t >= 0.3 + made * 0.28) {
-      const a = Math.random() * Math.PI * 2, r = made === 0 ? 0 : 3 + Math.random() * 8;
+    while (made < o.n && t >= 0.3 + made * o.gap) {
+      const a = Math.random() * Math.PI * 2, r = made === 0 ? 0 : 3 + Math.random() * o.spread;
       const x = camera.position.x + Math.cos(a) * r, z = camera.position.z + Math.sin(a) * r;
       const mesh = new THREE.Group();
-      const ring = new THREE.Mesh(new THREE.RingGeometry(3.3, 3.9, 40), new THREE.MeshBasicMaterial({ color: 0xff3a2a, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; mesh.add(ring);
-      const fill = new THREE.Mesh(new THREE.CircleGeometry(3.3, 40), new THREE.MeshBasicMaterial({ color: 0xff3a2a, transparent: true, opacity: 0.2, side: THREE.DoubleSide, depthWrite: false })); fill.rotation.x = -Math.PI / 2; fill.scale.setScalar(0.05); mesh.add(fill);
+      const ring = new THREE.Mesh(new THREE.RingGeometry(o.radius - 0.5, o.radius + 0.1, 40), new THREE.MeshBasicMaterial({ color: o.color, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; mesh.add(ring);
+      const fill = new THREE.Mesh(new THREE.CircleGeometry(o.radius - 0.5, 40), new THREE.MeshBasicMaterial({ color: o.color, transparent: true, opacity: 0.2, side: THREE.DoubleSide, depthWrite: false })); fill.rotation.x = -Math.PI / 2; fill.scale.setScalar(0.05); mesh.add(fill);
       mesh.position.set(x, 0.12, z); scene.add(mesh);
-      B.marks.push({ mesh, fill, x, z, t: 0, fuse: 1.5 });
-      try { playSoundEvent('air_burst', { position: _bossWorld(U.mortarMuzzle), remote: true, volume: 0.9, minGap: 0 }); } catch (e) {}
+      B.marks.push({ mesh, fill, x, z, t: 0, fuse: o.fuse, radius: o.radius, dmg: o.dmg, weapon: o.weapon, bolt: !!o.bolt });
+      try { playSoundEvent('air_burst', { position: new THREE.Vector3(BOSS.pos[0], 6, BOSS.pos[1]), remote: true, volume: 0.9, minGap: 0 }); } catch (e) {}
       made++;
     }
-    return made >= n && t > 0.3 + n * 0.28 + 1.6;
+    return made >= o.n && t > 0.3 + o.n * o.gap + o.fuse + 0.1;
   } };
 }
+function bossAtkMortar(B) { return bossAtkMarks(B, { name: 'mortar', n: B.phase === 3 ? 7 : 5, gap: 0.28, color: 0xff3a2a, radius: 3.8, fuse: 1.5, spread: 8, dmg: 70, weapon: 'boss_mortar' }); }
+function bossAtkBolts(B) { return bossAtkMarks(B, { name: 'bolts', n: B.phase === 3 ? 9 : 6, gap: 0.22, color: 0xffee44, radius: 2.7, fuse: 0.9, spread: 9, dmg: 55, weapon: 'boss_mortar', bolt: true }); }
 function bossAtkLaser(B) {
   const U = B.robot.userData, bot = B.bot, o0 = _bossWorld(U.lens);
   const dx = camera.position.x - bot.x, dz = camera.position.z - bot.z, R = Math.max(25, Math.min(100, Math.hypot(dx, dz)));
@@ -68117,65 +68216,183 @@ function bossAtkLaser(B) {
     return false;
   } };
 }
+// ── THE CORE's attacks ──
+function bossAtkRing(B) {                                                                                  // a ring of orbs with one gap, at chest height: step through the gap, or jump it
+  let t = 0, fired = 0; const rings = B.phase === 3 ? 4 : 3;
+  return { name: 'ring', tick(dt) {
+    t += dt;
+    while (fired < rings && t >= 0.6 + fired * 1.0) {
+      const o = _bossWorld(B.robot.userData.muzzle), n = 34, gap = Math.random() * Math.PI * 2, y = camera.position.y - 0.7;
+      for (let i = 0; i < n; i++) {
+        const a = i / n * Math.PI * 2 + fired * 0.07; let d = Math.abs(Math.atan2(Math.sin(a - gap), Math.cos(a - gap))); if (d < 0.22) continue;
+        bossShoot('bullet', new THREE.Vector3(o.x, y, o.z), new THREE.Vector3(Math.sin(a) * 25, 0, Math.cos(a) * 25), { life: 4, color: 0xd88aff, size: 0.34, weapon: 'boss_orb', hr: 0.75 });
+      }
+      try { playSoundEvent('air_burst', { position: o, remote: true, volume: 0.9, minGap: 0 }); } catch (e) {}
+      fired++;
+    }
+    return fired >= rings && t > 0.6 + rings + 2.2;
+  } };
+}
+function bossAtkShock(B) {                                                                                  // expanding rings along the floor: jump each one
+  let t = 0, fired = 0; const n = B.phase === 3 ? 4 : 3;
+  return { name: 'shock', tick(dt) {
+    t += dt;
+    while (fired < n && t >= 0.7 + fired * 1.1) {
+      const mesh = new THREE.Mesh(new THREE.RingGeometry(0.93, 1.0, 72), new THREE.MeshBasicMaterial({ color: 0xcc88ff, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+      mesh.rotation.x = -Math.PI / 2; mesh.position.set(BOSS.pos[0], 0.15, BOSS.pos[1]); mesh.scale.setScalar(4); scene.add(mesh);
+      B.waves.push({ mesh, r: 4, speed: 21, hit: false });
+      try { playSoundEvent('slam_boom', { position: new THREE.Vector3(BOSS.pos[0], 0, BOSS.pos[1]), remote: true, volume: 1.0, minGap: 0 }); } catch (e) {}
+      fired++;
+    }
+    return fired >= n && t > 0.7 + n * 1.1 + 2.6;
+  } };
+}
+function bossAtkSpokes(B) {                                                                                 // four beams along the floor, turning: step over them, or jump
+  let t = 0, tick = 0; const charge = 1.1, dur = charge + (B.phase === 3 ? 4.2 : 3.6), spd = (B.phase === 3 ? 0.95 : 0.75) * (Math.random() < 0.5 ? -1 : 1), a0 = Math.random() * 6.28;
+  const beams = [];
+  for (let i = 0; i < 4; i++) { const m = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.35, 62), new THREE.MeshBasicMaterial({ color: 0xff44ff, transparent: true, opacity: 0.4, depthWrite: false, blending: THREE.AdditiveBlending })); m.position.y = 0.9; scene.add(m); beams.push(m); }
+  B.beam = { mesh: beams[0], extra: beams.slice(1) };
+  return { name: 'spokes', tick(dt) {
+    t += dt; const live = t >= charge, ang = a0 + (live ? (t - charge) * spd : 0);
+    beams.forEach((m, i) => { const a = ang + i * Math.PI / 2; m.position.set(BOSS.pos[0] + Math.sin(a) * 31, 0.9, BOSS.pos[1] + Math.cos(a) * 31); m.rotation.y = a; m.material.opacity = live ? 0.75 : 0.15 + 0.3 * (t / charge); m.scale.x = live ? 1 : 0.3; });
+    tick += dt;
+    if (live && tick >= 0.12 && !isDead && camera.position.y < 2.3) {
+      tick = 0;
+      const dx = camera.position.x - BOSS.pos[0], dz = camera.position.z - BOSS.pos[1];
+      for (let i = 0; i < 4; i++) { const a = ang + i * Math.PI / 2, ux = Math.sin(a), uz = Math.cos(a), along = dx * ux + dz * uz, perp = Math.abs(dx * uz - dz * ux); if (along > 3 && along < 62 && perp < 1.3) { applyBotDamageToPlayer('boss_laser', B.bot.id); break; } }
+    }
+    if (t >= dur) { for (const m of beams) scene.remove(m); B.beam = null; return true; }
+    return false;
+  } };
+}
+// ── THE HYDRA's attacks ──
+function bossHeadOf(B, kind) { return B.robot.userData.heads.find(h => h.kind === kind); }
+function bossAtkAcid(B) {
+  const H = bossHeadOf(B, 'acid'); let t = 0, fired = 0; const n = B.phase === 3 ? 6 : 4;
+  return { name: 'acid', tick(dt) {
+    t += dt; H.open = Math.min(1, t * 3);
+    while (fired < n && t >= 0.5 + fired * 0.35) {
+      const o = _bossWorld(H.mouth), T = 1.7, g = 16, tg = camera.position.clone(); tg.x += (Math.random() - 0.5) * 6; tg.z += (Math.random() - 0.5) * 6; tg.y = 0.3;
+      bossShoot('acid', o, new THREE.Vector3((tg.x - o.x) / T, (tg.y - o.y + 0.5 * g * T * T) / T, (tg.z - o.z) / T), { g, life: 4, color: 0x66ff33, size: 0.4 });
+      fired++;
+    }
+    if (t > 0.5 + n * 0.35 + 1.6) { H.open = 0; return true; }
+    return false;
+  } };
+}
+function bossAtkIce(B) {
+  const H = bossHeadOf(B, 'ice'); let t = 0, fired = 0; const volleys = B.phase === 3 ? 4 : 3;
+  return { name: 'ice', tick(dt) {
+    t += dt; H.open = 1;
+    while (fired < volleys && t >= 0.7 + fired * 0.7) {
+      const o = _bossWorld(H.mouth), aim = camera.position.clone(); aim.y -= 0.4; const base = aim.sub(o).normalize();
+      for (let k = -3; k <= 3; k++) { const d = base.clone(); const yaw = k * 0.075, cs = Math.cos(yaw), sn = Math.sin(yaw); const x = d.x * cs - d.z * sn, z = d.x * sn + d.z * cs; d.x = x; d.z = z; bossShoot('bullet', o, d.multiplyScalar(58), { life: 2.4, color: 0x9ae8ff, size: 0.2, weapon: 'boss_minigun', chill: true }); }
+      try { playSoundEvent('air_burst', { position: o, remote: true, volume: 0.8, minGap: 0 }); } catch (e) {}
+      fired++;
+    }
+    if (t > 0.7 + volleys * 0.7 + 1.5) { H.open = 0; return true; }
+    return false;
+  } };
+}
+BOSS_DEFS.warden = { id: 'warden', name: 'THE WARDEN', icon: '🤖', color: '#ff6a2a', hp: 12000, scale: 4.5, hitMul: 1.85, build: buildWarden, win: 'THE WARDEN HAS FALLEN',
+  intro: 'A giant robot, and every weapon it owns · 3 phases',
+  phaseText: { 2: 'The Warden opens the mortar and the laser', 3: 'The Warden is enraged' },
+  pools: { 1: [['minigun', 3], ['missiles', 2]], 2: [['minigun', 2], ['missiles', 2], ['mortar', 2], ['laser', 1.5]], 3: [['minigun', 2], ['missiles', 2], ['mortar', 2], ['laser', 2]] },
+  attacks: { minigun: bossAtkMinigun, missiles: bossAtkMissiles, mortar: bossAtkMortar, laser: bossAtkLaser },
+  onPhase(B, ph) { B.robot.userData.redGlow.color.setHex(ph === 2 ? 0xffa21a : 0xff00aa); },
+  anim(B, dt, now) {
+    const U = B.robot.userData, bot = B.bot;
+    U.barrels.rotation.z += dt * 30 * B.spin; U.lens.scale.setScalar(1 + 0.15 * Math.sin(now / 120));
+    if (!B.beam) { const want = Math.atan2(camera.position.x - bot.x, camera.position.z - bot.z); let d = want - B.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); B.yaw += d * Math.min(1, dt * (B.phase === 3 ? 3.2 : 2)); }
+    U.torso.rotation.y = B.yaw;
+  } };
+BOSS_DEFS.core = { id: 'core', name: 'THE CORE', icon: '🔷', color: '#b77aff', hp: 10000, scale: 4, hitMul: 1.45, build: buildCore, win: 'THE CORE HAS GONE DARK',
+  intro: 'A caged star · rings to jump, gaps to find, beams to step over',
+  phaseText: { 2: 'The Core spins up its beams', 3: 'The Core goes critical' },
+  pools: { 1: [['ring', 3], ['shock', 2]], 2: [['ring', 2], ['shock', 2], ['spokes', 2], ['mortar', 1.5]], 3: [['ring', 2], ['shock', 2], ['spokes', 2], ['mortar', 2]] },
+  attacks: { ring: bossAtkRing, shock: bossAtkShock, spokes: bossAtkSpokes, mortar: bossAtkMortar },
+  onPhase(B, ph) { B.robot.userData.color.color.setHex(ph === 2 ? 0xff7ac8 : 0xff4a4a); },
+  anim(B, dt, now) {
+    const U = B.robot.userData, k = B.phase;
+    U.rings.forEach((r, i) => { r.rotation.y += dt * (0.8 + i * 0.5) * (1 + 0.4 * k); r.rotation.z += dt * 0.3 * (i + 1); });
+    U.pylons.rotation.y += dt * (0.5 + 0.3 * k); U.shell.rotation.y -= dt * 0.4; U.shell.rotation.x += dt * 0.2;
+    const pulse = 1 + 0.08 * Math.sin(now / (200 - 40 * k)); U.heart.scale.setScalar(pulse); U.halo.scale.setScalar(1 + 0.1 * Math.sin(now / 300));
+  } };
+BOSS_DEFS.hydra = { id: 'hydra', name: 'THE HYDRA', icon: '🐍', color: '#66ff66', hp: 11000, scale: 4.5, hitMul: 1.7, build: buildHydra, win: 'THE HYDRA IS SLAIN',
+  intro: 'Three heads: acid, ice and lightning',
+  phaseText: { 2: 'The Hydra rears up: lightning joins the fight', 3: 'All three heads strike at once' },
+  pools: { 1: [['acid', 3], ['ice', 2]], 2: [['acid', 2], ['ice', 2], ['bolts', 2.5]], 3: [['acid', 2], ['ice', 2], ['bolts', 2.5]] },
+  attacks: { acid: bossAtkAcid, ice: bossAtkIce, bolts: bossAtkBolts },
+  onPhase() {},
+  anim(B, dt, now) {
+    const U = B.robot.userData;
+    for (const H of U.heads) {                                                                              // each head turns to look at you, and breathes
+      const g = H.group, w = _bossWorld(g), want = Math.atan2(camera.position.x - w.x, camera.position.z - w.z);
+      let d = want - g.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d)); g.rotation.y += d * Math.min(1, dt * 4);
+      g.position.y = H.baseY + 0.05 * Math.sin(now / 400 + H.baseY * 7) + (H.open || 0) * 0.08;
+    }
+  } };
 function bossPickAttack(B) {
-  const p = B.phase, pool = p === 1 ? [['minigun', 3], ['missiles', 2]] : p === 2 ? [['minigun', 2], ['missiles', 2], ['mortar', 2], ['laser', 1.5]] : [['minigun', 2], ['missiles', 2], ['mortar', 2], ['laser', 2]];
+  const pool = B.def.pools[B.phase] || B.def.pools[3];
   let r = Math.random() * pool.reduce((a, x) => a + x[1], 0);
   for (const [n, w] of pool) { r -= w; if (r < 0) { if (n === B.last && Math.random() < 0.7) return bossPickAttack(B); return n; } }
-  return 'minigun';
+  return pool[0][0];
 }
 function bossPhaseUp(B, phase) {
   B.phase = phase;
-  showAnnouncement(`PHASE ${phase}`, phase === 2 ? 'The Warden opens the mortar and the laser' : 'The Warden is enraged', '#ff5a2a', 2600);
+  showAnnouncement(`PHASE ${phase}`, B.def.phaseText[phase] || '', B.def.color, 2600);
   flashScreen('rgba(255,120,40,0.4)', 500); try { viewKick(0, 0.05, 500); } catch (e) {}
-  B.robot.userData.redGlow.color.setHex(phase === 2 ? 0xffa21a : 0xff00aa);
+  try { B.def.onPhase(B, phase); } catch (e) {}
   const me = players[myId];                                                                   // a breath: full ammo, and some health back
   if (me && !isDead) { const to = Math.min(matchMaxHp(), me.hp + 100); socket.emit('healSelf', { amount: to - me.hp }); me.hp = to; updateHealthHUD(to); try { resetCombatResources(); } catch (e) {} }
   B.nextAt = Date.now() + 2200; B.atk = null;
 }
 function updateBoss(dt) {
   const B = match.boss; if (!B || match.over || B.done) return;
-  const bot = B.bot, now = Date.now(), U = B.robot.userData;
+  const bot = B.bot, now = Date.now();
+  B.t += dt;
   _bossUpdateProj(B, dt);
-  for (let i = B.marks.length - 1; i >= 0; i--) {                                                // the mortar circles fill, then the shell lands
+  for (let i = B.marks.length - 1; i >= 0; i--) {                                                // the circles fill, then it lands
     const m = B.marks[i]; m.t += dt; const k = Math.min(1, m.t / m.fuse);
     m.fill.scale.setScalar(Math.max(0.05, k)); m.fill.material.opacity = 0.2 + 0.4 * k; m.mesh.children[0].material.opacity = 0.5 + 0.5 * Math.abs(Math.sin(m.t * 12));
-    if (m.t >= m.fuse) { _bossBoom(new THREE.Vector3(m.x, 0.3, m.z), 3.8, 70, 'boss_mortar'); scene.remove(m.mesh); B.marks.splice(i, 1); }
+    if (m.t >= m.fuse) {
+      if (m.bolt) {                                                                               // lightning: a column of light, and a hit if you are in the circle
+        const col = new THREE.Mesh(new THREE.CylinderGeometry(m.radius * 0.45, m.radius * 0.45, 40, 10), new THREE.MeshBasicMaterial({ color: 0xfff6a0, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false }));
+        col.position.set(m.x, 20, m.z); scene.add(col); setTimeout(() => scene.remove(col), 180);
+        const c = camera.position; if (!isDead && Math.hypot(c.x - m.x, c.z - m.z) < m.radius) applyBotDamageToPlayer(m.weapon, bot.id, 55);
+        try { playSoundEvent('explosion', { position: new THREE.Vector3(m.x, 1, m.z), remote: true, volume: 0.8, minGap: 30 }); } catch (e) {}
+      } else _bossBoom(new THREE.Vector3(m.x, 0.3, m.z), m.radius, m.dmg, m.weapon);
+      scene.remove(m.mesh); B.marks.splice(i, 1);
+    }
   }
   if (bot.dead) return;
   const frac = bot.hp / bot.maxHp, ph = frac > 0.66 ? 1 : frac > 0.33 ? 2 : 3;
   if (ph > B.phase) bossPhaseUp(B, ph);
-  U.barrels.rotation.z += dt * 30 * B.spin;
-  U.lens.scale.setScalar(1 + 0.15 * Math.sin(now / 120));
-  if (!B.beam) {                                                                                  // it turns to look at you (the laser steers itself while it sweeps)
-    const dx = camera.position.x - bot.x, dz = camera.position.z - bot.z, want = Math.atan2(dx, dz);
-    let d = want - B.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); B.yaw += d * Math.min(1, dt * (B.phase === 3 ? 3.2 : 2));
-  }
-  U.torso.rotation.y = B.yaw;
+  B.def.anim(B, dt, now);
   if (B.atk) { if (B.atk.tick(dt)) { B.last = B.atk.name; B.atk = null; B.nextAt = now + (B.phase === 1 ? 1700 : B.phase === 2 ? 1200 : 700); } }
-  else if (now >= B.nextAt && !isDead) {
-    const n = bossPickAttack(B);
-    B.atk = n === 'minigun' ? bossAtkMinigun(B) : n === 'missiles' ? bossAtkMissiles(B) : n === 'mortar' ? bossAtkMortar(B) : bossAtkLaser(B);
-  }
+  else if (now >= B.nextAt && !isDead) B.atk = B.def.attacks[bossPickAttack(B)](B);
   bossBarUi();
   updateMatchHUD();
 }
 function onBossKill(killerId, targetId) {
   const B = match && match.boss; if (!B) return;
-  if (targetId === myId) {                                                                     // you fell: the Warden wins
+  if (targetId === myId) {                                                                     // you fell: it wins
     B.done = true; const m = match;
-    showAnnouncement('DEFEAT', 'THE WARDEN stands', '#ff4444', 2600);
-    setTimeout(() => { if (match === m && !m.over) endMatch('enemy', `🤖 THE WARDEN stands · it was down to ${Math.max(0, Math.round(B.bot.hp / B.bot.maxHp * 100))}%`); }, 1800);
+    showAnnouncement('DEFEAT', `${B.def.name} stands`, '#ff4444', 2600);
+    setTimeout(() => { if (match === m && !m.over) endMatch('enemy', `${B.def.icon} ${B.def.name} stands · it was down to ${Math.max(0, Math.round(B.bot.hp / B.bot.maxHp * 100))}%`); }, 1800);
     return;
   }
-  if (targetId === B.bot.id) {                                                                 // the Warden falls
-    B.done = true; const m = match, at = _bossWorld(B.robot.userData.torso);
+  if (targetId === B.bot.id) {                                                                 // it falls
+    B.done = true; const m = match, at = _bossWorld(B.mesh);
     for (const q of B.proj) scene.remove(q.mesh); B.proj.length = 0;
     for (const k of B.marks) scene.remove(k.mesh); B.marks.length = 0;
-    if (B.beam) { scene.remove(B.beam.mesh); scene.remove(B.beam.core); B.beam = null; }
-    showAnnouncement('VICTORY', 'THE WARDEN HAS FALLEN', '#4cff4c', 3200);
+    for (const w of B.waves) scene.remove(w.mesh); B.waves.length = 0;
+    for (const w of B.pools) scene.remove(w.mesh); B.pools.length = 0;
+    if (B.beam) { scene.remove(B.beam.mesh); if (B.beam.core) scene.remove(B.beam.core); for (const x of (B.beam.extra || [])) scene.remove(x); B.beam = null; }
+    showAnnouncement('VICTORY', B.def.win, '#4cff4c', 3200);
     for (let i = 0; i < 9; i++) setTimeout(() => { if (match !== m) return; spawnExplosion(new THREE.Vector3(at.x + (Math.random() - 0.5) * 8, 2 + Math.random() * 9, at.z + (Math.random() - 0.5) * 6)); }, i * 260);
     const secs = Math.round((Date.now() - B.started) / 1000);
-    setTimeout(() => { if (match === m && !m.over) endMatch('ally', `🤖 THE WARDEN HAS FALLEN · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`); }, 3400);
+    setTimeout(() => { if (match === m && !m.over) endMatch('ally', `${B.def.icon} ${B.def.win} · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`); }, 3400);
   }
 }
 
@@ -68693,7 +68910,7 @@ function endMatch(winner, reason) {
       ? `Raid progress  Guards cleared ${match.teamKills.ally}/${match.cfg.killGoal}  ·  Team losses ${match.teamKills.enemy}`
       : `Kills  Your Team ${match.teamKills.ally}  ·  Enemy ${match.teamKills.enemy}  (goal ${match.cfg.killGoal})`;
   } else if (match.type === 'boss') {
-    scoreText = match.boss ? `The Warden: ${Math.max(0, Math.ceil(match.boss.bot.hp / match.boss.bot.maxHp * 100))}% left  ·  Phase ${match.boss.phase}/3` : '';
+    scoreText = match.boss ? `${match.boss.def.name}: ${Math.max(0, Math.ceil(match.boss.bot.hp / match.boss.bot.maxHp * 100))}% left  ·  Phase ${match.boss.phase}/3` : '';
   } else if (match.type === 'laststand') {
     const ls = lastStandState;
     scoreText = ls ? `Waves survived: ${Math.max(0, ls.wave - 1)}  ·  Zombies killed: ${ls.kills}  ·  Best: wave ${ls.best}` : '';

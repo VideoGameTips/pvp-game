@@ -3248,7 +3248,7 @@ io.on('connection', (socket) => {
         hp: botHp, dead: false, kills: 0, deaths: 0, lastShot: 0,
         matchId: ownerMatchId, // bots inherit their owner's match
         matchMode: ownerMode,
-        boss: b.boss === true && ownerMode === 'boss',   // 🤖 THE WARDEN: no instakill, and no single hit above BOSS_HIT_CAP
+        boss: b.boss === true && /^boss/.test(ownerMode),   // 🤖 THE WARDEN: no instakill, and no single hit above BOSS_HIT_CAP
       };
       emitToMatch(ownerMatchId, 'playerJoined', players[b.id]);
     }
