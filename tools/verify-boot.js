@@ -4060,7 +4060,7 @@ if (ok && process.argv.includes('--combo')) {
           if (slamHeightMult(sl.ability, 2.4) !== 1 || slamHeightMult(sl.ability, 999) !== 2 || slamHeightMult(sl.ability, 0) < 0.5 || slamHeightMult(fi.ability, 99) !== 1) issues.push('slamHeightMult: x1 at the reference drop, x2 cap, never under x0.5, only for the sledge');
           // a skin on the sledge changes the look, never the damage entry the server holds
           const keepSkin = meleeSkinFor;
-          meleeSkinFor = (b) => b === 'sledge' ? BASIC_MELEE_SKINS.find(x => x.id === 'sledge_gold_brick') : null;
+          meleeSkinFor = (b) => b === 'sledge' ? { id: 'sledge_gold_brick', skinFor: 'sledge', name: 'Gold Brick', rarity: 'good', sw: ['#c8a020', '#fff0a0'], blurb: '', stats: {} } : null;   // (a made-up skin: the real melee stat skins are deleted)
           try { land(1.65 + 8); } finally { meleeSkinFor = keepSkin; }
           if (!hits.some(h => h.wid === 'sledge')) issues.push('a skinned sledge should hit as the base sledge, hit as: ' + hits.map(h => h.wid).join(','));
         } finally { wallColliders.push(...keepWalls); setMeleeComboMode(true); MELEE_COMBO_MODE = true; }

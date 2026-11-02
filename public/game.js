@@ -1257,62 +1257,11 @@ const BASIC_GUN_STAT_SKINS = [
 // same weapon. Codex's originals changed damage, range, cooldown AND swapped
 // the ability, which makes a skin a different weapon rather than a new coat of
 // paint. effectiveMeleeItem() now keeps the base item's numbers and ability.
-const BASIC_MELEE_SKINS = [
-  { id: 'brass_knuckles', skinFor: 'fists', name: 'Brass Knuckles', rarity: 'basic', sw: ['#a8822c', '#4a3a18'],
-    blurb: 'Four rings of unfriendly brass.', stats: {} },
-  { id: 'fists_sock_puppets', skinFor: 'fists', name: 'Sock Puppets', rarity: 'lame', sw: ['#d8c8a8', '#b04a6a'],
-    blurb: 'The left one is named violence.', stats: {} },
-  { id: 'hatchet', skinFor: 'combat_axe', name: 'Hatchet', rarity: 'basic', sw: ['#6a4a28', '#b9c0c8'],
-    blurb: 'Shorter haft, same argument.', stats: {} },
-  { id: 'machete', skinFor: 'katana', name: 'Machete', rarity: 'basic', sw: ['#2a2a2a', '#c8ced6'],
-    blurb: 'A field tool that took a wrong turn.', stats: {} },
-  { id: 'katana_ruler', skinFor: 'katana', name: 'School Ruler', rarity: 'lame', sw: ['#d8c48a', '#3a3a3a'],
-    blurb: 'Thirty centimetres of discipline.', stats: {} },
-  { id: 'cane', skinFor: 'spear', name: 'Walking Cane', rarity: 'basic', sw: ['#4a3020', '#c8a020'],
-    blurb: 'Brass handle. Entirely respectable.', stats: {} },
-  { id: 'spear_broom_handle', skinFor: 'spear', name: 'Broom Handle', rarity: 'lame', sw: ['#b09060', '#d8d8c8'],
-    blurb: 'Sweeps the floor. Occasionally the enemy.', stats: {} },
-  { id: 'fire_poker', skinFor: 'spear', name: 'Fire Poker', rarity: 'basic', sw: ['#2a2622', '#d85a10'],
-    blurb: 'Blackened at one end from honest work.', stats: {} },
-  { id: 'cricket_bat', skinFor: 'bat', name: 'Cricket Bat', rarity: 'basic', sw: ['#d8c49a', '#8a2a2a'],
-    blurb: 'Willow, taped at the toe.', stats: {} },
-  { id: 'pipe', skinFor: 'bat', name: 'Lead Pipe', rarity: 'basic', sw: ['#6a6a72', '#3a3a40'],
-    blurb: 'Found under the sink. Kept.', stats: {} },
-  { id: 'golf_club', skinFor: 'bat', name: 'Golf Club', rarity: 'basic', sw: ['#c8ccd2', '#2a2a2a'],
-    blurb: 'A seven iron, well out of bounds.', stats: {} },
-  { id: 'wrench', skinFor: 'crowbar', name: 'Wrench', rarity: 'basic', sw: ['#8a8f96', '#c83a2a'],
-    blurb: 'Adjustable. Mostly adjusted wrong.', stats: {} },
-  { id: 'shovel', skinFor: 'sledge', name: 'Shovel', rarity: 'basic', sw: ['#4a4a3a', '#8a7256'],
-    blurb: 'Entrenching tool, sharpened edge.', stats: {} },
-  { id: 'sledge_gold_brick', skinFor: 'sledge', name: 'Gold Brick', rarity: 'good', sw: ['#c8a020', '#fff0a0'],
-    blurb: 'Heavy, shiny, irresponsible.', stats: {} },
-  { id: 'tennis_racket', skinFor: 'frying_pan', name: 'Tennis Racket', rarity: 'basic', sw: ['#d8e84a', '#2a2a2a'],
-    blurb: 'Strung a little tight.', stats: {} },
-  { id: 'frying_pan_nonstick', skinFor: 'frying_pan', name: 'Nonstick Pan', rarity: 'good', sw: ['#2a2a2e', '#6a6a72'],
-    blurb: 'Nothing sticks. Not even dignity.', stats: {} },
-  { id: 'meat_cleaver', skinFor: 'knife', name: 'Meat Cleaver', rarity: 'basic', sw: ['#c8ced6', '#4a2a1a'],
-    blurb: 'Butcher’s pattern, well used.', stats: {} },
-  { id: 'knife_butter_knife', skinFor: 'knife', name: 'Butter Knife', rarity: 'lame', sw: ['#c8ccd2', '#e8d8a8'],
-    blurb: 'Barely sharp. Extremely committed.', stats: {} },
-  { id: 'bat_cricket_stump', skinFor: 'bat', name: 'Cricket Stump', rarity: 'lame', sw: ['#d8c49a', '#6a4a28'],
-    blurb: 'One of three. Nobody misses it.', stats: {} },
-  { id: 'knife_letter_opener', skinFor: 'knife', name: 'Letter Opener', rarity: 'lame', sw: ['#b9a06a', '#3a3a3a'],
-    blurb: 'Desk tidy. Desk weapon.', stats: {} },
-  { id: 'sledge_anvil_on_a_stick', skinFor: 'sledge', name: 'Anvil On A Stick', rarity: 'lame', sw: ['#3a3a40', '#6a4a28'],
-    blurb: 'Exactly what it says.', stats: {} },
-  { id: 'crowbar_tyre_iron', skinFor: 'crowbar', name: 'Tyre Iron', rarity: 'basic', sw: ['#5a5a62', '#2a2a2a'],
-    blurb: 'From the boot. Never used on a tyre.', stats: {} },
-  { id: 'frying_pan_copper', skinFor: 'frying_pan', name: 'Copper Pan', rarity: 'good', sw: ['#b06a2a', '#e8b47a'],
-    blurb: 'Restaurant grade. Restaurant heavy.', stats: {} },
-  { id: 'fists_gardening_gloves', skinFor: 'fists', name: 'Gardening Gloves', rarity: 'lame', sw: ['#4a7a3a', '#d8c8a8'],
-    blurb: 'Thorn-proof. Mostly.', stats: {} },
-  { id: 'spear_flagpole', skinFor: 'spear', name: 'Flagpole', rarity: 'good', sw: ['#c8ccd2', '#b01c3a'],
-    blurb: 'The flag is still on it.', stats: {} },
-  { id: 'combat_axe_firemans', skinFor: 'combat_axe', name: 'Fireman’s Axe', rarity: 'good', sw: ['#b01c1c', '#c8ced6'],
-    blurb: 'Red haft, chipped edge.', stats: {} },
-  { id: 'chainsaw_pruning', skinFor: 'chainsaw', name: 'Pruning Saw', rarity: 'basic', sw: ['#d8a800', '#2a2a2a'],
-    blurb: 'For hedges. Allegedly.', stats: {} },
-];
+// 🗄️ Deleted (the owner's call): all 27 of the old melee "skins" (Brass Knuckles, Hatchet, Machete, Cane, Pipe, Wrench, Shovel,
+// Gold Brick, Tennis Racket, Nonstick Pan, Meat Cleaver, Butter Knife ...). They were a name and a caption on the same weapon, and a
+// skin that is only a different caption is not a skin. The table stays, empty, because the picker, the cases, the loadout
+// resolver and the kill feed all read it; what players had pulled stays in their inventory and simply does nothing.
+const BASIC_MELEE_SKINS = [];
 
 
 const GUN_STAT_SKINS_BY_WEAPON = {};
@@ -76481,8 +76430,8 @@ function openWeaponSkinsPanel() {
       </div>
       <div style="font-size:10px;color:#8a9aaa;margin:5px 0 2px;line-height:1.4;">Buy cases anywhere, but open them in Lobby 13. Each case reveals one basic stat-changing skin.</div>
       ${gunRows}
-      <div style="margin-top:14px;font-size:12px;letter-spacing:2px;color:#ffcc99;">MELEE SKINS</div>
-      ${meleeRows}
+      ${meleeRows.trim() ? `<div style="margin-top:14px;font-size:12px;letter-spacing:2px;color:#ffcc99;">MELEE SKINS</div>
+      ${meleeRows}` : ''}
     </div>`;
   };
   const gen2CaseSection = () => {

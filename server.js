@@ -419,10 +419,7 @@ const GEN1_SKIN_IDS = [
   'ak20_cardboard_wrap', 'ak20_midnight_oil', 'sg8_duck_tape', 'sg8_confetti_shells',
   'srx_laser_pointer_taped', 'paintball_moldy_green', 'flamethrower_water_thrower',
   'crossbow_pool_noodle', 'minigun_arcade_cabinet', 'rpg_soda_bottle',
-  'brass_knuckles', 'hatchet', 'machete', 'cane', 'cricket_bat', 'pipe',
-  'wrench', 'shovel', 'golf_club', 'tennis_racket', 'fire_poker', 'meat_cleaver',
-  'knife_dental_floss', 'knife_butter_knife', 'bat_pool_noodle', 'sledge_gold_brick',
-  'katana_ruler', 'frying_pan_nonstick', 'spear_broom_handle', 'fists_sock_puppets',
+  'knife_dental_floss', 'bat_pool_noodle',
   // Realistic military model skins — gated behind Gen 1 cases too, unlike the
   // rest of MODEL_SKINS in public/game.js which stay free/always-equippable.
   'ak20_ak47_wood', 'burst_m4a1', 'flechette_bullpup', 'vector_mp5',
@@ -487,7 +484,7 @@ const ARCHIVED_SKIN_IDS = new Set([
   'nunchucks_sausage', 'fire_axe_guitar', 'crowbar_candy_cane', 'screwdriver_pencil', 'lightsabre_fluoro_tube',
   'titan_hammer_inflatable', 'vampire_blade_ketchup', 'umbrella_satellite_dish', 'yoyo_tea_bag',
   'shock_baton_tv_remote', 'volt_whip_fairy_lights', 'gravity_hammer_tenderizer', 'phase_blade_toy_sword',
-  'lightsabre_singularity', 'shock_baton_thunder', 'wrench', 'crowbar_tyre_iron',
+  'lightsabre_singularity', 'shock_baton_thunder',
 ]);
 const SKIN_CASES = {
   gen1_basic: { cost: SKIN_CASE_GEN1_COST, pool: GEN1_SKIN_IDS.filter(id => !ARCHIVED_SKIN_IDS.has(id)) },
