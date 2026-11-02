@@ -1944,7 +1944,7 @@ const MODE_TEAM_SIZES = {
   'm4_tower': { ally: 5, enemy: 5 },
   'ffa5':  { ally: 1, enemy: 5 },
   'ffa15': { ally: 1, enemy: 15 },
-  // 'koth': King of the Hill is archived (kept in the client's mode table; the server no longer opens a lobby for it)
+  'koth':  { ally: 1, enemy: 9 },
   // 🎮 Arcade
   'gungame':     { ally: 1, enemy: 7 },
   'oitc':        { ally: 1, enemy: 5 },

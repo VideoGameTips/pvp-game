@@ -4787,13 +4787,13 @@ if (ok && process.argv.includes('--useanim')) {
 }
 
 if (ok && process.argv.includes('--archive')) {
-  // Archived: the emote wheel and King of the Hill. Off the screen, refused by the server, a stale pick falls back, code kept.
+  // Archived: the emote wheel (King of the Hill was archived too, and came back on 2026-11-02: on the screen, open on the server).
   const issues = [];
   const idx = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
   const srv = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
-  if (!/data-mode="koth"[^>]*style="display:none/.test(idx)) issues.push('the King of the Hill card should be hidden on the mode screen');
-  if (/MODE_TEAM_SIZES = \{[\s\S]*?\n  'koth':/.test(srv)) issues.push('the server should not open a lobby for King of the Hill');
-  if (!vm.runInThisContext("ARCHIVED_MODES.has('koth') && EMOTES_ARCHIVED && !!GAME_MODE_CONFIGS.koth")) issues.push('KOTH and the emotes should be archived in the client with their code kept');
+  if (/data-mode="koth"[^>]*(display:none|data-archived)/.test(idx) || !/data-mode="koth"/.test(idx)) issues.push('the King of the Hill card should be on the mode screen');
+  if (!/MODE_TEAM_SIZES = \{[\s\S]*?\n  'koth':/.test(srv)) issues.push('the server should open a lobby for King of the Hill');
+  if (!vm.runInThisContext("!ARCHIVED_MODES.has('koth') && EMOTES_ARCHIVED && !!GAME_MODE_CONFIGS.koth")) issues.push('King of the Hill should be live and the emotes archived in the client');
   if (vm.runInThisContext("KEY_ACTIONS.some(a => a[0] === 'emotes')")) issues.push('the emote key should not be rebindable while they are archived');
   {
     // the combos: archived for everyone but admin accounts (the code and the combos stay; one flag gives them back)
@@ -4813,7 +4813,7 @@ if (ok && process.argv.includes('--archive')) {
     issues.push(...r);
     if (!/const comboLaunch = data\?\.weapon === 'combo_launch' && canUseHellfire\(shooter\)/.test(srv)) issues.push('the server should only give a combo launch to an admin');
   }
-  console.log('archive checks: King of the Hill and the emote wheel are off the screen, refused by the server, their code kept; the combos are archived for everyone but admin accounts');
+  console.log('archive checks: the emote wheel is archived (code kept); King of the Hill is on the screen and open on the server; the combos are archived for everyone but admin accounts');
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 

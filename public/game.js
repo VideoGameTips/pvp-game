@@ -43775,9 +43775,9 @@ function updateAimAssist(dt) {
 // event. Bind Reload to G and pressing G reaches the game as KeyR; R itself goes dead.
 // Typing in a text box is never touched.
 // ═════════════════════════════════════════════════════════════════════════════
-// 🗄️ ARCHIVED (the owner's call, kept in the code so it can come back): the emote wheel, and King of the Hill. Flip these to bring them back.
+// 🗄️ ARCHIVED (the owner's call, kept in the code so it can come back): the emote wheel. King of the Hill is back (2026-11-02).
 const EMOTES_ARCHIVED = true;                 // no emote wheel (Q), nobody's emote is played, the server drops them
-const ARCHIVED_MODES = new Set(['koth']);     // off the mode screen, and a stale pick of one falls back to FFA 5
+const ARCHIVED_MODES = new Set();             // modes off the mode screen; a stale pick of one falls back to FFA 5. (Was ['koth'].)
 const KEY_ACTIONS = [
   ['forward', 'Move forward', 'KeyW'], ['back', 'Move back', 'KeyS'],
   ['left', 'Move left', 'KeyA'], ['right', 'Move right', 'KeyD'],
