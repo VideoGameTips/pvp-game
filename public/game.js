@@ -15389,7 +15389,7 @@ function buildBossArenaLayout() {
   for (let i = 0; i < N; i++) { const a = i / N * Math.PI * 2; K.box(Math.sin(a) * R, 0, Math.cos(a) * R, seg, 11, 2.4, i % 2 ? 0x2e323a : 0x353a43, a); }
   for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2 + 0.5236; K.box(Math.sin(a) * 27, 0, Math.cos(a) * 27, 3.4, 7, 3.4, 0x3d424c, a); }                    // pillars
   for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; K.box(Math.sin(a) * 44, 0, Math.cos(a) * 44, 7, 1.7, 1.6, 0x4a505b, a); }                         // low blocks
-  K.box(0, 0, 0, 7, 5, 7, 0x1c2027);                                                                       // under the Warden: solid, so you cannot walk through it
+  K.box(0, 0, 0, 7, 2.6, 7, 0x1c2027);                                                                     // under the boss: solid, so you cannot walk through it (low, so nothing it fires starts inside it)
   G._skyColor = 0x07080c;
 }
 _BESPOKE.boss_arena = buildBossArenaLayout;
@@ -62846,7 +62846,7 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ['acid_pool', 8], ['bee_sting', 5],   // 🧪 acid tick / 🐝 bee sting
   ['thunderstorm', 60],
   // Lazy weapons batch
-  ['frost_blaster', 3], ['boss_minigun', 11], ['boss_missile', 55], ['boss_mortar', 70], ['boss_laser', 16], ['boss_orb', 24], ['boss_shock', 45], ['boss_acid', 12], ['air_grenade', 15], ['land_mine', 298], ['frost_freeze', 9999],
+  ['frost_blaster', 3], ['boss_minigun', 11], ['boss_missile', 55], ['boss_mortar', 70], ['boss_laser', 16], ['boss_orb', 24], ['boss_shock', 45], ['boss_acid', 12], ['boss_uzi', 8], ['boss_rail', 65], ['air_grenade', 15], ['land_mine', 298], ['frost_freeze', 9999],
   // 🔬 Tech / Physics batch
   ['prism_launcher', 38], ['foam_cannon', 18], ['airburst_projector', 22], ['glassmaker', 28],
   ['freeze_gun'], ['seismic_hammer', 70], ['painter_beam', 6], ['portal_launcher', 10],
@@ -68294,23 +68294,68 @@ function bossAtkIce(B) {
     return false;
   } };
 }
-BOSS_DEFS.warden = { id: 'warden', name: 'THE WARDEN', icon: '🤖', color: '#ff6a2a', hp: 12000, scale: 4.5, hitMul: 1.85, build: buildWarden, win: 'THE WARDEN HAS FALLEN',
+// ── the extra weapons: an uzi (short, fast bursts that lead you) and a railgun (a line, a held breath, then one hit) ──────────────────
+function bossAtkSpray(B, muzzleOf, color) {
+  let t = 0, fired = 0, burst = 0; const bursts = B.phase === 3 ? 4 : 3, per = 9, gap = 0.06, pause = 0.55;
+  return { name: 'spray', tick(dt) {
+    t += dt;
+    while (burst < bursts && t >= 0.4 + burst * (per * gap + pause) + fired * gap) {
+      const o = muzzleOf(B), lead = camera.position.clone().addScaledVector(B.pv || new THREE.Vector3(), 0.25); lead.y -= 0.4;      // aimed a little ahead of where you are going
+      const dir = lead.sub(o).normalize(); dir.x += (Math.random() - 0.5) * 0.1; dir.y += (Math.random() - 0.5) * 0.06; dir.z += (Math.random() - 0.5) * 0.1; dir.normalize();
+      bossShoot('bullet', o, dir.multiplyScalar(95), { life: 2.2, color, size: 0.17, weapon: 'boss_uzi' });
+      if (fired % 3 === 0) { try { playWeaponSound('mp40', { remote: true, position: o, volume: 0.7, minGap: 40 }); } catch (e) {} }
+      if (++fired >= per) { fired = 0; burst++; }
+    }
+    return burst >= bursts && t > 0.4 + bursts * (per * gap + pause) + 0.8;
+  } };
+}
+function bossAtkRail(B, originOf, color) {
+  const o0 = originOf(B); let t = 0, fired = false, lock = null; const charge = B.phase === 3 ? 1.0 : 1.3;
+  const mk = (c, op, w) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(w, w, 1, 8), new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: op, depthWrite: false, blending: THREE.AdditiveBlending })); scene.add(m); return m; };
+  const tele = mk(color, 0.3, 0.07); B.beam = { mesh: tele, track: true };
+  const line = (a, b, m) => { const d = b.clone().sub(a), len = d.length(); m.position.copy(a).addScaledVector(d, 0.5); m.scale.set(1, len, 1); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); };
+  return { name: 'rail', tick(dt) {
+    t += dt;
+    const me = new THREE.Vector3(camera.position.x, camera.position.y - 0.6, camera.position.z);
+    if (t < charge) {
+      if (t < charge - 0.35) lock = me.clone();                                                            // it tracks you, then holds the last place it saw you
+      const end = lock.clone().sub(o0).normalize().multiplyScalar(130).add(o0);
+      line(o0, end, tele); tele.material.opacity = 0.15 + 0.5 * (t / charge);
+    } else if (!fired) {
+      fired = true;
+      const dir = lock.clone().sub(o0).normalize(), end = o0.clone().addScaledVector(dir, 130);
+      const bolt = mk(0xffffff, 0.95, 0.22), glow = mk(color, 0.6, 0.6); line(o0, end, bolt); line(o0, end, glow);
+      setTimeout(() => { scene.remove(bolt); scene.remove(glow); }, 200);
+      const ab = end.clone().sub(o0), ap = me.clone().sub(o0), tt = Math.max(0, Math.min(1, ap.dot(ab) / ab.lengthSq()));
+      const near = o0.clone().addScaledVector(ab, tt);
+      if (!isDead && near.distanceTo(me) < 1.1 && !_bossSegHitsWall(o0.clone().add(me.clone().sub(o0).setLength(7)), me)) { applyBotDamageToPlayer('boss_rail', B.bot.id); flashScreen('rgba(255,255,255,0.4)', 220); }
+      try { playSoundEvent('explosion', { position: o0, remote: true, volume: 1.0, minGap: 0 }); } catch (e) {}
+      scene.remove(tele); B.beam = null;
+    }
+    return fired && t > charge + 0.5;
+  } };
+}
+BOSS_DEFS.warden = { id: 'warden', name: 'THE WARDEN', icon: '🤖', color: '#ff6a2a', hp: 6000, scale: 4.5, hitMul: 1.85, build: buildWarden, win: 'THE WARDEN HAS FALLEN',
   intro: 'A giant robot, and every weapon it owns · 3 phases',
   phaseText: { 2: 'The Warden opens the mortar and the laser', 3: 'The Warden is enraged' },
-  pools: { 1: [['minigun', 3], ['missiles', 2]], 2: [['minigun', 2], ['missiles', 2], ['mortar', 2], ['laser', 1.5]], 3: [['minigun', 2], ['missiles', 2], ['mortar', 2], ['laser', 2]] },
-  attacks: { minigun: bossAtkMinigun, missiles: bossAtkMissiles, mortar: bossAtkMortar, laser: bossAtkLaser },
+  pools: { 1: [['minigun', 3], ['missiles', 2], ['spray', 2]], 2: [['minigun', 2], ['missiles', 2], ['spray', 2], ['mortar', 2], ['laser', 1.5], ['rail', 1.5]], 3: [['minigun', 2], ['missiles', 2], ['spray', 2], ['mortar', 2], ['laser', 2], ['rail', 2]] },
+  attacks: { minigun: bossAtkMinigun, missiles: bossAtkMissiles, mortar: bossAtkMortar, laser: bossAtkLaser,
+    spray: B => bossAtkSpray(B, b => _bossWorld(b.robot.userData.podMuzzles[Math.floor(Math.random() * 6)]), 0xffc24a),          // the uzi, out of the missile pod's tubes
+    rail: B => bossAtkRail(B, b => _bossWorld(b.robot.userData.lens), 0xff5a3a) },                                                      // the railgun, out of the chest lens
   onPhase(B, ph) { B.robot.userData.redGlow.color.setHex(ph === 2 ? 0xffa21a : 0xff00aa); },
   anim(B, dt, now) {
     const U = B.robot.userData, bot = B.bot;
     U.barrels.rotation.z += dt * 30 * B.spin; U.lens.scale.setScalar(1 + 0.15 * Math.sin(now / 120));
-    if (!B.beam) { const want = Math.atan2(camera.position.x - bot.x, camera.position.z - bot.z); let d = want - B.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); B.yaw += d * Math.min(1, dt * (B.phase === 3 ? 3.2 : 2)); }
+    if (!B.beam || B.beam.track) { const want = Math.atan2(camera.position.x - bot.x, camera.position.z - bot.z); let d = want - B.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); B.yaw += d * Math.min(1, dt * (B.phase === 3 ? 3.2 : 2)); }
     U.torso.rotation.y = B.yaw;
   } };
-BOSS_DEFS.core = { id: 'core', name: 'THE CORE', icon: '🔷', color: '#b77aff', hp: 10000, scale: 4, hitMul: 1.45, build: buildCore, win: 'THE CORE HAS GONE DARK',
+BOSS_DEFS.core = { id: 'core', name: 'THE CORE', icon: '🔷', color: '#b77aff', hp: 5000, scale: 4, hitMul: 1.45, build: buildCore, win: 'THE CORE HAS GONE DARK',
   intro: 'A caged star · rings to jump, gaps to find, beams to step over',
   phaseText: { 2: 'The Core spins up its beams', 3: 'The Core goes critical' },
-  pools: { 1: [['ring', 3], ['shock', 2]], 2: [['ring', 2], ['shock', 2], ['spokes', 2], ['mortar', 1.5]], 3: [['ring', 2], ['shock', 2], ['spokes', 2], ['mortar', 2]] },
-  attacks: { ring: bossAtkRing, shock: bossAtkShock, spokes: bossAtkSpokes, mortar: bossAtkMortar },
+  pools: { 1: [['ring', 3], ['shock', 2], ['spray', 2]], 2: [['ring', 2], ['shock', 2], ['spray', 2], ['spokes', 2], ['mortar', 1.5], ['rail', 1.5]], 3: [['ring', 2], ['shock', 2], ['spray', 2], ['spokes', 2], ['mortar', 2], ['rail', 2]] },
+  attacks: { ring: bossAtkRing, shock: bossAtkShock, spokes: bossAtkSpokes, mortar: bossAtkMortar,
+    spray: B => bossAtkSpray(B, b => _bossWorld(b.robot.userData.muzzle), 0xff7ae8),                                                    // an uzi of violet bolts out of the heart
+    rail: B => bossAtkRail(B, b => _bossWorld(b.robot.userData.muzzle), 0xb77aff) },
   onPhase(B, ph) { B.robot.userData.color.color.setHex(ph === 2 ? 0xff7ac8 : 0xff4a4a); },
   anim(B, dt, now) {
     const U = B.robot.userData, k = B.phase;
@@ -68318,11 +68363,12 @@ BOSS_DEFS.core = { id: 'core', name: 'THE CORE', icon: '🔷', color: '#b77aff',
     U.pylons.rotation.y += dt * (0.5 + 0.3 * k); U.shell.rotation.y -= dt * 0.4; U.shell.rotation.x += dt * 0.2;
     const pulse = 1 + 0.08 * Math.sin(now / (200 - 40 * k)); U.heart.scale.setScalar(pulse); U.halo.scale.setScalar(1 + 0.1 * Math.sin(now / 300));
   } };
-BOSS_DEFS.hydra = { id: 'hydra', name: 'THE HYDRA', icon: '🐍', color: '#66ff66', hp: 11000, scale: 4.5, hitMul: 1.7, build: buildHydra, win: 'THE HYDRA IS SLAIN',
+BOSS_DEFS.hydra = { id: 'hydra', name: 'THE HYDRA', icon: '🐍', color: '#66ff66', hp: 5500, scale: 4.5, hitMul: 1.7, build: buildHydra, win: 'THE HYDRA IS SLAIN',
   intro: 'Three heads: acid, ice and lightning',
   phaseText: { 2: 'The Hydra rears up: lightning joins the fight', 3: 'All three heads strike at once' },
-  pools: { 1: [['acid', 3], ['ice', 2]], 2: [['acid', 2], ['ice', 2], ['bolts', 2.5]], 3: [['acid', 2], ['ice', 2], ['bolts', 2.5]] },
-  attacks: { acid: bossAtkAcid, ice: bossAtkIce, bolts: bossAtkBolts },
+  pools: { 1: [['acid', 3], ['ice', 2], ['spray', 2]], 2: [['acid', 2], ['ice', 2], ['spray', 2], ['bolts', 2.5]], 3: [['acid', 2], ['ice', 2], ['spray', 2.5], ['bolts', 2.5]] },
+  attacks: { acid: bossAtkAcid, ice: bossAtkIce, bolts: bossAtkBolts,
+    spray: B => bossAtkSpray(B, b => _bossWorld(bossHeadOf(b, 'bolt').mouth), 0xfff04a) },                                               // an uzi of sparks out of the lightning head
   onPhase() {},
   anim(B, dt, now) {
     const U = B.robot.userData;
@@ -68351,6 +68397,7 @@ function updateBoss(dt) {
   const B = match.boss; if (!B || match.over || B.done) return;
   const bot = B.bot, now = Date.now();
   B.t += dt;
+  { const c = camera.position; if (B.lastPos && dt > 0) { B.pv = c.clone().sub(B.lastPos).multiplyScalar(1 / dt); B.pv.y = 0; } B.lastPos = c.clone(); }     // where you are going, for the uzi
   _bossUpdateProj(B, dt);
   for (let i = B.marks.length - 1; i >= 0; i--) {                                                // the circles fill, then it lands
     const m = B.marks[i]; m.t += dt; const k = Math.min(1, m.t / m.fuse);
