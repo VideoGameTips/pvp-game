@@ -4799,7 +4799,11 @@ function playWeaponSound(idOrWeapon, opts = {}) {
   const wid = typeof idOrWeapon === 'object' ? idOrWeapon && idOrWeapon.id : idOrWeapon;
   _wpnPitch = (opts.remote || !wid) ? 1 : skinPitchFor(wid);              // somebody else's shot is the gun's own voice: what they wear is not yours to know
   _wpnDry = DRY_WEAPONS.has(wid);                                         // (the gun, whatever it wears, and for everybody who hears it)
-  try { return _playWeaponSound(idOrWeapon, opts); } finally { _wpnPitch = 1; _wpnDry = false; }
+  try {
+    const r = _playWeaponSound(idOrWeapon, opts);
+    if (!opts.remote && wid) { const chime = skinChimeFor(wid), ctx = chime && getAudioCtx(); if (ctx) chime(ctx, ctx.currentTime + 0.03, 1); }     // a skin that rings after its shot (the Midas Revolver)
+    return r;
+  } finally { _wpnPitch = 1; _wpnDry = false; }
 }
 // 🟩 A skin's own shot, made on the spot instead of the gun's recording (SKIN_VOICE: skin id -> a function of (ctx, start, level)). The Hacker Pistol is a laser blaster, not a pistol (Andy:
 // "it should sound more like a laser blaster, scrap the default shooting sound"): a click, a saw sweeping down through the whole range, a square one an octave under it for the digital edge,
@@ -4815,7 +4819,29 @@ function playHackerBlaster(ctx, start, level, o = {}) {
   playTone(ctx, start + 0.010, 0.11 * k, out, 5600, 880, v * 0.30, 'sine');                                        // a bright ping on top
   if (!o.noStutter) [0.105, 0.145, 0.182].forEach((d, i) => playTone(ctx, start + d, 0.018, out, 980 - i * 230, 760 - i * 230, v * 0.38, 'square'));   // the glitch stutter
 }
-const SKIN_VOICE = { pistol_hacker: playHackerBlaster, ak20_hacker: (ctx, start, level) => playHackerBlaster(ctx, start, level, { v: 0.62, k: 0.5, noStutter: true }),
+// ☠️ X!@&!@'s shot: a corrupted signal. A click, a seven-step modem scream (two tones swapping every 14 ms, falling), a saw dropping through the range, a square thud under it, and three buzzing
+// repeats, as if the shot were being read back wrong. Own compressor, like the hacker blaster, so it sits at the loudness of the other laser shots.
+function playErrorShot(ctx, start, level) {
+  const out = ctx.createGain(), comp = ctx.createDynamicsCompressor(); comp.threshold.value = -12; comp.ratio.value = 4; comp.knee.value = 8; out.connect(comp).connect(ctx.destination);
+  const v = 0.85 * level;
+  playFilteredNoise(ctx, start, 0.012, out, v * 0.9, 'highpass', 3800, 0.7, 0.0002, 0);
+  for (let i = 0; i < 7; i++) { const f = i % 2 ? 2300 - i * 130 : 1150 - i * 40; playTone(ctx, start + i * 0.014, 0.016, out, f, f * 0.96, v * 0.42, 'square'); }
+  playTone(ctx, start, 0.22, out, 3200, 90, v * 0.8, 'sawtooth');
+  playTone(ctx, start + 0.01, 0.20, out, 170, 40, v * 0.9, 'square');
+  [0.12, 0.165, 0.21].forEach((d, i) => playTone(ctx, start + d, 0.03, out, 420 - i * 90, 150, v * 0.4, 'sawtooth'));
+}
+// 👑 The Midas Revolver keeps the revolver's own recording and adds the ring of a coin after it (SKIN_CHIME: skin id -> a function of (ctx, start, level)): your own shot only, like every skin's sound.
+function playMidasChime(ctx, start, level) {
+  const out = ctx.createGain(); out.connect(ctx.destination);
+  const v = 0.20 * level;
+  playTone(ctx, start, 0.60, out, 2400, 2390, v, 'sine');                                // the ring
+  playTone(ctx, start, 0.34, out, 2400 * 2.76, 2400 * 2.7, v * 0.28, 'sine');           // its inharmonic partial: a coin, not a bell
+  playTone(ctx, start + 0.06, 0.40, out, 3250, 3235, v * 0.4, 'sine');                  // a second coin, a beat after
+  playFilteredNoise(ctx, start, 0.006, out, v * 0.5, 'highpass', 6000, 0.6, 0.0002, 0);
+}
+const SKIN_CHIME = { revolver_midas: playMidasChime };
+function skinChimeFor(id) { try { const sk = _activeModelSkin[id]; return sk ? SKIN_CHIME[sk.id] || null : null; } catch (e) { return null; } }
+const SKIN_VOICE = { pistol_hacker: playHackerBlaster, ak20_xerror: playErrorShot, ak20_hacker: (ctx, start, level) => playHackerBlaster(ctx, start, level, { v: 0.62, k: 0.5, noStutter: true }),
   grenade_launcher_hacker: (ctx, start, level) => playHackerBlaster(ctx, start, level, { v: 0.85, k: 1.5 }) };   // the launcher's: the same zap, longer and fatter   // the AK's: the same zap, half as long, no stutter, under it
 function skinVoiceFor(id) { try { const sk = _activeModelSkin[id]; return sk ? SKIN_VOICE[sk.id] || null : null; } catch (e) { return null; } }
 function _playWeaponSound(idOrWeapon, opts = {}) {
@@ -28729,9 +28755,10 @@ function buildM9Beretta() {
 
 // 🟩 The hacker look, shared by every Hacker skin (pistol, AK, grenade, axe). The black is a void: MeshBasicMaterial 0x000000 takes no light and shows no sheen, so it
 // reads as a hole in the shape rather than a plastic. The shape is the green outlines (real line segments on the edges) and a few lit green details.
-function _hackKit() {
+function _hackKit(pal = {}) {                                              // (a palette: X!@&!@ is the same void with red in it)
+  const main = pal.main ?? 0x2dff6a, dim = pal.dim ?? 0x14a043, faint = pal.faint ?? 0x0b6a2a;
   const mat = c => new THREE.MeshBasicMaterial({ color: c }), lin = c => new THREE.LineBasicMaterial({ color: c });
-  const kit = { black: mat(0x000000), green: mat(0x2dff6a), dim: mat(0x14a043), faint: mat(0x0b6a2a), edge: lin(0x2dff6a), edgeDim: lin(0x14a043) };
+  const kit = { black: mat(0x000000), green: mat(main), dim: mat(dim), faint: mat(faint), edge: lin(main), edgeDim: lin(dim) };
   kit.outline = (host, mesh, angle = 30, lm = kit.edge) => { const e = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, angle), lm); e.position.copy(mesh.position); e.rotation.copy(mesh.rotation); e.userData.noSmooth = true; host.add(e); return e; };
   return kit;
 }
@@ -28770,7 +28797,12 @@ function _hackerize(root, kit) {
 function _hackScreen(w, h, cols, rows, o = {}) {
   const px = o.px || 128, font = o.font || 11, line = o.line || 10, cv = document.createElement('canvas'); cv.width = px; cv.height = Math.round(px * h / w);
   const cx = cv.getContext('2d'), tex = new THREE.CanvasTexture(cv); tex.minFilter = THREE.LinearFilter;
-  const draw = (bright) => { cx.fillStyle = bright ? '#0e3a1e' : '#021208'; cx.fillRect(0, 0, cv.width, cv.height); cx.font = `bold ${font}px monospace`; cx.fillStyle = bright ? '#d4ffe0' : '#2dff6a'; for (let r = 0; r < rows; r++) { let t = ''; for (let c = 0; c < cols; c++) t += Math.random() < 0.5 ? '0' : '1'; cx.fillText(t, 3, font - 1 + r * line); } tex.needsUpdate = true; };
+  const chars = o.chars || '01', fg = o.fg || '#2dff6a', bg = o.bg || '#021208', fgHot = o.fgHot || '#d4ffe0', bgHot = o.bgHot || '#0e3a1e';
+  const draw = (bright) => {
+    cx.fillStyle = bright ? bgHot : bg; cx.fillRect(0, 0, cv.width, cv.height); cx.font = `bold ${font}px monospace`; cx.fillStyle = bright ? fgHot : fg;
+    for (let r = 0; r < rows; r++) { let t = ''; for (let c = 0; c < cols; c++) t += chars[Math.floor(Math.random() * chars.length)]; if (o.title && r === 0 && Math.random() < 0.7) t = (o.title + ' '.repeat(cols)).slice(0, cols); cx.fillText(t, 3, font - 1 + r * line); }
+    tex.needsUpdate = true;
+  };
   draw(false);
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex })); mesh.userData.noSmooth = true;
   return { mesh, draw };
@@ -28783,7 +28815,7 @@ function _hackTrace(host, kit, x, pts) {                                        
   for (let i = 1; i < pts.length; i++) { const [z0, y0] = pts[i - 1], [z1, y1] = pts[i], dz = z1 - z0, dy = y1 - y0; gpBox(host, kit.dim, 0.0012, Math.hypot(dz, dy) + 0.0014, 0.0014, x, (y0 + y1) / 2, (z0 + z1) / 2, Math.atan2(dz, dy)); }   // each leg a thin box laid along it, slanted or not
   for (const [z, y] of pts) gpBox(host, kit.green, 0.0015, 0.0034, 0.0034, x * 1.007, y, z);
 }
-function _hackFlash(flash) { if (flash) flash.traverse(o => { if (o.material) { o.material = o.material.clone(); if (o.material.color) o.material.color.setHex(0x55ff88); } }); }
+function _hackFlash(flash, color = 0x55ff88) { if (flash) flash.traverse(o => { if (o.material) { o.material = o.material.clone(); if (o.material.color) o.material.color.setHex(color); } }); }
 
 function buildHackerPistol() {
   // 🟩 Pistol -> Hacker Pistol. Matte black, every edge outlined in green (the outlines are real line segments on the boxes' edges), a screen on the slide that
@@ -28873,6 +28905,96 @@ function buildHackerAxe() {
   let acc = 0;
   g._tick = (dt) => { acc += dt; if (acc > 0.16) { acc = 0; draw(false); } };
   g.position.set(0.14, -0.12, -0.3);
+  return g;
+}
+
+let _glintTex = null;
+function _glintTexture() {                                                                // a four-point star of light
+  if (_glintTex) return _glintTex;
+  const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d');
+  const g = x.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, 'rgba(255,250,220,1)'); g.addColorStop(0.18, 'rgba(255,225,130,0.7)'); g.addColorStop(1, 'rgba(255,200,60,0)');
+  x.fillStyle = g; x.fillRect(0, 0, 64, 64);
+  x.fillStyle = 'rgba(255,248,210,0.9)'; x.beginPath(); x.moveTo(32, 2); x.lineTo(35, 29); x.lineTo(62, 32); x.lineTo(35, 35); x.lineTo(32, 62); x.lineTo(29, 35); x.lineTo(2, 32); x.lineTo(29, 29); x.closePath(); x.fill();
+  return _glintTex = new THREE.CanvasTexture(c);
+}
+
+function buildMidasRevolver() {
+  // 👑 Revolver -> Midas Revolver (EPIC). The stock wheelgun turned solid gold: polished on the frame and barrel, antique where the walnut was, the chambers left dark so the cylinder still reads. A ruby
+  // set in each grip beside a coin stamped with a $, a little crown for a front sight, and glints that wink along it. It is all look: the same revolver, the same six chambers turning.
+  const g = buildRevolver(), flash = g._flash;
+  const gold = new THREE.MeshPhongMaterial({ color: 0xffd24a, emissive: 0x4a3100, shininess: 190, specular: 0xfff6c8 }), antique = new THREE.MeshPhongMaterial({ color: 0xc08a20, emissive: 0x2e1c00, shininess: 100, specular: 0xf0cc70 });
+  const dark = new THREE.MeshPhongMaterial({ color: 0x2a1a04, shininess: 40, specular: 0x6a4a10 }), ruby = new THREE.MeshPhongMaterial({ color: 0xd0102a, emissive: 0x6a0010, shininess: 240, specular: 0xffb8b8 });
+  for (const m of [gold, antique, dark, ruby]) m.userData.metalDone = true;               // the metal pass would turn them into grey steel
+  const inFlash = o => { for (let p = o; p; p = p.parent) if (p === flash) return true; return false; };
+  g.traverse(m => {
+    if (!m.isMesh || inFlash(m) || !m.material || !m.material.color) return;
+    const hex = m.material.color.getHex(), r = (hex >> 16 & 255) / 255, gr = (hex >> 8 & 255) / 255, b = (hex & 255) / 255, lum = r * 0.299 + gr * 0.587 + b * 0.114;     // (the colour as it was written: color.r is linear)
+    m.material = lum < 0.10 ? dark : (r > b * 1.5 && lum < 0.40) ? antique : gold;           // dark chambers stay dark, the brown walnut becomes antique gold, the steel is gold
+  });
+  const coin = new THREE.MeshBasicMaterial({ map: _coinTexture() });
+  for (const sd of [-1, 1]) {
+    const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.0072), ruby); gem.scale.set(0.45, 1, 0.8); gem.position.set(sd * 0.0188, -0.034, 0.0556); gem.rotation.x = 0.28; g.add(gem);
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(0.0105, 20), coin); disc.position.set(sd * 0.0178, -0.060, 0.063); disc.rotation.set(0.28, sd * Math.PI / 2, 0); g.add(disc);
+    gem.userData.noSmooth = disc.userData.noSmooth = true;
+  }
+  for (let i = -1; i <= 1; i++) { const pt = new THREE.Mesh(new THREE.ConeGeometry(0.0024, 0.009, 6), gold); pt.position.set(i * 0.0042, 0.0458 - (i ? 0.0016 : 0), -0.156); pt.userData.noSmooth = true; g.add(pt); }   // the crown on the front sight
+  _hackFlash(flash, 0xffd24a);
+  const glints = new THREE.Group(); glints.userData.eqFx = true; g.add(glints);
+  const spots = [[0, 0.033, -0.10], [0, 0.012, -0.008], [0, 0.048, 0.058], [0.0, -0.040, 0.066], [0, 0.014, -0.17]];
+  const stars = spots.map(([x, y, z], i) => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: _glintTexture(), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0 })); sp.position.set(x, y, z); sp.scale.setScalar(0.02); glints.add(sp); return sp; });
+  g._blended = true;
+  g._tick = (dt, now) => {
+    const fired = !!(flash && flash.visible);
+    stars.forEach((sp, i) => { const o = Math.pow(Math.max(0, Math.sin(now * 2.1 + i * 1.9)), 10); sp.material.opacity = fired ? 1 : o; sp.scale.setScalar(0.014 + 0.026 * (fired ? 1 : o)); });
+  };
+  return g;
+}
+
+function buildErrorAK() {
+  // 💀 AK-20 -> X!@&!@ (MYTHIC). An error object that happens to be a rifle: the stock AK in the void with RED outlines, the big flat parts wearing a red-and-black missing-texture checker that crawls and
+  // flips, a screen of corrupted glyphs that says its own name, shards of the model that did not load drifting round it and jumping, and a checkered NULL cube hanging under the barrel, turning.
+  // The edge lines flash white now and then, and everything snaps in on a shot.
+  const kit = _hackKit({ main: 0xff2a3d, dim: 0xa3141f, faint: 0x5c0b12 }), g = _hackerize(buildAK20(), kit);
+  const cv = document.createElement('canvas'); cv.width = cv.height = 64; const cx = cv.getContext('2d');
+  for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) { cx.fillStyle = (x + y) % 2 ? '#ff1a2e' : '#0a0000'; cx.fillRect(x * 8, y * 8, 8, 8); }
+  const tex = new THREE.CanvasTexture(cv); tex.magFilter = tex.minFilter = THREE.NearestFilter; tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  const checker = new THREE.MeshBasicMaterial({ map: tex });
+  let n = 0;
+  g.traverse(m => {
+    if (!m.isMesh || m.material !== kit.black || m.geometry.type !== 'BoxGeometry') return;
+    const P = m.geometry.parameters; if (Math.max(P.width * m.scale.x, P.height * m.scale.y, P.depth * m.scale.z) > 0.04 && n++ % 2 === 0) m.material = checker;
+  });
+  const { mesh: screen, draw } = _hackScreen(0.120, 0.032, 34, 6, { px: 256, chars: 'X!@&#?%$01', fg: '#ff2a3d', bg: '#140003', fgHot: '#ffe0e4', bgHot: '#5a000c', title: 'X!@&!@ ERR_0xDEAD' });
+  screen.position.set(-0.0262, 0.018, -0.040); screen.rotation.y = -Math.PI / 2; g.add(screen);
+  _hackTrace(g, kit, -0.0262, [[-0.190, 0.004], [-0.226, 0.004], [-0.240, 0.020], [-0.292, 0.020]]);
+  _hackTrace(g, kit, -0.0160, [[-0.059, -0.060], [-0.071, -0.105], [-0.080, -0.150], [-0.090, -0.190]]);
+  gpBox(g, kit.green, 0.0042, 0.0042, 0.0042, 0, 0.0855, -0.505);
+  _hackFlash(g._flash, 0xff4050);
+  // the shards: bits of geometry that did not load, round the gun
+  const shardHost = new THREE.Group(); shardHost.userData.eqFx = true; g.add(shardHost);
+  const shards = [];
+  for (let i = 0; i < 14; i++) {
+    const sz = 0.008 + Math.random() * 0.016, geo = i % 3 === 0 ? new THREE.TetrahedronGeometry(sz) : new THREE.BoxGeometry(sz, sz * (0.4 + Math.random()), sz * (0.5 + Math.random()));
+    const m = new THREE.Mesh(geo, i % 2 ? kit.black : checker); m.userData.noSmooth = true; m.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo, 20), kit.edge));
+    const home = new THREE.Vector3((Math.random() - 0.5) * 0.12, -0.05 + Math.random() * 0.15, -0.55 + Math.random() * 0.8);
+    m.position.copy(home); shardHost.add(m); shards.push({ m, home, ph: Math.random() * 6.28, until: 0, off: new THREE.Vector3() });
+  }
+  // the NULL cube under the barrel
+  const cubeHost = new THREE.Group(); cubeHost.userData.eqFx = true; cubeHost.position.set(0, -0.052, -0.43); g.add(cubeHost);
+  const cubeGeo = new THREE.BoxGeometry(0.026, 0.026, 0.026), cube = new THREE.Mesh(cubeGeo, checker); cube.userData.noSmooth = true; cube.add(new THREE.LineSegments(new THREE.EdgesGeometry(cubeGeo), kit.edge)); cubeHost.add(cube);
+  _hackScreenTick(g, draw);
+  const base = g._tick; let acc = 0, crawl = 0;
+  g._tick = (dt, now, assembling) => {
+    base(dt, now, assembling);
+    const fired = !!(g._flash && g._flash.visible);
+    crawl += dt; if (crawl > 0.14 || fired) { crawl = 0; tex.offset.set(Math.floor(Math.random() * 8) / 8, Math.floor(Math.random() * 8) / 8); kit.edge.color.setHex(Math.random() < 0.12 ? 0xffffff : 0xff2a3d); }   // the checker crawls, the lines flash white
+    cube.rotation.x += dt * 1.7; cube.rotation.y += dt * 2.3; cube.visible = !(Math.random() < 0.05);
+    for (const s of shards) {
+      if (now < s.until) { s.m.position.copy(s.home).add(s.off); s.m.visible = Math.random() > 0.15; }
+      else { s.m.visible = true; s.m.position.set(s.home.x + Math.sin(now * 0.9 + s.ph) * 0.006, s.home.y + Math.sin(now * 1.3 + s.ph) * 0.008, s.home.z); if (fired || Math.random() < dt * 0.9) { s.until = now + 0.1 + Math.random() * 0.15; s.off.set((Math.random() - 0.5) * 0.08, (Math.random() - 0.5) * 0.08, (Math.random() - 0.5) * 0.1); } }
+      s.m.rotation.x += dt * 0.8; s.m.rotation.y += dt * 1.1;
+    }
+  };
   return g;
 }
 
@@ -42728,6 +42850,7 @@ const SKIN_SHAPES = (() => {
     orb:    (a, b, R) => ({ parts: [part(Sp(R * 0.8), K(a)), part(Sp(R * 1.5), new THREE.MeshBasicMaterial({ color: b, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }))] }),
     bolt:   (a, b, R) => ({ parts: [part(Cy(R * 0.22, R * 0.22, R * 4.6, 8), K(a)), part(Cy(R * 0.1, R * 0.1, R * 4.7, 6), K(0xffffff))], wake: b }),
     hackbullet: (a, b, R) => ({ parts: [part(Cy(R * 0.26, R * 0.26, R * 1.3, 8), L(0x0a0a0a)), part(new THREE.ConeGeometry(R * 0.26, R * 0.7, 8), L(0x0a0a0a), [0, R * 1.0, 0]), part(Cy(R * 0.3, R * 0.3, R * 0.22, 8), K(b), [0, -R * 0.55, 0])], wake: b, wakeLen: 16 }),
+    goldbullet: (a, b, R) => ({ parts: [part(Cy(R * 0.3, R * 0.3, R * 1.4, 10), K(a)), part(new THREE.ConeGeometry(R * 0.3, R * 0.8, 10), K(b), [0, R * 1.1, 0]), part(Cy(R * 0.36, R * 0.36, R * 0.2, 10), K(b), [0, -R * 0.6, 0])], wake: a, wakeLen: 12, spin: { x: 0, y: 6, z: 0 } }),
     hackball: (a, b, R) => ({ parts: [part(Sp(R), L(0x0a0a0a)), part(new THREE.TorusGeometry(R * 1.08, R * 0.13, 5, 14), K(b), null, [Math.PI / 2, 0, 0])], wake: b, wakeLen: 7 }),
     carrot: (a, b, R) => ({ parts: [part(new THREE.ConeGeometry(R * 1.0, R * 4, 10), L(a), [0, R * 0.2, 0]), part(new THREE.ConeGeometry(R * 0.3, R * 1.1, 6), L(b), [R * 0.3, -R * 2.2, 0], [0, 0, 0.3]), part(new THREE.ConeGeometry(R * 0.3, R * 1.1, 6), L(b), [-R * 0.3, -R * 2.2, 0], [0, 0, -0.3])] }),
   };
@@ -42826,7 +42949,9 @@ const SKIN_SHOT = {};
   G({ shape: 'hackbullet', c: [0x0a0a0a, 0x2dff6a], k: 1.5 }, null, ['pistol_hacker', 'ak20_hacker']);
   G({ shape: 'hackbullet', c: [0x0a0a0a, 0x2dff6a], k: 1.5 }, 'hacker', ['grenade_launcher_hacker']);   // a black round on a green trail that bursts in green code
   G(null, 'nuke', ['rpg_nuke'], 0xff8a2a);                                                                 // the ordinary rocket, and a mushroom cloud where it lands   // the Hacker Pistol and AK: a black round on a green glowing trail
-  G({ shape: 'hackball', c: [0x0a0a0a, 0x2dff6a], k: 1.3 }, 'hacker', ['frag_hacker']);               // the Hacker Grenade: a black ball in a green ring, trailing code
+  G({ shape: 'hackball', c: [0x0a0a0a, 0x2dff6a], k: 1.3 }, 'hacker', ['frag_hacker']);
+  G({ shape: 'goldbullet', c: [0xffc83d, 0xfff2b8], k: 1.6 }, null, ['revolver_midas']);                       // the Midas Revolver: a gold round on a gold trail
+  G({ shape: 'hackbullet', c: [0x0a0a0a, 0xff2a3d], k: 1.8 }, null, ['ak20_xerror']);                       // X!@&!@: the hacker round in red, and a size bigger               // the Hacker Grenade: a black ball in a green ring, trailing code
   G({ shape: 'cube', c: [0xe74c3c, 0x2ecc71] }, 'pixel', ['p90_rubiks_cube']);
   G({ shape: 'shard', c: [0xb0b8ff, 0x6a6aff] }, 'star', ['ak20_hyperspace', 'deagle_phantom', 'burst_cannon_phantom', 'deagle_glitch']);
   // more of the house
@@ -42894,16 +43019,54 @@ function skinLookById(id) {                                                 // f
 
 // 🟩 What the Hacker Pistol's rounds do where they land (a skin's look.hit = 'hack'): a bright green flash, and a spray of 1s and 0s that flicker as they fly.
 // On a target it is bigger and the screen blinks green; on a wall it is a small puff. The same 1s and 0s come out of a body as it crashes (see FINISHER_MOVES.glitch).
+// 🎨 What a skin's rounds do where they land (a skin's look.hit names a style from this table): a flash, a spray of glyphs (or coins), a tint on the screen, and the colour of the damage counter, which
+// scrambles before it settles. hack = the Hacker skins' green 1s and 0s. error = X!@&!@'s red glitch glyphs. gold = the Midas Revolver's coins and a cash-register counter. The same styles carry the
+// crash of a kill (FINISHER_MOVES.glitch / .gold) and, because the skin id rides on the hit, show on everybody's screen.
+const HIT_STYLES = {
+  hack:  { chars: '01',       glow: '#00ff55', fill: '#7dffa6', hit: 0xd4ffe0, miss: 0x7dffa6, screen: 'rgba(70,255,140,0.16)', num: '#39ff6a', numShadow: '0 0 8px #00ff55, 0 0 2px #003a14, -1px -1px 0 #021a0a, 1px 1px 0 #021a0a', scramble: '0123456789' },
+  error: { chars: 'X!@&#?%$', glow: '#ff1030', fill: '#ff8a96', hit: 0xffd0d6, miss: 0xff6a78, screen: 'rgba(255,30,60,0.18)',  num: '#ff2a3d', numShadow: '0 0 8px #ff1030, 0 0 2px #3a0008, -1px -1px 0 #1a0004, 1px 1px 0 #1a0004', scramble: 'X!@&#?%$0123' },
+  gold:  { coins: true,        glow: '#ff9a00', fill: '#ffd24a', hit: 0xfff0b0, miss: 0xffd24a, screen: 'rgba(255,205,70,0.14)', num: '#ffd24a', numShadow: '0 0 8px #ff9a00, 0 0 2px #4a2a00, -1px -1px 0 #3a2200, 1px 1px 0 #3a2200', scramble: '0123456789' },
+};
 const _hackGlyphs = {};
-function _hackGlyph(ch) {
-  if (_hackGlyphs[ch]) return _hackGlyphs[ch];
+function _hackGlyph(ch, style = 'hack') {
+  const key = style + ch; if (_hackGlyphs[key]) return _hackGlyphs[key];
+  const S = HIT_STYLES[style] || HIT_STYLES.hack;
   const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d');
-  x.font = 'bold 54px monospace'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.shadowColor = '#00ff55'; x.shadowBlur = 10; x.fillStyle = '#7dffa6'; x.fillText(ch, 32, 36); x.fillText(ch, 32, 36);
-  return _hackGlyphs[ch] = new THREE.CanvasTexture(c);
+  x.font = 'bold 54px monospace'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.shadowColor = S.glow; x.shadowBlur = 10; x.fillStyle = S.fill; x.fillText(ch, 32, 36); x.fillText(ch, 32, 36);
+  return _hackGlyphs[key] = new THREE.CanvasTexture(c);
 }
-function _hackDigits(pos, n, spread, up, life, size) {
+let _coinTex = null;
+function _coinTexture() {                                                                // a gold coin with a $ on it, face on
+  if (_coinTex) return _coinTex;
+  const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d');
+  const g = x.createRadialGradient(24, 22, 4, 32, 32, 30); g.addColorStop(0, '#fff3b0'); g.addColorStop(0.55, '#ffc928'); g.addColorStop(1, '#a86a00');
+  x.fillStyle = g; x.beginPath(); x.arc(32, 32, 29, 0, Math.PI * 2); x.fill();
+  x.strokeStyle = '#7a4a00'; x.lineWidth = 3; x.beginPath(); x.arc(32, 32, 24, 0, Math.PI * 2); x.stroke();
+  x.font = 'bold 34px Georgia, serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillStyle = '#8a5200'; x.fillText('$', 33, 35);
+  return _coinTex = new THREE.CanvasTexture(c);
+}
+function _coinBurst(pos, n, spread, up, life, size) {                                   // coins that pop out, flip as they fall (a sprite cannot turn, so its width shuts and opens), and fade
   for (let i = 0; i < n; i++) {
-    const mat = new THREE.SpriteMaterial({ map: _hackGlyph(Math.random() < 0.5 ? '1' : '0'), transparent: true, depthWrite: false, color: 0xffffff });
+    const mat = new THREE.SpriteMaterial({ map: _coinTexture(), transparent: true, depthWrite: false });
+    const sp = new THREE.Sprite(mat), sc = size * (0.75 + Math.random() * 0.5); sp.scale.set(sc, sc, 1); sp.position.copy(pos); scene.add(sp);
+    const vel = new THREE.Vector3((Math.random() - 0.5) * spread, up * (0.7 + Math.random() * 0.8), (Math.random() - 0.5) * spread), born = performance.now(), ttl = life * (0.8 + Math.random() * 0.5), ph = Math.random() * 6.28, rate = 14 + Math.random() * 10;
+    const tick = () => {
+      const t = (performance.now() - born) / ttl;
+      if (t >= 1) { scene.remove(sp); mat.dispose(); return; }
+      sp.position.addScaledVector(vel, 0.016); vel.y -= 0.16; vel.x *= 0.985; vel.z *= 0.985;
+      sp.scale.x = sc * Math.max(0.08, Math.abs(Math.cos(ph + t * rate)));
+      mat.opacity = t < 0.7 ? 1 : 1 - (t - 0.7) / 0.3;
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+}
+function _hackDigits(pos, n, spread, up, life, size, style = 'hack') {
+  const S = HIT_STYLES[style] || HIT_STYLES.hack;
+  if (S.coins) return _coinBurst(pos, n, spread, up, life, size);
+  const pick = () => S.chars[Math.floor(Math.random() * S.chars.length)];
+  for (let i = 0; i < n; i++) {
+    const mat = new THREE.SpriteMaterial({ map: _hackGlyph(pick(), style), transparent: true, depthWrite: false, color: 0xffffff });
     const sp = new THREE.Sprite(mat), sc = size * (0.7 + Math.random() * 0.6); sp.scale.set(sc, sc, 1); sp.position.copy(pos); scene.add(sp);
     const vel = new THREE.Vector3((Math.random() - 0.5) * spread, up * (0.4 + Math.random()), (Math.random() - 0.5) * spread), born = performance.now(), ttl = life * (0.7 + Math.random() * 0.6);
     let swap = 0;
@@ -42911,7 +43074,7 @@ function _hackDigits(pos, n, spread, up, life, size) {
       const t = (performance.now() - born) / ttl;
       if (t >= 1) { scene.remove(sp); mat.dispose(); return; }
       sp.position.addScaledVector(vel, 0.016); vel.multiplyScalar(0.96); vel.y -= 0.02;
-      if (++swap % 4 === 0) mat.map = _hackGlyph(Math.random() < 0.5 ? '1' : '0');
+      if (++swap % 4 === 0) mat.map = _hackGlyph(pick(), style);
       mat.opacity = t < 0.55 ? 1 : 1 - (t - 0.55) / 0.45;
       requestAnimationFrame(tick);
     };
@@ -42920,20 +43083,33 @@ function _hackDigits(pos, n, spread, up, life, size) {
 }
 let _hackFxAt = 0; const _hackFxPos = new THREE.Vector3();
 function skinHitFX(kind, pos, onTarget) {
-  if (kind !== 'hack' || !pos) return;
+  const S = HIT_STYLES[kind];
+  if (!S || !pos) return;
   if (onTarget) { const t = performance.now(); if (t - _hackFxAt < 60 && _hackFxPos.distanceToSquared(pos) < 0.25) return; _hackFxAt = t; _hackFxPos.copy(pos); }   // a hit reaches here from the round and from the damage number: one burst
-  const peak = onTarget ? 0.95 : 0.55, mat = new THREE.MeshBasicMaterial({ color: onTarget ? 0xd4ffe0 : 0x7dffa6, transparent: true, opacity: peak, blending: THREE.AdditiveBlending, depthWrite: false });
+  const peak = onTarget ? 0.95 : 0.55, mat = new THREE.MeshBasicMaterial({ color: onTarget ? S.hit : S.miss, transparent: true, opacity: peak, blending: THREE.AdditiveBlending, depthWrite: false });
   const flash = new THREE.Mesh(new THREE.SphereGeometry(onTarget ? 0.30 : 0.13, 10, 8), mat); flash.position.copy(pos); scene.add(flash);
   const born = performance.now(), life = onTarget ? 190 : 120;
   const tick = () => { const t = (performance.now() - born) / life; if (t >= 1) { scene.remove(flash); flash.geometry.dispose(); mat.dispose(); return; } flash.scale.setScalar(0.6 + t * 1.8); mat.opacity = peak * (1 - t); requestAnimationFrame(tick); };
   requestAnimationFrame(tick);
-  if (onTarget) { try { flashScreen('rgba(70,255,140,0.16)', 110); } catch (e) {} }
-  _hackDigits(pos, onTarget ? 16 : 7, onTarget ? 4.2 : 2.6, onTarget ? 2.6 : 1.4, onTarget ? 620 : 420, onTarget ? 0.26 : 0.18);
+  if (onTarget) { try { flashScreen(S.screen, 110); } catch (e) {} }
+  if (S.coins) _coinBurst(pos, onTarget ? 9 : 4, onTarget ? 3.4 : 2.2, onTarget ? 3.0 : 1.8, onTarget ? 760 : 520, onTarget ? 0.2 : 0.14);
+  else _hackDigits(pos, onTarget ? 16 : 7, onTarget ? 4.2 : 2.6, onTarget ? 2.6 : 1.4, onTarget ? 620 : 420, onTarget ? 0.26 : 0.18, kind);
 }
 // ...and the damage counter of a Hacker Pistol hit: green, scrambling digits for a quarter of a second, then the real number.
 // Whatever carries a hit look (a gun's skin, the grenade's, the axe's): its entry in _modelSkinLook, by the id the hit is reported under. The axe's combo moves are the axe's.
 const _LOOK_OF = { axe_upper: 'combat_axe', axe_airwhirl: 'combat_axe', axe_chop: 'combat_axe' };
 function _hackerHit(weaponId) { try { const L = weaponId && (_modelSkinLook[weaponId] || _modelSkinLook[_LOOK_OF[weaponId]]); return !!(L && L.hit === 'hack'); } catch (e) { return false; } }
+// The style (a HIT_STYLES key) of the hit look the thing in your hand wears, or null; the skin id behind it; and the style of a skin id somebody else sent.
+function _hitKind(weaponId) { try { const L = weaponId && (_modelSkinLook[weaponId] || _modelSkinLook[_LOOK_OF[weaponId]]); return (L && HIT_STYLES[L.hit] && L.hit) || null; } catch (e) { return null; } }
+function _skinHitId(weaponId) { try { const L = weaponId && (_modelSkinLook[weaponId] || _modelSkinLook[_LOOK_OF[weaponId]]); return (L && HIT_STYLES[L.hit] && L.skinId) || null; } catch (e) { return null; } }
+let _hitKindById = null;
+function _hitKindOfSkin(id) {
+  if (typeof id !== 'string') return null;
+  try {
+    if (!_hitKindById) { _hitKindById = new Map(); for (const m of [...MODEL_SKINS, ...SUPPORT_MODEL_SKINS, ...MELEE_MODEL_SKINS]) if (m.look && HIT_STYLES[m.look.hit]) _hitKindById.set(m.id, m.look.hit); }
+    return _hitKindById.get(id) || null;
+  } catch (e) { return null; }
+}
 // ...and what the other screens need to show it: the id of the hacker skin behind a hit (it rides on the hit, the server passes it on with playerHit and playerDied), and whether an id is one.
 function _hackSkinId(weaponId) { try { const L = weaponId && (_modelSkinLook[weaponId] || _modelSkinLook[_LOOK_OF[weaponId]]); return (L && L.hit === 'hack' && L.skinId) || null; } catch (e) { return null; } }
 let _hackSkinSet = null;
@@ -42941,20 +43117,22 @@ function _isHackSkin(id) {
   if (typeof id !== 'string') return false;
   try { if (!_hackSkinSet) _hackSkinSet = new Set([...MODEL_SKINS, ...SUPPORT_MODEL_SKINS, ...MELEE_MODEL_SKINS].filter(m => m.look && m.look.hit === 'hack').map(m => m.id)); return _hackSkinSet.has(id); } catch (e) { return false; }
 }
-function _othersHackHit(data) {                                            // somebody else's hacker hit: the flash on the victim (the shooter's own screen does its own, see hitFeedback)
-  if (!data || !data.shooterId || data.shooterId === myId || !_isHackSkin(data.skin)) return;
-  if (data.targetId === myId) { try { flashScreen('rgba(70,255,140,0.16)', 110); } catch (e) {} return; }          // it is you they hit: a green blink, nothing to draw
+function _othersSkinHit(data) {                                            // somebody else's hit with a skin that has a hit look: the flash on the victim (the shooter's own screen does its own, see hitFeedback)
+  const kind = data && data.shooterId && data.shooterId !== myId ? _hitKindOfSkin(data.skin) : null;
+  if (!kind) return;
+  if (data.targetId === myId) { try { flashScreen(HIT_STYLES[kind].screen, 110); } catch (e) {} return; }          // it is you they hit: a blink of its colour, nothing to draw
   const mesh = remoteMeshes[data.targetId]; if (!mesh || !mesh.visible) return;
-  skinHitFX('hack', mesh.position.clone().setY(mesh.position.y + 1.2), true);
+  skinHitFX(kind, mesh.position.clone().setY(mesh.position.y + 1.2), true);
 }
-function _hackFlicker(el, real) {                                // real: a string, or a function giving it (a running total may have moved on)
+function _hackFlicker(el, real, style = 'hack') {                // real: a string, or a function giving it (a running total may have moved on)
+  const S = HIT_STYLES[style] || HIT_STYLES.hack;
   const ms = 220 + Math.random() * 90, t0 = performance.now(), final = () => String(typeof real === 'function' ? real() : real);
-  el.style.color = '#39ff6a'; el.style.textShadow = '0 0 8px #00ff55, 0 0 2px #003a14, -1px -1px 0 #021a0a, 1px 1px 0 #021a0a';
+  el.style.color = S.num; el.style.textShadow = S.numShadow;
   const token = el._hackToken = {};
   const step = () => {
     if (el._hackToken !== token || !el.isConnected) return;
     if (performance.now() - t0 >= ms) { el.textContent = final(); return; }
-    let t = ''; const n = Math.max(2, final().length); for (let i = 0; i < n; i++) t += Math.floor(Math.random() * 10);
+    let t = ''; const n = Math.max(2, final().length); for (let i = 0; i < n; i++) t += S.scramble[Math.floor(Math.random() * S.scramble.length)];
     el.textContent = t; setTimeout(step, 40);
   };
   step();
@@ -45265,9 +45443,9 @@ function _beginEquip(model, spec, melee, support = false) {
   if (type === 'build')  ps.sort((a, b) => a.h.p.y - b.h.p.y);
   if (type === 'eruption') ps.sort((a, b) => b.h.p.z - a.h.p.z);   // rising back to front
   if (type === 'petals' || type === 'leafstorm' || type === 'foldout') ps.sort((a, b) => b.h.p.z - a.h.p.z);   // blooming hilt to tip
-  if (type === 'windup' || type === 'inflate') ps.sort((a, b) => b.h.p.z - a.h.p.z);   // back to front
+  if (type === 'windup' || type === 'inflate' || type === 'midas') ps.sort((a, b) => b.h.p.z - a.h.p.z);   // back to front
   if (type === 'meteor')   ps.sort((a, b) => a.h.p.z - b.h.p.z);   // raining front to back
-  if (type === 'unfold' || type === 'build' || type === 'eruption' || type === 'meteor' || type === 'petals' || type === 'leafstorm' || type === 'foldout' || type === 'windup' || type === 'inflate')
+  if (type === 'unfold' || type === 'build' || type === 'eruption' || type === 'meteor' || type === 'petals' || type === 'leafstorm' || type === 'foldout' || type === 'windup' || type === 'inflate' || type === 'midas')
     ps.forEach((p, i) => { p.delay = i / Math.max(1, ps.length - 1); });
   let ring = null;
   if (type === 'warp') {
@@ -45698,6 +45876,14 @@ function _equipStep(e, t) {
         } else {
           c.scale.copy(h.s).multiplyScalar(Math.max(0.001, _eqBack(_eqClamp((t - p.delay * 0.2) / 0.3))));
         }
+        break; }
+      case 'midas': {
+        // Midas Revolver: every piece drops in from above as a bar of gold, back to front, tipped forward, and lands with a bounce.
+        const k = _eqClamp((t - p.delay * 0.55) / 0.22), fall = 1 - k * k, bounce = k >= 1 ? Math.exp(-(t - p.delay * 0.55 - 0.22) * 18) * Math.abs(Math.sin((t - p.delay * 0.55 - 0.22) * 34)) * 0.012 : 0;
+        c.visible = k > 0;
+        c.position.copy(h.p); c.position.y += fall * 0.10 + bounce;
+        c.quaternion.copy(h.q).multiply(new THREE.Quaternion().setFromAxisAngle(_EQ_X, fall * 0.8));
+        c.scale.copy(h.s).multiplyScalar(0.85 + 0.15 * k);
         break; }
       case 'windup': {
         // Clockwork Coilgun: each piece clicks into place in turn, back to
@@ -53518,6 +53704,12 @@ const MODEL_SKINS = [
   { id: 'ak20_hacker', weapon: 'ak20', name: 'Hacker AK', rarity: 'rare', look: { hit: 'hack' },
     sw: ['#08090a', '#2dff6a'], build: buildHackerAK,
     blurb: 'The Hacker Pistol, full size: a void-black AK with green outlines and a screen of 1s and 0s down the receiver. Black rounds on a green trail, a laser-blaster crack, the same flash and scrambling damage number, and what it kills glitches into an ERROR and is gone.' },
+  { id: 'revolver_midas', weapon: 'revolver', name: 'Midas Revolver', rarity: 'epic', look: { hit: 'gold' },
+    sw: ['#ffc83d', '#b0101f'], build: buildMidasRevolver,
+    blurb: 'Solid gold, rubies in the grips, a crown for a front sight. Drawn, it drops in as bars of gold. Gold rounds on a gold trail and a coin rings after every shot; a hit sprays coins and the damage counts up like a till; whoever it kills turns to a gold statue and shatters into coins.' },
+  { id: 'ak20_xerror', weapon: 'ak20', name: 'X!@&!@', rarity: 'mythic', look: { hit: 'error' },
+    sw: ['#0a0000', '#ff2a3d'], build: buildErrorAK,
+    blurb: 'It is not supposed to be here. A red-and-black error object in the shape of a rifle: the textures crawl, pieces that did not load drift and jump round it, a NULL cube turns under the barrel. Drawn, it teleports together. Rounds are red errors, the shot is a corrupted signal, and whoever it hits is overwritten with X!@&!@.' },
   { id: 'pistol_m9', weapon: 'pistol', name: 'M9 Beretta', rarity: 'good',
     sw: ['#3a3f47', '#8d959d'], build: buildM9Beretta,
     blurb: 'Open-top slide, barrel visible underneath. Standard issue for a reason.' },
@@ -53898,6 +54090,7 @@ const GEN2_MODEL_SKIN_IDS = new Set([
   'revolver_donut', 'ak20_donut', 'rpg_donut', 'machine_pistol_donut', 'pistol_donut',
   'sg8_donut', 'srx_donut', 'vector_donut', 'grenade_launcher_donut', 'minigun_donut',
   'mp40_donut', 'deagle_donut', 'shorty_donut',
+  'revolver_midas', 'ak20_xerror',            // the Gen 2 case's two new top rarities: EPIC and MYTHIC (server.js GEN2_EPIC_SKIN_IDS / GEN2_NEW_MYTHIC_SKIN_IDS)
   'ak20_rainbow', 'ak20_hyperspace', 'ak20_blueprint', 'sg8_portal', 'vector_portal',
   'railgun_portal_detector', 'p90_quantum_scanner', 'freeze_hyperslush', 'firework_showman',
   'shorty_outlaw', 'snub_gunslinger', 'deagle_glitch', 'deagle_phantom',
@@ -58658,6 +58851,9 @@ const SKIN_FX = {
     reload: _fxR(RELOAD_KEYS.ak20, (RELOAD_PROPS.ak20 || []).map(e => e.k === 'mag' ? Object.assign({}, e, { k: 'holomag' }) : e), null, 'beep') },
   deagle_glitch: { sound: _fxS('glitch', .34, .10, 0, 0),
     equip: 'glitch', equipMs: 850, equipSfx: ['glitchsfx', 'snapin'] },
+  // (no `sound`: their shots are SKIN_VOICE / SKIN_CHIME, and a profile here would make the revolver's recording and the AK's lose to it)
+  revolver_midas: { equip: 'midas', equipMs: 1000, equipSfx: ['clink', 'ding'] },
+  ak20_xerror: { equip: 'glitch', equipMs: 950, equipSfx: ['glitchsfx', 'snapin'] },
   plasma_carbine_fishbowl: { sound: _fxS('bubblegun', .26, .10, 300, 900),
     equip: 'fill', equipMs: 1100, equipSfx: ['pour', 'bloop'],
     reload: _fxR(_RK.top(), [.30,.38,.46,.54].map(t => RP(t,'drop','arrive',1,'breech')), [[.28,'glug']], 'bloop') },
@@ -59020,7 +59216,7 @@ function spawnHitNumber(targetId, worldPos, damage, tier, label = null, hack = f
   if (tier === 'blue') el.style.textShadow = '-1px -1px 0 #002a55,1px -1px 0 #002a55,-1px 1px 0 #002a55,1px 1px 0 #002a55,0 0 12px #3db4ff';
   el.textContent = label ?? damage;
   document.body.appendChild(el);
-  if (hack) _hackFlicker(el, String(label ?? damage));
+  if (hack) _hackFlicker(el, String(label ?? damage), hack === true ? 'hack' : hack);
   const mid = window.innerWidth / 2;
   const side = Math.abs(sc.x - mid) < 40 ? ((_flyFlip++ & 1) ? 1 : -1) : (sc.x < mid ? -1 : 1);
   _flyNums.push({
@@ -59463,7 +59659,8 @@ function _playClassicFinisher(mesh, targetId, fin, pos) {
   }
 }
 function triggerFinisher(targetId, weaponId, killerId = myId, skinId = null) {
-  if ((killerId === myId ? _hackerHit(weaponId) : _isHackSkin(skinId)) && playGlitchFinisher(targetId)) return;     // killed with a Hacker skin (yours, or the id the server passed on for somebody else's): it crashes, whatever finisher was picked
+  const kind = killerId === myId ? _hitKind(weaponId) : _hitKindOfSkin(skinId);
+  if (kind && _playSkinFinisher(kind, targetId)) return;                  // killed with a skin that has a hit look (yours, or the id the server passed on for somebody else's): its own end, whatever finisher was picked
   const chosen = finisherChoiceOf(killerId);                   // the finisher its killer picked, if they picked one
   if (chosen && playChosenFinisher(targetId, chosen, killerId)) return;
   if (killerId !== myId) return;                                // someone else's kill with no finisher chosen: nothing of ours to play
@@ -59640,6 +59837,7 @@ const FINISHER_MOVES = {
 // 🟥 The Hacker Pistol's kill: the body does not fall, it crashes. It turns into a black copy of itself that jitters, stretches and blinks, red ERROR labels flicker in the
 // air round it, and after about a second and a quarter it is gone in a burst of 1s and 0s. Not one of the pickable finishers: it belongs to the skin (triggerFinisher).
 const HACK_ERRORS = ['ERROR', 'FATAL', '0xDEAD', 'SEGFAULT', '404', 'NULL', 'ACCESS DENIED', 'KERNEL PANIC', 'ERR_09', 'FAILED', 'STACK OVERFLOW', 'CORRUPT'];
+const X_ERRORS = ['X!@&!@', 'X!@&!@', 'ERR_0x00', 'NULL REF', '%@#!?', 'SEGFAULT', '!!!', 'UNDEFINED', '&&&&', 'X!@&!@'];
 const _hackLabels = {};
 function _hackLabel(text) {
   if (_hackLabels[text]) return _hackLabels[text];
@@ -59649,8 +59847,9 @@ function _hackLabel(text) {
   x.fillStyle = '#18d8ff'; x.fillText(text, 130, 34); x.fillStyle = '#ff2a2a'; x.fillText(text, 127, 32);        // a hair of chromatic offset
   return _hackLabels[text] = new THREE.CanvasTexture(c);
 }
-FINISHER_MOVES.glitch = function (mesh, id, c) {
-  const body = _finisherMat('hack', 0x050505); body.color.setHex(0x050505);
+FINISHER_MOVES.glitch = function (mesh, id, c, style = 'hack') {
+  const err = style === 'error', alt = err ? 0x5a0010 : 0x00330f, labelSet = err ? X_ERRORS : HACK_ERRORS;     // X!@&!@ crashes in red, with its own name in the air round it
+  const body = _finisherMat(err ? 'error' : 'hack', 0x050505); body.color.setHex(0x050505);
   _finisherSwap(mesh, body);
   playSoundEvent('emp_zap', { position: mesh.position, volume: 0.85, minGap: 80 });
   const labels = []; let nextLabel = 0, nextJump = 0, off = new THREE.Vector3(), stretch = new THREE.Vector3(1, 1, 1);
@@ -59660,7 +59859,7 @@ FINISHER_MOVES.glitch = function (mesh, id, c) {
       nextJump = now + 50 + Math.random() * 40;
       off.set((Math.random() - 0.5) * 0.3, (Math.random() - 0.5) * 0.12, (Math.random() - 0.5) * 0.3);
       stretch.set(1 + (Math.random() < 0.4 ? (Math.random() - 0.5) * 0.5 : 0), 1 + (Math.random() < 0.4 ? (Math.random() - 0.3) * 0.5 : 0), 1 + (Math.random() < 0.4 ? (Math.random() - 0.5) * 0.5 : 0));
-      body.color.setHex(Math.random() < 0.18 ? 0x00330f : 0x050505);
+      body.color.setHex(Math.random() < (err ? 0.3 : 0.18) ? alt : 0x050505);
     }
     mesh.position.copy(st.p).add(off);
     mesh.scale.set(st.s.x * stretch.x, st.s.y * stretch.y, st.s.z * stretch.z);
@@ -59668,7 +59867,7 @@ FINISHER_MOVES.glitch = function (mesh, id, c) {
     mesh.visible = !(t > 0.12 && Math.random() < 0.2);                       // it blinks out for a frame now and then
     if (now >= nextLabel && labels.length < 7) {                             // red ERROR labels in the air round it
       nextLabel = now + 70;
-      const mat = new THREE.SpriteMaterial({ map: _hackLabel(HACK_ERRORS[Math.floor(Math.random() * HACK_ERRORS.length)]), transparent: true, depthWrite: false, depthTest: false });
+      const mat = new THREE.SpriteMaterial({ map: _hackLabel(labelSet[Math.floor(Math.random() * labelSet.length)]), transparent: true, depthWrite: false, depthTest: false });
       const sp = new THREE.Sprite(mat), w = 0.55 + Math.random() * 0.35; sp.scale.set(w, w / 4, 1);
       sp.position.set(st.p.x + (Math.random() - 0.5) * 1.6, st.p.y + 0.3 + Math.random() * 1.7, st.p.z + (Math.random() - 0.5) * 1.6); sp.renderOrder = 999; scene.add(sp);
       labels.push({ sp, mat, die: now + 260 + Math.random() * 260 });
@@ -59677,17 +59876,57 @@ FINISHER_MOVES.glitch = function (mesh, id, c) {
   }, st => {
     for (const l of labels) { scene.remove(l.sp); l.mat.dispose(); }
     const at = st.p.clone().setY(st.p.y + 1.0);
-    _hackDigits(at, 26, 5, 3, 700, 0.3); _finisherBurst(at, 0xff2a2a, 14); _spawnFinisherRing(st.p.clone(), 0x39ff6a, 2.0);
+    _hackDigits(at, err ? 34 : 26, 5, 3, 700, 0.3, style); _finisherBurst(at, 0xff2a2a, 14); _spawnFinisherRing(st.p.clone(), err ? 0xff2a3d : 0x39ff6a, 2.0);
+    if (err && id !== myId) { try { flashScreen('rgba(255,30,60,0.14)', 140); } catch (e) {} }
   });
 };
-function playGlitchFinisher(targetId) {
+function playGlitchFinisher(targetId, style = 'hack') {
   const mesh = remoteMeshes[targetId];
   if (!mesh || !mesh.visible) return false;
   if (mesh._finisher && performance.now() < mesh._finisher.until) return true;          // already crashing
   mesh._finisher = { id: 'glitch', until: performance.now() + 4200 };                    // owns the body: the ragdoll keeps off it
-  FINISHER_MOVES.glitch(mesh, targetId, 0x39ff6a);
-  pushFeedLine('HACKED', players[targetId]?.name || 'Enemy', '#39ff6a');
+  FINISHER_MOVES.glitch(mesh, targetId, style === 'error' ? 0xff2a3d : 0x39ff6a, style);
+  pushFeedLine(style === 'error' ? 'X!@&!@' : 'HACKED', players[targetId]?.name || 'Enemy', style === 'error' ? '#ff2a3d' : '#39ff6a');
   return true;
+}
+// 🪙 Midas: the body turns to gold where it stands, a statue, and glints; then it shatters into coins.
+FINISHER_MOVES.gold = function (mesh, id, c) {
+  const body = _finisherMat('gold', 0xffc83d); body.color.setHex(0xffc83d); body.emissive.setHex(0x3a2400);
+  _finisherSwap(mesh, body);
+  playSoundEvent('ammo_refill', { position: mesh.position, volume: 0.7, minGap: 80 });
+  let nextGlint = 0;
+  _finisherDrive(mesh, id, 1150, (t, dt, st) => {
+    const now = performance.now();
+    mesh.position.copy(st.p); mesh.scale.copy(st.s);
+    const k = t < 0.18 ? t / 0.18 : 1;                                           // the gold floods in over a fifth of a second, a pulse as it sets
+    body.color.setRGB(1, 0.58 + 0.08 * Math.sin(now * 0.02) * k, 0.05 + 0.2 * (1 - k));            // (linear: this is gold, 255 / 200 / 60, pale for the first instant)
+    mesh.scale.multiplyScalar(1 + (t < 0.18 ? Math.sin(t / 0.18 * Math.PI) * 0.05 : 0));
+    mesh.rotation.y = st.r.y; mesh.rotation.x = st.r.x; mesh.rotation.z = st.r.z + (t > 0.8 ? (Math.random() - 0.5) * 0.06 * (t - 0.8) / 0.2 : 0);       // a shiver before it goes
+    if (now >= nextGlint) {                                                       // glints across the statue
+      nextGlint = now + 60;
+      _spawnFinisherSpark(st.p.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.7, 0.2 + Math.random() * 1.5, (Math.random() - 0.5) * 0.7)), 0xfff0b0, { size: 0.07, life: 320, vel: new THREE.Vector3(0, 0.6, 0) });
+    }
+  }, st => {
+    const at = st.p.clone().setY(st.p.y + 1.0);
+    _coinBurst(at, 36, 7.5, 5.5, 1500, 0.3); _finisherBurst(at, 0xffd24a, 22, [0xffd24a, 0xfff0b0, 0xffb000]); _spawnFinisherRing(st.p.clone(), 0xffd24a, 2.2);
+    playSoundEvent('hitmarker', { position: at, volume: 0.9, minGap: 40 });
+  });
+};
+function playGoldFinisher(targetId) {
+  const mesh = remoteMeshes[targetId];
+  if (!mesh || !mesh.visible) return false;
+  if (mesh._finisher && performance.now() < mesh._finisher.until) return true;
+  mesh._finisher = { id: 'gold', until: performance.now() + 4200 };
+  FINISHER_MOVES.gold(mesh, targetId, 0xffd24a);
+  pushFeedLine('GILDED', players[targetId]?.name || 'Enemy', '#ffd24a');
+  return true;
+}
+// The end a skin's hit style gives a kill; false = it has none (the finisher the player picked, or the ragdoll, runs as always). Looked up at the call, so a test can stand in for any of them.
+function _playSkinFinisher(kind, targetId) {
+  if (kind === 'hack') return playGlitchFinisher(targetId);
+  if (kind === 'error') return playGlitchFinisher(targetId, 'error');
+  if (kind === 'gold') return playGoldFinisher(targetId);
+  return false;
 }
 // Plays the chosen finisher on a body. The seven classic ones run the classic effect (see _playClassicFinisher); the others have a move
 // of their own above. Returns false if there is nothing to play it on.
@@ -59817,7 +60056,7 @@ function trackTotalDamage(targetId, damage, targetMesh, tier, label = null, hack
   // The running total wears the grade of the latest hit, so a string of crits reads red/orange.
   const T = tier && HIT_TIERS[tier];
   if (T) tr.el.style.color = T.color;
-  if (hack) _hackFlicker(tr.el, () => label ?? tr.total);                      // the Hacker Pistol: green, and it scrambles before it settles
+  if (hack) _hackFlicker(tr.el, () => label ?? tr.total, hack === true ? 'hack' : hack);          // a skin with a hit look: its colour, and it scrambles before it settles
 }
 
 // One call per landed hit, from emitHit and from the training dummies: grade it, fling the
@@ -59826,8 +60065,8 @@ function hitFeedback(targetId, mesh, hitPos, damage, headshot, falloff, headMiss
   const tier = gradeHit(headshot, falloff == null ? 1 : falloff, headMiss);
   const at = hitPos || (mesh ? mesh.position.clone().setY(mesh.position.y + 1.2) : null);
   const label = weaponId === 'omega_pistol' ? '\u03a9' : null;
-  const hack = _hackerHit(weaponId);
-  if (hack && at) skinHitFX('hack', at, true);                          // a blade or a blast has no round to do it: every hacker hit does it here (skinHitFX drops the twin from a round)
+  const hack = _hitKind(weaponId);                                          // the style of its skin's hit look, if it has one (hack / error / gold)
+  if (hack && at) skinHitFX(hack, at, true);                            // a blade or a blast has no round to do it: every such hit does it here (skinHitFX drops the twin from a round)
   spawnHitNumber(targetId, at, damage, tier, label, hack);
   if (mesh) trackTotalDamage(targetId, damage, mesh, tier, label, hack);
   if (damage > 0) {
@@ -59998,7 +60237,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
   const fatal = !!(isBot && mpMatch() && botHp != null && instakill);
   socket.emit(isBot ? 'hitBot' : 'hit', {
     [isBot ? 'botId' : 'targetId']: pid,
-    bulletId, weapon: weaponId, skin: _hackSkinId(weaponId) || undefined,
+    bulletId, weapon: weaponId, skin: _skinHitId(weaponId) || undefined,
     headshot, instakill, fatal, tags: killTags, wallPenetrated: !!opts.wallPenetrated,
     damageOverride: dmg,
   });
@@ -63691,7 +63930,7 @@ socket.on('nameRefused', () => console.warn('[auth] the server refused this name
 socket.on('playerHit', data => {
   const healthOnly = data.healthEvent === 'environment' || data.healthEvent === 'heal';
   if (data.shooterId && data.weapon) noteKillInfo(data.targetId, data.shooterId, data.weapon, data.headshot, { tags: data.tags });   // for the kill feed
-  _othersHackHit(data);                                                // a Hacker skin's flash and code on the victim, for everyone who is not the shooter
+  _othersSkinHit(data);                                                // a hit look's flash on the victim (the Hacker, X!@&!@ and Midas skins), for everyone who is not the shooter
   // Range mode: player is invincible — just ignore any damage (no healSelf to avoid server loop)
   if (data.targetId === myId && match?.type === 'range') {
     updateHealthHUD(300);
@@ -63803,7 +64042,7 @@ socket.on('playerHit', data => {
       // falls here; the credit comes with the server's playerDied, which names the killer.
       hitBot.dead = true;
       if (players[data.targetId]) players[data.targetId].dead = true;
-      if (finisherChoiceOf(data.shooterId) || _isHackSkin(data.skin)) triggerFinisher(data.targetId, data.weapon, data.shooterId, data.skin);   // their finisher, as they chose it (or the crash of their Hacker skin)
+      if (finisherChoiceOf(data.shooterId) || _hitKindOfSkin(data.skin)) triggerFinisher(data.targetId, data.weapon, data.shooterId, data.skin);   // their finisher, as they chose it (or the crash of their Hacker skin)
       dropBody(data.targetId);
     } else if (hitBot.hp <= 0) {
       hitBot.dead = true;
@@ -63966,7 +64205,7 @@ socket.on('playerDied', data => {
   }
   if (remoteMeshes[data.targetId]) {
     if (data.killerId === myId && data.targetId !== myId) triggerFinisher(data.targetId, data.weapon || currentEquippedId());
-    else if (data.killerId && data.killerId !== myId && data.targetId !== myId && (finisherChoiceOf(data.killerId) || _isHackSkin(data.skin))) triggerFinisher(data.targetId, data.weapon, data.killerId, data.skin);   // another player's finisher, or the crash of their Hacker skin
+    else if (data.killerId && data.killerId !== myId && data.targetId !== myId && (finisherChoiceOf(data.killerId) || _hitKindOfSkin(data.skin))) triggerFinisher(data.targetId, data.weapon, data.killerId, data.skin);   // another player's finisher, or the crash of their Hacker skin
     dropBody(data.targetId);   // falls, then hides (#34)
   }
   const bot = resolveBot(data.targetId);
@@ -75841,6 +76080,9 @@ const CLIENT_SKIN_CASES = {
   gen2_entrances: { name: 'Skin Case Gen 2', shortName: 'GEN 2', cost: SKIN_CASE_GEN2_COST, defs: () => GEN2_SKIN_DEFS.filter(skinShown), accent: '#c9a6ff' },
 };
 function skinCaseDef(caseId) { return CLIENT_SKIN_CASES[caseId] || CLIENT_SKIN_CASES.gen1_basic; }
+// The colour of a rarity on the reel and in the reveal (public/lobby-case.js has the same table as numbers for the 3D case). EPIC and MYTHIC are the Gen 2 case's two new top tiers.
+const RARITY_CSS = { lame: '#a1aab4', basic: '#79b8ef', good: '#62e8a0', rare: '#a78bfa', epic: '#ff7a2e', mythic: '#ff2a3d', legend: '#ffca55', legendary: '#ffca55', donut: '#ff80b8' };
+const rarityCss = r => RARITY_CSS[r] || RARITY_CSS.basic;
 function skinDefById(skinId) {
   return GEN1_SKIN_BY_ID[skinId] || GEN2_SKIN_BY_ID[skinId] ||
     MODEL_SKINS.find(s => s.id === skinId) || MELEE_MODEL_SKINS.find(s => s.id === skinId) ||
@@ -75919,12 +76161,13 @@ function showSkinCaseOpening(skinId, duplicate, caseId = 'gen1_basic') {
       <div style="font-size:13px;letter-spacing:4px;color:${accent};margin-bottom:12px;">📦 ${c.shortName} CASE</div>
       <div id="case-reel" style="display:flex;gap:8px;transform:translateX(0);transition:transform 2.4s cubic-bezier(.12,.8,.08,1);margin:18px 0 20px;">
         ${roll.map(s => `<div style="flex:0 0 150px;height:92px;background:#171923;border:1px solid ${s.id===skin.id?'#ffdd66':'#444'};border-radius:6px;padding:10px;display:flex;flex-direction:column;justify-content:center;">
-          <div style="font-size:10px;color:#8aa;letter-spacing:1px;">${(s.rarity || 'basic').toUpperCase()}</div>
+          <div style="font-size:10px;color:${rarityCss(s.rarity)};letter-spacing:1px;">${(s.rarity || 'basic').toUpperCase()}</div>
           <div style="font-size:13px;color:${s.id===skin.id?'#ffdd66':'#ddd'};font-weight:bold;">${s.name}</div>
         </div>`).join('')}
       </div>
       <div id="case-result" style="opacity:0;transform:scale(.9);transition:all .45s ease;">
-        <div style="font-size:28px;color:#ffdd66;font-weight:bold;margin-bottom:6px;">${skin.name}</div>
+        <div style="font-size:28px;color:${skin.rarity === 'epic' || skin.rarity === 'mythic' ? rarityCss(skin.rarity) : '#ffdd66'};font-weight:bold;margin-bottom:2px;${skin.rarity === 'epic' || skin.rarity === 'mythic' ? 'text-shadow:0 0 18px ' + rarityCss(skin.rarity) + '99;' : ''}">${skin.name}</div>
+        <div style="font-size:11px;letter-spacing:3px;color:${rarityCss(skin.rarity)};margin-bottom:6px;">${(skin.rarity || 'basic').toUpperCase()}</div>
         <div style="font-size:12px;color:#9ab;line-height:1.5;">${skin.blurb || ''}</div>
         ${duplicate ? '<div style="font-size:11px;color:#ff9966;margin-top:8px;">Duplicate. Emotionally devastating, mechanically harmless.</div>' : '<div style="font-size:11px;color:#88ff99;margin-top:8px;">NEW SKIN UNLOCKED</div>'}
       </div>

@@ -1,7 +1,7 @@
 (function () {
   'use strict';
   let state = null;
-  const colors = { lame:0xa1aab4, basic:0x79b8ef, good:0x62e8a0, rare:0xa78bfa, legend:0xffca55, donut:0xff80b8 };
+  const colors = { lame:0xa1aab4, basic:0x79b8ef, good:0x62e8a0, rare:0xa78bfa, epic:0xff7a2e, mythic:0xff2a3d, legend:0xffca55, legendary:0xffca55, donut:0xff80b8 };   // epic / mythic: the new top tiers of the Gen 2 case
   const ease = t => { t=Math.max(0,Math.min(1,t));return t*t*(3-2*t); };
   function sound(name,volume=.6) { try { playSoundEvent(name,{volume,minGap:0}); } catch (_) {} }
   function mesh(parent,geometry,material,x=0,y=0,z=0) {

@@ -4559,14 +4559,14 @@ if (ok && process.argv.includes('--hacker')) {
     skinHitFX = (kind, pos, on) => { at.push([kind, pos.y, on]); }; flashScreen = () => { flashes.push(1); };
     remoteMeshes.vic = { visible: true, position: new THREE.Vector3(3, 0, 3) };
     try {
-      _othersHackHit({ shooterId: 'someone', targetId: 'vic', skin: 'ak20_hacker' });
+      _othersSkinHit({ shooterId: 'someone', targetId: 'vic', skin: 'ak20_hacker' });
       if (at.length !== 1 || at[0][0] !== 'hack' || Math.abs(at[0][1] - 1.2) > 0.01 || at[0][2] !== true) issues.push('a hacker hit by somebody else should flash the victim at chest height: ' + JSON.stringify(at));
-      at.length = 0; _othersHackHit({ shooterId: myId, targetId: 'vic', skin: 'ak20_hacker' });
+      at.length = 0; _othersSkinHit({ shooterId: myId, targetId: 'vic', skin: 'ak20_hacker' });
       if (at.length) issues.push('the shooter does not flash it a second time from the server message');
-      _othersHackHit({ shooterId: 'someone', targetId: 'vic', skin: 'pistol_m9' }); _othersHackHit({ shooterId: 'someone', targetId: 'vic' }); _othersHackHit({ shooterId: 'someone', targetId: 'vic', skin: '<b>' });
+      _othersSkinHit({ shooterId: 'someone', targetId: 'vic', skin: 'pistol_m9' }); _othersSkinHit({ shooterId: 'someone', targetId: 'vic' }); _othersSkinHit({ shooterId: 'someone', targetId: 'vic', skin: '<b>' });
       if (at.length) issues.push('a stock skin, no skin and a made-up id flash nothing');
-      remoteMeshes.vic.visible = false; _othersHackHit({ shooterId: 'someone', targetId: 'vic', skin: 'ak20_hacker' }); if (at.length) issues.push('a hidden body is not flashed'); remoteMeshes.vic.visible = true;
-      _othersHackHit({ shooterId: 'someone', targetId: myId, skin: 'ak20_hacker' });
+      remoteMeshes.vic.visible = false; _othersSkinHit({ shooterId: 'someone', targetId: 'vic', skin: 'ak20_hacker' }); if (at.length) issues.push('a hidden body is not flashed'); remoteMeshes.vic.visible = true;
+      _othersSkinHit({ shooterId: 'someone', targetId: myId, skin: 'ak20_hacker' });
       if (at.length || flashes.length !== 1) issues.push('when it is you they hit, you get a green blink and nothing is drawn in the world (flashes ' + flashes.length + ', draws ' + at.length + ')');
     } finally { [skinHitFX, flashScreen] = spied; delete remoteMeshes.vic; myId = keepMe; }
     // the crash on somebody else's kill: only for a hacker skin id, and the server's id decides (their weapon is whatever it was)
@@ -4590,6 +4590,124 @@ if (ok && process.argv.includes('--hacker')) {
     return issues;
   })()`);
   console.log('hacker seen by others checks: the hit carries the hacker skin id (gun, grenade, axe), a screen that is not the shooter\'s flashes the victim and crashes a kill\'s body only for a hacker skin, once, and their grenade throws its code');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
+if (ok && process.argv.includes('--epic')) {
+  // EPIC and MYTHIC, the Gen 2 case's two new top rarities (Andy: "we are starting a new rarity: EPIC and MYTHIC inside of the skin case"): the Midas Revolver (EPIC) and X!@&!@ (MYTHIC) are real skins with
+  // an entrance, a round, a hit look, a kill of their own, and the case (server.js) deals them, rarest of all. The shared hit styles (hack / error / gold) route hits, counters and kills.
+  const server = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  const lobby = fs.readFileSync(path.join(__dirname, '..', 'public', 'lobby-case.js'), 'utf8');
+  const listOf = (name) => { const m = server.match(new RegExp('const ' + name + ' = \\[([^\\]]*)\\]')); return m ? [...m[1].matchAll(/'([a-z0-9_]+)'/g)].map(x => x[1]) : null; };
+  const epicIds = listOf('GEN2_EPIC_SKIN_IDS'), mythicIds = listOf('GEN2_NEW_MYTHIC_SKIN_IDS');
+  const issues = vm.runInThisContext(`((epicIds, mythicIds, lobby, gameSrc) => {
+    const issues = [];
+    if (!epicIds || !mythicIds) return ['server.js has no GEN2_EPIC_SKIN_IDS / GEN2_NEW_MYTHIC_SKIN_IDS'];
+    const midas = MODEL_SKINS.find(m => m.id === 'revolver_midas'), xe = MODEL_SKINS.find(m => m.id === 'ak20_xerror');
+    if (!midas || !xe) return ['revolver_midas / ak20_xerror are missing from MODEL_SKINS'];
+    // the tiers, on the reel and in the 3D case
+    if (midas.rarity !== 'epic') issues.push('the Midas Revolver is EPIC, not ' + midas.rarity);
+    if (xe.rarity !== 'mythic') issues.push('X!@&!@ is MYTHIC, not ' + xe.rarity);
+    if (xe.name !== 'X!@&!@') issues.push('the skin is called X!@&!@, not ' + xe.name);
+    for (const r of ['epic', 'mythic']) { if (!RARITY_CSS[r]) issues.push('the reel has no colour for ' + r); if (!new RegExp(r + ':0x[0-9a-f]{6}').test(lobby)) issues.push('the 3D case has no colour for ' + r); }
+    if (RARITY_CSS.epic === RARITY_CSS.mythic || RARITY_CSS.epic === RARITY_CSS.rare || RARITY_CSS.mythic === RARITY_CSS.legend) issues.push('the new rarities should each have a colour of their own');
+    // case membership: the same ids on both sides, and they are Gen 2 skins (the picker locks them until pulled)
+    if (JSON.stringify(epicIds) !== JSON.stringify(['revolver_midas'])) issues.push('server EPIC list should be the Midas Revolver: ' + epicIds);
+    if (JSON.stringify(mythicIds) !== JSON.stringify(['ak20_xerror'])) issues.push('server MYTHIC list should be X!@&!@: ' + mythicIds);
+    for (const id of [...epicIds, ...mythicIds]) { if (!GEN2_MODEL_SKIN_IDS.has(id)) issues.push(id + ' is dealt by the server but the picker would not lock it (GEN2_MODEL_SKIN_IDS)'); if (GEN1_GATED_MODEL_SKIN_IDS.has(id)) issues.push(id + ' is in the Gen 1 case too'); }
+    // an entrance, like every Gen 2 skin; no sound profile (their shots are SKIN_VOICE / SKIN_CHIME and a profile would out-vote the recordings)
+    for (const [id, equip] of [['revolver_midas', 'midas'], ['ak20_xerror', 'glitch']]) {
+      const fx = SKIN_FX[id]; if (!fx || fx.equip !== equip || !(fx.equipMs > 0)) issues.push(id + ' needs an entrance (' + equip + ')'); else if (fx.sound) issues.push(id + ' should not carry a sound profile: its shot is its own');
+    }
+    if (!/case 'midas':/.test(gameSrc)) issues.push('the midas entrance has no animation (case \\'midas\\' in the equip switch)');
+    if (!/type === 'midas'\\) ps\\.sort/.test(gameSrc) && !/type === 'inflate' \\|\\| type === 'midas'/.test(gameSrc)) issues.push('the midas entrance should order its pieces back to front');
+    // rounds
+    const Tm = SKIN_SHOT.revolver_midas, Tx = SKIN_SHOT.ak20_xerror;
+    if (!Tm || Tm.shot.shape !== 'goldbullet' || !SKIN_SHAPES.goldbullet) issues.push('the Midas round should be the goldbullet shape');
+    if (!Tx || Tx.shot.shape !== 'hackbullet' || Tx.shot.c[1] !== 0xff2a3d) issues.push('the X!@&!@ round should be the hackbullet shape in red');
+    for (const sk of [midas, xe]) { const m = makeBulletMesh(0xffffff, 0.045, sk.weapon, true, skinLookFor(sk)); let n = 0; m.traverse(o => { if (o.geometry) n++; }); if (n < 3) issues.push(sk.id + ' round should be a body, a tip and a trail, found ' + n + ' parts'); }
+    // the styles
+    for (const k of ['hack', 'error', 'gold']) { const S = HIT_STYLES[k]; if (!S || !S.num || !S.screen || !S.scramble || !S.glow) issues.push('hit style ' + k + ' is incomplete'); }
+    if (_hitKindOfSkin('revolver_midas') !== 'gold' || _hitKindOfSkin('ak20_xerror') !== 'error' || _hitKindOfSkin('ak20_hacker') !== 'hack' || _hitKindOfSkin('pistol_m9') !== null || _hitKindOfSkin(null) !== null || _hitKindOfSkin('<b>') !== null) issues.push('the hit style of a skin id is wrong: ' + [_hitKindOfSkin('revolver_midas'), _hitKindOfSkin('ak20_xerror'), _hitKindOfSkin('ak20_hacker'), _hitKindOfSkin('pistol_m9')]);
+    // models
+    { const g = buildMidasRevolver(); let gold = 0, steel = 0, coin = 0, ruby = 0, stars = 0;
+      g.traverse(o => { if (o.isSprite) stars++; if (!o.isMesh || !o.material) return; const h = o.material.color && o.material.color.getHex(); if (o.material.map) coin++; else if (h === 0xffd24a || h === 0xc08a20) gold++; else if (h === 0xd0102a) ruby++; else if (o.material.userData && o.material.userData.weaponMaterial) steel++; });
+      if (gold < 20) issues.push('the Midas Revolver should be gold all over, found ' + gold + ' gold parts');
+      if (steel) issues.push(steel + ' steel parts were left on the Midas Revolver');
+      if (ruby < 2 || coin < 2) issues.push('a ruby and a coin in each grip (rubies ' + ruby + ', coins ' + coin + ')');
+      if (stars < 3 || typeof g._tick !== 'function') issues.push('the Midas Revolver should glint (sprites ' + stars + ', tick ' + typeof g._tick + ')');
+      if (!g._parts || !g._parts.main || g._parts.main._chambers !== 6) issues.push('the cylinder must still turn (the stock revolver parts survive)'); }
+    { const g = buildErrorAK(); let lit = 0, lines = 0, checker = 0; const skip = new Set(); if (g._flash) g._flash.traverse(o => skip.add(o));
+      g.traverse(o => { if (o.isLineSegments) lines++; if (!o.isMesh || skip.has(o) || !o.material) return; if (!o.material.isMeshBasicMaterial) lit++; else if (o.material.map && o.material.map.wrapS === THREE.RepeatWrapping && !o.userData.screen) checker++; });
+      if (lit) issues.push(lit + ' parts of X!@&!@ are lit materials: it is unlit like the Hacker skins');
+      if (lines < 30) issues.push('X!@&!@ should be outlined, found ' + lines + ' line sets');
+      if (checker < 3) issues.push('X!@&!@ should wear the checker on its big parts, found ' + checker);
+      if (!g._sightLine || !g._hasDefaultAimer) issues.push('X!@&!@ lost the rifle sights');
+      if (typeof g._tick !== 'function') issues.push('X!@&!@ must run (checker, shards, cube, screen)');
+      const t0 = g.children.filter(c => c.userData && c.userData.eqFx).length; if (t0 < 2) issues.push('its shards and its cube are effects the entrance leaves alone (eqFx), found ' + t0); }
+    // they are locked until the case deals them (a player who does not own the skin cannot wear it), and open once it is in the inventory
+    { const keepUser = currentUser;
+      try {
+        currentUser = { username: 't', isAdmin: false, skinInventory: [] };
+        if (!isCaseSkinLocked(midas) || !isCaseSkinLocked(xe)) issues.push('a player who has not pulled them cannot wear the Midas Revolver or X!@&!@');
+        currentUser = { username: 't', isAdmin: false, skinInventory: ['revolver_midas', 'ak20_xerror'] };
+        if (isCaseSkinLocked(midas) || isCaseSkinLocked(xe)) issues.push('a player who pulled them can wear them');
+      } finally { currentUser = keepUser; } }
+    return issues;
+  })(${JSON.stringify(epicIds)}, ${JSON.stringify(mythicIds)}, ${JSON.stringify(lobby)}, ${JSON.stringify(src)})`);
+  console.log('epic / mythic checks: the Midas Revolver (EPIC) and X!@&!@ (MYTHIC) are Gen 2 skins with an entrance, a round, a model that is what it says, their own tier colours, and the hit styles route them');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+if (ok && process.argv.includes('--epic')) {
+  // ...and what those styles do. Each style flashes its own colour, scrambles its own counter, and ends a kill its own way, on the shooter's screen and on everybody else's.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [], keep = { revolver: _modelSkinLook.revolver, ak20: _modelSkinLook.ak20 }, keepMe = myId; myId = 'me_test';
+    const spied = [spawnHitNumber, trackTotalDamage, playSoundEvent, skinHitFX, flashScreen, _hackDigits, _coinBurst, playGlitchFinisher, playGoldFinisher];
+    const fx = [], digits = [], coins = [], nums = [], flashes = [], crashes = [];
+    spawnHitNumber = (a, b, c, d, e, kind) => { nums.push(kind); }; trackTotalDamage = () => {}; playSoundEvent = () => {};
+    skinHitFX = (kind, pos, on) => { fx.push(kind); }; flashScreen = (c) => { flashes.push(c); };
+    _hackDigits = (pos, n, a, b, c, d, style) => { digits.push(style); }; _coinBurst = () => { coins.push(1); };
+    playGlitchFinisher = (id, style) => { crashes.push(['glitch', style || 'hack']); return true; }; playGoldFinisher = (id) => { crashes.push(['gold']); return true; };
+    try {
+      // your own hit: the style of what you hold decides the number and the flash
+      _modelSkinLook.revolver = Object.assign({ skinId: 'revolver_midas' }, MODEL_SKINS.find(m => m.id === 'revolver_midas').look);
+      _modelSkinLook.ak20 = skinLookFor(MODEL_SKINS.find(m => m.id === 'ak20_xerror'));
+      hitFeedback('t', null, new THREE.Vector3(0, 1, -5), 40, false, 1, null, 'revolver'); hitFeedback('t', null, new THREE.Vector3(9, 1, -5), 22, false, 1, null, 'ak20');
+      if (nums.join() !== 'gold,error') issues.push('the damage counter should take the style of the skin (gold, error): ' + nums.join());
+      if (fx.join() !== 'gold,error') issues.push('the flash should take the style of the skin: ' + fx.join());
+      if (_skinHitId('revolver') !== 'revolver_midas' || _skinHitId('ak20') !== 'ak20_xerror') issues.push('the hit should carry the skin id: ' + _skinHitId('revolver') + ', ' + _skinHitId('ak20'));
+      // somebody else's hit, from the server: each its own colour on the victim, and on you
+      fx.length = 0; flashes.length = 0; remoteMeshes.vic = { visible: true, position: new THREE.Vector3(3, 0, 3) };
+      _othersSkinHit({ shooterId: 'x', targetId: 'vic', skin: 'revolver_midas' }); _othersSkinHit({ shooterId: 'x', targetId: 'vic', skin: 'ak20_xerror' }); _othersSkinHit({ shooterId: 'x', targetId: 'vic', skin: 'ak20_hacker' });
+      if (fx.join() !== 'gold,error,hack') issues.push('hits by somebody else should flash in the styles of their skins: ' + fx.join());
+      _othersSkinHit({ shooterId: 'x', targetId: myId, skin: 'ak20_xerror' }); _othersSkinHit({ shooterId: 'x', targetId: myId, skin: 'revolver_midas' });
+      if (flashes[0] !== HIT_STYLES.error.screen || flashes[1] !== HIT_STYLES.gold.screen) issues.push('when it is you they hit, the blink is the colour of their skin: ' + flashes.join(' | '));
+      _othersSkinHit({ shooterId: 'x', targetId: 'vic', skin: 'pistol_m9' }); _othersSkinHit({ shooterId: myId, targetId: 'vic', skin: 'revolver_midas' });
+      if (fx.length !== 3) issues.push('a stock skin and your own echo from the server flash nothing');
+      delete remoteMeshes.vic;
+      // the kill: gold turns to a statue, X!@&!@ crashes in red, the hacker in green; yours and theirs
+      triggerFinisher('v', 'revolver', myId); triggerFinisher('v', 'ak20', myId); triggerFinisher('v', 'ak20', 'someone', 'ak20_hacker'); triggerFinisher('v', 'ak20', 'someone', 'ak20_xerror'); triggerFinisher('v', 'revolver', 'someone', 'revolver_midas');
+      if (JSON.stringify(crashes) !== JSON.stringify([['gold'], ['glitch', 'error'], ['glitch', 'hack'], ['glitch', 'error'], ['gold']])) issues.push('each kill should end in its own style: ' + JSON.stringify(crashes));
+      crashes.length = 0; triggerFinisher('v', 'ak20', 'someone', 'pistol_m9'); if (crashes.length) issues.push('a stock skin crashes nothing');
+    } finally { [spawnHitNumber, trackTotalDamage, playSoundEvent, skinHitFX, flashScreen, _hackDigits, _coinBurst, playGlitchFinisher, playGoldFinisher] = spied; myId = keepMe; for (const k of Object.keys(keep)) { if (keep[k]) _modelSkinLook[k] = keep[k]; else delete _modelSkinLook[k]; } delete remoteMeshes.vic; }
+    // the real flash of each style (not stubbed): gold spills coins, the others glyphs; one burst per hit
+    { const sp = [_hackDigits, _coinBurst]; const got = { coins: 0, digits: [] }; _coinBurst = () => { got.coins++; }; _hackDigits = (a, b, c, d, e, f, st) => { got.digits.push(st); };
+      try { _hackFxAt = 0; skinHitFX('gold', new THREE.Vector3(1, 1, 1), true); _hackFxAt = 0; skinHitFX('error', new THREE.Vector3(8, 1, 1), true); _hackFxAt = 0; skinHitFX('hack', new THREE.Vector3(16, 1, 1), true); _hackFxAt = 0; skinHitFX('nonsense', new THREE.Vector3(24, 1, 1), true); }
+      finally { [_hackDigits, _coinBurst] = sp; }
+      if (got.coins !== 1 || got.digits.join() !== 'error,hack') issues.push('gold should spill coins and the others glyphs in their own style (coins ' + got.coins + ', glyphs ' + got.digits.join() + ')'); }
+    // the counters scramble in their own colours, with their own characters
+    for (const [k, col, re] of [['hack', '#39ff6a', /^[0-9]+$/], ['error', '#ff2a3d', /^[X!@&#?%$0-3]+$/], ['gold', '#ffd24a', /^[0-9]+$/]]) {
+      const el = { style: {}, textContent: '25', isConnected: true }; _hackFlicker(el, '25', k);
+      if (el.style.color !== col || !re.test(el.textContent)) issues.push(k + ' counter: ' + JSON.stringify(el.style.color) + ' ' + el.textContent); el._hackToken = null;
+    }
+    // the chime of the Midas Revolver is for the one wearing it, on their own shots
+    const keepSk = _activeModelSkin.revolver; _activeModelSkin.revolver = MODEL_SKINS.find(m => m.id === 'revolver_midas');
+    try { if (typeof skinChimeFor('revolver') !== 'function') issues.push('the Midas Revolver should ring after its shot'); } finally { if (keepSk) _activeModelSkin.revolver = keepSk; else delete _activeModelSkin.revolver; }
+    if (skinChimeFor('revolver')) issues.push('a stock revolver does not ring');
+    if (typeof SKIN_VOICE.ak20_xerror !== 'function') issues.push('X!@&!@ should make its own shot (SKIN_VOICE)');
+    return issues;
+  })()`);
+  console.log('epic / mythic style checks: gold / error / hack each flash, count and end a kill in their own style, for the shooter and for everybody else, and the Midas shot rings');
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 

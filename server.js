@@ -464,12 +464,18 @@ const GEN2_GOOD_SKIN_IDS = [
 ];
 // The Neon Rift series: seven Gen 2 skins that light up. Ordinary rarity, so they drop alongside the other 'rare' entrances.
 GEN2_RARE_SKIN_IDS.push('ak20_cyberpunk', 'srx_cyberpunk', 'sg8_cyberpunk', 'vector_cyberpunk', 'pistol_cyberpunk', 'mp40_cyberpunk', 'revolver_cyberpunk');
-const GEN2_SKIN_IDS = [...GEN2_MYTHIC_SKIN_IDS, ...GEN2_LEGENDARY_SKIN_IDS, ...GEN2_RARE_SKIN_IDS, ...GEN2_GOOD_SKIN_IDS];
+// 🟠🔴 The case's two newest top rarities, EPIC and MYTHIC (MODEL_SKINS rarity 'epic' / 'mythic' in public/game.js): the Midas Revolver and X!@&!@. Both have an entrance like every Gen 2 skin; what is new is how
+// rare they are. (The donut guns above are this file's old "mythic" tier and still show as DONUT on the reel. The new MYTHIC is rarer than any single one of them.)
+const GEN2_EPIC_SKIN_IDS = ['revolver_midas'];
+const GEN2_NEW_MYTHIC_SKIN_IDS = ['ak20_xerror'];
+const GEN2_SKIN_IDS = [...GEN2_MYTHIC_SKIN_IDS, ...GEN2_NEW_MYTHIC_SKIN_IDS, ...GEN2_EPIC_SKIN_IDS, ...GEN2_LEGENDARY_SKIN_IDS, ...GEN2_RARE_SKIN_IDS, ...GEN2_GOOD_SKIN_IDS];
 const GEN2_SKIN_WEIGHTS = {};
 for (const id of GEN2_MYTHIC_SKIN_IDS) GEN2_SKIN_WEIGHTS[id] = 1;
 for (const id of GEN2_LEGENDARY_SKIN_IDS) GEN2_SKIN_WEIGHTS[id] = 2;
 for (const id of GEN2_RARE_SKIN_IDS) GEN2_SKIN_WEIGHTS[id] = 3;
 for (const id of GEN2_GOOD_SKIN_IDS) GEN2_SKIN_WEIGHTS[id] = 6;
+for (const id of GEN2_EPIC_SKIN_IDS) GEN2_SKIN_WEIGHTS[id] = 1.5;          // a bit rarer than the Rainbow AK (2) and half a rare skin (3)
+for (const id of GEN2_NEW_MYTHIC_SKIN_IDS) GEN2_SKIN_WEIGHTS[id] = 0.5;    // half as likely as any one donut gun
 // 🗄️ A skin belongs to its weapon. Once the weapon is archived (out of the shop, the loadouts and the chests) its skins go
 // with it: no case drops them any more. Anyone who already pulled one keeps it (it is still in their inventory, and
 // the admin still gets everything). Mirrors the skins of every `archived: true` item in public/game.js (gotcha #4);
