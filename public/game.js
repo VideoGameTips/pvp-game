@@ -27306,7 +27306,7 @@ function buildFencingFoil() {
   const steel = _skM(0xd8dee6, 200, 0xffffff), bell = _skM(0xc8ccd2, 180, 0xffffff);
   const grip = _skM(0x1c1c1e, 30, 0x444444), brass = _skM(0xd8b040, 180, 0xfff0a0);
   const red = _skM(0xd8302a, 100, 0xffa098);
-  gpCyl(g, steel, 0.0045, 0.0018, 0.300, 8, 0, 0.012, -0.100);         // blade
+  const blade = gpCyl(g, steel, 0.0045, 0.0018, 0.300, 8, 0, 0.012, -0.100);         // blade
   gpCyl(g, red, 0.0035, 0.0035, 0.008, 8, 0, 0.012, -0.254);           // button tip
   gpCyl(g, bell, 0.010, 0.030, 0.034, 16, 0, 0.012, 0.062);            // bell guard
   gpCyl(g, bell, 0.031, 0.031, 0.004, 16, 0, 0.012, 0.046);            // guard rim
@@ -27314,7 +27314,22 @@ function buildFencingFoil() {
   gpCyl(g, brass, 0.013, 0.013, 0.020, 10, 0, 0.012, 0.180);           // pommel
   gpCyl(g, _skM(0x2a2c30, 20), 0.0025, 0.0025, 0.080, 6, 0, -0.020, 0.200, 1.0); // body wire
   _skGrip(g, grip, -0.004);
-  return _skFinish(g, -0.262, 0.012, 0.010);
+  const dark = _skM(0x2a2c30, 20), led = new THREE.MeshBasicMaterial({ color: 0x3aff6a });
+  gpCyl(g, dark, 0.026, 0.026, 0.003, 16, 0, 0.012, 0.0475);           // the pad inside the bell
+  gpBox(g, dark, 0.010, 0.006, 0.020, 0, 0.024, 0.090);                 // thumb pad
+  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; gpCyl(g, dark, 0.0034, 0.0034, 0.004, 8, Math.cos(a) * 0.020, 0.012 + Math.sin(a) * 0.020, 0.063); }   // the bell's holes
+  for (let i = 0; i < 3; i++) gpCyl(g, grip, 0.0100 - i * 0.0004, 0.0100 - i * 0.0004, 0.004, 10, 0, 0.012, 0.100 + i * 0.022);   // grip bands
+  const light = new THREE.Mesh(new THREE.SphereGeometry(0.0065, 8, 6), led); light.position.set(0, 0.034, 0.100); g.add(light);     // the scoring light
+  for (let i = 0; i < 4; i++) { const c = new THREE.Mesh(new THREE.TorusGeometry(0.006, 0.0014, 5, 10), dark); c.position.set(0.004 * i, -0.022 - i * 0.004, 0.206 + i * 0.016); c.rotation.x = 0.6; g.add(c); }   // the wire's coil
+  _skFinish(g, -0.262, 0.012, 0.010);
+  let amp = 0, was = false;
+  g._tick = (dt, now) => {
+    const fired = !!(g._flash && g._flash.visible); if (fired && !was) amp = 1; was = fired;
+    amp = Math.max(0, amp - dt * 2.2);
+    blade.rotation.x = Math.PI / 2 + Math.sin(now / 38) * 0.05 * amp; blade.rotation.z = Math.sin(now / 47) * 0.04 * amp;   // the blade whips after a thrust
+    light.material.color.setHex(amp > 0.05 ? 0xff3030 : 0x3aff6a);
+  };
+  return g;
 }
 
 function buildCordReel() {
@@ -27334,7 +27349,21 @@ function buildCordReel() {
   gpBox(g, dark, 0.052, 0.008, 0.008, 0, 0.084, -0.050);
   gpCyl(g, cord, 0.004, 0.004, 0.090, 6, 0, -0.040, 0.070, 1.2);       // trailing cord
   _skGrip(g, dark, -0.030);
-  return _skFinish(g, -0.142, 0, 0.014);
+  const hubSpin = new THREE.Group(); hubSpin.position.set(0, 0, -0.0425); g.add(hubSpin);          // the front of the drum: six spokes, turning
+  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; gpBox(hubSpin, dark, 0.006, 0.040, 0.003, Math.sin(a) * 0.027, Math.cos(a) * 0.027, 0, 0, 0, -a); }
+  gpCyl(hubSpin, yellow, 0.010, 0.010, 0.004, 10, 0, 0, 0.001);
+  const breaker = _skM(0xd8302a, 100, 0xffa098); gpBox(g, breaker, 0.012, 0.010, 0.010, 0.016, 0.026, -0.098);   // the reset button
+  const lamp = new THREE.MeshBasicMaterial({ color: 0x3aff6a }); gpBox(g, lamp, 0.006, 0.004, 0.006, -0.014, 0.026, -0.098);
+  gpBox(g, yellow, 0.002, 0.014, 0.030, 0.0285, 0.0, -0.098);          // warning label
+  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; gpBox(g, dark, 0.003, 0.003, 0.003, Math.sin(a) * 0.052, Math.cos(a) * 0.052, -0.042); }   // flange bolts
+  gpCyl(g, dark, 0.006, 0.006, 0.014, 8, 0, -0.046, 0.140, 1.2); gpBox(g, dark, 0.020, 0.012, 0.016, 0, -0.050, 0.150);   // and the plug on the cord's end
+  _skFinish(g, -0.142, 0, 0.014);
+  let spin = 0.6;
+  g._tick = (dt, now) => {
+    const fired = !!(g._flash && g._flash.visible); spin += ((fired ? 18 : 0.6) - spin) * Math.min(1, dt * 7);
+    hubSpin.rotation.z += dt * spin; lamp.color.setHex(fired ? 0xffcc20 : 0x3aff6a);
+  };
+  return g;
 }
 
 function buildMailingTube() {
@@ -27352,6 +27381,15 @@ function buildMailingTube() {
   for (let i = 0; i < 6; i++) gpBox(g, ink, 0.0035, 0.022, i % 2 ? 0.003 : 0.005, -0.038, 0.010, -0.058 + i * 0.011); // barcode
   gpBox(g, cap, 0.003, 0.008, 0.070, -0.0365, 0.040, -0.030);          // FRAGILE stripe
   _skGrip(g, tape, -0.020);
+  const red2 = cap;
+  for (const [z, w] of [[-0.130, 0.014], [-0.010, 0.010]]) gpCyl(g, tape, 0.0368, 0.0368, w, 16, 0, 0.014, z);   // more tape
+  for (let i = 0; i < 3; i++) { const st = gpBox(g, [red2, ink, label][i % 3], 0.0035, 0.012, 0.012, -0.0372, 0.036, -0.100 + i * 0.014); }   // postage stamps
+  gpCyl(g, ink, 0.009, 0.009, 0.0035, 12, -0.0372, 0.028, -0.062, 0, Math.PI / 2);                 // a postmark
+  gpCyl(g, label, 0.0072, 0.0072, 0.0038, 12, -0.0374, 0.028, -0.062, 0, Math.PI / 2);
+  gpBox(g, ink, 0.0036, 0.004, 0.030, -0.0376, 0.004, -0.004);                                    // THIS END UP, and the arrow
+  gpBox(g, ink, 0.0036, 0.012, 0.004, -0.0376, 0.012, 0.014);
+  for (let i = 0; i < 2; i++) gpBox(g, ink, 0.0036, 0.003, 0.010, -0.0376, 0.017 - i * 0.001, 0.010 + i * 0.008, 0, 0, i ? -0.8 : 0.8);
+  gpBox(g, kraft, 0.040, 0.004, 0.030, 0, 0.050, 0.150);                                          // a dent where it was dropped
   return _skFinish(g, -0.252, 0.014, 0.018);
 }
 
@@ -27366,14 +27404,25 @@ function buildKaleidoscope() {
   [-0.150, -0.060, 0.030].forEach(z => gpCyl(g, dark, 0.0275, 0.0275, 0.008, 14, 0, 0.014, z)); // bands
   gpCyl(g, brass, 0.032, 0.034, 0.030, 14, 0, 0.014, -0.190);         // object cell
   gpCyl(g, _skGlass(0x88ddff), 0.030, 0.030, 0.022, 14, 0, 0.014, -0.200); // glass
-  for (let i = 0; i < 6; i++) {                                         // the loose glass
+  const cell = new THREE.Group(); cell.position.set(0, 0.014, -0.2135); g.add(cell);                  // the loose glass, in a cell that turns
+  for (let i = 0; i < 6; i++) {
     const a = (i / 6) * Math.PI * 2;
-    gpBox(g, gems[i], 0.008, 0.008, 0.004, Math.cos(a) * 0.017, 0.014 + Math.sin(a) * 0.017, -0.2135, 0, 0, a * 2);
+    gpBox(cell, gems[i], 0.008, 0.008, 0.004, Math.cos(a) * 0.017, Math.sin(a) * 0.017, 0, 0, 0, a * 2);
   }
+  for (let i = 0; i < 4; i++) { const a = i / 4 * Math.PI * 2 + 0.4; gpBox(cell, gems[(i + 2) % 6], 0.005, 0.005, 0.003, Math.cos(a) * 0.008, Math.sin(a) * 0.008, 0.001, 0, 0, a * 3); }
   gpCyl(g, dark, 0.022, 0.016, 0.040, 12, 0, 0.014, 0.095);           // eyepiece
   gpCyl(g, dark, 0.026, 0.026, 0.010, 12, 0, 0.014, 0.120);           // eye cup
   _skGrip(g, brass, 0);
-  return _skFinish(g, -0.222, 0.014, 0.010);
+  for (let i = 0; i < 12; i++) gpBox(g, dark, 0.050, 0.003, 0.004, 0, 0.014, 0.060 + i * 0.0, 0, 0, i * 0.26).position.z = 0.060 + (i % 2) * 0.012;   // a knurled collar
+  for (const z of [-0.105, -0.015]) gpCyl(g, brass, 0.0262, 0.0262, 0.003, 14, 0, 0.014, z);       // fine rings between the bands
+  const glow = new THREE.Mesh(new THREE.SphereGeometry(0.022, 12, 8), new THREE.MeshBasicMaterial({ color: 0xff9aff, transparent: true, opacity: 0.0, depthWrite: false, blending: THREE.AdditiveBlending }));
+  glow.position.set(0, 0.014, -0.225); g.add(glow);
+  _skFinish(g, -0.222, 0.014, 0.010);
+  g._tick = (dt, now) => {
+    const fired = !!(g._flash && g._flash.visible); cell.rotation.z += dt * (fired ? 9 : 0.7);
+    glow.material.opacity += ((fired ? 0.5 : 0.0) - glow.material.opacity) * Math.min(1, dt * 12); glow.material.color.setHSL((now / 2000) % 1, 0.8, 0.65);
+  };
+  return g;
 }
 
 function buildBoombox() {
@@ -27383,9 +27432,10 @@ function buildBoombox() {
   const body = _skM(0x2a2c30, 50, 0x5a5e66), silver = _skM(0xc0c6ce, 160, 0xffffff);
   const red = _skM(0xd8302a, 100, 0xffa098), cone = _skM(0x121416, 20, 0x30343a);
   gpBox(g, body, 0.064, 0.058, 0.190, 0, 0.010, -0.030);               // body
+  const cones = [];
   [-0.070, 0.005].forEach(z => {
     gpCyl(g, silver, 0.021, 0.021, 0.004, 16, -0.033, 0.010, z, 0, Math.PI / 2); // woofer ring
-    gpCyl(g, cone, 0.015, 0.015, 0.006, 16, -0.034, 0.010, z, 0, Math.PI / 2);   // cone
+    cones.push(gpCyl(g, cone, 0.015, 0.015, 0.006, 16, -0.034, 0.010, z, 0, Math.PI / 2));   // cone
     gpCyl(g, silver, 0.005, 0.005, 0.008, 8, -0.035, 0.010, z, 0, Math.PI / 2);  // dust cap
   });
   gpBox(g, cone, 0.032, 0.004, 0.070, 0, 0.040, -0.010);               // cassette door
@@ -27396,7 +27446,22 @@ function buildBoombox() {
   gpBox(g, silver, 0.006, 0.006, 0.130, 0, 0.067, -0.030);
   gpBox(g, red, 0.060, 0.008, 0.004, 0, 0.030, -0.126);                // front stripe
   _skGrip(g, body, -0.010);
-  return _skFinish(g, -0.140, 0.010, 0.020);
+  const barM = [0x3ad86a, 0xe8c828, 0xd8302a].map(c => new THREE.MeshBasicMaterial({ color: c }));
+  const bars = [];                                                                                 // an equaliser across the front, dancing
+  for (let i = 0; i < 7; i++) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.020, 0.0024), barM[0]); b.position.set(-0.018 + i * 0.006, 0.018, -0.1262); g.add(b); bars.push(b); }
+  gpBox(g, cone, 0.044, 0.026, 0.002, 0, 0.018, -0.1255);                                         // its window
+  gpBox(g, silver, 0.030, 0.004, 0.006, 0.0, -0.012, -0.1262);                                    // the tuning dial
+  gpBox(g, red, 0.002, 0.008, 0.007, 0.006, -0.012, -0.1266);
+  gpCyl(g, silver, 0.0025, 0.0025, 0.080, 6, 0.026, 0.060, 0.050, 0, -0.5);                       // a telescopic aerial
+  for (let i = 0; i < 3; i++) gpCyl(g, silver, 0.0035 - i * 0.0006, 0.0035 - i * 0.0006, 0.020, 6, 0.030 + i * 0.006, 0.050 + i * 0.020, 0.050, 0, -0.5);
+  for (const z of [-0.012, 0.012]) gpCyl(g, silver, 0.007, 0.007, 0.003, 10, 0, 0.0405, z + 0.0, Math.PI / 2, 0).position.set(z, 0.0405, -0.010);    // the cassette's two reels, in the door
+  _skFinish(g, -0.140, 0.010, 0.020);
+  g._tick = (dt, now) => {
+    const fired = !!(g._flash && g._flash.visible), t = now / 1000;
+    bars.forEach((b, i) => { const h = 0.3 + 0.7 * Math.abs(Math.sin(t * (5 + i * 1.3) + i)) * (fired ? 1 : 0.55); b.scale.y = h; b.position.y = 0.008 + h * 0.010; b.material = h > 0.8 ? barM[2] : h > 0.55 ? barM[1] : barM[0]; });
+    cones.forEach(c => c.scale.set(1, 1 + (fired ? 0.5 : 0.1) * Math.sin(t * 24), 1));                // the woofers pump
+  };
+  return g;
 }
 
 function buildToaster() {
@@ -27484,15 +27549,24 @@ function buildHolePunch() {
   const black = _skM(0x1c1e22, 40, 0x444850);
   const bits = [0xff4a6a, 0xffd23a, 0x4aa8ff, 0x6aff8a, 0xffffff].map(c => _skM(c, 30));
   gpBox(g, black, 0.050, 0.014, 0.170, 0, 0.000, -0.010);              // base plate
-  gpBox(g, blue, 0.046, 0.016, 0.150, 0, 0.018, -0.010, -0.03);        // lever arm
-  gpBox(g, blue, 0.046, 0.020, 0.060, 0, 0.024, 0.060, -0.10);         // lever handle
+  const lever = new THREE.Group(); lever.position.set(0, 0.014, 0.060); g.add(lever);
+  gpBox(lever, blue, 0.046, 0.016, 0.150, 0, 0.004, -0.070, -0.03);        // lever arm (it pivots at the back)
+  gpBox(lever, blue, 0.046, 0.020, 0.060, 0, 0.010, 0.000, -0.10);         // lever handle
   [-0.012, 0.012].forEach(x => gpCyl(g, steel, 0.006, 0.006, 0.020, 8, x, 0.014, -0.070, 0)); // punch pins
   gpBox(g, steel, 0.052, 0.010, 0.006, 0, 0.002, -0.100);              // paper guide
   gpBox(g, _skGlass(0xdfeaf2), 0.040, 0.020, 0.070, 0, -0.016, 0.040); // confetti reservoir
   for (let i = 0; i < 8; i++)
     gpBox(g, bits[i % 5], 0.006, 0.003, 0.006, ((i % 3) - 1) * 0.011, -0.021 + (i % 2) * 0.008, 0.022 + i * 0.008, 0, i, 0);
   _skGrip(g, blue, -0.010);
-  return _skFinish(g, -0.112, 0.008, 0.010);
+  gpCyl(g, steel, 0.004, 0.004, 0.050, 8, 0, 0.014, 0.060, 0, Math.PI / 2);   // the hinge pin
+  for (let i = 0; i < 3; i++) gpCyl(g, steel, 0.0065, 0.0065, 0.003, 8, 0.0, 0.020 + i * 0.0, 0.020 + i * 0.012);   // the spring
+  for (let i = 0; i < 9; i++) gpBox(g, black, 0.0016, i % 3 === 0 ? 0.004 : 0.0028, 0.004, 0.0236, 0.0035, -0.080 + i * 0.016);   // the ruler marks on the guide
+  for (const x of [-0.020, 0.020]) gpCyl(g, black, 0.007, 0.007, 0.006, 8, x, -0.008, -0.080, 0);   // rubber feet
+  gpBox(g, bits[0], 0.024, 0.008, 0.002, 0, -0.016, 0.0775);          // the label on the chad drawer
+  _skFinish(g, -0.112, 0.008, 0.010);
+  let press = 0, was = false;
+  g._tick = (dt) => { const fired = !!(g._flash && g._flash.visible); if (fired && !was) press = 1; was = fired; press = Math.max(0, press - dt * 6); lever.rotation.x = Math.sin(press * Math.PI * 0.5) * 0.35; };   // the lever comes down with every shot
+  return g;
 }
 
 function buildBeeSmoker() {
@@ -27510,7 +27584,23 @@ function buildBeeSmoker() {
   gpBox(g, wood, 0.050, 0.006, 0.070, 0, -0.030, 0.092, 0.15);         // bellows bottom board
   gpBox(g, leather, 0.046, 0.026, 0.055, 0, -0.012, 0.088);            // folded leather
   _skGrip(g, leather, -0.020);
-  return _skFinish(g, -0.182, 0.014, 0.010);
+  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; gpBox(g, dark, 0.004, 0.004, 0.004, Math.cos(a) * 0.0315, 0.014 + Math.sin(a) * 0.0315, 0.022); }   // rivets round the can
+  gpBox(g, tin, 0.060, 0.004, 0.012, 0, 0.050, -0.040);                // a hinged lid
+  gpCyl(g, dark, 0.003, 0.003, 0.040, 6, 0, 0.060, -0.064, 0.9);       // its latch wire
+  for (let i = 0; i < 3; i++) gpBox(g, leather, 0.048, 0.004, 0.050, 0, -0.026 + i * 0.012, 0.090);   // the bellows' folds
+  const puffM = new THREE.MeshBasicMaterial({ color: 0xdcdcdc, transparent: true, opacity: 0.5, depthWrite: false });
+  const puffs = []; for (let i = 0; i < 4; i++) { const m = new THREE.Mesh(new THREE.SphereGeometry(0.010, 8, 6), puffM.clone()); g.add(m); puffs.push(m); }
+  const bee = new THREE.Group(); g.add(bee);                            // and one bee, who has made up their mind
+  const bb = new THREE.Mesh(new THREE.SphereGeometry(0.006, 8, 6), new THREE.MeshBasicMaterial({ color: 0xf2c418 })); bb.scale.set(1, 0.8, 1.4); bee.add(bb);
+  const bs = new THREE.Mesh(new THREE.BoxGeometry(0.0125, 0.0035, 0.003), new THREE.MeshBasicMaterial({ color: 0x1c1c1c })); bs.position.z = 0.001; bee.add(bs);
+  const bw = new THREE.Mesh(new THREE.PlaneGeometry(0.008, 0.005), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6, side: THREE.DoubleSide })); bw.position.y = 0.006; bee.add(bw);
+  _skFinish(g, -0.182, 0.014, 0.010);
+  g._tick = (dt, now) => {
+    const fired = !!(g._flash && g._flash.visible), t = now / 1000;
+    puffs.forEach((m, i) => { const k = ((t * (fired ? 1.4 : 0.5) + i / 4) % 1); m.position.set(Math.sin(t * 2 + i) * 0.006, 0.020 + k * 0.060, -0.172 - k * 0.030); m.scale.setScalar(0.6 + k * 1.6); m.material.opacity = 0.5 * (1 - k); });
+    bee.position.set(Math.cos(t * 2.4) * 0.034, 0.040 + Math.sin(t * 3.1) * 0.010, -0.140 + Math.sin(t * 2.4) * 0.030); bee.rotation.y = -t * 2.4; bw.scale.y = 0.6 + 0.4 * Math.sin(t * 60);
+  };
+  return g;
 }
 
 function buildFieldRadio() {
@@ -33430,17 +33520,29 @@ function buildBubbleBlaster() {
   const dark = GUN_MATS.inner(), glow = new THREE.MeshBasicMaterial({ color: 0x9ffcff });
   gpBox(g, blue, 0.050, 0.052, 0.170, 0, 0.014, 0.010);
   gpCyl(g, clear, 0.036, 0.036, 0.110, 18, 0, 0.050, -0.020, Math.PI / 2);
-  for (let i = 0; i < 6; i++) {
-    const b = new THREE.Mesh(new THREE.SphereGeometry(0.006 + i * 0.001, 8, 6), clear);
-    b.position.set((Math.random() - 0.5) * 0.040, 0.050 + (Math.random() - 0.5) * 0.034, -0.060 + i * 0.018); g.add(b);
+  const bubs = [];
+  for (let i = 0; i < 9; i++) {
+    const b = new THREE.Mesh(new THREE.SphereGeometry(0.005 + (i % 4) * 0.0012, 8, 6), clear);
+    b.position.set((Math.random() - 0.5) * 0.040, 0.050 + (Math.random() - 0.5) * 0.034, -0.060 + i * 0.014); g.add(b); bubs.push({ m: b, ph: Math.random() * 6.3, z: b.position.z, x: b.position.x });
   }
+  const soap = new THREE.Mesh(new THREE.CylinderGeometry(0.0335, 0.0335, 0.090, 18, 1, true), new THREE.MeshBasicMaterial({ color: 0x9ae8ff, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }));
+  soap.rotation.x = Math.PI / 2; soap.position.set(0, 0.050, -0.020); g.add(soap);                     // the solution, with a level
   gpCyl(g, pink, 0.018, 0.026, 0.105, 16, 0, 0.016, -0.122);
   gpCyl(g, glow, 0.008, 0.008, 0.012, 12, 0, 0.016, -0.182);
   gpBox(g, dark, 0.032, 0.076, 0.030, 0, -0.062, 0.050, 0.24);
   gpBox(g, pink, 0.038, 0.010, 0.034, 0, -0.106, 0.058, 0.24);
+  const wandRing = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.0028, 6, 18), pink); wandRing.position.set(0, 0.016, -0.186); g.add(wandRing);     // the wand ring at the muzzle
+  const film = new THREE.Mesh(new THREE.CircleGeometry(0.0185, 18), new THREE.MeshBasicMaterial({ color: 0xcaf4ff, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false })); film.position.set(0, 0.016, -0.186); g.add(film);
+  const dial = new THREE.Mesh(new THREE.CircleGeometry(0.011, 14), new THREE.MeshBasicMaterial({ color: 0xf8f8f0 })); dial.position.set(-0.0258, 0.020, 0.040); dial.rotation.y = -Math.PI / 2; g.add(dial);   // a pressure gauge on the side
+  const needle = new THREE.Mesh(new THREE.BoxGeometry(0.0016, 0.0095, 0.001), new THREE.MeshBasicMaterial({ color: 0xd83030 })); needle.position.set(-0.0262, 0.020, 0.040); needle.rotation.y = -Math.PI / 2; g.add(needle);
   const flash = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 7), clear);
   flash.visible = false; flash.position.set(0, 0.016, -0.188); g.add(flash);
   g._flash = flash; g._kickZ = 0.010; g._greebled = true; g._handDetailed = true;
+  g._tick = (dt, now) => {
+    const fired = !!(g._flash && g._flash.visible), t = now / 1000;
+    bubs.forEach(b => { b.m.position.y = 0.050 + Math.sin(t * 1.7 + b.ph) * 0.014; b.m.position.x = b.x + Math.cos(t * 1.3 + b.ph) * 0.006; });      // they bob about in the tank
+    film.scale.setScalar(1 + (fired ? 0.15 : 0.03 * Math.sin(t * 5))); needle.rotation.z = (fired ? -1.1 : -0.4 + 0.08 * Math.sin(t * 3));
+  };
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
@@ -33458,6 +33560,14 @@ function buildRPGWaterBalloonLauncher() {
   gpCyl(g, hose, 0.009, 0.009, 0.180, 10, -0.030, -0.010, 0.010, Math.PI / 2, 0.35);
   gpBox(g, hose, 0.020, 0.020, 0.020, -0.044, -0.050, 0.082);
   gpPlate(g, dark, [[0.076,-0.020],[0.108,-0.034],[0.112,-0.100],[0.080,-0.116],[0.058,-0.056],[0.056,-0.026]], 0.040, 0);
+  const bal2 = new THREE.Mesh(new THREE.SphereGeometry(0.030, 12, 9), new THREE.MeshPhongMaterial({ color: 0xff7ab8, shininess: 130, specular: 0xffffff })); bal2.scale.set(1.1, 0.86, 1); bal2.position.set(0, 0.048, 0.060); g.add(bal2);   // a second one waiting
+  const water = new THREE.Mesh(new THREE.CylinderGeometry(0.0485, 0.0485, 0.060, 18, 1, true), new THREE.MeshBasicMaterial({ color: 0x4ac0ff, transparent: true, opacity: 0.2, depthWrite: false, side: THREE.DoubleSide }));
+  water.rotation.x = Math.PI / 2; water.position.set(0, 0.040, 0.030); g.add(water);                       // water in the hopper
+  const dial = new THREE.Mesh(new THREE.CircleGeometry(0.014, 16), new THREE.MeshBasicMaterial({ color: 0xf8f8f0 })); dial.position.set(-0.0362, 0.014, 0.060); dial.rotation.y = -Math.PI / 2; g.add(dial);
+  const needle = new THREE.Mesh(new THREE.BoxGeometry(0.0018, 0.012, 0.001), new THREE.MeshBasicMaterial({ color: 0xd83030 })); needle.position.set(-0.0366, 0.014, 0.060); needle.rotation.y = -Math.PI / 2; g.add(needle);   // the pressure gauge
+  gpCyl(g, hose, 0.006, 0.006, 0.090, 8, 0.030, 0.010, 0.020, Math.PI / 2, 0); gpBox(g, hose, 0.016, 0.016, 0.016, 0.030, 0.010, 0.072);   // a pump handle on the other side
+  for (let i = 0; i < 3; i++) gpCyl(g, hose, 0.0365, 0.0365, 0.006, 18, 0, 0.010, -0.150 - i * 0.030);   // hose clamps along the tube
+  g._tick = (dt, now) => { const t = now / 1000, fired = !!(g._flash && g._flash.visible); bal.scale.set(1.15 + 0.04 * Math.sin(t * 6), 0.86 - 0.03 * Math.sin(t * 6), 1.0); bal2.scale.set(1.1 + 0.03 * Math.sin(t * 5 + 1), 0.86, 1); needle.rotation.z = fired ? -1.2 : -0.5 + 0.1 * Math.sin(t * 2); };
   const flash = new THREE.Mesh(new THREE.SphereGeometry(0.030, 8, 7), balloon);
   flash.visible = false; flash.position.set(0, 0.010, -0.258); g.add(flash);
   g._flash = flash; g._kickZ = 0.020; g._greebled = true; g._handDetailed = true;
@@ -53469,6 +53579,17 @@ function buildChampagnePopper() {
   gpBox(g, poly, 0.080, 0.070, 0.090, 0, -0.050, 0.100);
   gpBox(g, poly, 0.040, 0.050, 0.140, 0, -0.060, 0.220, 0.10);
   gpBox(g, steel, 0.090, 0.012, 0.070, 0, -0.012, 0.070);
+  const wire = new THREE.MeshPhongMaterial({ color: 0xc8ccd2, shininess: 180, specular: 0xffffff });
+  for (let i = 0; i < 3; i++) gpCyl(g, wire, 0.026 + i * 0.0006, 0.026 + i * 0.0006, 0.003, 12, 0, 0.010, -0.204 - i * 0.012);     // the muselet's wire cage
+  for (let i = 0; i < 4; i++) { const a = i / 4 * Math.PI; gpBox(g, wire, 0.0025, 0.0025, 0.036, Math.cos(a) * 0.017, 0.010 + Math.sin(a) * 0.017, -0.222); }
+  gpCyl(g, foilMat, 0.0535, 0.0535, 0.020, 16, 0, 0.010, -0.100);                                          // the foil collar on the neck
+  const lab = new THREE.MeshPhongMaterial({ color: 0xf2e8c8, shininess: 20 });
+  gpCyl(g, lab, 0.0525, 0.0525, 0.090, 16, 0, 0.010, 0.050);                                                // the label
+  gpCyl(g, foilMat, 0.0530, 0.0530, 0.006, 16, 0, 0.010, 0.098); gpCyl(g, foilMat, 0.0530, 0.0530, 0.006, 16, 0, 0.010, 0.002);
+  for (let i = 0; i < 3; i++) gpBox(g, new THREE.MeshPhongMaterial({ color: 0x2a2a2a }), 0.020, 0.004 + (i === 1 ? 0.002 : 0), 0.002, 0, 0.010 + 0.0, 0.0 + 0.0).position.set(0, 0.0625, 0.030 + i * 0.012);   // lettering on it
+  const fizz = new THREE.MeshBasicMaterial({ color: 0xfff4c8, transparent: true, opacity: 0.6, depthWrite: false });
+  const bub = []; for (let i = 0; i < 8; i++) { const m = new THREE.Mesh(new THREE.SphereGeometry(0.0034, 6, 5), fizz); g.add(m); bub.push(m); }
+  g._tick = (dt, now) => { const t = now / 1000, fired = !!(g._flash && g._flash.visible); bub.forEach((m, i) => { const k = (t * (fired ? 1.6 : 0.5) + i / 8) % 1; m.position.set(Math.cos(i * 2.4) * 0.040, 0.010 + Math.sin(i * 2.4) * 0.040 * 0.9, 0.140 - k * 0.340); }); };   // bubbles rising through the glass
   const flash = new THREE.Mesh(new THREE.SphereGeometry(0.040, 8, 7), new THREE.MeshBasicMaterial({ color: 0xffeeaa }));
   flash.visible = false; flash.position.set(0, 0.010, -0.270); g.add(flash);
   g._flash = flash; g._kickZ = 0.014; g._greebled = true; g._handDetailed = true;
@@ -54489,6 +54610,14 @@ function buildPlunger() {
   // Socket where the wood goes into the rubber.
   const socket = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.026, 0.030, 10), darkMat);
   socket.rotation.x = Math.PI / 2; socket.position.set(0, 0, -0.072); g.add(socket);
+  const inside = new THREE.Mesh(new THREE.ConeGeometry(0.056, 0.090, 14, 1, true), new THREE.MeshLambertMaterial({ color: 0x4a0e0a, side: THREE.DoubleSide }));
+  inside.rotation.x = Math.PI / 2; inside.position.set(0, 0, -0.114); g.add(inside);                      // the dark inside of the cup
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.0172, 0.0172, 0.030, 10), new THREE.MeshLambertMaterial({ color: 0xf0e0c0 })); band.rotation.x = Math.PI / 2; band.position.set(0, 0, 0.060); g.add(band);   // a brand band round the handle
+  for (const z of [0.052, 0.068]) { const r = new THREE.Mesh(new THREE.CylinderGeometry(0.0176, 0.0176, 0.004, 10), new THREE.MeshLambertMaterial({ color: 0xa8261a })); r.rotation.x = Math.PI / 2; r.position.set(0, 0, z); g.add(r); }
+  const hole = new THREE.Mesh(new THREE.TorusGeometry(0.008, 0.002, 5, 10), new THREE.MeshLambertMaterial({ color: 0x6a1710 })); hole.position.set(0, 0, 0.268); g.add(hole);   // the hanging hole
+  const dm = new THREE.MeshBasicMaterial({ color: 0x8ac8ff, transparent: true, opacity: 0.8 });
+  const drips = [0, 1, 2].map(i => { const m = new THREE.Mesh(new THREE.SphereGeometry(0.0045, 6, 5), dm); g.add(m); return m; });
+  g._tick = (dt, now) => { const t = now / 1000; drips.forEach((m, i) => { const k = (t * 0.9 + i / 3) % 1; m.position.set(Math.cos(i * 2.1) * 0.058, -0.012 - k * k * 0.080, -0.158 + Math.sin(i * 2.1) * 0.0); m.scale.set(1, 1 + k, 1); m.material.opacity = 0.8 * (1 - k * 0.6); }); };   // it drips
   g.position.set(0.10, -0.12, -0.20); return g;
 }
 
@@ -54639,6 +54768,12 @@ function buildCandyCane() {
       Math.floor(i / 2) % 2 ? redMat : whiteMat);
     bead.position.set(x, y, z); g.add(bead);
   });
+  const ribbon = new THREE.MeshLambertMaterial({ color: 0x1f8a3a });
+  for (const sx of [-1, 1]) { const loop = new THREE.Mesh(new THREE.SphereGeometry(0.018, 10, 8), ribbon); loop.scale.set(1.0, 0.55, 0.7); loop.position.set(sx * 0.020, 0.024, 0.150); loop.rotation.z = sx * 0.5; g.add(loop); }
+  const knotB = new THREE.Mesh(new THREE.SphereGeometry(0.0095, 8, 6), ribbon); knotB.position.set(0, 0.024, 0.150); g.add(knotB);
+  for (const sx of [-1, 1]) { const tail = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.002, 0.040), ribbon); tail.position.set(sx * 0.010, 0.012, 0.172); tail.rotation.set(0.2, sx * 0.3, 0); g.add(tail); }   // the bow, with its tails
+  const sparks = []; for (let i = 0; i < 10; i++) { const m = new THREE.Mesh(new THREE.OctahedronGeometry(0.004, 0), new THREE.MeshBasicMaterial({ color: 0xfff6c8 })); const bead = g.children[i * 3 + 1] || g.children[0]; m.position.copy(bead.position).add(new THREE.Vector3((i % 3 - 1) * 0.010, 0.010 + (i % 2) * 0.008, 0)); g.add(m); sparks.push(m); }   // sugar crystals
+  g._tick = (dt, now) => { const t = now / 1000; sparks.forEach((m, i) => { const k = 0.5 + 0.5 * Math.sin(t * 5 + i * 1.9); m.scale.setScalar(0.3 + k * 1.1); m.rotation.y += dt * 3; }); };
   g.position.set(0.10, -0.12, -0.20); return g;
 }
 
@@ -56436,6 +56571,11 @@ function buildEightBall() {
   g.add(patch);
   const halo = new THREE.Mesh(new THREE.SphereGeometry(0.066, 14, 10), new THREE.MeshBasicMaterial({ color: 0xb98cff, transparent: true, opacity: 0.22, depthWrite: false }));
   g.add(halo);
+  const win = new THREE.Mesh(new THREE.CircleGeometry(0.0105, 6), new THREE.MeshBasicMaterial({ color: 0x1a2a8a })); win.position.set(0, -0.012, 0.0494); g.add(win);
+  const tri = new THREE.Mesh(new THREE.CircleGeometry(0.0074, 3), new THREE.MeshBasicMaterial({ color: 0xaab8ff })); tri.position.set(0, -0.0125, 0.0497); tri.rotation.z = Math.PI / 2; g.add(tri);   // the die floating in its window
+  const orbit = new THREE.Group(); g.add(orbit);
+  for (let i = 0; i < 5; i++) { const m = new THREE.Mesh(new THREE.SphereGeometry(0.0032, 6, 5), new THREE.MeshBasicMaterial({ color: i % 2 ? 0xd8b8ff : 0x8affff })); const a = i / 5 * Math.PI * 2; m.position.set(Math.cos(a) * 0.060, Math.sin(a) * 0.020, Math.sin(a) * 0.060); orbit.add(m); }
+  g._tick = (dt, now) => { const t = now / 1000; orbit.rotation.y += dt * 1.4; orbit.rotation.z = 0.5; halo.material.opacity = 0.18 + 0.1 * Math.sin(t * 3); tri.rotation.z = Math.PI / 2 + Math.sin(t * 2) * 0.35; };
   g.position.set(0.10, -0.12, -0.20); return g;
 }
 function buildWhoopeeCushion() {
