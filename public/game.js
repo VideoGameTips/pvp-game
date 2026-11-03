@@ -39483,10 +39483,46 @@ function _realGunsInUse() {
   for (const m of Object.values(remoteMeshes)) if (m && m._gun && m._gun.userData && m._gun.userData.realGun) n++;
   return n;
 }
-function makeRealWorldGun(weaponId) {
+// The skin model another player holds, built the way applyModelSkin / applyMeleeModelSkin / applySupportModelSkin build it and
+// cached on the skin (skin._model, which those appliers reuse), so seeing a skin in someone's hands costs one build, not one per swap.
+function remoteSkinModel(weaponId, skinId) {
+  if (!skinId || !weaponId) return null;
+  const gun = MODEL_SKINS.find(m => m.id === skinId && m.weapon === weaponId);
+  const melee = !gun && MELEE_MODEL_SKINS.find(m => m.id === skinId && m.melee === weaponId);
+  const sup = !gun && !melee && SUPPORT_MODEL_SKINS.find(m => m.id === skinId && m.support === weaponId);
+  const skin = gun || melee || sup;
+  if (!skin) return null;
+  if (!skin._model) {
+    let m;
+    if (gun) {
+      m = prepViewModel(skin.rarity === 'donut' ? skin.build() : _smoothModelSkin(skin.build()), _skinHasMechanics(skin) ? weaponId : null, weaponId);
+      try { blendProudSteps(m); } catch (e) {}
+    } else if (melee) {
+      m = (skin.rarity === 'donut' || skin.raw) ? skin.build() : _smoothModelSkin(skin.build());
+      if (!skin.raw) {
+        try { greebleModel(m); } catch (e) {}
+        try { weldModelParts(m); } catch (e) {}
+        try { blendProudSteps(m); } catch (e) {}
+        try { shinifyModel(m); } catch (e) {}
+      }
+      if (m._offHand) camera.add(m._offHand);
+    } else {
+      m = _smoothModelSkin(skin.build());
+      try { greebleModel(m); } catch (e) {}
+      try { weldModelParts(m); } catch (e) {}
+      try { shinifyModel(m); } catch (e) {}
+    }
+    m.visible = false;
+    camera.add(m);
+    skin._model = m;
+  }
+  return skin._model;
+}
+function makeRealWorldGun(weaponId, skinId) {
   let src = null;
+  try { src = remoteSkinModel(weaponId, skinId); } catch (e) { src = null; console.warn('[remote skin]', e); }
   const wi = WEAPONS.findIndex(w => w.id === weaponId);
-  if (wi >= 0) src = (typeof _baseWeaponModels !== 'undefined' && _baseWeaponModels[wi]) || weaponModels[wi];
+  if (src) { /* the owner's skin model */ } else if (wi >= 0) src = (typeof _baseWeaponModels !== 'undefined' && _baseWeaponModels[wi]) || weaponModels[wi];
   else if (weaponId !== 'fists') {
     const mi = MELEE_ITEMS.findIndex(m => m.id === weaponId);
     if (mi >= 0) src = (typeof _baseMeleeModels !== 'undefined' && _baseMeleeModels[mi]) || meleeModels[mi];
@@ -46149,11 +46185,18 @@ let _sentWeaponId = null;
 // Without this the dedupe below matches a value nobody holds any more and the
 // body stays empty-handed for the rest of the session.
 try { socket.on('connect', () => { _sentWeaponId = null; }); } catch (e) {}
+// The skin on what I hold (a gun, melee or utility model skin), so the others' copy of my body holds the same thing.
+function heldSkinId(id) {
+  if (!id) return undefined;
+  try { return _activeModelSkin[id]?.id || equippedMeleeModelSkins[id] || equippedSupportModelSkins[id] || undefined; } catch (e) { return undefined; }
+}
 function broadcastHeldWeapon() {
   const id = heldItemId();
-  if (id === _sentWeaponId) return;
-  _sentWeaponId = id;
-  try { socket.emit('setWeapon', { weaponId: id }); } catch (e) {}
+  const skin = heldSkinId(id);
+  const key = id + '|' + (skin || '');
+  if (key === _sentWeaponId) return;
+  _sentWeaponId = key;
+  try { socket.emit('setWeapon', { weaponId: id, skin }); } catch (e) {}
 }
 
 function syncHeldAmmoModelForIndex(idx) {
@@ -63832,11 +63875,11 @@ socket.on('matchRoster', ({ matchId, players: roster }) => {
   }
 });
 // 🎭 A player changed skin (or their admin flag arrived) — rebuild their mesh
-socket.on('weaponChanged', ({ id, weaponId }) => {
+socket.on('weaponChanged', ({ id, weaponId, skin }) => {
   if (id === myId) return;                   // the local player sees a viewmodel, not a body
-  if (players[id]) players[id].weaponId = weaponId;
+  if (players[id]) { players[id].weaponId = weaponId; players[id].weaponSkin = skin || null; }   // the skin on it, so the gun in their hands is the one they see
   const m = remoteMeshes[id];
-  if (m) armRemoteMesh(m, armableWeaponOf(players[id] || { weaponId }));
+  if (m) armRemoteMesh(m, armableWeaponOf(players[id] || { weaponId }), skin || null);
 });
 socket.on('skinChanged', ({ id, skin, isAdmin, skinData, hair, finisher }) => {
   if (players[id]) players[id].finisher = FINISHER_IDS.includes(finisher) ? finisher : 'auto';   // how this player finishes people
@@ -63852,7 +63895,7 @@ socket.on('skinChanged', ({ id, skin, isAdmin, skinData, hair, finisher }) => {
                               renderedSkinForPlayer(p, skin), { crown: !!isAdmin, tag: humanTagKind(p), hair });
   mesh.position.copy(old.position); mesh.rotation.y = old.rotation.y; mesh.visible = wasVisible;
   mesh._ownerId = id;
-  armRemoteMesh(mesh, armableWeaponOf(p));
+  armRemoteMesh(mesh, armableWeaponOf(p), p.weaponSkin);
   setMeshTeamArrow(mesh, shouldShowTeamArrow(id, p));
   scene.add(mesh); remoteMeshes[id] = mesh;
 });
@@ -64304,11 +64347,12 @@ function disposeBody(obj) {
     for (const m of ms) m.dispose();
   });
 }
-function armRemoteMesh(mesh, weaponId) {
+function armRemoteMesh(mesh, weaponId, skinId) {
   if (!mesh) return;
+  skinId = skinId || null;
   // Re-sending the same weapon is common (a reconnect replays it), and tearing
   // the prop down to build an identical one is pure churn.
-  if (mesh._gun && mesh._gunId === weaponId) return;
+  if (mesh._gun && mesh._gunId === weaponId && (mesh._gunSkin || null) === skinId) return;
   if (mesh._gun) {
     // makeBotWeaponProp builds a fresh prop every call — about nineteen
     // geometries and materials — so dropping the old one on the floor leaks
@@ -64321,20 +64365,20 @@ function armRemoteMesh(mesh, weaponId) {
       const ms = Array.isArray(o.material) ? o.material : (o.material ? [o.material] : []);
       for (const m of ms) m.dispose();
     });
-    mesh._gun = null; mesh._gunId = null;
+    mesh._gun = null; mesh._gunId = null; mesh._gunSkin = null;
   }
   if (mesh._rig) mesh._rig.holdsGun = false;
   if (!weaponId) return;
   // The weapon's own model if there is one and there is room for it (real people first: they are few); the
   // stand-in otherwise.
   let gun = null;
-  try { if (_realGunsInUse() < REAL_GUN_BUDGET) gun = makeRealWorldGun(weaponId); } catch (e) { gun = null; }
+  try { if (_realGunsInUse() < REAL_GUN_BUDGET) gun = makeRealWorldGun(weaponId, skinId); } catch (e) { gun = null; }
   if (!gun) gun = makeBotWeaponProp(weaponId);
   if (gun.userData.gripCentered) gun.position.set(0, 0, 0);
   else gun.position.set(0, -0.02, 0.055);
   gun.rotation.y = Math.PI;
   ((mesh._rig && mesh._rig.gripR) || mesh).add(gun);
-  mesh._gun = gun; mesh._gunId = weaponId;
+  mesh._gun = gun; mesh._gunId = weaponId; mesh._gunSkin = skinId;
   try { dressRemoteGun(mesh); } catch (e) {}                 // and whatever wrap its owner has on
   // The arms are solved from the weapon's own measured length, so a swap has to
   // re-solve: a pistol pose on a sniper rifle leaves the support hand in the air.
@@ -64345,7 +64389,7 @@ function spawnRemotePlayer(p) {
   const mesh = makePlayerMesh(p.name, p.isBot, p.team || 'enemy', skinId, { crown: !!p.isAdmin, tag: humanTagKind(p), hair:p.hair });
   mesh.position.set(p.x,0,p.z);
   mesh._ownerId = p.id;
-  armRemoteMesh(mesh, armableWeaponOf(p));
+  armRemoteMesh(mesh, armableWeaponOf(p), p.weaponSkin);
   setMeshTeamArrow(mesh, shouldShowTeamArrow(p.id, p));
   scene.add(mesh); remoteMeshes[p.id]=mesh;
 }

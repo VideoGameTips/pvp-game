@@ -2342,6 +2342,30 @@ if (ok && process.argv.includes('--flare')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+// Held skins: what a player carries is what the others see in their hands. Every gun, melee and utility model skin, built as another
+// player's copy of it, has to come out as a real gun that differs from the plain weapon's.
+if (ok && process.argv.includes('--heldskin')) {
+  const rep = vm.runInThisContext(`(() => {
+    const issues = [], r = { total: 0, shown: 0, same: [], failed: [] };
+    const sig = g => { const a = []; g.traverse(o => { if (o.isMesh) a.push(o.geometry.uuid); }); return a.join(','); };
+    const check = (list, key) => {
+      for (const s of list) {
+        const base = s[key]; r.total++;
+        let g = null, b = null;
+        try { g = makeRealWorldGun(base, s.id); b = makeRealWorldGun(base); } catch (e) { r.failed.push(s.id + ' threw ' + e.message); continue; }
+        if (!g) { r.failed.push(s.id + ' came out empty'); continue; }
+        if (b && sig(g) === sig(b)) r.same.push(s.id); else r.shown++;
+      }
+    };
+    check(MODEL_SKINS, 'weapon'); check(MELEE_MODEL_SKINS, 'melee'); check(SUPPORT_MODEL_SKINS, 'support');
+    return r;
+  })()`);
+  console.log('held skins: ' + rep.shown + ' of ' + rep.total + ' show their own model in another player\'s hands'
+    + (rep.same.length ? '; ' + rep.same.length + ' look like the plain weapon (' + rep.same.slice(0, 6).join(', ') + ')' : '')
+    + (rep.failed.length ? '; ' + rep.failed.length + ' did not build (' + rep.failed.slice(0, 6).join('; ') + ')' : ''));
+  if (!rep.total || rep.shown < rep.total * 0.8) { ok = false; console.log('too few skins show up in another player\'s hands'); }
+}
+
 // Bot strategy: on every map, ten random bot/enemy pairs 20-36 m apart each ask for a plan. A plan has to be a route a body can
 // walk (each step at most 0.65 m up and 2 m down, one cell at a time), end where it says it does (a perch is 2.4 m or higher
 // and sees the enemy), and most maps with a deck or a roof should have at least one.

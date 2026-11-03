@@ -2641,7 +2641,9 @@ io.on('connection', (socket) => {
     if(hellfireWeapon(id)&&!canUseHellfire(p))return;
     if(id==='omega_pistol'&&!canUseHellfire(p))return;
     p.weaponId = id ? String(id).slice(0, 32) : null;
-    emitToMatch(p.matchId, 'weaponChanged', { id: socket.id, weaponId: p.weaponId });
+    // The skin on it: cosmetic like the weapon id, so only a plain id is passed on (others look it up by weapon + id).
+    p.weaponSkin = p.weaponId && typeof data.skin === 'string' && /^[a-z0-9_]{1,48}$/.test(data.skin) ? data.skin : null;
+    emitToMatch(p.matchId, 'weaponChanged', { id: socket.id, weaponId: p.weaponId, skin: p.weaponSkin });
   });
 
   // ── 🌐 PvP matchmaking: player wants to find others playing the same elim mode ──
