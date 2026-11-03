@@ -60207,6 +60207,7 @@ function gimmickOnHit(weaponId, pid, hitPos, dmg, opts) {
   }
 }
 function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = {}) {
+  if (match && match.boss && pid === match.boss.bot.id) bossOnHit(hitWorldPos, weaponId);   // 🛡️ a deflecting boss sends some of it back
   // 🛋️ Lobby 13 is a no-combat chill zone — the cast is neutral and can't be hurt. The hit still
   // shows (grey), and the first one says why nothing happened: a gun that seems to do nothing reads
   // as broken (#35).
@@ -68277,7 +68278,7 @@ function bossBarUi() {
   const B = match && match.boss; if (!B) return;
   const U = juggBossUi(), bot = B.bot, max = bot.maxHp, hp = Math.max(0, Math.min(max, bot.hp));
   U.root.style.display = bot.dead ? 'none' : 'block';
-  const label = `${B.def.icon} ${B.def.name} · PHASE ${B.phase}`;
+  const label = `${B.def.icon} ${B.def.name} · PHASE ${B.phase}${B.shield ? ' · 🛡 DEFLECTING' : ''}`;
   if (U.name.textContent !== label) U.name.textContent = label;
   const pct = (hp / max * 100).toFixed(2) + '%';
   U.fill.style.width = pct; U.ghost.style.width = pct;
@@ -68299,7 +68300,7 @@ function startBossFight() {
                 difficulty: selectedDifficulty, tune: botTuning(selectedDifficulty), activeSlot: 'primary' };
   gameBots.push(bot);
   socket.emit('spawnBots', [{ id, name: D.name, team: absTeam('enemy'), weaponId: null, spawnX: BOSS.pos[0], spawnZ: BOSS.pos[1], hp, skin: 'default', boss: true }]);
-  match.boss = { def: D, bot, robot, mesh, phase: 1, atk: null, nextAt: Date.now() + 3500, proj: [], marks: [], waves: [], pools: [], beam: null, yaw: 0, spin: 0, t: 0, started: Date.now(), done: false };
+  match.boss = { def: D, bot, robot, mesh, phase: 1, atk: null, nextAt: Date.now() + 3500, nextShield: Date.now() + 8000, shield: false, shieldUntil: 0, rate: 1, lastReflect: 0, proj: [], marks: [], waves: [], pools: [], beam: null, yaw: 0, spin: 0, t: 0, started: Date.now(), done: false };
   showAnnouncement(D.name, D.intro, D.color, 3200);
   bossBarUi();
 }
@@ -68617,6 +68618,33 @@ BOSS_DEFS.hydra = { id: 'hydra', name: 'THE HYDRA', icon: '🐍', color: '#66ff6
       g.position.y = H.baseY + 0.05 * Math.sin(now / 400 + H.baseY * 7) + (H.open || 0) * 0.08;
     }
   } };
+// 🛡️ DEFLECT (the katana's idea): now and then the boss throws up a shield. While it is up shots bounce off (and some are sent back at you) and
+// almost no damage lands: the server cuts it to 5%. It comes rarely in the second phase and often, and for long, in the third.
+const BOSS_SHIELD = { 1: { gap: [9000, 12000], ms: 2200 }, 2: { gap: [15000, 19000], ms: 1500 }, 3: { gap: [4500, 6500], ms: 3200 } };
+function bossShieldOn(B, now) {
+  const S = BOSS_SHIELD[B.phase] || BOSS_SHIELD[3];
+  B.shield = true; B.shieldUntil = now + S.ms;
+  try { socket.emit('bossShield', { id: B.bot.id, ms: S.ms + 150 }); } catch (e) {}
+  if (!B.shieldMesh) {
+    B.shieldMesh = new THREE.Mesh(new THREE.SphereGeometry(2.0, 24, 18), new THREE.MeshBasicMaterial({ color: 0x9ad8ff, transparent: true, opacity: 0.3, depthWrite: false, blending: THREE.AdditiveBlending }));
+    B.shieldMesh.position.y = 1.0; B.mesh.add(B.shieldMesh);
+  }
+  B.shieldMesh.visible = true;
+  showAnnouncement('DEFLECT', 'Shots bounce back: wait it out', '#9ad8ff', 1100);
+  try { playSoundEvent('katana_deflect', { volume: 1.0, minGap: 0 }); } catch (e) {}
+}
+function bossShieldOff(B, now) {
+  B.shield = false; if (B.shieldMesh) B.shieldMesh.visible = false;
+  const S = BOSS_SHIELD[B.phase] || BOSS_SHIELD[3];
+  B.nextShield = now + S.gap[0] + Math.random() * (S.gap[1] - S.gap[0]);
+}
+function bossOnHit(pos, weaponId) {                                                                  // called for every hit you land on the boss (see emitHit)
+  const B = match && match.boss; if (!B || !B.shield || !pos) return;
+  const now = performance.now(); if (now - B.lastReflect < 140) return; B.lastReflect = now;
+  const o = pos.clone(), dir = camera.position.clone(); dir.y -= 0.5; dir.sub(o).normalize();
+  bossShoot('bullet', o, dir.multiplyScalar(70), { life: 2, color: 0x9ad8ff, size: 0.2, weapon: 'boss_uzi' });   // a little of it is sent back
+  spawnAbilityAOEFX(o, 1.0, 0x9ad8ff);
+}
 function bossPickAttack(B) {
   const pool = B.def.pools[B.phase] || B.def.pools[3];
   let r = Math.random() * pool.reduce((a, x) => a + x[1], 0);
@@ -68630,7 +68658,7 @@ function bossPhaseUp(B, phase) {
   try { B.def.onPhase(B, phase); } catch (e) {}
   const me = players[myId];                                                                   // a breath: full ammo, and some health back
   if (me && !isDead) { const to = Math.min(matchMaxHp(), me.hp + 100); socket.emit('healSelf', { amount: to - me.hp }); me.hp = to; updateHealthHUD(to); try { resetCombatResources(); } catch (e) {} }
-  B.nextAt = Date.now() + 2200; B.atk = null;
+  B.nextAt = Date.now() + 2200; B.atk = null; B.nextShield = Date.now() + 3500;
 }
 function updateBoss(dt) {
   const B = match.boss; if (!B || match.over || B.done) return;
@@ -68654,8 +68682,14 @@ function updateBoss(dt) {
   if (bot.dead) return;
   const frac = bot.hp / bot.maxHp, ph = frac > 0.66 ? 1 : frac > 0.33 ? 2 : 3;
   if (ph > B.phase) bossPhaseUp(B, ph);
+  B.rate = 1 + 2.2 * (1 - frac);                                                                  // the more you hurt it, the faster its guns fire (up to three times as fast)
+  if (!B.shield && now >= B.nextShield && !isDead) bossShieldOn(B, now);
+  else if (B.shield) { if (now >= B.shieldUntil) bossShieldOff(B, now); else if (B.shieldMesh) B.shieldMesh.material.opacity = 0.22 + 0.12 * Math.sin(now / 90); }
   B.def.anim(B, dt, now);
-  if (B.atk) { if (B.atk.tick(dt)) { B.last = B.atk.name; B.atk = null; B.nextAt = now + (B.phase === 1 ? 1700 : B.phase === 2 ? 1200 : 700); } }
+  if (B.atk) {
+    const calm = B.atk.name === 'laser' || B.atk.name === 'rail' || B.atk.name === 'spokes' || B.atk.name === 'shock';   // (a warning line or a ring does not get faster: it must stay readable)
+    if (B.atk.tick(dt * (calm ? Math.min(1.5, B.rate) : B.rate))) { B.last = B.atk.name; B.atk = null; B.nextAt = now + (B.phase === 1 ? 1700 : B.phase === 2 ? 1200 : 700) / B.rate; }
+  }
   else if (now >= B.nextAt && !isDead) B.atk = B.def.attacks[bossPickAttack(B)](B);
   bossBarUi();
   updateMatchHUD();

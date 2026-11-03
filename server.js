@@ -2166,6 +2166,7 @@ function freezeRayHit(shooter, target) {
   target._freezeImmuneUntil = now + FREEZE.ms + FREEZE.immuneMs;
   emitToMatch(target.matchId, 'frozen', { targetId: target.id, shooterId: shooter.id, ms: FREEZE.ms });
 }
+const BOSS_PHASE_MULT = { 1: 0.6, 2: 1.6, 3: 0.2 }, BOSS_SHIELD_MULT = 0.05;
 const BOSS_HIT_CAP = 450;   // the Warden has 12,000 health: nothing takes a quarter of it at once
 function serverHitDamage(data, shooter, target) {
   const dmg = serverHitDamageBase(data, shooter, target);
@@ -2937,7 +2938,15 @@ io.on('connection', (socket) => {
     // differently (their own tables, zone bonuses, positions), and with other real players in
     // the match a kill that stays on one screen leaves a frozen, unkillable bot on everyone else's.
     if (data.fatal && data.instakill && !bot.boss) dmg = bot.hp;
-    if (bot.boss) dmg = Math.min(dmg, BOSS_HIT_CAP);
+    if (bot.boss) {
+      dmg = Math.min(dmg, BOSS_HIT_CAP);
+      // How hard it is to hurt depends on the phase it is in (its health when the hit lands): the first is tough, the second is the easy one, the
+      // third is nearly impossible. And while it is deflecting (the client says so with 'bossShield') almost nothing gets through.
+      const frac = bot.bossMax > 0 ? bot.hp / bot.bossMax : 1;
+      dmg = dmg * (frac > 0.66 ? BOSS_PHASE_MULT[1] : frac > 0.33 ? BOSS_PHASE_MULT[2] : BOSS_PHASE_MULT[3]);
+      if (Date.now() < (bot.bossShieldUntil || 0)) dmg *= BOSS_SHIELD_MULT;
+      dmg = dmg > 0 ? Math.max(1, Math.round(dmg)) : 0;
+    }
     const botHpBefore = bot.hp;
     bot.hp = Math.max(0, bot.hp - dmg);
     // Only what the PLAYER dealt counts -- not a friendly bot they own.
@@ -3254,10 +3263,17 @@ io.on('connection', (socket) => {
         hp: botHp, dead: false, kills: 0, deaths: 0, lastShot: 0,
         matchId: ownerMatchId, // bots inherit their owner's match
         matchMode: ownerMode,
-        boss: b.boss === true && /^boss/.test(ownerMode),   // 🤖 THE WARDEN: no instakill, and no single hit above BOSS_HIT_CAP
+        boss: b.boss === true && /^boss/.test(ownerMode), bossMax: (b.boss === true && /^boss/.test(ownerMode)) ? botHp : 0,   // 🤖 THE WARDEN: no instakill, and no single hit above BOSS_HIT_CAP
       };
       emitToMatch(ownerMatchId, 'playerJoined', players[b.id]);
     }
+  });
+
+  // 🛡️ A boss is deflecting: for these few milliseconds almost no damage gets through (see hitBot). Only the owner of the boss can say so.
+  socket.on('bossShield', (d) => {
+    const b = d && players[d.id];
+    if (!b || !b.isBot || !b.boss || b.ownerId !== socket.id) return;
+    b.bossShieldUntil = Date.now() + Math.max(0, Math.min(6000, Number(d.ms) || 0));
   });
 
   // 🧹 The client has stopped simulating these bots — reclaim them.
