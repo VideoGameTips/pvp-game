@@ -1777,6 +1777,7 @@ let medkitHealChannel = null; // { token, timer, amount, startedAt, duration }
 
 // ── Melee swing animation state ────────────────────────────────────────────
 let meleeSwingT    = 1;       // 1 = idle/done, 0 = just started
+let fistStrike = null;
 // ⛽ The chainsaw runs on fuel and the tank is the weapon's limit: sawing costs a little per swing, Rev Up costs a lot --
 // a burst to start it and a drain for as long as it runs. It is refilled when you respawn, and not before.
 const CHAINSAW_FUEL_MAX = 120, CHAINSAW_SWING_FUEL = 1;
@@ -32376,6 +32377,26 @@ function buildAkimboGun() {
 // barrels meet far ahead. Everything about the pair lives on `_akimbo`: the shot alternates between the hands
 // (akimboFire), each gun kicks and runs its own slide (updateAkimboHands), and the hands are fitted to the grips
 // (attachAkimboHands, called from attachViewHands).
+// Little things a pistol throws out when it fires (a casing, a staple, a drop of water): a small pool of meshes, one launched on each shot.
+// o: { geo, mat, at:[x,y,z], v:[vx,vy,vz], spread, life, grav, spin, n }. Returns a function to call every frame.
+function _akimboBits(g, o) {
+  const pool = [];
+  for (let i = 0; i < (o.n || 4); i++) { const m = new THREE.Mesh(o.geo, o.mat); m.visible = false; g.add(m); pool.push({ m, t: 9, v: new THREE.Vector3() }); }
+  let k = 0, was = false;
+  return (dt) => {
+    const fired = !!(g._flash && g._flash.visible);
+    if (fired && !was) {
+      const b = pool[k++ % pool.length], r = () => (Math.random() - 0.5) * (o.spread || 0);
+      b.t = 0; b.m.visible = true; b.m.position.set(o.at[0], o.at[1], o.at[2]); b.v.set(o.v[0] + r(), o.v[1] + r(), o.v[2] + r());
+    }
+    was = fired;
+    for (const b of pool) {
+      if (b.t >= o.life) { b.m.visible = false; continue; }
+      b.t += dt; b.v.y -= (o.grav || 2) * dt; b.m.position.addScaledVector(b.v, dt);
+      b.m.rotation.x += (o.spin || 0) * dt; b.m.rotation.z += (o.spin || 0) * dt * 0.7;
+    }
+  };
+}
 function _akimboPair(gunFn) {
   const root = new THREE.Group();
   const A = { holders: [], guns: [], flashes: [], hand: 1, kick: [0, 0], handLocal: [], handRot: [], rest: [] };
@@ -32390,6 +32411,7 @@ function _akimboPair(gunFn) {
     A.rest.push(holder.position.clone());
   });
   root._akimbo = A;
+  root._tick = (dt, now, asm) => { for (const gn of A.guns) if (gn._tick) gn._tick(dt, now, asm); };      // each gun's own little show (see _akimboBits)
   root._flash = A.flashes[0];
   root._kickZ = 0.012; root._greebled = true; root._handDetailed = true;
   // None of the passes that decorate a gun is for a pair: the collar pass put a ring round a sight on one slide, and the
@@ -32455,7 +32477,10 @@ function buildAkimbo1911() {
   gpBox(g, M.dark, 0.0105, 0.040, 0.0016, 0, -0.130, 0.0345, 0.30);                 // its witness slot
   gpBox(g, M.bright, 0.026, 0.007, 0.032, 0, -0.1555, 0.0545, 0.30);                // floorplate
   _akimboGuard(g, blued, M.bright);
-  return _akimboFinish(g, slide, -0.150);
+  _akimboFinish(g, slide, -0.150);
+  const eject = _akimboBits(g, { geo: new THREE.BoxGeometry(0.0042, 0.0042, 0.0115), mat: _skM(0xd8b040, 180, 0xfff0a0), at: [0.0123, 0.028, -0.030], v: [0.55, 0.38, 0.08], spread: 0.16, life: 0.55, grav: 2.4, spin: 14, n: 4 });
+  g._tick = (dt) => eject(dt);
+  return g;
 }
 
 // Micro Uzi pair: the stamped box receiver with its ridged top cover, a shrouded barrel with its nut, two sight ears, and a cocking
@@ -32487,7 +32512,10 @@ function buildAkimboUzi() {
   gpBox(g, M.black, 0.027, 0.008, 0.034, 0, -0.1585, 0.0545, 0.30);                 // its base plate
   gpCyl(g, M.bright, 0.0040, 0.0040, 0.003, 10, 0.0175, 0.010, 0.022, 0.0, Math.PI / 2);   // the selector
   _akimboGuard(g, stamped, M.bright);
-  return _akimboFinish(g, slide, -0.171);
+  _akimboFinish(g, slide, -0.171);
+  const eject = _akimboBits(g, { geo: new THREE.BoxGeometry(0.0042, 0.0042, 0.0115), mat: _skM(0xd8b040, 180, 0xfff0a0), at: [0.0172, 0.022, -0.016], v: [0.55, 0.38, 0.08], spread: 0.16, life: 0.55, grav: 2.4, spin: 14, n: 4 });
+  g._tick = (dt) => eject(dt);                                                      // a brass casing out of the port on every shot
+  return g;
 }
 
 // Water-pistol pair: cyan shell, a clear tank on top with the water showing, a white nozzle, and an orange pump grip that is
@@ -32501,7 +32529,7 @@ function buildAkimboSoaker() {
   gpBox(g, cyan, 0.026, 0.034, 0.124, 0, 0.012, -0.030);                            // body shell
   gpBox(g, deep, 0.0275, 0.008, 0.070, 0, 0.002, -0.030);                           // a darker band down the side
   gpCyl(g, clear, 0.0235, 0.0235, 0.088, 18, 0, 0.049, -0.026);                     // the tank
-  gpCyl(g, water, 0.0200, 0.0200, 0.080, 18, 0, 0.046, -0.026);                     // the water in it
+  const tankWater = gpCyl(g, water, 0.0200, 0.0200, 0.080, 18, 0, 0.046, -0.026);                     // the water in it
   [-1, 1].forEach(s => gpCyl(g, cyan, 0.0250, 0.0250, 0.006, 18, 0, 0.049, -0.026 + s * 0.047));   // end caps
   gpCyl(g, white, 0.0060, 0.0060, 0.012, 10, 0, 0.0760, -0.026, 0);                 // the filler cap
   for (let i = 0; i < 3; i++) gpCyl(g, white, 0.0014, 0.0014, 0.0155, 8, 0.0, 0.053 - i * 0.0042, -0.074, 0.0, Math.PI / 2);   // the scale lines
@@ -32515,7 +32543,15 @@ function buildAkimboSoaker() {
   gpBox(g, orange, 0.007, 0.022, 0.009, 0, -0.016, 0.000, 0.2);                     // a big orange trigger
   gpBox(g, yellow, 0.020, 0.028, 0.024, 0, -0.130, 0.047, 0.30);                    // the little reservoir at the heel
   gpBox(g, orange, 0.024, 0.006, 0.028, 0, -0.1465, 0.052, 0.30);
-  return _akimboFinish(g, slide, -0.140, 0.012);
+  const bubbles = []; for (let i = 0; i < 4; i++) { const b = new THREE.Mesh(new THREE.SphereGeometry(0.0034, 6, 5), _skGlass(0xffffff)); g.add(b); bubbles.push(b); }   // bubbles in the tank
+  _akimboFinish(g, slide, -0.140, 0.012);
+  const drops = _akimboBits(g, { geo: new THREE.SphereGeometry(0.0034, 6, 5), mat: new THREE.MeshBasicMaterial({ color: 0x6ac8ff }), at: [0, 0.012, -0.136], v: [0, 0.10, -1.2], spread: 0.22, life: 0.5, grav: 3.2, spin: 0, n: 6 });
+  g._tick = (dt, now) => {
+    const t = now / 1000; tankWater.rotation.z = Math.sin(t * 2.6) * 0.07; tankWater.rotation.x = Math.PI / 2 + Math.sin(t * 2.1) * 0.03;      // it sloshes
+    bubbles.forEach((b, i) => { const k = (t * 0.4 + i / 4) % 1; b.position.set(Math.sin(t * 2 + i) * 0.010, 0.040 + k * 0.014, -0.026 + (i - 1.5) * 0.020); });
+    drops(dt);
+  };
+  return g;
 }
 
 // Stapler pair: a red top arm on a dark base with a chrome strip down the spine, the hinge at the back, a staple strip standing in
@@ -32545,7 +32581,12 @@ function buildAkimboStapler() {
   for (let i = 0; i < 5; i++) gpBox(g, inner, 0.0125, 0.0016, 0.015, 0, -0.112 - i * 0.0105, 0.0405 + i * 0.0016, 0.30);
   gpBox(g, rubber, 0.017, 0.007, 0.022, 0, -0.1625, 0.056, 0.30);
   _akimboGuard(g, base, chrome);
-  return _akimboFinish(g, slide, -0.140, 0.016);
+  gpBox(g, tape, 0.0016, 0.006, 0.020, -0.0146, 0.0300, -0.070);                   // a "SWING" sticker on the other side
+  gpBox(g, red, 0.0017, 0.004, 0.012, -0.0148, 0.0300, -0.070);
+  _akimboFinish(g, slide, -0.140, 0.016);
+  const staples = _akimboBits(g, { geo: new THREE.BoxGeometry(0.010, 0.0016, 0.0016), mat: _skM(0xd8dce2, 200, 0xffffff), at: [0, 0.0145, -0.132], v: [0, 0.05, -1.3], spread: 0.18, life: 0.35, grav: 1.5, spin: 18, n: 5 });
+  g._tick = (dt) => staples(dt);                                                    // a staple leaves with every shot
+  return g;
 }
 
 // Banana pair: five segments bent into the curve, a brown stalk at the heel and a brown tip for the muzzle, spots, and three
@@ -32574,7 +32615,65 @@ function buildAkimboBanana() {
     gpBox(g, brown, 0.0070, 0.0070, 0.010, x, -0.084, 0.044 + i * 0.002, 0.18, 0, rz);                // a bruised tip
   });
   gpBox(g, peel, 0.0050, 0.016, 0.005, 0, -0.020, 0.000, 0.2);                                      // a small strip for the trigger
-  return _akimboFinish(g, slide, -0.158);
+  const flap = gpBox(g, peel, 0.0050, 0.020, 0.005, 0.0, -0.092, 0.050, 0.2);                       // a loose bit of peel that flaps
+  const label = _skM(0x2a9a3a, 40, 0xbfffcf); gpBox(g, label, 0.0016, 0.012, 0.018, 0.0152, 0.004, -0.022, 0.0, 0, 0.0);    // the sticker on the side
+  gpBox(g, _skM(0xf8f8f0, 30), 0.0018, 0.005, 0.005, 0.0156, 0.004, -0.022);
+  const fly = new THREE.Mesh(new THREE.SphereGeometry(0.0028, 6, 5), new THREE.MeshBasicMaterial({ color: 0x1a1a1a })); g.add(fly);   // and a fruit fly
+  _akimboFinish(g, slide, -0.158);
+  g._tick = (dt, now) => {
+    const t = now / 1000, fired = !!(g._flash && g._flash.visible);
+    fly.position.set(Math.cos(t * 5.2) * 0.026, 0.040 + Math.sin(t * 7.1) * 0.010, 0.010 + Math.sin(t * 5.2) * 0.040);
+    flap.rotation.x = 0.2 + Math.sin(t * 4) * 0.12 + (fired ? 0.5 : 0);
+  };
+  return g;
+}
+
+// ⚡ Apex pistols: a pair of black sidearms, lit red. One pistol of the pair (the left hand is this one mirrored). The slide
+// is a flat-topped wedge with a long red strip down each flank, the energy cell hangs under the grip where the magazine
+// would be and glows through a window, and the muzzle is an emitter: a shroud, a lit ring and a lens. The slide runs back
+// on every shot like the others (the contract with updateAkimboHands), but what leaves is a red bolt.
+function buildAkimboApex() {
+  const g = new THREE.Group();
+  const M = _milMats(), blk = gpFinish(0x25282d, .34, .70, 'steel'), panel = gpFinish(0x30343a, .40, .60, 'steel');
+  const red = new THREE.MeshBasicMaterial({ color: 0xff2a3a }), dim = new THREE.MeshBasicMaterial({ color: 0xc01828 });
+  const slide = new THREE.Group(); g.add(slide);
+  gpBox(slide, blk, 0.024, 0.026, 0.150, 0, 0.021, -0.045);                         // the slide
+  gpBox(slide, panel, 0.014, 0.006, 0.140, 0, 0.0375, -0.045);                      // flat top
+  gpBox(slide, blk, 0.024, 0.020, 0.020, 0, 0.0195, -0.127, 0.0);                    // the nose
+  gpBox(slide, panel, 0.020, 0.008, 0.022, 0, 0.0285, -0.121, -0.5);                // cut back to a wedge
+  [-1, 1].forEach(sx => {
+    const x = sx * 0.0124;
+    gpBox(slide, red, 0.0022, 0.004, 0.100, x, 0.026, -0.040);                       // the long light strip
+    gpBox(slide, dim, 0.0022, 0.003, 0.050, x, 0.014, -0.020);                       // a short one under it
+    for (let i = 0; i < 3; i++) gpBox(slide, M.dark, 0.0024, 0.012, 0.004, x, 0.027, 0.034 - i * 0.008);   // rear vents
+  });
+  gpBox(slide, M.bright, 0.010, 0.006, 0.006, 0, 0.042, 0.032);                      // rear sight
+  gpBox(slide, red, 0.0035, 0.007, 0.005, 0, 0.0425, -0.112);                        // front sight, lit
+  // the frame under it, and the emitter on the front
+  gpBox(g, panel, 0.022, 0.014, 0.130, 0, 0.002, -0.030);
+  gpCyl(g, panel, 0.0085, 0.0095, 0.034, 14, 0, 0.0195, -0.146);                     // emitter shroud
+  gpCyl(g, red, 0.0098, 0.0098, 0.003, 14, 0, 0.0195, -0.150);                       // lit ring
+  gpCyl(g, red, 0.0050, 0.0050, 0.003, 12, 0, 0.0195, -0.164);                       // lens
+  gpPlate(g, M.black, _AKIMBO_GRIP, 0.028, 0);                                       // the grip
+  [-1, 1].forEach(sx => gpBox(g, dim, 0.0022, 0.042, 0.003, sx * 0.0143, -0.066, 0.040));   // a light line down each side of it
+  gpBox(g, blk, 0.021, 0.050, 0.028, 0, -0.132, 0.047, 0.30);                        // the energy cell
+  [-1, 1].forEach(sx => gpBox(g, red, 0.0024, 0.034, 0.014, sx * 0.0108, -0.130, 0.047, 0.30));   // lit through its window
+  gpBox(g, panel, 0.026, 0.006, 0.032, 0, -0.1585, 0.0545, 0.30);                    // its base
+  _akimboGuard(g, panel, red);
+  _akimboFinish(g, slide, -0.172);
+  const eject = _akimboBits(g, { geo: new THREE.BoxGeometry(0.0042, 0.0042, 0.0115), mat: _skM(0xff3a48, 120, 0xffc0c8), at: [0.0125, 0.027, -0.030], v: [0.55, 0.38, 0.08], spread: 0.16, life: 0.55, grav: 2.4, spin: 14, n: 4 });
+  g._tick = (dt) => eject(dt);                                                      // (its casings are the red of its light)
+  return g;
+}
+function buildAkimboApexPair() {
+  const root = _akimboPair(buildAkimboApex);
+  // The flash is makeMuzzleFlash(), orange all through: repaint it red (the core sphere is child 1 and also sets the colour of the light)
+  root._akimbo.flashes.forEach(f => f.traverse(o => {
+    if (!o.isMesh || !o.material || !o.material.color) return;
+    if (o === f.children[1]) o.material.color.setHex(0xff6a74);
+    else o.material.color.setHex(o.material.color.getHex() === 0xffffff ? 0xffe0e2 : 0xff2a3a);
+  }));
+  return root;
 }
 function buildAkimbo1911Pair() { return _akimboPair(buildAkimbo1911); }
 function buildAkimboUziPair() { return _akimboPair(buildAkimboUzi); }
@@ -32586,18 +32685,23 @@ function buildAkimboBananaPair() { return _akimboPair(buildAkimboBanana); }
 function placeAkimboHand(A, hand, i) {
   const holder = A.holders[i], gun = A.guns[i];
   holder.updateMatrix(); gun.updateMatrix();
-  hand.position.copy(A.handLocal[i]).applyMatrix4(gun.matrix).applyMatrix4(holder.matrix);
-  hand.rotation.set(A.handRot[i].x + holder.rotation.x, A.handRot[i].y, A.handRot[i].z + holder.rotation.z);
+  // Compose the whole grip frame, including the left pistol's reflection.
+  // Adding Euler angles dropped yaw and left the glove behind during flips.
+  const matrix=A.handMatrix || (A.handMatrix=new THREE.Matrix4());
+  matrix.copy(holder.matrix).multiply(gun.matrix).multiply(A.handPose[i]);
+  matrix.decompose(hand.position,hand.quaternion,hand.scale);
 }
 function attachAkimboHands(root) {
   const A = root._akimbo;
   root._handsDone = true;
   const handScale = 1 / (root.scale.x || 1);
+  A.handPose=[];
   const make = (side, i) => {
     const h = _makeViewHand(side);
     h.scale.setScalar(handScale);
     A.handLocal[i] = new THREE.Vector3(0.004, -0.046, 0.036);      // the trigger hand on the grip, a little behind it
-    A.handRot[i] = new THREE.Euler(0.26, 0, side * 0.10);
+    A.handRot[i] = new THREE.Euler(0.26, 0, 0.10);
+    A.handPose[i]=new THREE.Matrix4().compose(A.handLocal[i],new THREE.Quaternion().setFromEuler(A.handRot[i]),new THREE.Vector3(handScale,handScale,handScale));
     root.add(h);
     placeAkimboHand(A, h, i);
     return h;
@@ -54799,6 +54903,17 @@ function buildPoolNoodle() {
     const band = new THREE.Mesh(new THREE.TorusGeometry(0.0345, 0.005, 5, 14), stripeMat);
     band.position.set(0, 0, z); g.add(band);
   });
+  const dm = new THREE.MeshBasicMaterial({ color: 0x9adfff, transparent: true, opacity: 0.8 });
+  for (let i = 0; i < 12; i++) {                                                   // the ribbing of the foam, a ring of little ridges along the shaft
+    const rd = new THREE.Mesh(new THREE.TorusGeometry(0.0345, 0.0016, 4, 14), foamMat); rd.position.set(0, 0, 0.190 - i * 0.032); g.add(rd);
+  }
+  const bite = new THREE.Mesh(new THREE.SphereGeometry(0.010, 8, 6), holeMat); bite.position.set(0.026, 0.020, -0.050); g.add(bite);   // a chunk someone bit out of it
+  const drips = [0, 1, 2].map(() => { const m = new THREE.Mesh(new THREE.SphereGeometry(0.0045, 6, 5), dm); g.add(m); return m; });
+  g._tick = (dt, now) => {
+    const t = now / 1000;
+    tip.rotation.x = Math.PI / 2 + 0.17 + Math.sin(t * 2.2) * 0.05; tip.position.y = -0.008 + Math.sin(t * 2.2) * 0.004;       // the floppy end never quite stops
+    drips.forEach((m, i) => { const k = (t * 0.8 + i / 3) % 1; m.position.set(Math.cos(i * 2.1) * 0.032, -0.030 - k * k * 0.090, -0.300 + i * 0.022); m.material.opacity = 0.8 * (1 - k * 0.7); });
+  };
   g.position.set(0.10, -0.12, -0.20); return g;
 }
 
