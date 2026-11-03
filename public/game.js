@@ -43107,6 +43107,7 @@ const BOOM_THEMES = {
   hacker:   { fire: 0x1fdc55, core: 0xd4ffe0, smoke: 0x061a0c, bits: [0x2dff6a, 0x0a0a0a, 0x7dffa6], bit: 'cube', ring: 0x2dff6a, flash: [70, 255, 140] },
   crumbs:   { fire: 0xe8a838, core: 0xfff0c0, smoke: 0xb8935a, bits: [0xe8a838, 0xc0392b, 0xf2c14e, 0x8a5a2a], bit: 'chunk', ring: 0xf2c14e, flash: [255, 200, 90] },
   soda:     { fire: 0xe8dcc0, core: 0xffffff, smoke: 0xf4f4f4, bits: [0xffffff, 0xcfe8ff, 0xe8c07a], bit: 'ball', ring: 0xffffff, flash: [255, 255, 255] },
+  splash:   { fire: 0x55bbff, core: 0xe8f8ff, smoke: 0xcfeeff, bits: [0x55bbff, 0xaadcff, 0xffffff], bit: 'drop', ring: 0x66ccff, flash: [90, 170, 255], splash: true },   // a water balloon bursting: the water theme, plus the splash
   water:    { fire: 0x55bbff, core: 0xe8f8ff, smoke: 0xcfeeff, bits: [0x55bbff, 0xaadcff, 0xffffff], bit: 'drop', ring: 0x66ccff, flash: [90, 170, 255] },
   confetti: { fire: 0xff6ab8, core: 0xffffff, smoke: 0xfff0a0, bits: [0xff4fa8, 0x4ad8ff, 0xffe14a, 0x7aff7a, 0xff8a3a], bit: 'flake', ring: 0xffe14a, flash: [255, 230, 120] },
   foam:     { fire: 0xf4f8ff, core: 0xffffff, smoke: 0xe0eaf4, bits: [0xffffff, 0xdbe8f5], bit: 'ball', ring: 0xdbe8f5, flash: [230, 240, 255] },
@@ -43181,8 +43182,8 @@ const SKIN_SHOT = {};
   G({ shape: 'cube', c: [0xe74c3c, 0x2ecc71] }, 'pixel', ['p90_rubiks_cube']);
   G({ shape: 'shard', c: [0xb0b8ff, 0x6a6aff] }, 'star', ['ak20_hyperspace', 'deagle_phantom', 'burst_cannon_phantom', 'deagle_glitch']);
   // more of the house
-  G({ shape: 'drop', c: [0x2a9fd8, 0xffffff], min: 0.1 }, 'water', ['gl_water_balloon']);
-  G(null, 'water', ['rpg_water_balloon']);                                     // (its round is the authored water balloon; the burst is a splash)
+  G({ shape: 'drop', c: [0x2a9fd8, 0xffffff], min: 0.1 }, 'splash', ['gl_water_balloon']);
+  G(null, 'splash', ['rpg_water_balloon']);                                     // (its round is the authored water balloon; the burst is a splash)
   G({ shape: 'dart', c: [0xf2e63a, 0xf07a1c] }, 'foam', ['ak20_nerf_elite']);
   G({ shape: 'leaf', c: [0xc8782a, 0x8a5a1a] }, 'crumbs', ['sg8_leaf_blower']);
   G({ shape: 'ball', c: [0xe8442c, 0xffffff] }, 'water', ['lever_fishing_rod']);
@@ -58854,6 +58855,26 @@ const SKIN_FX = {
     reload: _fxR(_RK.front(), [RP(.30,'comb','eject',1,'muzzle'), RP(.54,'comb','arrive',1,'muzzle')], null, 'buzz') },
   machine_pistol_tape_gun: { sound: _fxS('rip', .24, .08, 2200, 5200),
     reload: _fxR(_RK.top(), [RP(.30,'tape','eject',1,'breech'), RP(.56,'tape','arrive',1,'breech')], null, 'rip') },
+  sawed_off_baguette: { sound: _fxS('crunch', .36, .10, 900, 1500),
+    reload: _fxR(_RK.front(), [RP(.30,'crisp','eject',2,'breech'), RP(.56,'crisp','arrive',2,'breech')], [[.40,'rustle']], 'tap') },
+  plasma_carbine_lava_lamp: { sound: _fxS('squirt', .30, .09, 380, 140),
+    reload: _fxR(_RK.under(), [RP(.30,'bubble','eject',3,'muzzle'), RP(.56,'refill','arrive')], [[.34,'glug'],[.62,'bloop']], 'bloop') },
+  smart_smg_smartphone: { sound: _fxS('beep', .22, .06, 1568, 2093),
+    reload: _fxR(_RK.under(), [RP(.30,'battery'), RP(.58,'battery','arrive')], [[.45,'beep']], 'ding') },
+  // the lid flips up (arx), the stack is tipped out (av drains), the off hand goes
+  // to a pocket and comes back with a fresh wad that goes in (av fills), the lid shuts
+  machine_pistol_money_gun: { sound: _fxS('flick', .26, .07, 2600, 2400),
+    reload: _fxR([K(.08,{py:.05,rx:.20,rz:-.30,hy:.02}),
+      K(.20,{py:.06,rx:.24,rz:-.62,hx:.02,hy:.10,hz:-.02,hr:-.4}),
+      K(.30,{py:.06,rx:.26,rz:-.70,hy:.14,hz:-.03,arx:1.35,av:.9}),
+      K(.38,{py:.06,rx:.28,rz:-.70,hx:-.04,hy:.06,hz:.02,arx:1.35,av:.06}),
+      K(.46,{py:.07,rx:.30,rz:-.66,hx:-.09,hy:-.22,hz:.04,hr:.5,arx:1.35,av:.06}),
+      K(.58,{py:.07,rx:.28,rz:-.70,hx:.02,hy:.13,hz:-.03,arx:1.35,av:.35}),
+      K(.66,{py:.06,rx:.26,rz:-.70,hy:.10,hz:-.02,arx:1.35,av:1}),
+      K(.78,{py:.05,rx:.16,rz:-.45,hy:.04,arx:1.10,av:1}),
+      K(.86,{py:.03,rx:.08,rz:-.22,arx:0,av:1}), K(.95,{py:.01,rz:-.04})],
+      [RP(.34,'cash','eject',3,'breech'), RP(.60,'cash','arrive',1,'breech')],
+      [[.22,'click'],[.40,'rustle'],[.62,'rustle'],[.84,'snapin']], 'ding') },
   mk44_keytar: { sound: _fxS('synth', .24, .09, 523, 659),
     reload: _fxR(_RK.tune(), [.40,.50,.60].map(t => RP(t,'note','arrive',1,'breech')), null, 'chord') },
   amr_pool_net: { sound: _fxS('splash', .34, .18, 500, 200),
@@ -60919,7 +60940,7 @@ function rocketExplode(pos, weaponId, excludePid, opts = {}) {
   spawnExplosion(pos, boom);
   if (opts.skinLook && opts.skinLook.hit === 'hack') { skinHitFX('hack', pos, false); _hackDigits(pos, 34, 7.5, 4, 820, 0.32); }   // a hacker round that bursts (the Hacker Launcher's, or somebody else's Hacker Grenade; your own grenade bursts in explodeGrenade) throws its code
   spawnAbilityAOEFX(pos.clone().setY(0.2), radius, boom ? boom.ring : 0xff7722);
-  playSoundEvent('explosion', { position: pos, volume: 1.1, minGap: 60 });
+  playSoundEvent('explosion', { position: pos, volume: (boom && boom.splash) ? 0.5 : 1.1, minGap: 60 });
   const splashId = weaponId + '_splash';
   const damageRemotes = opts.damageRemotes !== false;
   const damagePlayer = !!opts.damagePlayer;
@@ -65590,10 +65611,37 @@ function spawnMushroomCloud(pos) {
   };
   requestAnimationFrame(tick);
 }
+// 💦 The Water Balloon Launchers' blast (a skin's look only): a dome of water thrown up with a column in the middle that rises and falls, a crown of
+// droplets flung out in arcs, and a ring and a puddle spreading across the floor. About a second and a half.
+function spawnWaterSplash(pos) {
+  const g = new THREE.Group(); g.position.copy(pos); scene.add(g);
+  const mat = (c, op) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: op, depthWrite: false, side: THREE.DoubleSide });
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), mat(0x7ad0ff, 0.5)); g.add(dome);
+  const col = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.85, 1, 14, 1, true), mat(0xaee4ff, 0.6)); g.add(col);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.88, 1.0, 48), mat(0x9adfff, 0.8)); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.05; g.add(ring);
+  const puddle = new THREE.Mesh(new THREE.CircleGeometry(1, 30), mat(0x6ac0f0, 0.35)); puddle.rotation.x = -Math.PI / 2; puddle.position.y = 0.04; g.add(puddle);
+  const drops = [];
+  for (let i = 0; i < 30; i++) {
+    const a = Math.random() * Math.PI * 2, sp = 4 + Math.random() * 6, m = new THREE.Mesh(new THREE.SphereGeometry(0.07 + Math.random() * 0.07, 6, 5), mat(0xdff4ff, 0.9));
+    g.add(m); drops.push({ m, vx: Math.cos(a) * sp, vy: 6 + Math.random() * 7, vz: Math.sin(a) * sp });
+  }
+  const t0 = performance.now(), T = 1500;
+  const tick = () => {
+    const t = (performance.now() - t0) / 1000, p = Math.min(1, t * 1000 / T), e = 1 - Math.pow(1 - Math.min(1, t / 0.5), 3);
+    dome.scale.setScalar(0.3 + 4.2 * e); dome.material.opacity = Math.max(0, 0.5 * (1 - Math.max(0, t - 0.25) / 0.55));
+    const H = 7 * Math.sin(Math.min(1, t / 0.8) * Math.PI); col.scale.set(1 + 0.6 * e, Math.max(0.01, H), 1 + 0.6 * e); col.position.y = H / 2; col.material.opacity = 0.6 * Math.max(0, 1 - p * 1.3);
+    ring.scale.setScalar(0.5 + 8 * (1 - Math.pow(1 - Math.min(1, t / 0.9), 2))); ring.material.opacity = 0.8 * Math.max(0, 1 - t / 0.9);
+    puddle.scale.setScalar(0.5 + 4.5 * e); puddle.material.opacity = 0.35 * (t < 1.0 ? 1 : Math.max(0, 1 - (t - 1.0) / 0.5));
+    for (const d of drops) { d.vy -= 22 * 0.016; d.m.position.x += d.vx * 0.016; d.m.position.y = Math.max(0.05, d.m.position.y + d.vy * 0.016); d.m.position.z += d.vz * 0.016; if (d.m.position.y <= 0.05) { d.vx *= 0.5; d.vz *= 0.5; d.vy = 0; d.m.material.opacity *= 0.93; } }
+    if (p < 1) requestAnimationFrame(tick);
+    else { scene.remove(g); g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); }
+  };
+  requestAnimationFrame(tick);
+}
 function spawnExplosion(pos, boom = null) {
   // 💥 Boom — positional volume based on distance from camera. `boom` (BOOM_THEMES, or a tint of a skin) changes only the colours and what the bits are:
   // the blast, the damage and the sound are the same for every skin.
-  playSoundEvent('explosion', { position: pos, remote: pos.distanceTo(camera.position) > 5, volume: 1.1, minGap: 80 });
+  playSoundEvent('explosion', { position: pos, remote: pos.distanceTo(camera.position) > 5, volume: (boom && boom.splash) ? 0.5 : 1.1, minGap: 80 });   // (a balloon: a thump, not a bang)
   applyBlastImpulse(pos);
   window.PVP_RAGDOLL?.blast(pos);
   // ── Fireball (grows + fades) ──
@@ -65638,6 +65686,7 @@ function spawnExplosion(pos, boom = null) {
   };
   requestAnimationFrame(tick);
   if (boom && boom.mushroom) spawnMushroomCloud(pos);
+  if (boom && boom.splash) spawnWaterSplash(pos);
 
   // ── Debris chunks ──
   const bits = boom ? boom.bits : null;
