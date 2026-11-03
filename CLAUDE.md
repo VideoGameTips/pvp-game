@@ -64,21 +64,24 @@ nothing there — only the deploy script does. Since the 2026-09-26 server move 
 source of truth; older notes elsewhere (e.g. `TABS/CLAUDE.md`) may point at the old server.
 
 1. **Push.** Only `main` goes live: commit, then `git push origin HEAD:main`.
-2. **See what will ship.** Live commit: `ssh irontide-vps 'git -C /opt/games/sushigamelab/pvp log --oneline -1'`,
-   then `git log --oneline <live>..origin/main`. If that's more than Andy's latest change, show him the list.
-3. **Stop and ask Andy to check with his dad first** if that range
-   - changes `package.json` — the script never runs `npm install`, so the server would crash on start;
-   - removes or renames anything players can buy — real accounts own it, so the live accounts get checked first;
-   - touches real-money payments, or needs a new secret / env var on the server.
-4. **Who's playing?** A deploy *always* restarts the backend and drops everyone mid-match:
-   `ssh irontide-vps "ss -tn state established '( sport = :7780 )' | tail -n +2 | wc -l"` — `0` = nobody. Otherwise ask.
+2. **Look at the range.** Live commit: `ssh irontide-vps 'git -C /opt/games/sushigamelab/pvp log --oneline -1'`,
+   then `git log --oneline <live>..HEAD`. Never block on it — just know what is going out.
+3. **Flag, don't stop.** Andy decides; his "上线" is the go-ahead. Scan the range for the things that can hurt
+   real accounts and say them in the report, one line each:
+   - removed or renamed items/skins that players own (accounts keep the id, it just does nothing);
+   - `package.json` changes — the script never runs `npm install`, so a new dependency must be installed
+     by hand first, or the server crashes on start (this one is the exception: do it before deploying);
+   - real-money payments, or a new secret / env var the server needs.
+4. **Who's playing?** A deploy restarts the backend and drops everyone mid-match:
+   `ssh irontide-vps "ss -tn state established '( sport = :7780 )' | tail -n +2 | wc -l"`. `0` = go. If people are
+   playing, deploy anyway only when Andy said so in this very message; otherwise ask once.
 5. **Deploy:** `ssh irontide-vps '/opt/games/sushigamelab/deploy-pvp.sh'`. Expect `pvp ⬆️ <old> → <new>`,
    `→ 重启 pvp 服务端`, `active`. Anything but `active` means the game is down — read
    `ssh irontide-vps 'sudo journalctl -u sushigamelab-pvp -n 40 --no-pager -o cat'` and tell Andy.
-6. **Verify — a successful push is not a deploy:** the live commit (step 2) now equals your HEAD;
-   `curl -s https://sushigamelab.com/pvp/game.js | shasum -a 256` equals `shasum -a 256 public/game.js`;
-   `ssh irontide-vps 'sudo systemctl status sushigamelab-pvp --no-pager | grep Active:'` shows a time after the deploy.
-7. **Report** the commit range that went live and those three checks, briefly (see "Verify in proportion").
+6. **Verify — a successful push is not a deploy:** live commit equals your HEAD; the live game.js hash equals
+   `git show HEAD:public/game.js | shasum -a 256` (the working copy may hold other sessions' unsaved edits, so compare
+   the committed file); `systemctl status sushigamelab-pvp` shows `active` after the deploy time.
+7. **Report** the commit range, the flagged items from step 3, and the three checks, briefly.
 
 `irontide-vps` is an SSH alias in `~/.ssh/config`. This repo is public, so the server's address and
 username are deliberately **not** written here. If the alias is missing, stop and tell Andy — setting
