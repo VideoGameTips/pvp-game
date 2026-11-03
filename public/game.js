@@ -75077,7 +75077,26 @@ function closeVChat() {
   const box = document.getElementById('vchat-box'); if (box) box.style.display = 'none';
   try { requestPointerLockSafe(); } catch (e) {}
 }
+// "/adminpanel @me <password>" — asks the server to make this account an admin; the password never goes into chat.
+function handleClaimAdminCommand(raw) {
+  const m = String(raw || '').trim().match(/^\/adminpanel\s+@me(?:\s+(\S+))?$/i);
+  if (!m) return false;
+  if (!currentUser || currentUser.guest) { pushChatLine('Log in to an account first.', '#ff7777'); return true; }
+  if (!m[1]) { pushChatLine('Admin: type /adminpanel @me <password>', '#ff8888'); return true; }
+  authRequest('/auth/claim-admin', { username: currentUser.username, password: currentUser.password, adminPass: m[1] }).then(r => {
+    if (!r || r.error) { pushChatLine('Admin: ' + (r?.error || 'no answer'), '#ff7777'); return; }
+    currentUser.isAdmin = true;
+    currentUser.unlocks = r.unlocks || currentUser.unlocks;
+    currentUser.credits = r.credits ?? currentUser.credits;
+    currentUser.skinInventory = r.skinInventory || currentUser.skinInventory;
+    try { updateUserInfoBar(); } catch (e) {}
+    pushChatLine('Admin: you are an admin now.', '#ff8888');
+    openAdminPanel();
+  });
+  return true;
+}
 function sendVChat(raw) {
+  if (handleClaimAdminCommand(raw)) return;
   if (handleAdminChatCommand(raw)) return;
   const msg = filterVChat(raw);
   if (!msg) return;

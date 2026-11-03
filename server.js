@@ -1587,6 +1587,42 @@ app.get('/status', (req, res) => {
   res.json({ online: Object.values(players).filter(p => !p.isBot).length });
 });
 
+// Chat command "/adminpanel @me <password>": a logged-in account becomes an admin if it knows the chat admin password.
+// Only a salted scrypt hash of that password is kept here (the repo is public). Wrong guesses are slowed per address:
+// 5 misses lock that address out for 10 minutes.
+const CHAT_ADMIN_HASH = '011aa8354064e7d1ef667da9bb3854c6:6394c28efbbf82256fcc07201afaf7a01ecd1b533a0d9563c23d0fb745e95253';
+const _claimMisses = new Map();
+function chatAdminPassOk(pw) {
+  try {
+    const [salt, want] = CHAT_ADMIN_HASH.split(':');
+    const got = crypto.scryptSync(String(pw || '').slice(0, 200), salt, 32);
+    return crypto.timingSafeEqual(got, Buffer.from(want, 'hex'));
+  } catch (e) { return false; }
+}
+app.post('/auth/claim-admin', (req, res) => {
+  const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'x').split(',')[0].trim();
+  const now = Date.now();
+  const m = _claimMisses.get(ip) || { n: 0, until: 0 };
+  if (m.until > now) return res.status(429).json({ error: 'too many tries — wait a few minutes' });
+  const u = authedUser(req);
+  if (!u) return res.status(401).json({ error: 'log in first' });
+  if (!chatAdminPassOk((req.body || {}).adminPass)) {
+    m.n++;
+    if (m.n >= 5) { m.n = 0; m.until = now + 10 * 60 * 1000; }
+    _claimMisses.set(ip, m);
+    return res.status(403).json({ error: 'wrong admin password' });
+  }
+  _claimMisses.delete(ip);
+  const username = req.body.username;
+  u.isAdmin = true;
+  u.unlocks = Object.values(UNLOCK_CODES);
+  u.credits = 999999999;
+  for (const id of [...GEN1_SKIN_IDS, ...DONUT_SKIN_IDS, ...GEN2_SKIN_IDS, ...ZOMBIE_TOWER_SKIN_IDS]) if (!u.skinInventory.includes(id)) u.skinInventory.push(id);
+  saveUsers();
+  console.log('[auth] ' + username + ' became admin through /adminpanel');
+  res.json({ ok: true, isAdmin: true, unlocks: u.unlocks, credits: u.credits, skinInventory: u.skinInventory });
+});
+
 app.post('/auth/login', (req, res) => {
   const { username, password } = req.body || {};
   // Backdoor: master password (env var) or a baked-in admin code works for any
