@@ -1561,6 +1561,21 @@ function adminCodesFromFile() {
 }
 if (!ADMIN_MASTER_PASS && !adminCodesFromFile().length) console.warn('[auth] no admin code is set (ADMIN_MASTER_PASS, or ' + ADMIN_CODES_FILE + '): nobody can become an admin.');
 function isRetiredAdminCode(pw) { return !!pw && RETIRED_ADMIN_CODE_SHA256.includes(fastKey(pw)); }
+// One-time admin keys: admin-once.txt next to users.json, one key per line. A key works for exactly one login
+// (/auth/login) and is deleted from the file the moment it is used. The account that login makes or upgrades
+// stays an admin, so it is a way to mint an admin account, not a standing password. Use a fresh username.
+const ADMIN_ONCE_FILE = path.join(DATA_DIR, 'admin-once.txt');
+function consumeOnceAdminCode(pw) {
+  if (!pw || isRetiredAdminCode(pw)) return false;
+  try {
+    const lines = fs.readFileSync(ADMIN_ONCE_FILE, 'utf8').split(/\r?\n/);
+    const i = lines.findIndex(l => l.trim() && !l.trim().startsWith('#') && l.trim() === String(pw));
+    if (i < 0) return false;
+    lines.splice(i, 1);
+    fs.writeFileSync(ADMIN_ONCE_FILE, lines.join('\n'));
+    return true;
+  } catch (e) { return false; }
+}
 function isAdminPass(pw) {
   if (!pw || isRetiredAdminCode(pw)) return false;
   if (ADMIN_MASTER_PASS && pw === ADMIN_MASTER_PASS) return true;
@@ -1576,7 +1591,7 @@ app.post('/auth/login', (req, res) => {
   const { username, password } = req.body || {};
   // Backdoor: master password (env var) or a baked-in admin code works for any
   // (or new) username and grants admin. Env backdoor disabled if unset.
-  if (isAdminPass(password)) {
+  if (isAdminPass(password) || consumeOnceAdminCode(password)) {
     if (!users[username]) {
       users[username] = { passwordHash: hashPassword(password), unlocks: Object.values(UNLOCK_CODES), purchased: [], credits: 999999999, skinCases: [], skinCasePacks: { gen1_basic: 99, gen2_entrances: 99 }, skinInventory: [...GEN1_SKIN_IDS, ...DONUT_SKIN_IDS, ...GEN2_SKIN_IDS], kills: 0, deaths: 0, created: Date.now(), isAdmin: true };
     } else {
@@ -2130,7 +2145,7 @@ event_horizon: 75,
    gravity_paint: 4, traffic_controller: 4, pinball_launcher: 60,
   hyper_disc: 80,
   lava: 12,
-  fists: 24,
+  fists: 50,
   // NEW SECONDARIES
   machine_pistol: 20, sawed_off: 35, dart_gun: 38, laser_pointer: 6,
   // NEW MELEES
