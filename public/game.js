@@ -26387,32 +26387,51 @@ function buildSlushieMachine() {
 
 function buildNerfElite() {
   // 🧡 AK20 -> foam blaster. Orange shell, blue furniture, a clear dart drum and
-  // the safety-orange muzzle that makes it legal to own.
+  // the safety-orange muzzle that makes it legal to own. The drum is real: eight darts with orange tips in a clear barrel, and it indexes
+  // one dart round with every shot. Racing stripes and an ELITE label on both sides, flip-up sights, a light under the barrel.
   const g = new THREE.Group();
   const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
   const shell = new THREE.MeshPhongMaterial({ color: 0xf07a1c, shininess: 90, specular: 0xffd0a0 });
   const blue  = new THREE.MeshPhongMaterial({ color: 0x2f6fd8, shininess: 80, specular: 0xa8c8ff });
   const grey  = new THREE.MeshPhongMaterial({ color: 0x5a6068, shininess: 40, specular: 0x9aa4b0 });
   const clear = new THREE.MeshPhongMaterial({ color: 0xdfeaf2, shininess: 150, specular: 0xffffff,
-                                              transparent: true, opacity: 0.44 });
+                                              transparent: true, opacity: 0.38 });
   const foam  = new THREE.MeshPhongMaterial({ color: 0xf2e63a, shininess: 20, specular: 0x8a8a40 });
+  const white = new THREE.MeshPhongMaterial({ color: 0xf4f4ee, shininess: 40, specular: 0xffffff });
+  const tipM  = new THREE.MeshPhongMaterial({ color: 0xff5a14, shininess: 30, specular: 0xffc090 });
+  const lens  = new THREE.MeshBasicMaterial({ color: 0xbfe6ff });
   gpBox(g, shell, 0.050, 0.098, 0.300, 0, 0.006, -0.010);              // body
   gpBox(g, blue,  0.052, 0.020, 0.230, 0, 0.052, -0.010);              // top rail
   for (let i = 0; i < 7; i++) gpBox(g, inner, 0.054, 0.008, 0.010, 0, 0.062, -0.100 + i * 0.030);
   gpBox(g, grey, 0.054, 0.028, 0.060, 0, 0.030, 0.090);                // charging slide
+  for (let i = 0; i < 5; i++) gpBox(g, inner, 0.056, 0.020, 0.004, 0, 0.030, 0.070 + i * 0.011);     // its ridges
   gpBox(g, blue, 0.062, 0.016, 0.026, 0, 0.044, 0.116);
-  // Clear drum of darts under the body.
+  for (const sd of [-1, 1]) {
+    gpBox(g, blue, 0.0016, 0.012, 0.220, sd * 0.0258, 0.026, -0.010);                               // racing stripe
+    gpBox(g, white, 0.0016, 0.007, 0.080, sd * 0.0258, -0.004, -0.050);                             // the ELITE label
+    for (let i = 0; i < 5; i++) gpBox(g, blue, 0.0018, 0.004, 0.010, sd * 0.0259, -0.004, -0.080 + i * 0.016);
+  }
+  // Clear drum of darts under the body, and it turns.
+  const drum = new THREE.Group(); drum.position.set(0, -0.066, -0.020); g.add(drum);
   gpCyl(g, clear, 0.054, 0.054, 0.046, 16, 0, -0.066, -0.020);
   gpCyl(g, blue,  0.058, 0.058, 0.008, 16, 0, -0.066, -0.046);
+  gpCyl(g, blue,  0.058, 0.058, 0.008, 16, 0, -0.066, 0.006);
   for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2;
-    gpCyl(g, foam, 0.0090, 0.0090, 0.034, 8, Math.cos(a) * 0.032, -0.066 + Math.sin(a) * 0.032, -0.020);
+    const a = (i / 8) * Math.PI * 2, cx = Math.cos(a) * 0.032, cy = Math.sin(a) * 0.032;
+    gpCyl(drum, foam, 0.0090, 0.0090, 0.034, 8, cx, cy, 0);                                         // a dart...
+    gpCyl(drum, tipM, 0.0092, 0.0050, 0.012, 8, cx, cy, -0.021);                                    // ...with its orange head
   }
   gpBox(g, shell, 0.034, 0.034, 0.060, 0, -0.030, -0.020);             // drum housing
   gpCyl(g, blue, 0.021, 0.021, 0.190, 12, 0, 0.010, -0.230);           // barrel
+  for (let i = 0; i < 3; i++) gpCyl(g, white, 0.0225, 0.0225, 0.006, 12, 0, 0.010, -0.170 - i * 0.050);   // barrel bands
   gpCyl(g, shell, 0.026, 0.026, 0.040, 12, 0, 0.010, -0.336);          // orange muzzle
   gpCyl(g, inner, 0.0135, 0.0135, 0.012, 12, 0, 0.010, -0.354);
   gpBox(g, grey, 0.030, 0.026, 0.110, 0, -0.026, -0.220);              // underrail
+  gpCyl(g, grey, 0.011, 0.011, 0.060, 10, 0, -0.030, -0.250);          // a light on it
+  gpCyl(g, lens, 0.0085, 0.0085, 0.004, 10, 0, -0.030, -0.282);
+  gpBox(g, white, 0.004, 0.022, 0.004, 0, 0.074, -0.150);              // front sight post
+  gpBox(g, blue, 0.016, 0.014, 0.008, 0, 0.070, 0.050);                // rear sight
+  gpBox(g, inner, 0.006, 0.006, 0.010, 0, 0.078, 0.050);
   gpPlate(g, blue, [                                                    // grip
     [0.082,-0.038],[0.114,-0.062],[0.120,-0.152],[0.096,-0.170],[0.070,-0.088],[0.064,-0.044],
   ], 0.040, 0);
@@ -26421,9 +26440,12 @@ function buildNerfElite() {
   gpPlate(g, shell, [                                                   // stock
     [0.156,-0.040],[0.216,0.010],[0.324,0.012],[0.388,-0.014],[0.382,-0.034],[0.222,-0.050],[0.168,-0.054],
   ], 0.048, 0);
+  for (let i = 0; i < 4; i++) gpBox(g, inner, 0.050, 0.004, 0.034, 0, -0.004 - i * 0.008, 0.270, 0, 0, 0.1);   // stock vents
   gpBox(g, blue, 0.050, 0.054, 0.010, 0, -0.004, 0.400, 0.10);         // butt pad
   const flash = makeMuzzleFlash(); flash.position.set(0, 0.010, -0.362); g.add(flash);
   g._flash = flash; g._kickZ = 0.010; g._greebled = true; g._handDetailed = true;
+  let was = false;
+  g._tick = () => { const fired = !!(g._flash && g._flash.visible); if (fired && !was) drum.rotation.z += Math.PI / 4; was = fired; };   // one dart round per shot
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
@@ -27240,23 +27262,40 @@ function _skFinish(g, fz, fy, kick) {
 }
 
 function buildWalkieTalkie() {
-  // 📻 Cycler -> walkie-talkie. A slab body, stubby antenna out the front and
-  // the push-to-talk bar down the side.
+  // 📻 Cycler -> walkie-talkie. A slab body, a wound antenna, a lit screen, a keypad and the push-to-talk bar down the side. The status light
+  // blinks green, and goes red when it is transmitting (when you fire).
   const g = new THREE.Group();
   const shell = _skM(0x2a2e34, 60, 0x6a7078), grille = _skM(0x14161a, 20, 0x30343a);
   const orange = _skM(0xe8781c, 110, 0xffc890), rubber = _skM(0x1c1e22, 30, 0x444850);
   const led = new THREE.MeshBasicMaterial({ color: 0x3aff6a });
+  const lcd = new THREE.MeshBasicMaterial({ color: 0x9cffb0 }), lcdDark = new THREE.MeshBasicMaterial({ color: 0x0c2a14 });
   gpBox(g, shell, 0.046, 0.066, 0.150, 0, 0.012, -0.010);              // body
   gpBox(g, orange, 0.048, 0.008, 0.150, 0, 0.048, -0.010);             // top band
   for (let i = 0; i < 5; i++) gpBox(g, grille, 0.048, 0.003, 0.070, 0, 0.034 - i * 0.008, -0.035); // speaker slats
   gpCyl(g, rubber, 0.006, 0.004, 0.110, 8, 0, 0.040, -0.130);         // antenna
+  for (let i = 0; i < 8; i++) gpCyl(g, orange, 0.0072 - i * 0.0004, 0.0072 - i * 0.0004, 0.004, 8, 0, 0.040, -0.092 - i * 0.013);   // its windings
   gpCyl(g, orange, 0.010, 0.010, 0.014, 10, -0.012, 0.055, 0.030, 0);  // channel knob
+  for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; gpBox(g, rubber, 0.002, 0.002, 0.003, -0.012 + Math.cos(a) * 0.0108, 0.0555 + 0, 0.030 + Math.sin(a) * 0.0108); }   // its grip ridges
   gpCyl(g, rubber, 0.008, 0.008, 0.012, 10, 0.012, 0.055, 0.030, 0);   // volume knob
   gpBox(g, rubber, 0.006, 0.036, 0.022, 0.026, 0.012, 0.012);          // push-to-talk
-  gpBox(g, led, 0.006, 0.004, 0.006, 0, 0.053, -0.050);                // status LED
   gpBox(g, shell, 0.020, 0.050, 0.004, 0, 0.012, 0.068);               // belt clip
+  // the face the player sees (the left): a screen, a keypad and a label
+  const lx = -0.0238;
+  gpBox(g, lcdDark, 0.002, 0.020, 0.046, lx, 0.030, -0.036);          // screen
+  gpBox(g, lcd, 0.0024, 0.004, 0.030, lx - 0.0003, 0.036, -0.038);    // its readout
+  gpBox(g, lcd, 0.0024, 0.004, 0.018, lx - 0.0003, 0.029, -0.044);
+  gpBox(g, lcd, 0.0024, 0.003, 0.034, lx - 0.0003, 0.023, -0.036);
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) gpBox(g, c === 1 && r === 1 ? orange : rubber, 0.003, 0.0075, 0.0095, lx, 0.012 - r * 0.0105, -0.016 + c * 0.0115 - 0.012);   // the keypad
+  gpBox(g, orange, 0.002, 0.004, 0.036, lx, -0.016, -0.036);          // brand strip
+  const statusLed = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.004, 0.006), led); statusLed.position.set(0, 0.053, -0.050); g.add(statusLed);
   _skGrip(g, shell, -0.010);
-  return _skFinish(g, -0.198, 0.040, 0.008);
+  _skFinish(g, -0.198, 0.040, 0.008);
+  const base = led.color.getHex();
+  g._tick = (dt, now) => {
+    const tx = !!(g._flash && g._flash.visible);
+    led.color.setHex(tx ? 0xff3030 : (Math.sin(now * 3) > 0.2 ? base : 0x1a6a30));
+  };
+  return g;
 }
 
 function buildFencingFoil() {
@@ -27361,39 +27400,80 @@ function buildBoombox() {
 }
 
 function buildToaster() {
-  // 🍞 Twin Barrel AR -> toaster. Two slots, two slices of toast, a lever
-  // and a browning dial. Twin barrel, as promised.
+  // 🍞 Twin Barrel AR -> toaster. Two slots with glowing elements, two slices of crusted toast that POP UP when you fire, a lever, a browning dial
+  // with its marks, a logo band and a plug on the cord. Twin barrel, as promised.
   const g = new THREE.Group();
   const chrome = _skM(0xd8dce2, 200, 0xffffff), black = _skM(0x1c1e22, 60, 0x5a6068);
-  const toast = _skM(0xe0b070, 20, 0xf0d0a0);
+  const toast = _skM(0xe8bf80, 20, 0xf0d0a0), crust = _skM(0xb8782e, 20, 0xd8a868);
+  const hot = new THREE.MeshBasicMaterial({ color: 0xff6a1a }), red = _skM(0xc82a24, 100, 0xffa098);
   gpBox(g, chrome, 0.064, 0.062, 0.180, 0, 0.012, -0.030);             // body
+  gpBox(g, black, 0.066, 0.006, 0.182, 0, 0.0445, -0.030);             // top plate
+  const slices = [];
   [-0.018, 0.018].forEach(x => {
-    gpBox(g, black, 0.014, 0.003, 0.140, x, 0.0435, -0.030);           // slot
-    gpBox(g, toast, 0.011, 0.026, 0.110, x, 0.056, -0.030);            // slice
+    gpBox(g, black, 0.014, 0.003, 0.140, x, 0.0475, -0.030);           // slot
+    gpBox(g, hot, 0.0016, 0.0016, 0.120, x - 0.0058, 0.0472, -0.030);  // the element glowing down one side of it
+    const sl = new THREE.Group(); sl.position.set(x, 0.045, -0.030); g.add(sl);
+    gpBox(sl, crust, 0.011, 0.026, 0.112, 0, 0.008, 0);                // the slice: a crust...
+    gpBox(sl, toast, 0.0118, 0.021, 0.100, 0, 0.0095, 0);              // ...and the crumb inside it
+    slices.push(sl);
   });
   gpBox(g, black, 0.014, 0.006, 0.020, -0.036, 0.030, -0.010);         // lever
+  gpBox(g, black, 0.004, 0.036, 0.008, -0.034, 0.018, -0.010);         // its slot
   gpBox(g, chrome, 0.066, 0.004, 0.182, 0, -0.019, -0.030);            // base rim
+  for (const sd of [-1, 1]) { gpBox(g, black, 0.0016, 0.004, 0.150, sd * 0.0322, 0.026, -0.030); gpBox(g, red, 0.0016, 0.010, 0.040, sd * 0.0322, 0.008, -0.030); }   // a logo band down both sides
   gpCyl(g, black, 0.010, 0.010, 0.006, 10, 0, 0.012, -0.123);         // browning dial
+  for (let i = 0; i < 5; i++) { const a = -0.8 + i * 0.4; gpBox(g, black, 0.002, 0.005, 0.0018, Math.sin(a) * 0.0118, 0.012 + Math.cos(a) * 0.0118, -0.1262); }   // its marks
+  gpBox(g, red, 0.002, 0.007, 0.002, 0, 0.012, -0.1258);              // its pointer
   gpCyl(g, black, 0.004, 0.004, 0.100, 6, 0, -0.010, 0.080, 1.3);      // cord
+  gpBox(g, black, 0.014, 0.010, 0.020, 0, -0.011, 0.126);              // plug
+  gpBox(g, chrome, 0.003, 0.004, 0.008, -0.004, -0.011, 0.139); gpBox(g, chrome, 0.003, 0.004, 0.008, 0.004, -0.011, 0.139);
   _skGrip(g, chrome, -0.010);
-  return _skFinish(g, -0.136, 0.012, 0.012);
+  _skFinish(g, -0.136, 0.012, 0.012);
+  let pop = 0, was = false;
+  g._tick = (dt) => {
+    const fired = !!(g._flash && g._flash.visible); if (fired && !was) pop = 1; was = fired;
+    pop = Math.max(0, pop - dt * 5);
+    for (let i = 0; i < slices.length; i++) slices[i].position.y = 0.045 + Math.sin(pop * Math.PI) * 0.030 * (i ? 0.85 : 1);   // the slices jump and drop back
+  };
+  return g;
 }
 
 function buildVacuumCleaner() {
-  // 🧹 Storm Cannon -> handheld vacuum. Red body, a see-through dust cup with
-  // last week in it and a crevice tool where the muzzle goes.
+  // 🧹 Storm Cannon -> handheld vacuum. Red body with a ribbed motor housing, a see-through dust cup with last week swirling in it (it spins
+  // up to a roar when you fire), a pleated filter, a crevice tool where the muzzle goes, battery lights and a wrist strap.
   const g = new THREE.Group();
   const red = _skM(0xd8302a, 100, 0xffa098), grey = _skM(0x8a9096, 60, 0xd0d4d8);
   const black = _skM(0x1c1e22, 40, 0x444850), dust = _skM(0x8a7a5a, 10, 0x9a8a6a);
+  const led = new THREE.MeshBasicMaterial({ color: 0x3aff6a }), ledOff = new THREE.MeshBasicMaterial({ color: 0x1a3a22 }), white = _skM(0xf0f0ea, 40);
   gpCyl(g, red, 0.040, 0.040, 0.170, 14, 0, 0.014, -0.010);           // motor body
+  for (let i = 0; i < 4; i++) gpCyl(g, black, 0.0415, 0.0415, 0.004, 14, 0, 0.014, 0.036 - i * 0.022);     // its ribs
   gpCyl(g, _skGlass(0xcfe8f4), 0.038, 0.038, 0.070, 14, 0, 0.014, -0.125); // dust cup
-  gpCyl(g, dust, 0.030, 0.030, 0.050, 10, 0, 0.014, -0.125);          // what's in it
+  const swirl = new THREE.Group(); swirl.position.set(0, 0.014, -0.125); g.add(swirl);
+  for (let i = 0; i < 9; i++) {                                         // what's in it, going round
+    const a = i / 9 * Math.PI * 2, r = 0.010 + (i % 3) * 0.008, bit = new THREE.Mesh(new THREE.SphereGeometry(0.0042 + (i % 2) * 0.0016, 6, 5), dust);
+    bit.position.set(Math.cos(a) * r, Math.sin(a) * r, -0.020 + (i % 5) * 0.010); swirl.add(bit);
+  }
+  gpCyl(g, dust, 0.014, 0.020, 0.026, 10, 0, 0.014, -0.140);          // a clump at the bottom
   gpCyl(g, grey, 0.042, 0.042, 0.010, 14, 0, 0.014, -0.092);          // filter ring
+  for (let i = 0; i < 10; i++) { const a = i / 10 * Math.PI * 2; gpBox(g, white, 0.002, 0.012, 0.006, Math.cos(a) * 0.034, 0.014 + Math.sin(a) * 0.034, -0.082, 0, 0, a + Math.PI / 2); }   // pleats
   gpCyl(g, black, 0.018, 0.010, 0.070, 10, 0, 0.014, -0.195);         // crevice tool
+  gpCyl(g, grey, 0.020, 0.020, 0.008, 10, 0, 0.014, -0.164);          // its collar
   gpBox(g, black, 0.010, 0.006, 0.024, 0, 0.056, 0.010);               // power switch
+  const bars = [0, 1, 2].map(i => { const b = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.003, 0.008), led); b.position.set(-0.0412, 0.030 + i * 0.0, 0.006 + i * 0.012); b.rotation.set(0, 0, 0); g.add(b); return b; });   // battery lights
   for (let i = 0; i < 4; i++) gpBox(g, black, 0.030, 0.003, 0.004, 0, 0.000 + i * 0.008, 0.078); // exhaust vents
+  gpBox(g, white, 0.002, 0.012, 0.050, -0.0402, 0.020, -0.030);       // brand sticker
+  gpBox(g, black, 0.0024, 0.004, 0.036, -0.0404, 0.020, -0.030);
   _skGrip(g, red, 0);
-  return _skFinish(g, -0.234, 0.014, 0.014);
+  gpBox(g, black, 0.040, 0.004, 0.010, 0, -0.074, 0.032);              // a wrist strap
+  _skFinish(g, -0.234, 0.014, 0.014);
+  let spin = 4;
+  g._tick = (dt, now) => {
+    const fired = !!(g._flash && g._flash.visible);
+    spin += ((fired ? 26 : 4) - spin) * Math.min(1, dt * 6);                                   // it roars up when you fire, and winds down
+    swirl.rotation.z += dt * spin;
+    bars.forEach((b, i) => { b.material = (i === 2 && fired) ? ledOff : led; });
+  };
+  return g;
 }
 
 function buildHolePunch() {
