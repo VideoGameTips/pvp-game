@@ -2366,6 +2366,43 @@ if (ok && process.argv.includes('--heldskin')) {
   if (!rep.total || rep.shown < rep.total * 0.8) { ok = false; console.log('too few skins show up in another player\'s hands'); }
 }
 
+// Hit looks seen from the other side: when somebody else's Hacker skin hits a man, the victim and anybody watching get the same
+// scrambling damage counter the shooter has.
+if (ok && process.argv.includes('--hitcounter')) {
+  const rep = vm.runInThisContext(`(() => {
+    const issues = [];
+    const hack = [...MODEL_SKINS, ...SUPPORT_MODEL_SKINS, ...MELEE_MODEL_SKINS].find(m => m.look && m.look.hit === 'hack');
+    if (!hack) return ['no hacker skin found'];
+    const keepPlayers = players.t, keepMesh = remoteMeshes.t, keepSelf = _selfDmg.total;
+    const noFx = skinHitFX, noFlash = flashScreen;
+    try {
+      players.t = { hp: 80 };
+      const m = new THREE.Group(); m.visible = true; m.position.set(0, 0, -5); remoteMeshes.t = m;
+      skinHitFX = () => {}; flashScreen = () => {};
+      delete damageTracker.o_t;
+      _othersSkinHit({ shooterId: 'someone', targetId: 't', skin: hack.id, hp: 50 });
+      const tr = damageTracker.o_t;
+      if (!tr) issues.push('a bystander gets no damage counter over the victim');
+      else if (tr.total !== 30) issues.push('the bystander counter shows ' + tr.total + ' instead of 30');
+      if (tr) { tr.el.remove(); delete damageTracker.o_t; }
+      _selfDmg.total = 0; _selfDmg.last = 0;
+      players[myId] = Object.assign(players[myId] || {}, { hp: 100 });
+      _othersSkinHit({ shooterId: 'someone', targetId: myId, skin: hack.id, hp: 70 });
+      if (_selfDmg.total !== 30) issues.push('the victim counter shows ' + _selfDmg.total + ' instead of 30');
+      _othersSkinHit({ shooterId: myId, targetId: 't', skin: hack.id, hp: 40 });
+      if (damageTracker.o_t) issues.push('my own shot made a bystander counter');
+    } finally {
+      players.t = keepPlayers; if (keepMesh) remoteMeshes.t = keepMesh; else delete remoteMeshes.t;
+      skinHitFX = noFx; flashScreen = noFlash; _selfDmg.total = keepSelf;
+      try { if (_selfDmg.el) _selfDmg.el.remove(); } catch (e) {} _selfDmg.el = null;
+      if (!keepPlayers) delete players.t;
+    }
+    return issues;
+  })()`);
+  console.log('hit counter checks: the victim and a bystander both see a Hacker skin\'s damage counter');
+  if (rep.length) { ok = false; console.log(rep.join('\n')); }
+}
+
 // Bot strategy: on every map, ten random bot/enemy pairs 20-36 m apart each ask for a plan. A plan has to be a route a body can
 // walk (each step at most 0.65 m up and 2 m down, one cell at a time), end where it says it does (a perch is 2.4 m or higher
 // and sees the enemy), and most maps with a deck or a roof should have at least one.

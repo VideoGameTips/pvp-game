@@ -43156,9 +43156,36 @@ function _isHackSkin(id) {
 function _othersSkinHit(data) {                                            // somebody else's hit with a skin that has a hit look: the flash on the victim (the shooter's own screen does its own, see hitFeedback)
   const kind = data && data.shooterId && data.shooterId !== myId ? _hitKindOfSkin(data.skin) : null;
   if (!kind) return;
-  if (data.targetId === myId) { try { flashScreen(HIT_STYLES[kind].screen, 110); } catch (e) {} return; }          // it is you they hit: a blink of its colour, nothing to draw
+  // What this hit took off, from the health the victim had a moment ago: the same scrambling number the shooter sees over the victim.
+  const prevHp = players[data.targetId]?.hp ?? (typeof gameBots !== 'undefined' ? gameBots.find(b => b.id === data.targetId)?.hp : undefined);
+  const dmg = Number.isFinite(prevHp) && Number.isFinite(data.hp) ? Math.round(prevHp - data.hp) : 0;
+  if (data.targetId === myId) {                                                                              // it is you they hit: a blink of its colour, and the number on you
+    try { flashScreen(HIT_STYLES[kind].screen, 110); } catch (e) {}
+    try { _selfSkinDamage(kind, dmg); } catch (e) {}
+    return;
+  }
   const mesh = remoteMeshes[data.targetId]; if (!mesh || !mesh.visible) return;
   skinHitFX(kind, mesh.position.clone().setY(mesh.position.y + 1.2), true);
+  if (dmg > 0) { try { trackTotalDamage('o_' + data.targetId, dmg, mesh, null, null, kind); } catch (e) {} }   // a bystander sees the damage counter too (own tracker: it never mixes with the one for my own shots)
+}
+// The counter on the one who is being hit: a running total in the hit look's colour that scrambles before it settles, under the crosshair.
+let _selfDmg = { total: 0, last: 0, el: null };
+function _selfSkinDamage(kind, dmg) {
+  if (!(dmg > 0)) return;
+  const now = performance.now();
+  if (now - _selfDmg.last > 3000) _selfDmg.total = 0;
+  _selfDmg.total += dmg; _selfDmg.last = now;
+  if (!_selfDmg.el || !_selfDmg.el.isConnected) {
+    const el = document.createElement('div');
+    el.setAttribute('style', DMG_TOTAL_STYLE.replace('transform:translate(-50%,-100%)', 'transform:translate(-50%,0)') + ';left:50%;top:58%');
+    document.body.appendChild(el);
+    _selfDmg.el = el;
+  }
+  const el = _selfDmg.el, total = _selfDmg.total;
+  el.style.opacity = '1';
+  _hackFlicker(el, () => '-' + total, kind);
+  clearTimeout(_selfDmg.t);
+  _selfDmg.t = setTimeout(() => { if (el.isConnected) el.remove(); _selfDmg.el = null; }, 3000);
 }
 function _hackFlicker(el, real, style = 'hack') {                // real: a string, or a function giving it (a running total may have moved on)
   const S = HIT_STYLES[style] || HIT_STYLES.hack;
