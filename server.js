@@ -646,6 +646,7 @@ for(const b of Object.values(BUNDLES)){
 const STARTER_CREDITS = 500;       // a first weapon or two, not the shop
 const TRIAL_DIVISOR = 20; // trial costs 1/20 of buy price (min 1)
 
+const SKIN_SWAPS = { freeze_slushie: 'freeze_hyperslush', railgun_metal_detector: 'railgun_portal_detector', p90_barcode_scanner: 'p90_quantum_scanner', firework_champagne: 'firework_showman' };   // mirrors the client's
 function ensureShopFields(u) {
   if (!u) return;
   if (typeof u.credits !== 'number') u.credits = STARTER_CREDITS;
@@ -670,6 +671,12 @@ function ensureShopFields(u) {
     if (typeof u.skinCasePacks[caseId] !== 'number') u.skinCasePacks[caseId] = 0;
   }
   if (!Array.isArray(u.skinInventory)) u.skinInventory = [];
+  // A skin deleted for being the same model as its twin: whoever owned it owns the twin now.
+  for (const [gone, twin] of Object.entries(SKIN_SWAPS)) {
+    if (!u.skinInventory.includes(gone)) continue;
+    u.skinInventory = u.skinInventory.filter(id => id !== gone);
+    if (!u.skinInventory.includes(twin)) u.skinInventory.push(twin);
+  }
   if (!Array.isArray(u.paidOrders)) u.paidOrders = [];   // real-money receipts, for idempotency
   // The Donut Case was retired. Nobody loses a case they paid for: an unopened
   // one becomes a Gen 2 case, which is where its two skins live now.

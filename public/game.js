@@ -43259,7 +43259,7 @@ const SKIN_SHOT = {};
   G({ shape: 'shard', c: [0xbdf3ff, 0x9ae8ff] }, 'ice', ['freeze_hyperslush', 'cyroclasm_snow_globe', 'frost_blaster_window_ac']);
   // the office and the house
   G({ shape: 'staple', c: [0xc8d0d6, 0xc8d0d6], min: 0.07 }, 'paper', ['burst_staple_gun', 'akimbo_staplers']);
-  G({ shape: 'disc', c: [0xffffff, 0x2a75ff] }, 'paper', ['vector_brick_labeler']);
+  G({ shape: 'disc', c: [0xffffff, 0x2a75ff] }, 'paper', ['vector_label_maker', 'vector_brick_labeler']);
   G({ shape: 'disc', c: [0xfff3e0, 0xffd27a] }, 'confetti', ['sticker_blaster_hole_punch']);
   G({ shape: 'disc', c: [0xd8c8a0, 0x8a6a3a] }, 'paper', ['machine_pistol_tape_gun']);
   G({ shape: 'ball', c: [0xfff0a0, 0xffffff] }, 'foam', ['nail_gun_hot_glue']);
@@ -53875,6 +53875,9 @@ const MODEL_SKINS = [
   { id: 'arc_rifle_jumper_cables', weapon: 'arc_rifle', name: 'Jumper Cables', rarity: 'good',
     sw: ['#1c2a34', '#b87333'], build: buildJumperCables,
     blurb: 'Car battery underneath, copper clamps arcing at the jaws.' },
+  { id: 'vector_label_maker', weapon: 'vector', name: 'Label Maker', rarity: 'good',
+    sw: ['#2a5ab8', '#faf8f0'], build: buildLabelMaker,
+    blurb: 'Tiny keyboard, tiny screen, a strip that says YOU.' },
   { id: 'vector_bubble_blaster', weapon: 'vector', name: 'Bubble Blaster', rarity: 'good',
     sw: ['#3aa8e8', '#ff7ab8'], build: buildBubbleBlaster, look: { projectile: 'bubble_shot', bulletColor: 0x9ffcff },
     blurb: 'Fast bubbles from a clear tank. Absolutely unserious.' },
@@ -53968,6 +53971,9 @@ const MODEL_SKINS = [
   { id: 'signal_pistol_bike_horn', weapon: 'signal_pistol', name: 'Bike Horn', rarity: 'lame',
     sw: ['#d8242a', '#d8aa3a'], build: buildBikeHorn,
     blurb: 'Squeeze bulb, coiled brass. Honk.' },
+  { id: 'shorty_hair_clippers', weapon: 'shorty', name: 'Hair Clippers', rarity: 'good',
+    sw: ['#2a2c34', '#c8a040'], build: buildHairClippers,
+    blurb: 'Short, loud, close range. Number two on the guard.' },
   { id: 'machine_pistol_uzi', weapon: 'machine_pistol', name: 'Uzi', rarity: 'rare', noMech: true,
     sw: ['#2c3034', '#9aa4aa'], build: buildUziSkin,
     blurb: 'Stamped box receiver, a long stick magazine up the grip, the wire stock folded underneath. The cocking knob runs back on every shot.' },
@@ -54475,8 +54481,14 @@ for (const id of GEN1_GATED_MODEL_SKIN_IDS) {
   if (ms && !GEN1_SKIN_BY_ID[id]) { GEN1_SKIN_DEFS.push(ms); GEN1_SKIN_BY_ID[id] = ms; }
 }
 
+// Skins that were deleted for being the same model as a twin: whoever owned or wore one now has the twin.
+const SKIN_SWAPS = { freeze_slushie: 'freeze_hyperslush', railgun_metal_detector: 'railgun_portal_detector', p90_barcode_scanner: 'p90_quantum_scanner', firework_champagne: 'firework_showman' };
 let equippedModelSkins = (() => {
-  try { return JSON.parse(localStorage.getItem('pvp_model_skins')) || {}; } catch (e) { return {}; }
+  try {
+    const eq = JSON.parse(localStorage.getItem('pvp_model_skins')) || {};
+    for (const w of Object.keys(eq)) if (SKIN_SWAPS[eq[w]]) eq[w] = SKIN_SWAPS[eq[w]];
+    return eq;
+  } catch (e) { return {}; }
 })();
 const _baseWeaponModels = {};
 // What the equipped model skin does to the rounds, by weapon. Empty for every
@@ -58872,6 +58884,8 @@ const SKIN_FX = {
     reload: _fxR(_RK.pump(3), null, [[.14,'pump'],[.36,'pump'],[.58,'pump']], 'hiss') },
   arc_rifle_jumper_cables: { sound: _fxS('arc', .30, .10, 620, 240),
     reload: _fxR(_RK.under(), [RP(.30,'battery'), RP(.58,'battery','arrive')], [[.66,'click'],[.72,'click']], 'buzz') },
+  vector_label_maker: { sound: _fxS('zip', .22, .06, 1800, 3400),
+    reload: _fxR(_RK.top(), [RP(.30,'tape','eject',1,'breech'), RP(.58,'tape','arrive',1,'breech')], null, 'beep') },
   srx_telescope: { sound: _fxS('sparkle', .24, .30, 1760, 0),
     reload: _fxR(_RK.front(), [RP(.36,'lenscap','arrive',1,'muzzle'), RP(.62,'lenscap','eject',1,'muzzle')], [[.48,'squeak']]) },
   nail_gun_hot_glue: { sound: _fxS('splat', .22, .08, 180, 90),
@@ -58937,6 +58951,8 @@ const SKIN_FX = {
     reload: _fxR(_RK.top(), null, [[.30,'slurp'],[.56,'slurp']], 'bloop') },
   signal_pistol_bike_horn: { sound: _fxS('honk', .34, .18, 370, 360),
     reload: _fxR(_RK.pump(2), null, [[.30,'squeak'],[.56,'squeak']], 'honk') },
+  shorty_hair_clippers: { sound: _fxS('buzz', .24, .12, 120, 120),
+    reload: _fxR(_RK.front(), [RP(.30,'comb','eject',1,'muzzle'), RP(.54,'comb','arrive',1,'muzzle')], null, 'buzz') },
   machine_pistol_tape_gun: { sound: _fxS('rip', .24, .08, 2200, 5200),
     reload: _fxR(_RK.top(), [RP(.30,'tape','eject',1,'breech'), RP(.56,'tape','arrive',1,'breech')], null, 'rip') },
   sawed_off_baguette: { sound: _fxS('crunch', .36, .10, 900, 1500),
