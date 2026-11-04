@@ -43250,16 +43250,16 @@ const SKIN_SHOT = {};
   G({ shape: 'ball', c: [0xffffff, 0x222222], k: 1 }, 'crumbs', ['sawed_off_salt_pepper']);
   G({ shape: 'ball', c: [0x4a3626, 0xd8c8a0] }, 'crumbs', ['chain_gun_pepper_mill']);
   G({ shape: 'cube', c: [0xe8c07a, 0x8a5a2a] }, 'crumbs', ['twin_ar_toaster']);
-  G({ shape: 'cork', c: [0xc8a030, 0xe8e0c0], min: 0.08 }, 'soda', ['firework_champagne', 'javelin_launcher_champagne', 'firework_showman']);
+  G({ shape: 'cork', c: [0xc8a030, 0xe8e0c0], min: 0.08 }, 'soda', ['javelin_launcher_champagne', 'firework_showman']);
   G({ shape: 'leaf', c: [0x4caf3a, 0x2e7d32] }, 'crumbs', ['minigun_salad_spinner'], 0x4caf3a);
   G({ shape: 'ball', c: [0xff4fa8, 0xffe14a] }, 'paint', ['paintball_gumball']);
   // water and foam
   G({ shape: 'drop', c: [0x3aa8e8, 0xffffff] }, 'water', ['glock18_water_pistol', 'akimbo_water_pistols', 'm134_lawn_sprinkler', 'barrett_pressure_washer']);
   G({ shape: 'ball', c: [0xf4f8ff, 0xdbe8f5], min: 0.08 }, 'foam', ['foam_cannon_extinguisher']);
-  G({ shape: 'shard', c: [0xbdf3ff, 0x9ae8ff] }, 'ice', ['freeze_slushie', 'freeze_hyperslush', 'cyroclasm_snow_globe', 'frost_blaster_window_ac']);
+  G({ shape: 'shard', c: [0xbdf3ff, 0x9ae8ff] }, 'ice', ['freeze_hyperslush', 'cyroclasm_snow_globe', 'frost_blaster_window_ac']);
   // the office and the house
   G({ shape: 'staple', c: [0xc8d0d6, 0xc8d0d6], min: 0.07 }, 'paper', ['burst_staple_gun', 'akimbo_staplers']);
-  G({ shape: 'disc', c: [0xffffff, 0x2a75ff] }, 'paper', ['vector_label_maker', 'vector_brick_labeler']);
+  G({ shape: 'disc', c: [0xffffff, 0x2a75ff] }, 'paper', ['vector_brick_labeler']);
   G({ shape: 'disc', c: [0xfff3e0, 0xffd27a] }, 'confetti', ['sticker_blaster_hole_punch']);
   G({ shape: 'disc', c: [0xd8c8a0, 0x8a6a3a] }, 'paper', ['machine_pistol_tape_gun']);
   G({ shape: 'ball', c: [0xfff0a0, 0xffffff] }, 'foam', ['nail_gun_hot_glue']);
@@ -53857,9 +53857,6 @@ const MODEL_SKINS = [
   { id: 'sg8_singularity', weapon: 'sg8', name: 'Singularity Shotgun', rarity: 'rare',
     sw: ['#050507', '#ffffff'], build: buildSingularityShotgun, look: { projectile: 'void', bulletColor: 0xffffff },
     blurb: 'The pump shotgun collapses into a tiny black hole at the muzzle.' },
-  { id: 'freeze_slushie', weapon: 'freeze_gun', name: 'Slushie Machine', rarity: 'good',
-    sw: ['#3aa8e8', '#e03a5a'], build: buildSlushieMachine,
-    blurb: 'Blue raspberry, turning in a clear hopper. Chrome tap.' },
   { id: 'burst_staple_gun', weapon: 'burst', name: 'Staple Gun', rarity: 'good',
     sw: ['#1f5f8a', '#bfa03a'], build: buildStapleGun,
     blurb: 'Heavy duty. You can see the staples through the slot.' },
@@ -53872,30 +53869,18 @@ const MODEL_SKINS = [
   { id: 'mp40_hair_dryer', weapon: 'mp40', name: 'Hair Dryer', rarity: 'good',
     sw: ['#f0e4d2', '#2f8a92'], build: buildHairDryer,
     blurb: 'Two settings and a glowing element. The cable is coiled.' },
-  { id: 'railgun_metal_detector', weapon: 'railgun', name: 'Metal Detector', rarity: 'good',
-    sw: ['#c8ccd2', '#1a1c20'], build: buildMetalDetector,
-    blurb: 'Search coil on a shaft, armrest cuff, a needle that twitches.' },
   { id: 'air_rifle_bike_pump', weapon: 'air_rifle', name: 'Bicycle Pump', rarity: 'good',
     sw: ['#9aa2ac', '#c02a22'], build: buildBicyclePump,
     blurb: 'Track pump with a foot plate, pressure gauge and a hose.' },
   { id: 'arc_rifle_jumper_cables', weapon: 'arc_rifle', name: 'Jumper Cables', rarity: 'good',
     sw: ['#1c2a34', '#b87333'], build: buildJumperCables,
     blurb: 'Car battery underneath, copper clamps arcing at the jaws.' },
-  { id: 'p90_barcode_scanner', weapon: 'p90', name: 'Barcode Scanner', rarity: 'good',
-    sw: ['#e8b818', '#ff2a2a'], build: buildBarcodeScanner,
-    blurb: 'Beep. Beep. Beep. Fifty items, no price check.' },
-  { id: 'vector_label_maker', weapon: 'vector', name: 'Label Maker', rarity: 'good',
-    sw: ['#2a5ab8', '#faf8f0'], build: buildLabelMaker,
-    blurb: 'Tiny keyboard, tiny screen, a strip that says YOU.' },
   { id: 'vector_bubble_blaster', weapon: 'vector', name: 'Bubble Blaster', rarity: 'good',
     sw: ['#3aa8e8', '#ff7ab8'], build: buildBubbleBlaster, look: { projectile: 'bubble_shot', bulletColor: 0x9ffcff },
     blurb: 'Fast bubbles from a clear tank. Absolutely unserious.' },
   { id: 'srx_telescope', weapon: 'srx', name: 'Telescope', rarity: 'rare',
     sw: ['#f2f2ee', '#1c2a4a'], build: buildTelescope,
     blurb: 'Refractor with a finder scope. Magnification: yes.' },
-  { id: 'firework_champagne', weapon: 'firework_launcher', name: 'Champagne Magnum', rarity: 'rare',
-    sw: ['#1c3a22', '#d8b040'], build: buildChampagneBottle,
-    blurb: 'Gold foil, wire cage, cork aimed at someone. Every shot is a celebration.' },
   { id: 'nail_gun_hot_glue', weapon: 'nail_gun', name: 'Hot Glue Gun', rarity: 'good',
     sw: ['#2c6ad0', '#ff7a22'], build: buildHotGlueGun,
     blurb: 'Glowing nozzle, glue stick in the back, a string that follows it everywhere.' },
@@ -53983,9 +53968,6 @@ const MODEL_SKINS = [
   { id: 'signal_pistol_bike_horn', weapon: 'signal_pistol', name: 'Bike Horn', rarity: 'lame',
     sw: ['#d8242a', '#d8aa3a'], build: buildBikeHorn,
     blurb: 'Squeeze bulb, coiled brass. Honk.' },
-  { id: 'shorty_hair_clippers', weapon: 'shorty', name: 'Hair Clippers', rarity: 'good',
-    sw: ['#2a2c34', '#c8a040'], build: buildHairClippers,
-    blurb: 'Short, loud, close range. Number two on the guard.' },
   { id: 'machine_pistol_uzi', weapon: 'machine_pistol', name: 'Uzi', rarity: 'rare', noMech: true,
     sw: ['#2c3034', '#9aa4aa'], build: buildUziSkin,
     blurb: 'Stamped box receiver, a long stick magazine up the grip, the wire stock folded underneath. The cocking knob runs back on every shot.' },
@@ -57564,9 +57546,9 @@ const SECRET_INSPECTS = {
   vector_bubble_blaster: { every: 4, kind: 'bubble', color: 0x79efff },
   revolver_donut: { every: 6, kind: 'donut', color: 0xff83ba },
   srx_telescope: { every: 5, kind: 'solar', color: 0xffcb55 },
-  freeze_slushie: { every: 4, kind: 'snow', color: 0x9aeaff },
+  freeze_hyperslush: { every: 4, kind: 'snow', color: 0x9aeaff },
   rpg_water_balloon: { every: 4, kind: 'splash', color: 0x55bbff },
-  p90_barcode_scanner: { every: 3, kind: 'receipt', color: 0xff4455 },
+  p90_quantum_scanner: { every: 3, kind: 'receipt', color: 0xff4455 },
   lever_fishing_rod: { every: 4, kind: 'catch', color: 0x9b623c },
   ak20_nerf_elite: { every: 5, kind: 'darts', color: 0x44aaff },
 };
@@ -58876,9 +58858,6 @@ const SKIN_FX = {
     equip: 'fill', equipMs: 850, equipSfx: ['pour', 'bloop'] },
   sg8_leaf_blower: { sound: _fxS('whirr', .30, .16, 180, 90),
     reload: _fxR(_RK.front(), [.32,.40,.48,.56].map(t => RP(t,'leaf','arrive',1,'muzzle')), [[.20,'whirr']]) },
-  freeze_slushie: { sound: _fxS('squirt', .24, .14, 900, 500),
-    reload: _fxR(_RK.top(), [RP(.32,'ice','arrive',1,'breech'), RP(.42,'ice','arrive',1,'breech'),
-      RP(.52,'ice','arrive',1,'breech'), RP(.60,'refill','arrive',1,'breech')], [[.70,'whirr']], 'click') },
   lever_fishing_rod: { sound: _fxS('swish', .30, .20, 2600, 700),
     reload: _fxR(_RK.crank(3), [RP(.80,'bobber','arrive',1,'muzzle')], [[.16,'dial'],[.40,'dial'],[.64,'dial']], 'click') },
   burst_staple_gun: { sound: _fxS('clatter', .30, .05, 1300, 600),
@@ -58889,20 +58868,12 @@ const SKIN_FX = {
     reload: _fxR(RELOAD_KEYS.revolver, [RP(.50,'caps','arrive',1,'breech')], [[.24,'click']], 'click') },
   mp40_hair_dryer: { sound: _fxS('whirr', .24, .10, 520, 480),
     reload: _fxR(_RK.rear(), [RP(.30,'plug','eject',1,'rear'), RP(.56,'plug','arrive',1,'rear')], null, 'hum') },
-  railgun_metal_detector: { sound: _fxS('beep', .24, .12, 1320, 1760),
-    reload: _fxR(_RK.under(), [RP(.30,'cell','eject',2), RP(.56,'cell','arrive',2)], null, 'beep') },
   air_rifle_bike_pump: { sound: _fxS('hiss', .30, .12, 2600, 0),
     reload: _fxR(_RK.pump(3), null, [[.14,'pump'],[.36,'pump'],[.58,'pump']], 'hiss') },
   arc_rifle_jumper_cables: { sound: _fxS('arc', .30, .10, 620, 240),
     reload: _fxR(_RK.under(), [RP(.30,'battery'), RP(.58,'battery','arrive')], [[.66,'click'],[.72,'click']], 'buzz') },
-  p90_barcode_scanner: { sound: _fxS('beep', .22, .07, 2400, 2400),
-    reload: _fxR(_RK.under(), [RP(.30,'battery'), RP(.58,'battery','arrive')], null, 'beep') },
-  vector_label_maker: { sound: _fxS('zip', .22, .06, 1800, 3400),
-    reload: _fxR(_RK.top(), [RP(.30,'tape','eject',1,'breech'), RP(.58,'tape','arrive',1,'breech')], null, 'beep') },
   srx_telescope: { sound: _fxS('sparkle', .24, .30, 1760, 0),
     reload: _fxR(_RK.front(), [RP(.36,'lenscap','arrive',1,'muzzle'), RP(.62,'lenscap','eject',1,'muzzle')], [[.48,'squeak']]) },
-  firework_champagne: { sound: _fxS('cork', .40, .08, 900, 120),
-    reload: _fxR(_RK.shake(8, .24), [RP(.88,'cork','arrive',1,'muzzle')], [[.40,'fizz'],[.86,'squeak']]) },
   nail_gun_hot_glue: { sound: _fxS('splat', .22, .08, 180, 90),
     reload: _fxR(_RK.rear(), [RP(.54,'gluestick','arrive',1,'rear')], [[.48,'squeak'],[.70,'click']]) },
   rpd_sewing_machine: { sound: _fxS('clatter', .24, .04, 900, 500),
@@ -58966,8 +58937,6 @@ const SKIN_FX = {
     reload: _fxR(_RK.top(), null, [[.30,'slurp'],[.56,'slurp']], 'bloop') },
   signal_pistol_bike_horn: { sound: _fxS('honk', .34, .18, 370, 360),
     reload: _fxR(_RK.pump(2), null, [[.30,'squeak'],[.56,'squeak']], 'honk') },
-  shorty_hair_clippers: { sound: _fxS('buzz', .24, .12, 120, 120),
-    reload: _fxR(_RK.front(), [RP(.30,'comb','eject',1,'muzzle'), RP(.54,'comb','arrive',1,'muzzle')], null, 'buzz') },
   machine_pistol_tape_gun: { sound: _fxS('rip', .24, .08, 2200, 5200),
     reload: _fxR(_RK.top(), [RP(.30,'tape','eject',1,'breech'), RP(.56,'tape','arrive',1,'breech')], null, 'rip') },
   sawed_off_baguette: { sound: _fxS('crunch', .36, .10, 900, 1500),

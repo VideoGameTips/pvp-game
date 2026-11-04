@@ -72,7 +72,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         } finally {weaponModels[p90Index]=original;}
       }
       let singleShotSkins=0;
-      for(const id of ['sg8_singularity','lever_fishing_rod','revolver_cap_gun','hand_cannon_megaphone','railgun_metal_detector','grenade_launcher_mgl']) {
+      for(const id of ['sg8_singularity','lever_fishing_rod','revolver_cap_gun','hand_cannon_megaphone','railgun_portal_detector','grenade_launcher_mgl']) {
         const skin=MODEL_SKINS.find(s=>s.id===id),m=prepViewModel(_smoothModelSkin(skin.build()),null,skin.weapon);
         if(!m._sightLine)throw Error('Single-shot skin missing sight '+id);
         const s=weaponSightPose(m);if(!s.position.toArray().every(Number.isFinite))throw Error('Invalid skin aim pose '+id);

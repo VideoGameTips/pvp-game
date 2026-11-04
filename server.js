@@ -481,7 +481,7 @@ for (const id of GEN2_NEW_MYTHIC_SKIN_IDS) GEN2_SKIN_WEIGHTS[id] = 0.5;    // ha
 // the admin still gets everything). Mirrors the skins of every `archived: true` item in public/game.js (gotcha #4);
 // tools/verify-boot.js --archivedskins fails if the two lists ever differ.
 const ARCHIVED_SKIN_IDS = new Set([
-  'arc_rifle_jumper_cables', 'firework_champagne', 'potato_cannon_crisp_tube', 'foam_cannon_extinguisher',
+  'arc_rifle_jumper_cables', 'plasma_carbine_lava_lamp', 'smart_smg_smartphone', 'potato_cannon_crisp_tube', 'foam_cannon_extinguisher',
   'harpoon_selfie_stick', 'boomstick_binoculars', 'signal_pistol_bike_horn', 'amr_pool_net', 'glassmaker_squeegee',
   'painter_beam_roller', 'seismic_pogo_stick', 'traffic_stop_sign', 'switchblade_pocket_knife', 'flechette_bullpup',
   'firework_showman', 'plasma_carbine_fishbowl', 'coilgun_clockwork', 'smart_smg_neon',
