@@ -4690,11 +4690,11 @@ if (ok && process.argv.includes('--epic')) {
     for (const r of ['epic', 'mythic']) { if (!RARITY_CSS[r]) issues.push('the reel has no colour for ' + r); if (!new RegExp(r + ':0x[0-9a-f]{6}').test(lobby)) issues.push('the 3D case has no colour for ' + r); }
     if (RARITY_CSS.epic === RARITY_CSS.mythic || RARITY_CSS.epic === RARITY_CSS.rare || RARITY_CSS.mythic === RARITY_CSS.legend) issues.push('the new rarities should each have a colour of their own');
     // case membership: the same ids on both sides, and they are Gen 2 skins (the picker locks them until pulled)
-    if (JSON.stringify(epicIds) !== JSON.stringify(['revolver_midas'])) issues.push('server EPIC list should be the Midas Revolver: ' + epicIds);
+    if (JSON.stringify(epicIds) !== JSON.stringify(['revolver_midas', 'pistol_frost'])) issues.push('server EPIC list should be the Midas Revolver and the Frost Pistol: ' + epicIds);
     if (JSON.stringify(mythicIds) !== JSON.stringify(['ak20_xerror'])) issues.push('server MYTHIC list should be X!@&!@: ' + mythicIds);
     for (const id of [...epicIds, ...mythicIds]) { if (!GEN2_MODEL_SKIN_IDS.has(id)) issues.push(id + ' is dealt by the server but the picker would not lock it (GEN2_MODEL_SKIN_IDS)'); if (GEN1_GATED_MODEL_SKIN_IDS.has(id)) issues.push(id + ' is in the Gen 1 case too'); }
     // an entrance, like every Gen 2 skin; no sound profile (their shots are SKIN_VOICE / SKIN_CHIME and a profile would out-vote the recordings)
-    for (const [id, equip] of [['revolver_midas', 'midas'], ['ak20_xerror', 'glitch']]) {
+    for (const [id, equip] of [['revolver_midas', 'midas'], ['pistol_frost', 'assemble'], ['ak20_xerror', 'glitch']]) {
       const fx = SKIN_FX[id]; if (!fx || fx.equip !== equip || !(fx.equipMs > 0)) issues.push(id + ' needs an entrance (' + equip + ')'); else if (fx.sound) issues.push(id + ' should not carry a sound profile: its shot is its own');
     }
     if (!/case 'midas':/.test(gameSrc)) issues.push('the midas entrance has no animation (case \\'midas\\' in the equip switch)');
@@ -4786,6 +4786,74 @@ if (ok && process.argv.includes('--epic')) {
     return issues;
   })()`);
   console.log('epic / mythic style checks: gold / error / hack each flash, count and end a kill in their own style, for the shooter and for everybody else, and the Midas shot rings');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
+if (ok && process.argv.includes('--epic')) {
+  // The Frost Pistol (EPIC, a skin of the pistol): an ice-crystal gun. Whoever it hits gets frost over the edge of THEIR screen for a moment (nothing more: it does not slow them), the shooter and
+  // the onlookers see ice fly off the victim, and a kill freezes the body and shatters it like glass. Same rules as the other Epic and Mythic skins: a Gen 2 entrance, the server deals it, all look.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [], sk = MODEL_SKINS.find(m => m.id === 'pistol_frost');
+    if (!sk) return ['there is no pistol_frost skin'];
+    if (sk.weapon !== 'pistol') issues.push('the Frost Pistol is a skin of the pistol, not of ' + sk.weapon);
+    if (sk.rarity !== 'epic') issues.push('the Frost Pistol is EPIC, not ' + sk.rarity);
+    if (sk.name !== 'Frost Pistol') issues.push('it is called Frost Pistol: ' + sk.name);
+    if (!sk.look || sk.look.hit !== 'frost' || !HIT_STYLES.frost) issues.push('its look should be hit: frost, with a style of that name');
+    if (!GEN2_MODEL_SKIN_IDS.has('pistol_frost')) issues.push('it is dealt by the Gen 2 case, so the picker must lock it (GEN2_MODEL_SKIN_IDS)');
+    const fx = SKIN_FX.pistol_frost; if (!fx || fx.equip !== 'assemble' || !(fx.equipMs > 0)) issues.push('it needs its entrance (the crystals assemble)'); else if (fx.sound) issues.push('no sound profile: its shot is the pistol recording and a chime');
+    if (typeof skinChimeFor !== 'function' || typeof SKIN_CHIME.pistol_frost !== 'function') issues.push('a ring of struck glass should follow the shot (SKIN_CHIME)');
+    const T = SKIN_SHOT.pistol_frost; if (!T || T.shot.shape !== 'shard' || T.boom !== 'ice' || !BOOM_THEMES.ice) issues.push('its round should be an icicle (the shard shape, the ice burst)');
+    if (_hitKindOfSkin('pistol_frost') !== 'frost') issues.push('the hit style of the skin id should be frost');
+    // the model: ice all over (translucent, no steel), a slide that moves, vapour, a flash in ice colours, and pieces the entrance can fly
+    { const g = buildFrostPistol(); let ice = 0, lit = 0, rime = 0, sprites = 0; const flashSet = new Set(); if (g._flash) g._flash.traverse(o => flashSet.add(o));
+      g.traverse(o => { if (o.isSprite) sprites++; if (!o.isMesh || flashSet.has(o) || !o.material) return; if (o.material.transparent) ice++; else if (!o.material.isMeshBasicMaterial) lit++; });
+      g.children.forEach(c => { if (c.isMesh && c.material && c.material.color && c.material.color.getHex() === 0xf2fcff) rime++; });
+      if (ice < 14) issues.push('the Frost Pistol should be made of ice crystals (translucent shards), found ' + ice);
+      if (lit) issues.push(lit + ' parts are opaque lit materials: it is all ice');
+      if (rime < 4) issues.push('white rime crystals should jut off it, found ' + rime);
+      if (sprites < 4) issues.push('cold vapour should curl off it, found ' + sprites + ' puffs');
+      if (typeof g._tick !== 'function' || typeof g._calm !== 'function') issues.push('the slide runs back and the vapour moves (tick, calm)');
+      if (!g._flash || !g._equipGlow) issues.push('it needs a muzzle flash and the glow the entrance lights');
+      const eq = g.children.filter(c => c.userData && c.userData.eqFx).length; if (eq < 1) issues.push('the vapour is an effect the entrance leaves alone (eqFx)'); }
+    // the other styles are untouched by the new one
+    for (const k of ['hack', 'error', 'gold']) if (HIT_STYLES[k].shards) issues.push(k + ' must not turn into ice');
+    // what it does to the victim: the frost over THEIR screen edge, the ice on the body for the rest; a screen-effects setting of zero keeps the frost off
+    const spied = [skinHitFX, flashScreen, _frostEdge, _iceBurst, trackTotalDamage, spawnHitNumber, playSoundEvent], keepMe = myId; myId = 'me_test';
+    const fx2 = [], flashes = [], frosts = [], ice = [];
+    skinHitFX = (kind) => { fx2.push(kind); }; flashScreen = (c) => { flashes.push(c); }; _frostEdge = () => { frosts.push(1); }; _iceBurst = (pos, n) => { ice.push(n); }; trackTotalDamage = () => {}; spawnHitNumber = () => {}; playSoundEvent = () => {};
+    remoteMeshes.fv = { visible: true, position: new THREE.Vector3(2, 0, 2) };
+    try {
+      _othersSkinHit({ shooterId: 'x', targetId: myId, skin: 'pistol_frost' });
+      if (frosts.length !== 1 || flashes.length) issues.push('when it is you the Frost Pistol hits, the screen edge frosts over (not a blink): frosts ' + frosts.length + ', blinks ' + flashes.length);
+      _othersSkinHit({ shooterId: 'x', targetId: 'fv', skin: 'pistol_frost' });
+      if (fx2.join() !== 'frost') issues.push('an onlooker sees the ice burst on the victim: ' + fx2.join());
+      _othersSkinHit({ shooterId: 'x', targetId: myId, skin: 'revolver_midas' });
+      if (frosts.length !== 1 || flashes.length !== 1) issues.push('only the Frost Pistol frosts a screen: frosts ' + frosts.length + ', blinks ' + flashes.length);
+    } finally { [skinHitFX, flashScreen, _frostEdge, _iceBurst, trackTotalDamage, spawnHitNumber, playSoundEvent] = spied; delete remoteMeshes.fv; myId = keepMe; }
+    { const keepSet = GAMEPLAY_SETTINGS.screenFx, keepEl = _frostEl, keepT = _frostTimer; _frostEl = null;
+      try {
+        GAMEPLAY_SETTINGS.screenFx = 0; _frostEdge(); if (_frostEl) issues.push('with screen effects off, no frost goes over the screen');
+        GAMEPLAY_SETTINGS.screenFx = 1; _frostEdge();
+        if (!_frostEl) issues.push('the frost should go over the screen');
+        else { if (_frostEl.style.pointerEvents !== 'none' && !/pointer-events:\\s*none/.test(_frostEl.style.cssText || '')) issues.push('the frost must not catch clicks'); if (!(parseFloat(_frostEl.style.opacity) > 0.9)) issues.push('the frost comes in at full strength: ' + _frostEl.style.opacity); }
+      } finally { clearTimeout(_frostTimer); GAMEPLAY_SETTINGS.screenFx = keepSet; _frostEl = keepEl; _frostTimer = keepT; } }
+    // the flash on a hit it lands itself is ice, not glyphs; the number keeps its own text (nothing to scramble) in ice colours
+    { const got = { ice: 0, glyphs: 0 }, sp2 = [_iceBurst, _hackDigits, _coinBurst]; _iceBurst = () => { got.ice++; }; _hackDigits = () => { got.glyphs++; }; _coinBurst = () => {};
+      try { _hackFxAt = 0; skinHitFX('frost', new THREE.Vector3(1, 1, 1), true); } finally { [_iceBurst, _hackDigits, _coinBurst] = sp2; }
+      if (got.ice !== 1 || got.glyphs) issues.push('the Frost flash is ice shards: ice ' + got.ice + ', glyphs ' + got.glyphs); }
+    { const el = { style: {}, textContent: '25', isConnected: true }; _hackFlicker(el, '25', 'frost');
+      if (el.style.color !== HIT_STYLES.frost.num || el.textContent !== '25') issues.push('the frost counter keeps its number and takes the ice colour: ' + JSON.stringify(el.style.color) + ' ' + el.textContent); }
+    // the kill: ice, for yours and for somebody else's
+    { const calls = [], keep = playGlassFinisher; playGlassFinisher = (id) => { calls.push(id); return true; };
+      const keepLook = _modelSkinLook.pistol; _modelSkinLook.pistol = skinLookFor(sk);
+      try {
+        triggerFinisher('v', 'pistol', myId); triggerFinisher('v', 'ak20', 'someone', 'pistol_frost'); triggerFinisher('v', 'ak20', 'someone', 'pistol_m9');
+        if (calls.length !== 2) issues.push('a kill with the Frost Pistol shatters the body, whoever made it, and a stock skin does not (called ' + calls.length + ' times, wanted 2)');
+      } finally { playGlassFinisher = keep; if (keepLook) _modelSkinLook.pistol = keepLook; else delete _modelSkinLook.pistol; } }
+    if (typeof FINISHER_MOVES.glass !== 'function' || FINISHER_IDS.includes('glass')) issues.push('the glass kill is a move of the skin, not a finisher anybody can pick');
+    return issues;
+  })()`);
+  console.log('frost pistol checks: an EPIC Gen 2 skin of the pistol made of ice, frost over the victim\'s screen edge (and not when screen effects are off), ice on the body for onlookers, and a kill that shatters like glass');
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 

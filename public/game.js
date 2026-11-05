@@ -4832,7 +4832,16 @@ function playMidasChime(ctx, start, level) {
   playTone(ctx, start + 0.06, 0.40, out, 3250, 3235, v * 0.4, 'sine');                  // a second coin, a beat after
   playFilteredNoise(ctx, start, 0.006, out, v * 0.5, 'highpass', 6000, 0.6, 0.0002, 0);
 }
-const SKIN_CHIME = { revolver_midas: playMidasChime };
+// ❄️ The Frost Pistol keeps the pistol's recording and adds the ring of struck glass and a crackle of frost after it.
+function playFrostChime(ctx, start, level) {
+  const out = ctx.createGain(); out.connect(ctx.destination);
+  const v = 0.16 * level;
+  playTone(ctx, start, 0.42, out, 3700, 3680, v, 'sine');
+  playTone(ctx, start, 0.28, out, 5550, 5540, v * 0.45, 'sine');
+  playTone(ctx, start + 0.03, 0.30, out, 5400, 5380, v * 0.32, 'sine');
+  for (let i = 0; i < 4; i++) playFilteredNoise(ctx, start + 0.02 + i * 0.022, 0.012, out, v * 0.5, 'highpass', 7000 + Math.random() * 1500, 0.8, 0.0002, 0);
+}
+const SKIN_CHIME = { revolver_midas: playMidasChime, pistol_frost: playFrostChime };
 function skinChimeFor(id) { try { const sk = _activeModelSkin[id]; return sk ? SKIN_CHIME[sk.id] || null : null; } catch (e) { return null; } }
 const SKIN_VOICE = { pistol_hacker: playHackerBlaster, ak20_xerror: playErrorShot, ak20_hacker: (ctx, start, level) => playHackerBlaster(ctx, start, level, { v: 0.62, k: 0.5, noStutter: true }),
   grenade_launcher_hacker: (ctx, start, level) => playHackerBlaster(ctx, start, level, { v: 0.85, k: 1.5 }) };   // the launcher's: the same zap, longer and fatter   // the AK's: the same zap, half as long, no stutter, under it
@@ -29071,6 +29080,60 @@ function buildHackerAxe() {
   return g;
 }
 
+let _mistTex = null;
+function _mistTexture() {                                                                // a soft puff of cold vapour
+  if (_mistTex) return _mistTex;
+  const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d');
+  const g = x.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, 'rgba(230,248,255,0.75)'); g.addColorStop(0.5, 'rgba(190,232,255,0.3)'); g.addColorStop(1, 'rgba(180,225,255,0)');
+  x.fillStyle = g; x.fillRect(0, 0, 64, 64);
+  return _mistTex = new THREE.CanvasTexture(c);
+}
+function buildFrostPistol() {
+  // ❄️ Pistol -> Frost Pistol (EPIC). An ice-crystal gun, shard by shard like the Hyperspace AK: diamonds of pale ice along the slide with a deep-blue ridge and a light running down inside, a barrel of
+  // blue crystal, a faceted frame and grip, white rime crystals jutting off it, cold vapour curling up from the slide, and a slide that still runs back on every shot. Drawn, the shards hang in
+  // the air round your hand and fuse. It is all look: the same pistol.
+  const g = new THREE.Group();
+  const ice = new THREE.MeshPhongMaterial({ color: 0x9aeaff, emissive: 0x1a5a7a, emissiveIntensity: 0.6, shininess: 220, specular: 0xffffff, transparent: true, opacity: 0.8 });
+  const deep = new THREE.MeshPhongMaterial({ color: 0x4aa8f0, emissive: 0x0e3a7a, emissiveIntensity: 0.6, shininess: 220, specular: 0xffffff, transparent: true, opacity: 0.86 });
+  const rime = new THREE.MeshPhongMaterial({ color: 0xf2fcff, emissive: 0x6ad0ff, emissiveIntensity: 0.25, shininess: 200, specular: 0xffffff, transparent: true, opacity: 0.92 });
+  const core = new THREE.MeshBasicMaterial({ color: 0xeafcff });
+  const OCT = new THREE.OctahedronGeometry(0.5, 0);
+  const shard = (host, mat, w, h, d, x, y, z, rx = 0, ry = 0, rz = 0) => { const m = new THREE.Mesh(OCT, mat); m.scale.set(w, h, d); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); m.userData.noSmooth = true; host.add(m); return m; };
+  const slide = new THREE.Group(); g.add(slide);
+  for (let i = 0; i < 4; i++) shard(slide, ice, 0.036, 0.046, 0.066, 0, 0.036, -0.056 + i * 0.036, 0, (i % 2) * 0.785, 0);       // diamonds along the slide, every other one turned
+  shard(slide, deep, 0.016, 0.018, 0.134, 0, 0.061, -0.004);                                                                       // the ridge on top
+  const seam = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.004, 0.112), core); seam.position.set(0, 0.036, -0.004); slide.add(seam);   // the light inside
+  shard(slide, deep, 0.008, 0.014, 0.014, 0, 0.066, -0.072); shard(slide, deep, 0.012, 0.014, 0.012, 0, 0.066, 0.064);              // sights
+  for (const z of [-0.072, 0.064]) { const dot = new THREE.Mesh(new THREE.BoxGeometry(0.003, 0.003, 0.003), core); dot.position.set(0, 0.0745, z); slide.add(dot); }
+  shard(g, deep, 0.020, 0.020, 0.060, 0, 0.034, -0.102); shard(g, rime, 0.012, 0.012, 0.024, 0, 0.034, -0.128);                    // the barrel, and its tip
+  shard(g, ice, 0.034, 0.052, 0.082, 0, 0.004, 0.012, 0, 0.785, 0); shard(g, deep, 0.030, 0.040, 0.066, 0, 0.004, -0.046);          // the frame
+  shard(g, ice, 0.034, 0.050, 0.050, 0, -0.022, 0.030, 0.2);                                                                     // (a crystal tying the frame to the grip)
+  shard(g, deep, 0.038, 0.088, 0.048, 0, -0.050, 0.040, 0.28); shard(g, ice, 0.032, 0.058, 0.040, 0, -0.100, 0.052, 0.28);           // the grip
+  shard(g, deep, 0.008, 0.030, 0.044, 0, -0.022, -0.004, 0.2);                                                                     // the trigger guard
+  { const tr = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.012, 0.004), core); tr.position.set(0, -0.016, -0.010); tr.rotation.x = 0.22; g.add(tr); }
+  for (const [x, y, z, rx, rz] of [[0, 0.080, 0.036, -0.5, 0], [0.006, 0.076, 0.004, -0.2, 0.25], [-0.007, 0.074, -0.030, 0.1, -0.3], [0.014, 0.050, 0.062, 0, 0.7], [-0.014, 0.020, 0.062, 0, -0.7], [0, -0.130, 0.060, 0.5, 0]])   // rime crystals jutting off it
+    shard(g, rime, 0.010, 0.044, 0.010, x, y, z, rx, 0, rz);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.034, -0.136); _hackFlash(flash, 0xaaf0ff); g.add(flash);
+  g._flash = flash; g._kickZ = 0.010; g._greebled = true; g._handDetailed = true; g._blended = true;
+  g._equipGlow = [ice, deep];
+  const mist = new THREE.Group(); mist.userData.eqFx = true; g.add(mist);
+  const puffs = [];
+  for (let i = 0; i < 5; i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: _mistTexture(), transparent: true, depthWrite: false, opacity: 0 })); mist.add(sp); puffs.push({ sp, ph: i / 5, x: (Math.random() - 0.5) * 0.012, z: -0.06 + Math.random() * 0.12 }); }
+  _milRecoil(g, slide, 0.026);
+  const rec = g._tick;
+  g._tick = (dt, now, assembling) => {
+    rec(dt, now, assembling);
+    const fired = !!(g._flash && g._flash.visible);
+    for (const p of puffs) {                                                                                                      // vapour curling up off the slide, over and over; a shot throws a burst of it
+      const life = (now * 0.35 + p.ph) % 1;
+      p.sp.position.set(p.x + Math.sin(now * 1.4 + p.ph * 9) * 0.006, 0.07 + life * 0.07, p.z - life * 0.03);
+      p.sp.scale.setScalar(0.03 + life * 0.05); p.sp.material.opacity = Math.sin(Math.PI * life) * (fired ? 0.75 : 0.32);
+    }
+    seam.material.color.setHex(fired ? 0xffffff : 0xcff6ff);
+  };
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
 let _glintTex = null;
 function _glintTexture() {                                                                // a four-point star of light
   if (_glintTex) return _glintTex;
@@ -43272,6 +43335,7 @@ const SKIN_SHOT = {};
   G({ shape: 'hackbullet', c: [0x0a0a0a, 0x2dff6a], k: 1.5 }, 'hacker', ['grenade_launcher_hacker']);   // a black round on a green trail that bursts in green code
   G(null, 'nuke', ['rpg_nuke'], 0xff8a2a);                                                                 // the ordinary rocket, and a mushroom cloud where it lands   // the Hacker Pistol and AK: a black round on a green glowing trail
   G({ shape: 'hackball', c: [0x0a0a0a, 0x2dff6a], k: 1.3 }, 'hacker', ['frag_hacker']);
+  G({ shape: 'shard', c: [0xcff4ff, 0x7fd8ff], k: 1.5 }, 'ice', ['pistol_frost']);                            // the Frost Pistol: an icicle on a pale-blue trail
   G({ shape: 'goldbullet', c: [0xffc83d, 0xfff2b8], k: 1.6 }, null, ['revolver_midas']);                       // the Midas Revolver: a gold round on a gold trail
   G({ shape: 'hackbullet', c: [0x0a0a0a, 0xff2a3d], k: 1.8 }, null, ['ak20_xerror']);                       // X!@&!@: the hacker round in red, and a size bigger               // the Hacker Grenade: a black ball in a green ring, trailing code
   G({ shape: 'cube', c: [0xe74c3c, 0x2ecc71] }, 'pixel', ['p90_rubiks_cube']);
@@ -43347,6 +43411,7 @@ function skinLookById(id) {                                                 // f
 const HIT_STYLES = {
   hack:  { chars: '01',       glow: '#00ff55', fill: '#7dffa6', hit: 0xd4ffe0, miss: 0x7dffa6, screen: 'rgba(70,255,140,0.16)', num: '#39ff6a', numShadow: '0 0 8px #00ff55, 0 0 2px #003a14, -1px -1px 0 #021a0a, 1px 1px 0 #021a0a', scramble: '0123456789' },
   error: { chars: 'X!@&#?%$', glow: '#ff1030', fill: '#ff8a96', hit: 0xffd0d6, miss: 0xff6a78, screen: 'rgba(255,30,60,0.18)',  num: '#ff2a3d', numShadow: '0 0 8px #ff1030, 0 0 2px #3a0008, -1px -1px 0 #1a0004, 1px 1px 0 #1a0004', scramble: 'X!@&#?%$0123' },
+  frost: { shards: true,       glow: '#7fd8ff', fill: '#e8fbff', hit: 0xe8fbff, miss: 0xa8e8ff, screen: 'rgba(160,230,255,0.16)', num: '#9fe8ff', numShadow: '0 0 8px #3aa8ff, 0 0 2px #04344f, -1px -1px 0 #04344f, 1px 1px 0 #04344f', scramble: null },
   gold:  { coins: true,        glow: '#ff9a00', fill: '#ffd24a', hit: 0xfff0b0, miss: 0xffd24a, screen: 'rgba(255,205,70,0.14)', num: '#ffd24a', numShadow: '0 0 8px #ff9a00, 0 0 2px #4a2a00, -1px -1px 0 #3a2200, 1px 1px 0 #3a2200', scramble: '0123456789' },
 };
 const _hackGlyphs = {};
@@ -43383,9 +43448,70 @@ function _coinBurst(pos, n, spread, up, life, size) {                           
     requestAnimationFrame(tick);
   }
 }
+let _iceTex = null;
+function _iceTexture() {                                                                 // a cut ice shard (a long diamond with a bright facet), face on
+  if (_iceTex) return _iceTex;
+  const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d');
+  x.beginPath(); x.moveTo(32, 2); x.lineTo(46, 32); x.lineTo(32, 62); x.lineTo(18, 32); x.closePath();
+  const g = x.createLinearGradient(18, 0, 46, 0); g.addColorStop(0, 'rgba(120,205,255,0.95)'); g.addColorStop(0.5, 'rgba(235,252,255,1)'); g.addColorStop(1, 'rgba(150,220,255,0.9)');
+  x.fillStyle = g; x.fill(); x.strokeStyle = 'rgba(255,255,255,0.95)'; x.lineWidth = 2; x.stroke();
+  x.beginPath(); x.moveTo(32, 2); x.lineTo(32, 62); x.strokeStyle = 'rgba(255,255,255,0.55)'; x.lineWidth = 1; x.stroke();
+  return _iceTex = new THREE.CanvasTexture(c);
+}
+function _iceBurst(pos, n, spread, up, life, size) {                                      // ice shards: they fly out, turn as they fall (a sprite turns by its material rotation), and fade
+  for (let i = 0; i < n; i++) {
+    const mat = new THREE.SpriteMaterial({ map: _iceTexture(), transparent: true, depthWrite: false, rotation: Math.random() * 6.28 });
+    const sp = new THREE.Sprite(mat), sc = size * (0.6 + Math.random() * 0.9); sp.scale.set(sc * 0.55, sc, 1); sp.position.copy(pos); scene.add(sp);
+    const vel = new THREE.Vector3((Math.random() - 0.5) * spread, up * (0.5 + Math.random() * 0.9), (Math.random() - 0.5) * spread), born = performance.now(), ttl = life * (0.7 + Math.random() * 0.6), spin = (Math.random() - 0.5) * 14;
+    const tick = () => {
+      const t = (performance.now() - born) / ttl;
+      if (t >= 1) { scene.remove(sp); mat.dispose(); return; }
+      sp.position.addScaledVector(vel, 0.016); vel.y -= 0.18; vel.x *= 0.99; vel.z *= 0.99; mat.rotation += spin * 0.016;
+      mat.opacity = t < 0.65 ? 1 : 1 - (t - 0.65) / 0.35;
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+}
+let _frostEl = null, _frostTex = null, _frostTimer = 0;
+function _frostTexture() {                                                              // frost grown in from the edges of a screen: a white-blue vignette and ferns of ice along the rim
+  if (_frostTex) return _frostTex;
+  const W = 640, H = 360, c = document.createElement('canvas'); c.width = W; c.height = H; const x = c.getContext('2d');
+  const g = x.createRadialGradient(W / 2, H / 2, H * 0.28, W / 2, H / 2, W * 0.62);
+  g.addColorStop(0, 'rgba(200,238,255,0)'); g.addColorStop(0.55, 'rgba(190,232,255,0.22)'); g.addColorStop(0.82, 'rgba(225,246,255,0.62)'); g.addColorStop(1, 'rgba(248,253,255,0.92)');
+  x.fillStyle = g; x.fillRect(0, 0, W, H);
+  x.lineCap = 'round';
+  const fern = (px, py, ang, len, depth) => {                                           // a stem with side branches, each shorter
+    const ex = px + Math.cos(ang) * len, ey = py + Math.sin(ang) * len;
+    x.beginPath(); x.moveTo(px, py); x.lineTo(ex, ey); x.stroke();
+    if (depth <= 0 || len < 5) return;
+    for (let k = 1; k <= 3; k++) { const f = k / 3.4, bx = px + (ex - px) * f, by = py + (ey - py) * f; fern(bx, by, ang + 0.75, len * 0.38, depth - 1); fern(bx, by, ang - 0.75, len * 0.38, depth - 1); }
+  };
+  for (let i = 0; i < 90; i++) {
+    const side = Math.floor(Math.random() * 4), u = Math.random();
+    const [px, py, ang] = side === 0 ? [u * W, 0, Math.PI / 2] : side === 1 ? [u * W, H, -Math.PI / 2] : side === 2 ? [0, u * H, 0] : [W, u * H, Math.PI];
+    x.strokeStyle = `rgba(255,255,255,${0.35 + Math.random() * 0.4})`; x.lineWidth = 0.8 + Math.random() * 1.4;
+    fern(px, py, ang + (Math.random() - 0.5) * 0.9, 22 + Math.random() * 46, 2);
+  }
+  _frostTex = c.toDataURL('image/png');
+  return _frostTex;
+}
+function _frostEdge(ms = 1300) {                                                        // frost over the edge of YOUR screen for a moment (when somebody's Frost skin hits you): in fast, out slow; nothing more, it does not slow you
+  const k = Math.min(1, typeof gameplaySettingMult === 'function' ? gameplaySettingMult('screenFx') : 1);
+  if (!(k > 0)) return;
+  if (!_frostEl) {
+    _frostEl = document.createElement('div'); _frostEl.id = 'frost-edge';
+    _frostEl.style.cssText = `position:fixed;inset:0;pointer-events:none;z-index:998;opacity:0;background:url(${_frostTexture()}) center/100% 100% no-repeat;`;
+    document.body.appendChild(_frostEl);
+  }
+  clearTimeout(_frostTimer);
+  _frostEl.style.transition = 'opacity 120ms ease-out'; _frostEl.style.opacity = String(k);
+  _frostTimer = setTimeout(() => { if (_frostEl) { _frostEl.style.transition = `opacity ${Math.round(ms * 0.7)}ms ease-in`; _frostEl.style.opacity = '0'; } }, Math.round(ms * 0.3));
+}
 function _hackDigits(pos, n, spread, up, life, size, style = 'hack') {
   const S = HIT_STYLES[style] || HIT_STYLES.hack;
   if (S.coins) return _coinBurst(pos, n, spread, up, life, size);
+  if (S.shards) return _iceBurst(pos, n, spread, up, life, size);
   const pick = () => S.chars[Math.floor(Math.random() * S.chars.length)];
   for (let i = 0; i < n; i++) {
     const mat = new THREE.SpriteMaterial({ map: _hackGlyph(pick(), style), transparent: true, depthWrite: false, color: 0xffffff });
@@ -43415,6 +43541,7 @@ function skinHitFX(kind, pos, onTarget) {
   requestAnimationFrame(tick);
   if (onTarget) { try { flashScreen(S.screen, 110); } catch (e) {} }
   if (S.coins) _coinBurst(pos, onTarget ? 9 : 4, onTarget ? 3.4 : 2.2, onTarget ? 3.0 : 1.8, onTarget ? 760 : 520, onTarget ? 0.2 : 0.14);
+  else if (S.shards) _iceBurst(pos, onTarget ? 14 : 6, onTarget ? 3.6 : 2.2, onTarget ? 2.4 : 1.4, onTarget ? 720 : 480, onTarget ? 0.2 : 0.14);
   else _hackDigits(pos, onTarget ? 16 : 7, onTarget ? 4.2 : 2.6, onTarget ? 2.6 : 1.4, onTarget ? 620 : 420, onTarget ? 0.26 : 0.18, kind);
 }
 // ...and the damage counter of a Hacker Pistol hit: green, scrambling digits for a quarter of a second, then the real number.
@@ -43446,7 +43573,7 @@ function _othersSkinHit(data) {                                            // so
   const prevHp = players[data.targetId]?.hp ?? (typeof gameBots !== 'undefined' ? gameBots.find(b => b.id === data.targetId)?.hp : undefined);
   const dmg = Number.isFinite(prevHp) && Number.isFinite(data.hp) ? Math.round(prevHp - data.hp) : 0;
   if (data.targetId === myId) {                                                                              // it is you they hit: a blink of its colour, and the number on you
-    try { flashScreen(HIT_STYLES[kind].screen, 110); } catch (e) {}
+    try { if (kind === 'frost') _frostEdge(); else flashScreen(HIT_STYLES[kind].screen, 110); } catch (e) {}          // (frost grows over the screen edge for a moment instead of a blink)
     try { _selfSkinDamage(kind, dmg); } catch (e) {}
     return;
   }
@@ -43477,6 +43604,7 @@ function _hackFlicker(el, real, style = 'hack') {                // real: a stri
   const S = HIT_STYLES[style] || HIT_STYLES.hack;
   const ms = 220 + Math.random() * 90, t0 = performance.now(), final = () => String(typeof real === 'function' ? real() : real);
   el.style.color = S.num; el.style.textShadow = S.numShadow;
+  if (!S.scramble) return;                                       // (frost: the number is the number, in ice)
   const token = el._hackToken = {};
   const step = () => {
     if (el._hackToken !== token || !el.isConnected) return;
@@ -54041,6 +54169,9 @@ const MODEL_SKINS = [
   { id: 'revolver_midas', weapon: 'revolver', name: 'Midas Revolver', rarity: 'epic', look: { hit: 'gold' },
     sw: ['#ffc83d', '#b0101f'], build: buildMidasRevolver,
     blurb: 'Solid gold, rubies in the grips, a crown for a front sight. Drawn, it drops in as bars of gold. Gold rounds on a gold trail and a coin rings after every shot; a hit sprays coins and the damage counts up like a till; whoever it kills turns to a gold statue and shatters into coins.' },
+  { id: 'pistol_frost', weapon: 'pistol', name: 'Frost Pistol', rarity: 'epic', look: { hit: 'frost' },
+    sw: ['#9aeaff', '#2a78d0'], build: buildFrostPistol,
+    blurb: 'An ice-crystal gun with cold vapour curling off it. Drawn, the shards hang round your hand and fuse. Icicle rounds and a ring of struck glass after every shot; a hit sprays ice and frosts over the edge of the victim\'s screen for a moment; whoever it kills freezes and shatters like glass.' },
   { id: 'ak20_xerror', weapon: 'ak20', name: 'X!@&!@', rarity: 'mythic', look: { hit: 'error' },
     sw: ['#0a0000', '#ff2a3d'], build: buildErrorAK,
     blurb: 'It is not supposed to be here. A red-and-black error object in the shape of a rifle: the textures crawl, pieces that did not load drift and jump round it, a NULL cube turns under the barrel. Drawn, it teleports together. Rounds are red errors, the shot is a corrupted signal, and whoever it hits is overwritten with X!@&!@.' },
@@ -54424,7 +54555,7 @@ const GEN2_MODEL_SKIN_IDS = new Set([
   'revolver_donut', 'ak20_donut', 'rpg_donut', 'machine_pistol_donut', 'pistol_donut',
   'sg8_donut', 'srx_donut', 'vector_donut', 'grenade_launcher_donut', 'minigun_donut',
   'mp40_donut', 'deagle_donut', 'shorty_donut',
-  'revolver_midas', 'ak20_xerror',            // the Gen 2 case's two new top rarities: EPIC and MYTHIC (server.js GEN2_EPIC_SKIN_IDS / GEN2_NEW_MYTHIC_SKIN_IDS)
+  'revolver_midas', 'pistol_frost', 'ak20_xerror',            // the Gen 2 case's two new top rarities: EPIC and MYTHIC (server.js GEN2_EPIC_SKIN_IDS / GEN2_NEW_MYTHIC_SKIN_IDS)
   'ak20_rainbow', 'ak20_hyperspace', 'ak20_blueprint', 'sg8_portal', 'vector_portal',
   'railgun_portal_detector', 'p90_quantum_scanner', 'freeze_hyperslush', 'firework_showman',
   'shorty_outlaw', 'snub_gunslinger', 'deagle_glitch', 'deagle_phantom',
@@ -59250,6 +59381,7 @@ const SKIN_FX = {
   // (no `sound`: their shots are SKIN_VOICE / SKIN_CHIME, and a profile here would make the revolver's recording and the AK's lose to it)
   revolver_midas: { equip: 'midas', equipMs: 1000, equipSfx: ['clink', 'ding'] },
   ak20_xerror: { equip: 'glitch', equipMs: 950, equipSfx: ['glitchsfx', 'snapin'] },
+  pistol_frost: { equip: 'assemble', equipMs: 950, equipSfx: ['crystal', 'chime'] },
   plasma_carbine_fishbowl: { sound: _fxS('bubblegun', .26, .10, 300, 900),
     equip: 'fill', equipMs: 1100, equipSfx: ['pour', 'bloop'],
     reload: _fxR(_RK.top(), [.30,.38,.46,.54].map(t => RP(t,'drop','arrive',1,'breech')), [[.28,'glug']], 'bloop') },
@@ -60317,11 +60449,59 @@ function playGoldFinisher(targetId) {
   pushFeedLine('GILDED', players[targetId]?.name || 'Enemy', '#ffd24a');
   return true;
 }
+// ❄️ Frost: the body freezes where it stands, glassy and pale, shivering harder as the frost takes it, and shatters like glass: chunks of ice fly out and turn, a spray of shards, a ring.
+function _iceChunks(pos, n) {
+  for (let i = 0; i < n; i++) {
+    const sz = 0.05 + Math.random() * 0.12, mat = new THREE.MeshPhongMaterial({ color: 0xbfeaff, emissive: 0x16486a, shininess: 200, specular: 0xffffff, transparent: true, opacity: 0.88 });
+    const geo = new THREE.OctahedronGeometry(sz, 0), m = new THREE.Mesh(geo, mat); m.scale.set(0.6 + Math.random() * 0.8, 0.9 + Math.random() * 1.4, 0.6 + Math.random() * 0.8); m.position.copy(pos).add(new THREE.Vector3((Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.9, (Math.random() - 0.5) * 0.5)); scene.add(m);
+    const vel = new THREE.Vector3((Math.random() - 0.5) * 6.5, 1.5 + Math.random() * 4.5, (Math.random() - 0.5) * 6.5), spin = new THREE.Vector3(Math.random() * 9, Math.random() * 9, Math.random() * 9), born = performance.now(), ttl = 1100 + Math.random() * 600;
+    const tick = () => {
+      const t = (performance.now() - born) / ttl;
+      if (t >= 1) { scene.remove(m); geo.dispose(); mat.dispose(); return; }
+      m.position.addScaledVector(vel, 0.016); vel.y -= 0.28; vel.x *= 0.99; vel.z *= 0.99;
+      if (m.position.y < 0.04 && vel.y < 0) { m.position.y = 0.04; vel.y *= -0.3; vel.x *= 0.7; vel.z *= 0.7; }               // it lands on the floor and skids
+      m.rotation.x += spin.x * 0.016; m.rotation.y += spin.y * 0.016; m.rotation.z += spin.z * 0.016;
+      mat.opacity = t < 0.7 ? 0.88 : 0.88 * (1 - (t - 0.7) / 0.3);
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+}
+FINISHER_MOVES.glass = function (mesh, id, c) {
+  const ice = _finisherMat('glass', 0xbfeaff, 0.8); ice.color.setHex(0xbfeaff); ice.emissive.setHex(0x1a4a66);
+  _finisherSwap(mesh, ice);
+  playSoundEvent('hitmarker', { position: mesh.position, volume: 0.6, minGap: 60 });
+  let nextGlint = 0;
+  _finisherDrive(mesh, id, 1050, (t, dt, st) => {
+    const now = performance.now();
+    mesh.position.copy(st.p); mesh.scale.copy(st.s);
+    const k = t < 0.16 ? t / 0.16 : 1;                                             // the frost sweeps over in a sixth of a second
+    ice.color.setRGB(0.56 + 0.44 * (1 - k), 0.78 + 0.22 * (1 - k), 1); ice.opacity = 0.62 + 0.3 * k;
+    const shake = t > 0.55 ? (t - 0.55) / 0.45 : 0;                                // and it shivers harder and harder, about to go
+    mesh.position.x += (Math.random() - 0.5) * 0.05 * shake; mesh.position.z += (Math.random() - 0.5) * 0.05 * shake;
+    mesh.rotation.y = st.r.y + (Math.random() - 0.5) * 0.12 * shake;
+    if (now >= nextGlint) { nextGlint = now + 55; _spawnFinisherSpark(st.p.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.7, 0.2 + Math.random() * 1.5, (Math.random() - 0.5) * 0.7)), 0xe8fbff, { size: 0.05, life: 300, vel: new THREE.Vector3(0, 0.5, 0) }); }
+  }, st => {
+    const at = st.p.clone().setY(st.p.y + 1.0);
+    _iceChunks(at, 16); _iceBurst(at, 60, 7, 4.5, 1500, 0.22); _finisherBurst(at, 0xcfefff, 26, [0xffffff, 0xbfeaff, 0x8fdcff]); _spawnFinisherRing(st.p.clone(), 0xbfeaff, 2.2);
+    playSoundEvent('freeze_shatter', { position: at, volume: 1.0, minGap: 40 });
+  });
+};
+function playGlassFinisher(targetId) {
+  const mesh = remoteMeshes[targetId];
+  if (!mesh || !mesh.visible) return false;
+  if (mesh._finisher && performance.now() < mesh._finisher.until) return true;
+  mesh._finisher = { id: 'glass', until: performance.now() + 4200 };
+  FINISHER_MOVES.glass(mesh, targetId, 0xbfeaff);
+  pushFeedLine('SHATTERED', players[targetId]?.name || 'Enemy', '#9fe8ff');
+  return true;
+}
 // The end a skin's hit style gives a kill; false = it has none (the finisher the player picked, or the ragdoll, runs as always). Looked up at the call, so a test can stand in for any of them.
 function _playSkinFinisher(kind, targetId) {
   if (kind === 'hack') return playGlitchFinisher(targetId);
   if (kind === 'error') return playGlitchFinisher(targetId, 'error');
   if (kind === 'gold') return playGoldFinisher(targetId);
+  if (kind === 'frost') return playGlassFinisher(targetId);
   return false;
 }
 // Plays the chosen finisher on a body. The seven classic ones run the classic effect (see _playClassicFinisher); the others have a move
