@@ -1059,8 +1059,8 @@ const MELEE_ITEMS = [
     ability: { name: 'Deflect',      cd: 4000, desc: '1s · reflect bullets · every hit blocked adds 0.1s', type: 'melee_deflect', duration: 1000, extendPerHit: 100, maxExtend: 2000 } },
   { id: 'baguette',   name: 'Baguette',   type: 'Melee',       damage: 28, range: 2.0, cooldown: 300,
     ability: { name: 'Eat It',       cd: 10000, desc: 'Munch the baguette · restore 40 HP', type: 'melee_eat', heal: 40 } },
-  { id: 'knife',      name: 'Knife',      type: 'Melee',       damage: 28, range: 1.6, cooldown: 260, speedMult: 2.0,
-    ability: { name: 'Backstab',  cd: 7500, desc: 'Glide behind a target · instant kill from behind', type: 'melee_instakill' } },
+  { id: 'knife',      name: 'Knife',      type: 'Melee',       damage: 80, range: 1.6, cooldown: 380, speedMult: 2.0,
+    ability: { name: 'Backstab',  cd: 7500, desc: 'Glide behind a target · 999 damage from behind, an ordinary stab from the front', type: 'melee_instakill' } },
   { id: 'chainsaw',   name: 'Chainsaw',   type: 'Heavy Melee', damage: 45, range: 1.9, cooldown: 150,
     ability: { name: 'Rev Up',       cd: 0, desc: 'HOLD E · the saw revs: it swings by itself, 2.5× as fast, and burns fuel · let go and it stops', type: 'melee_revup', hold: true, autoMs: 60, fuelDrain: 12 } },
   { id: 'lightsabre', archived: true, name: 'Lightsabre', type: 'Melee · Jedi',  damage: 72, range: 2.5, cooldown: 420, doubleJump: true,
@@ -1178,11 +1178,6 @@ const MELEE_ITEMS = [
   { id: 'garrote',    name: 'Spec-Ops Garrote', type: 'Admin · Silent Kill', damage: 9999, range: 1.5, cooldown: 1200,
     adminItem: true,
     ability: { name: 'Lights Out',   cd: 16000, desc: '5 s · all hits instakill', type: 'melee_revup', duration: 5000, autoMs: 240, lunge: 0.8 } },
-  { id: 'twin_knife', name: 'Twin Knife', type: 'Dual Blade', damage: 50, range: 1.6, cooldown: 240, speedMult: 1.7,
-    dual: true,    // two real knives, alternating — see the dual-wield companion system
-    dualHit: true, // every swing lands BOTH blades (50 + 50), not one flat number
-    doubleJump: true, // light and quick — an extra jump mid-air, no new code needed (grantsDoubleJump)
-    ability: { name: 'Throw Knife', cd: 350, desc: 'Hurl a knife · 30 dmg · 10 in reserve', type: 'melee_multithrow', damage: 30, maxCharges: 10 } },
   { id: 'scythe', name: 'Scythe', type: 'Movement Reaper', damage: 58, range: 2.7, cooldown: 560, speedMult: 1.35,
     // Reap Dash goes where you are pointing, up and down included, and covers twice what it did (about 13 m, now 26).
     ability: { name: 'Reap Dash', cd: 4200, desc: 'Movement dash · twice as far · goes where you aim, up included', type: 'melee_mobility', speed: 30, side: 0, up: 3.5, color: 0x99ffe8, aimDash: true, distance: 26, dashTime: 0.42 } },
@@ -1620,7 +1615,7 @@ const WEAPON_COSTS = {
   // Batch-4 melees
   brass_knuckles: 200, hatchet: 220, machete: 260, cane: 140, cricket_bat: 200,
   pipe: 160, wrench: 180, shovel: 280, golf_club: 200, tennis_racket: 100,
-  fire_poker: 200, meat_cleaver: 260, twin_knife: 480, scythe: 420, chain_hammer: 300,
+  fire_poker: 200, meat_cleaver: 260, scythe: 420, chain_hammer: 300,
   // 🌌 Sci-fi P2W melees
   phase_blade: 18000, gravity_hammer: 22000, volt_whip: 17000,
   // Support / Utility
@@ -1792,7 +1787,6 @@ let spearThrown = false;
 let axeThrown = null;        // Hatchet / Tomahawk: { idx, key, cd } while the one you threw is "in the air" (back in hand when its cooldown ends)
 const plantedSpears = [];    // the ones that have landed: { id, ownerId, mesh, boxes } (up here because activateMap clears them while the page is still starting)
 function spearSpent(item) { return spearThrown && (item?.baseId || item?.id) === 'spear'; }
-let twinKnifeCharges = 10;   // Twin Knife: thrown knives left this life, see melee_multithrow
 let meleeSwingDur  = 400;     // ms for full swing arc
 let meleeDeflectDir = 1;      // resting guard side; impacts add a randomized pose
 let meleeDeflectPulseAt = 0;  // short extra twitch layered on the held deflect pose
@@ -1849,9 +1843,8 @@ const MELEE_SWING_TYPES = [
   'stab',    // 40 ots04         → bayonet profile, but 1.8 m and a 240 ms cooldown: a jab
   'thrust',  // 41 garrote       → nothing here really fits a strangle; a forward
              //                    reach is the least wrong. Change it if it feels off.
-  'punch',   // 42 twin_knife    → alternating dual-hand jabs (dual:true reuses this rig)
-  'slash',   // 43 scythe        → wide reaping slash
-  'slash',   // 44 chain_hammer
+  'slash',   // 42 scythe        → wide reaping slash
+  'slash',   // 43 chain_hammer
 ];
 
 // ── Which swing sound each melee makes ─────────────────────────────────────
@@ -1910,7 +1903,6 @@ const MELEE_SWING_SOUND = {
   tomahawk:        'blade',
   ots04:           'blade',   // its own type says Blade; the old test read only the id
   garrote:         'blade',   // inherited from the old name match; a wire has no edge — worth an ear
-  twin_knife:      'blade',
   scythe:          'blade',
 };
 const MELEE_SWING_EVENT = { blade: 'melee_blade', heavy: 'melee_heavy', generic: 'melee_swing' };
@@ -4052,7 +4044,7 @@ function weaponAudioProfile(id, baseWeapon) {
   // Throwables
   if (lowerId.includes('crossbow') || lowerId.includes('bow') || lowerId.includes('harpoon') || lowerId === 'slingshot') return { kind:'twang', vol:0.34, dur:0.18, f1:420, f2:130 };
   if (lowerId === 'boomerang')      return { kind:'twang', vol:0.20, dur:0.16, f1:380, f2:180 };
-  if (lowerId === 'throwing_axes' || lowerId === 'throwing_knives' || lowerId === 'spear_throw' || lowerId === 'twin_knife_throw') return { kind:'throw', vol:0.23, dur:0.12, f1:780, f2:260 };
+  if (lowerId === 'throwing_axes' || lowerId === 'throwing_knives' || lowerId === 'spear_throw') return { kind:'throw', vol:0.23, dur:0.12, f1:780, f2:260 };
   // Pattern fallbacks
   if (lowerId.includes('rail') || lowerId.includes('coil') || lowerId.includes('laser')) return { kind:'energy', vol:0.32, dur:0.20, f1:920, f2:170 };
   if (lowerId.includes('freeze') || lowerId.includes('cryo')) return { kind:'energy', vol:0.26, dur:0.22, f1:740, f2:260 };
@@ -37549,7 +37541,6 @@ const meleeModels = [
   // 🪖 ADMIN melees
   handcraftedMelee('karambit'), handcraftedMelee('bayonet'),
   handcraftedMelee('tomahawk'), handcraftedMelee('ots04'), buildGarrote(),
-  buildKnife(),  // twin_knife — same blade, dual-wielded via MELEE_ITEMS.dual
   buildScythe(), // scythe
   buildChainHammer(), // chain_hammer
 ];
@@ -42214,7 +42205,7 @@ const PROJECTILE_KIND_BY_ID = {
   slingshot:'stone', air_rifle:'bullet',
   // These five used to share the generic 'solid' ball, so a thrown knife flew
   // as a sphere. Each has its own shape and its own tumble now.
-  throwing_knives:'knife', throwing_axes:'axe', boomerang:'boomerang', twin_knife_throw:'knife',
+  throwing_knives:'knife', throwing_axes:'axe', boomerang:'boomerang',
   traffic_cone:'cone', cream_pie:'pie',
   flamethrower:'flame', hellfire:'flame', hellfire_burn:'flame', hellfire_pool:'flame',
   freeze_gun:'ice', abs_zero:'ice', frost_blaster:'ice',
@@ -45640,7 +45631,7 @@ const EQUIP_MS = {
   grenade_launcher: 950, railgun: 1000, rpd: 1000, rpg: 1100, mg42: 1150, bazooka: 1150,
   chain_gun: 1200, javelin_launcher: 1200, mortar_rifle: 1250, amr: 1300, minigun: 1500,
   // melees: small blades are nearly instant, a big weapon is a hoist
-  fists: 100, knife: 120, baguette: 130, twin_knife: 140, katana: 170, sabre: 170, spear: 220, bat: 220,
+  fists: 100, knife: 120, baguette: 130, katana: 170, sabre: 170, spear: 220, bat: 220,
   frying_pan: 240, scythe: 300, combat_axe: 380, chain_hammer: 400, riot_shield: 450, sledge: 520, chainsaw: 600,
 };
 const EQUIP_MS_DEFAULT = { primary: 800, secondary: 400, melee: 220, support: 250 };
@@ -46631,7 +46622,6 @@ function resetCombatResources() {
   playerRootedUntil = 0;
   crossbowCharging = false; crossbowChargeStart = 0;
   spearThrown = false; spearsLeft = SPEAR_THROWS; axeThrown = null; revealActive = false; revealEndTime = 0;
-  twinKnifeCharges = 10;
   riotShieldHp = RIOT_SHIELD_MAX_HP;
   javelinLockTargetId = null; javelinLockStartedAt = 0; javelinLocked = false;
   meleeSwingT = 1; grenadeWindupT = 1; grenadeThrowFired = false;
@@ -48688,7 +48678,7 @@ function _backstabStrike(g) {
   const dummy = TRAINING_DUMMIES.find(d => d.id === g.pid);
   // It only kills from behind. Arrive and they have turned round (or you are not at their back for any reason): an ordinary stab.
   const behind = isKnifeBackstabTarget(mesh);
-  if (dummy) handleDummyHit(dummy, mesh, { damage: behind ? 9999 : g.item.damage }, hp);
+  if (dummy) handleDummyHit(dummy, mesh, { damage: behind ? 999 : g.item.damage }, hp);
   else emitHit(g.pid, `knife_ab_${myId}_${g.now}`, behind ? 'knife_instakill' : (g.item.baseId || g.item.id), hp);
   spawnHitParticle(hp);
   if (behind) flashScreen('rgba(255,0,0,0.40)', 300);
@@ -49906,19 +49896,6 @@ function activateMeleeAbility() {
       }, 520);
       flashAbilityName(spearsLeft > 0 ? `${ab.name} · ${spearsLeft} left` : `${ab.name} · that was the last`);
     }
-  }
-  else if (ab.type === 'melee_multithrow') {
-    if (twinKnifeCharges <= 0) { flashAbilityName('OUT OF KNIVES'); return; }
-    twinKnifeCharges--;
-    const origin = new THREE.Vector3();
-    camera.getWorldPosition(origin);
-    origin.add(new THREE.Vector3(0.10, -0.10, -0.35).applyQuaternion(camera.quaternion));
-    const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
-    const tid = `twin_knife_throw_${myId}_${now}`;
-    socket.emit('shoot', { x: origin.x, y: origin.y, z: origin.z, dx: dir.x, dy: dir.y, dz: dir.z, weapon: 'twin_knife_throw' });
-    spawnLocalBullet(origin, dir, tid, true, 130, 0xd8d8d8, 0.045, 'twin_knife_throw');
-    startUseAnim('melee', item, 'flick');
-    flashAbilityName(`${ab.name} \u00b7 ${twinKnifeCharges} left`);
   }
   else if (ab.type === 'melee_deflect') {
     meleeAbilityBuff = { type: 'deflect', endTime: now + (ab.duration || 2000), extendPer: ab.extendPerHit || 0, extendLeft: ab.maxExtend || 0 };
@@ -51618,10 +51595,7 @@ function meleeStrikeScan(item, soundId, sawDry, now) {
 
     // Determine effective weapon ID and handle buffs
     let effectiveWeaponId = item.id;
-    if (item.id === 'knife' && isKnifeBackstabTarget(mesh)) {
-      effectiveWeaponId = 'knife_instakill';
-      flashScreen('rgba(255,0,0,0.35)', 250);
-    } else if (meleeAbilityBuff?.type === 'instakill' && meleeAbilityBuff.usesLeft > 0 && isKnifeBackstabTarget(mesh)) {
+    if (meleeAbilityBuff?.type === 'instakill' && meleeAbilityBuff.usesLeft > 0 && isKnifeBackstabTarget(mesh)) {
       effectiveWeaponId = 'knife_instakill';
       meleeAbilityBuff.usesLeft--;
       if (meleeAbilityBuff.usesLeft <= 0) meleeAbilityBuff = null;
@@ -51640,11 +51614,7 @@ function meleeStrikeScan(item, soundId, sawDry, now) {
     const dummy = TRAINING_DUMMIES.find(d => d.id === pid);
     if (soundId === 'chainsaw' && !sawDry) playSoundEvent('chainsaw_hit', { volume: 1.35, minGap: 80 });
     const sawOpts = sawDry ? { damageOverride: Math.round(item.damage * 0.25) } : undefined;
-    if (item.dualHit) {
-      // Twin Knife: two real blades, two real hits (50 + 50), not one flat 100.
-      if (dummy) { handleDummyHit(dummy, mesh, { weaponId: effectiveWeaponId }, hitPos.clone()); handleDummyHit(dummy, mesh, { weaponId: effectiveWeaponId }, hitPos.clone()); }
-      else { emitHit(pid, `melee_${myId}_${now}_a`, effectiveWeaponId, hitPos.clone()); emitHit(pid, `melee_${myId}_${now}_b`, effectiveWeaponId, hitPos.clone()); }
-    } else if (dummy) handleDummyHit(dummy, mesh, sawDry ? { weaponId: effectiveWeaponId, damage: sawOpts.damageOverride } : { weaponId: effectiveWeaponId }, hitPos.clone());
+    if (dummy) handleDummyHit(dummy, mesh, sawDry ? { weaponId: effectiveWeaponId, damage: sawOpts.damageOverride } : { weaponId: effectiveWeaponId }, hitPos.clone());
     else emitHit(pid, `melee_${myId}_${now}`, effectiveWeaponId, hitPos.clone(), false, sawOpts || {});
     // Vampire Blade / Meat Cleaver: heal on hit
     const healPerHit = item.healOnHit || (item.lifestealOnHit && meleeAbilityBuff?.type === 'revup' ? item.lifestealOnHit : 0);
@@ -53473,7 +53443,7 @@ function attachEquipmentHands(model, item, support = false) {
     const grips = {
       bat: [0,0,0.17], sabre: [0,0,0.112], frying_pan: [0,0,0.16],
       sledge: [0,0,0.23], spear: [0,0,0.19], katana: [0,0,0.16],
-      baguette: [0,-0.012,0.18], knife: [0,0,0.108], twin_knife: [0,0,0.108],
+      baguette: [0,-0.012,0.18], knife: [0,0,0.108],
       chainsaw: [0,0,0.195], lightsabre: [0,0,0.125], riot_shield: [0.055,0,0.025],
       screwdriver: [0,0,0.128], crowbar: [0,0,0.025], fire_axe: [0,0,0.08],
       nunchucks: [0.055,0,0.025], umbrella: [0,0,0.12], yoyo: [0,0.08,-0.13],
@@ -55001,6 +54971,18 @@ function buildLimitless() {
   g._offHand = off; g._gojo = true; g._distinctHands = true;
   return g;
 }
+// Twin Knife was its own weapon; it is a skin now: the Knife's own model in each hand.
+function buildTwinKnives() {
+  const idx = MELEE_ITEMS.findIndex(m => m.id === 'knife');
+  const base = _baseMeleeModels[idx] || meleeModels[idx];
+  const g = base.clone();
+  g.position.copy(base.position);
+  const off = base.clone();
+  off.position.copy(MELEE_OFFHAND_REST_POS);
+  off.visible = false;
+  g._offHand = off; g._distinctHands = true;
+  return g;
+}
 const _gojoFlare = { blue: 0, red: 0 };
 const GOJO = { count: 0, last: 0, st: null, ui: null, orb: null };
 function _gojoFxMult() { try { return gameplaySettingMult('screenFx'); } catch (e) { return 1; } }
@@ -56308,6 +56290,9 @@ const MELEE_MODEL_SKINS = [
   { id: 'fists_limitless', melee: 'fists', name: 'Limitless', rarity: 'rare', raw: true,
     sw: ['#2f7bff', '#ff2a2a'], build: buildLimitless,
     blurb: 'Blue in the right hand, red in the left. Inspect them. Then inspect them again.' },
+  { id: 'knife_twin', melee: 'knife', name: 'Twin Knife', rarity: 'good', raw: true,
+    sw: ['#d8d8d8', '#2a2c32'], build: buildTwinKnives,
+    blurb: 'A knife in each hand. It was a weapon of its own once; now it is the same knife, twice.' },
   { id: 'spear_trident', melee: 'spear', name: 'Trident', rarity: 'good',
     sw: ['#d4a935', '#1f9fae'], build: buildTrident,
     blurb: 'Three points where there was one. Slightly damp.' },
@@ -63463,8 +63448,7 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   // Opera/Doomsday map hazards — without these, applyBotDamageToPlayer's own
   // ||25 fallback silently underdealt them too (#51).
   ['chandelier', 200], ['debris', 120], ['lightning_strike', 70],
-  ['twin_knife_throw', 30],
-  ['knife_instakill', 9999], ['chainsaw', 45], ['katana', 65], ['knife', 28],
+  ['knife_instakill', 999], ['chainsaw', 45], ['katana', 65], ['knife', 80],
   ['lightsabre', 72], ['riot_shield', 18], ['baguette', 16], ['screwdriver', 20],
   // New ability-shot weapon ids
   ['m1_garand_ab', 150], ['plasma_storm', 35], ['arc_overload', 70],
@@ -66112,7 +66096,7 @@ const ITEM_INSPECT = {
 };
 const MELEE_INSPECT_KIND = {
   katana: 'blade', sabre: 'blade', knife: 'blade', machete: 'blade', lightsabre: 'blade', vampire_blade: 'blade',
-  phase_blade: 'blade', karambit: 'blade', bayonet: 'blade', ots04: 'blade', twin_knife: 'blade', meat_cleaver: 'blade',
+  phase_blade: 'blade', karambit: 'blade', bayonet: 'blade', ots04: 'blade', meat_cleaver: 'blade',
   hatchet: 'blade', tomahawk: 'blade', garrote: 'blade', fire_poker: 'blade', screwdriver: 'blade',
   sledge: 'heavy', fire_axe: 'heavy', combat_axe: 'heavy', titan_hammer: 'heavy', gravity_hammer: 'heavy', shovel: 'heavy',
   crowbar: 'heavy', wrench: 'heavy', chain_hammer: 'heavy', chainsaw: 'heavy', scythe: 'heavy', frying_pan: 'heavy',
@@ -66237,7 +66221,7 @@ const USE_VIEW_ITEM = {
   stim: { r: [.1, .9, .1] }, vampire_syringe: { r: [.1, .9, .1] }, adrenaline: { r: [.2, 0, 0] }, berserker_serum: { r: [.2, 0, 0] },
   smoke: { r: [.5, 0, 0] }, land_mine: { r: [.6, 0, 0] }, confetti_cannon: { r: [.2, .3, 0] }, air_blaster: { r: [.2, .3, 0] }, grapple_hook: { r: [.2, .3, 0] },
   blink_pearl: { r: [0, 0, 0] }, rubber_duck: { r: [0, 0, 0] }, moon_mine: { r: [0, 0, 0] }, black_hole_seed: { r: [0, 0, 0] },
-  knife: { r: [.5, 0, 0] }, twin_knife: { r: [.4, 0, 0] }, baguette: { r: [.5, 0, 0] },
+  knife: { r: [.5, 0, 0] }, baguette: { r: [.5, 0, 0] },
 };
 const USE_TRACKS = {
   // a case that opens: up to the face, tipped to look in, the lid back, something done inside, the lid shut again (as long as the heal takes)
@@ -66883,7 +66867,7 @@ const DICE_POOL = {
        'railgun', 'bazooka', 'sg8', 'flare',
        'gravity_launcher', 'harpoon_gun', 'firework_launcher', 'shockwave_launcher', 'prism_launcher', 'airburst_projector',
        'throwing_axes', 'pulse_needle', 'lancer',
-       'm:spear', 'm:knife', 'm:twin_knife', 'm:riot_shield', 'm:nunchucks', 'm:volt_whip', 'm:bat', 'm:shock_baton',
+       'm:spear', 'm:knife', 'm:riot_shield', 'm:nunchucks', 'm:volt_whip', 'm:bat', 'm:shock_baton',
        'u:molotov', 'u:acid_grenade', 'u:emp_grenade', 'u:taser_grenade', 'u:magnet_mine', 'u:proximity_mine', 'u:stasis_mine',
        'u:tripwire', 'u:grapple_hook', 'u:blink_pearl'],
   D:  ['storm_bloom', 'flamethrower', 'javelin_launcher', 'shorty', 'sawed_off', 'gatecrasher',

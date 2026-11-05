@@ -1790,7 +1790,7 @@ if (ok && process.argv.includes('--movement')) {
       for (const item of [MELEE_ITEMS[sc], WEAPONS[crossbow]]) {
         if (grantsDoubleJump(item)) issues.push(item.id + ' must not grant double jump');
       }
-      for (const item of [WEAPONS[bow], WEAPONS[daggers], MELEE_ITEMS.find(m => m.id === 'twin_knife')]) {
+      for (const item of [WEAPONS[bow], WEAPONS[daggers]]) {
         if (!grantsDoubleJump(item)) issues.push(item.id + ' must grant double jump');
       }
       selectedPrimaryIdx = crossbow;
@@ -2401,6 +2401,23 @@ if (ok && process.argv.includes('--hitcounter')) {
   })()`);
   console.log('hit counter checks: the victim and a bystander both see a Hacker skin\'s damage counter');
   if (rep.length) { ok = false; console.log(rep.join('\n')); }
+}
+
+// The Knife: 80 a stab, 999 (never 9999) from behind with its Backstab, and the old Twin Knife is a skin of it now.
+if (ok && process.argv.includes('--knife')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const knife = MELEE_ITEMS.find(m => m.id === 'knife');
+    if (!knife || knife.damage !== 80) issues.push('the knife should stab for 80, it does ' + (knife && knife.damage));
+    if (MELEE_ITEMS.some(m => m.id === 'twin_knife')) issues.push('the Twin Knife weapon is still there');
+    if (!(MELEE_ITEMS.length === meleeModels.length && MELEE_ITEMS.length === MELEE_SWING_TYPES.length)) issues.push('MELEE_ITEMS, meleeModels and MELEE_SWING_TYPES are out of step: ' + [MELEE_ITEMS.length, meleeModels.length, MELEE_SWING_TYPES.length]);
+    const sk = MELEE_MODEL_SKINS.find(s => s.id === 'knife_twin');
+    if (!sk || sk.melee !== 'knife') issues.push('the Twin Knife skin of the knife is missing');
+    else { const m = sk.build(); if (!m || !m._offHand) issues.push('the Twin Knife skin has no second knife'); }
+    return issues;
+  })()`);
+  console.log('knife checks: 80 a stab, 999 from behind, Twin Knife is a skin');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
 // Bot strategy: on every map, ten random bot/enemy pairs 20-36 m apart each ask for a plan. A plan has to be a route a body can
@@ -4987,7 +5004,7 @@ if (ok && process.argv.includes('--useanim')) {
     // every kind that is switched on, on a real model of its own: it moves the item, and when it is over (or cut short) the item is exactly where it was
     {
       const kinds = [['support', 'inject', 'stim'], ['support', 'injectX', 'adrenaline'], ['support', 'pin', 'smoke'], ['support', 'toss', 'blink_pearl'], ['support', 'plant', 'land_mine'],
-        ['support', 'pop', 'confetti_cannon'], ['support', 'eat', 'hamburger'], ['melee', 'eat', 'baguette'], ['melee', 'throw', 'spear'], ['melee', 'flick', 'twin_knife'], ['melee', 'stab', 'knife']];
+        ['support', 'pop', 'confetti_cannon'], ['support', 'eat', 'hamburger'], ['melee', 'eat', 'baguette'], ['melee', 'throw', 'spear'], ['melee', 'stab', 'knife']];
       const dev = SUPPORT_ITEMS.find(i => !i.archived && !i.adminItem && supportUseKind(i) === 'device');
       if (dev) kinds.push(['support', 'device', dev.id]);
       const keep = { started: gameStarted, dead: isDead, slot: activeSlot, sup: selectedSupportIdx, mel: selectedMeleeIdx, eq: _equip, swing: meleeSwingT };

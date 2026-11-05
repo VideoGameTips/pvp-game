@@ -357,7 +357,7 @@ const WEAPON_COSTS = {
   // Batch-4 melees
   brass_knuckles: 200, hatchet: 220, machete: 260, cane: 140, cricket_bat: 200,
   pipe: 160, wrench: 180, shovel: 280, golf_club: 200, tennis_racket: 100,
-  fire_poker: 200, meat_cleaver: 260, twin_knife: 480, scythe: 420, chain_hammer: 300,
+  fire_poker: 200, meat_cleaver: 260, scythe: 420, chain_hammer: 300,
   // 🌌 Sci-fi P2W melees
   phase_blade: 18000, gravity_hammer: 22000, volt_whip: 17000,
   // Support / Utility
@@ -629,7 +629,7 @@ function cleanKillTags(tags) {
 const FREE_WEAPONS = new Set([
   'ak20', 'sg8',          // primaries
   'pistol', 'flare',      // secondaries
-  'fists', 'frying_pan',  // melees (knife is 2× speed + 28 dmg = nasty, NOT free)
+  'fists', 'frying_pan',  // melees (knife is 2× speed + 80 dmg = nasty, NOT free)
   'frag', 'medkit',       // utilities
 ]);
 
@@ -2138,9 +2138,9 @@ event_horizon: 75,
   mg42: 15,
   // Melee
   bat: 50, sabre: 45, frying_pan: 100, sledge: 70, spear: 50,
-  spear_throw: 85, pickle: 22, shield_charge: 60, knife_instakill: 9999, bat_crowd_clear: 100, fists_uppercut: 50, zombie_claw: 30, sledge_hop: 20, sledge_spin: 40, fists_cross: 35, axe_upper: 45, axe_airwhirl: 50, axe_chop: 70,
+  spear_throw: 85, pickle: 22, shield_charge: 60, knife_instakill: 999, bat_crowd_clear: 100, fists_uppercut: 50, zombie_claw: 30, sledge_hop: 20, sledge_spin: 40, fists_cross: 35, axe_upper: 45, axe_airwhirl: 50, axe_chop: 70,
   sabre_slash: 40, sabre_rise: 55, bat_swing: 32, bat_back: 38, bat_homerun: 70, pan_clang: 22, pan_dong: 50, shield_bash: 25, spear_thrust: 40, spear_sweep: 38, spear_skewer: 65,
-  chainsaw: 45, katana: 65, knife: 28, lightsabre: 72, twin_knife: 50, scythe: 58, chain_hammer: 85,
+  chainsaw: 45, katana: 65, knife: 80, lightsabre: 72, scythe: 58, chain_hammer: 85,
   riot_shield: 18, baguette: 28, screwdriver: 20,
   // cane and shovel were missing here entirely — every hit with either one
   // fell through to the (WEAPON_DAMAGE[x] || 25) fallback, dealing 25 no
@@ -2199,8 +2199,6 @@ event_horizon: 75,
   chain_pull: 60, airburst: 95, toxin_dart: 30, blind_flash: 0,
   // NEW SUPPORTS
   tripwire: 60, magnet_mine: 40,
-  // Twin Knife's thrown alt-fire — mirrors public/game.js CLIENT_WEAPON_DAMAGE
-  twin_knife_throw: 30,
 };
 
 const DAMAGE_OVERRIDE_CAPS = {

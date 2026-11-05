@@ -6423,15 +6423,15 @@
    "name": "Knife",
    "type": "Melee",
    "archived": false,
-   "damage": 28,
+   "damage": 80,
    "reachM": 1.6,
-   "swingMs": 260,
-   "swingsPerSec": 3.846,
-   "dps": 107.692,
+   "swingMs": 380,
+   "swingsPerSec": 2.632,
+   "dps": 210.526,
    "speedMult": 2,
    "ability": {
     "name": "Backstab",
-    "desc": "Glide behind a target · instant kill from behind",
+    "desc": "Glide behind a target · 999 damage from behind, an ordinary stab from the front",
     "cooldownSec": 1.5,
     "steps": null
    },
@@ -6755,25 +6755,6 @@
    "ability": {
     "name": "Thunder Lash",
     "desc": "3 s spin · chain electric hits",
-    "cooldownSec": 1.5,
-    "steps": null
-   },
-   "defaultAbility": null
-  },
-  {
-   "id": "twin_knife",
-   "name": "Twin Knife",
-   "type": "Dual Blade",
-   "archived": false,
-   "damage": 50,
-   "reachM": 1.6,
-   "swingMs": 240,
-   "swingsPerSec": 4.167,
-   "dps": 208.333,
-   "speedMult": 1.7,
-   "ability": {
-    "name": "Throw Knife",
-    "desc": "Hurl a knife · 30 dmg · 10 in reserve",
     "cooldownSec": 1.5,
     "steps": null
    },
