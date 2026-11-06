@@ -30581,16 +30581,17 @@ function buildSnowGlobe() {
   return _skFinish(g, GZ - 0.085, 0, 0.014);
 }
 
-// 🧊 P90 -> Rubik's Cube. Nine of the cubies are the top layer, and it really turns.
+// 🧊 P90 -> Rubik's Cube. 27 real cubies. Every shot twists one random layer a quarter turn (any of the three axes, either way),
+// so it scrambles as you shoot; a reload turns the top layer a full circle. It has never once been solved.
 function buildRubiksCube() {
   const g = new THREE.Group();
   const black = _skM(0x111214, 60, 0x555a66), dark = _skM(0x23252a, 70, 0x667088);
   const cols = { px: 0xd8281e, nx: 0xf27a12, py: 0xf4f4f0, ny: 0xf2d21a, pz: 0x1f9a3a, nz: 0x1f5fcf };
   const U = 0.034, CZ = -0.062;
   const cubie = (ix, iy, iz) => {
-    const x = ix * U, y = iy * U, z = CZ + iz * U;
-    gpBox(g, black, 0.0335, 0.0335, 0.0335, x, y, z);
-    const st = (c, w, h, d, ox, oy, oz) => gpBox(g, _skM(c, 120, 0xffffff), w, h, d, x + ox, y + oy, z + oz);
+    const cg = new THREE.Group(); cg.position.set(ix * U, iy * U, CZ + iz * U); g.add(cg);
+    gpBox(cg, black, 0.0335, 0.0335, 0.0335, 0, 0, 0);
+    const st = (c, w, h, d, ox, oy, oz) => gpBox(cg, stick[c] || (stick[c] = _skM(c, 120, 0xffffff)), w, h, d, ox, oy, oz);
     if (ix === 1)  st(cols.px, 0.0016, 0.027, 0.027, 0.0170, 0, 0);
     if (ix === -1) st(cols.nx, 0.0016, 0.027, 0.027, -0.0170, 0, 0);
     if (iy === 1)  st(cols.py, 0.027, 0.0016, 0.027, 0, 0.0170, 0);
@@ -30598,12 +30599,77 @@ function buildRubiksCube() {
     if (iz === 1)  st(cols.pz, 0.027, 0.027, 0.0016, 0, 0, 0.0170);
     if (iz === -1) st(cols.nz, 0.027, 0.027, 0.0016, 0, 0, -0.0170);
   };
-  for (let ix = -1; ix <= 1; ix++) for (let iz = -1; iz <= 1; iz++) for (let iy = -1; iy <= 0; iy++) cubie(ix, iy, iz);
-  gpPart(g, 'main', () => { for (let ix = -1; ix <= 1; ix++) for (let iz = -1; iz <= 1; iz++) cubie(ix, 1, iz); }, { x: 0, y: U, z: CZ });
+  for (let ix = -1; ix <= 1; ix++) for (let iy = -1; iy <= 1; iy++) for (let iz = -1; iz <= 1; iz++) cubie(ix, iy, iz);
+  gpPart(g, 'main', () => {}, { x: 0, y: U, z: CZ });   // the reload drives this one's turn; _tick applies it to whatever is on top
   gpCyl(g, black, 0.0075, 0.0075, 0.008, 10, 0, 0.0, CZ - 0.058);        // the muzzle, in the middle of the front face
   gpBox(g, dark, 0.036, 0.032, 0.056, 0, -0.012, 0.012);                 // the handle block behind it
   _skGrip(g, dark, -0.010);
-  return _skFinish(g, CZ - 0.078, 0, 0.010);
+  _skFinish(g, CZ - 0.078, 0, 0.010);
+
+  const C = new THREE.Vector3(0, 0, CZ);
+  const mkPivot = () => { const pv = new THREE.Group(); pv.position.copy(C); pv.userData.eqFx = true; g.add(pv); return pv; };
+  const twistPv = mkPivot(), reloadPv = mkPivot();
+  let tw = null, reloadOn = false, wasFired = false, wasAsm = false;
+  const rot90 = (v, axis, th) => {            // a grid position turned a quarter about an axis, as three.js turns it
+    const c = Math.round(Math.cos(th)), sn = Math.round(Math.sin(th)); let [x, y, z] = v;
+    if (axis === 'x') [y, z] = [y * c - z * sn, y * sn + z * c];
+    else if (axis === 'y') [x, z] = [x * c + z * sn, -x * sn + z * c];
+    else [x, y] = [x * c - y * sn, x * sn + y * c];
+    return [Math.round(x), Math.round(y), Math.round(z)];
+  };
+  const finishTwist = () => {
+    if (!tw) return;
+    const th = tw.dir * Math.PI / 2, q = new THREE.Quaternion();
+    q.setFromAxisAngle(new THREE.Vector3(tw.axis === 'x' ? 1 : 0, tw.axis === 'y' ? 1 : 0, tw.axis === 'z' ? 1 : 0), th);
+    for (const c of tw.items) {
+      c.cg.position.applyQuaternion(q).add(C); c.cg.quaternion.premultiply(q);
+      g.add(c.cg); c.at = rot90(c.at, tw.axis, th);
+      c.cg.position.set(c.at[0] * U, c.at[1] * U, CZ + c.at[2] * U);   // snap to the grid so quarter turns never drift
+    }
+    twistPv.rotation.set(0, 0, 0); tw = null;
+  };
+  const startTwist = () => {
+    finishTwist();
+    const axis = 'xyz'[Math.floor(Math.random() * 3)], slice = Math.floor(Math.random() * 3) - 1, dir = Math.random() < 0.5 ? -1 : 1;
+    const items = cubies.filter(c => c.at['xyz'.indexOf(axis)] === slice);
+    for (const c of items) { c.cg.position.sub(C); twistPv.add(c.cg); }
+    tw = { axis, dir, t: 0, items };
+  };
+  const endReload = () => {
+    if (!reloadOn) return;
+    for (const c of [...reloadPv.children]) { c.position.add(C); g.add(c); }
+    reloadPv.rotation.set(0, 0, 0); reloadOn = false;
+    if (g._parts && g._parts.main) g._parts.main.rotation.set(0, 0, 0);
+  };
+  const solve = () => {
+    finishTwist(); endReload();
+    for (const c of cubies) { const h = c.cg.userData.eqHome; c.cg.position.copy(h.p); c.cg.quaternion.copy(h.q); g.add(c.cg); c.at = c.home.slice(); }
+  };
+  g._calm = () => { finishTwist(); endReload(); };
+  g._tick = (dt, now, assembling) => {
+    if (assembling) { if (!wasAsm) solve(); wasAsm = true; return; }
+    wasAsm = false;
+    if (reloading) {                                         // the reload turns the top layer a full circle, whichever cubies are up there
+      if (!reloadOn) {
+        finishTwist();
+        for (const c of cubies) if (c.at[1] === 1) { c.cg.position.sub(C); reloadPv.add(c.cg); }
+        reloadOn = true;
+      }
+      reloadPv.rotation.y = g._parts.main.rotation.y;
+      return;
+    }
+    endReload();
+    const fired = !!(g._flash && g._flash.visible);
+    if (fired && !wasFired) startTwist();                    // one shot, one random twist
+    wasFired = fired;
+    if (tw) {
+      tw.t = Math.min(1, tw.t + dt / 0.09);
+      const k = tw.t * tw.t * (3 - 2 * tw.t);
+      twistPv.rotation[tw.axis] = tw.dir * Math.PI / 2 * k;
+      if (tw.t >= 1) finishTwist();
+    }
+  };
+  return g;
 }
 
 // 🎼 Railgun -> Tuning Fork. It hums all the time; a shot sets it ringing.
@@ -30835,6 +30901,8 @@ function buildMousetrap() {
   gpBox(g, cheese, 0.024, 0.010, 0.026, 0, 0.012, -0.120);               // the cheese
   gpBox(g, hole, 0.006, 0.0105, 0.006, 0.006, 0.0125, -0.126);
   gpBox(g, hole, 0.005, 0.0105, 0.005, -0.006, 0.0125, -0.114);
+  const stick = {};   // one material per colour, not one per sticker
+  const cubies = [];
   [-1, 1].forEach(sd => {
     const coil = new THREE.Mesh(new THREE.TorusGeometry(0.0075, 0.0018, 6, 12), steel);
     coil.rotation.y = Math.PI / 2; coil.position.set(sd * 0.0155, 0.011, 0.040); g.add(coil);
@@ -30845,6 +30913,9 @@ function buildMousetrap() {
   gpPart(g, 'main', () => {                                              // the bar, hinged at the back
     ham = new THREE.Group(); ham.position.set(0, 0.012, 0.040); ham.rotation.x = REST; g.add(ham);
     [-1, 1].forEach(sd => gpCyl(ham, steel, 0.003, 0.003, 0.200, 6, sd * 0.022, 0, -0.100));
+    // where it sits when the cube is solved: the entrance and every redraw come back to this
+    cg.userData.eqHome = { p: cg.position.clone(), q: cg.quaternion.clone(), s: cg.scale.clone() };
+    cubies.push({ cg, home: [ix, iy, iz], at: [ix, iy, iz] });
     gpCyl(ham, steel, 0.003, 0.003, 0.048, 6, 0, 0, -0.200, 0, Math.PI / 2);
     gpCyl(ham, steel, 0.003, 0.003, 0.048, 6, 0, 0, 0, 0, Math.PI / 2);
   }, { x: 0, y: 0.012, z: 0.040 });
@@ -54309,7 +54380,7 @@ const MODEL_SKINS = [
     blurb: 'A small village, permanently in the middle of a blizzard. Turn it upside down to reload.' },
   { id: 'p90_rubiks_cube', weapon: 'p90', name: "Rubik's Cube", rarity: 'rare',
     sw: ['#d8281e', '#1f5fcf'], build: buildRubiksCube,
-    blurb: 'Every reload is a clean quarter-turn of the top layer. It has never once been solved.' },
+    blurb: 'Every shot twists a random layer of the cube, every reload spins the top one right round. It has never once been solved.' },
   { id: 'railgun_tuning_fork', weapon: 'railgun', name: 'Tuning Fork', rarity: 'rare',
     sw: ['#c4ccd6', '#66e8ff'], build: buildTuningFork,
     blurb: 'A perfect A, held very hard. Every shot sets it ringing.' },
@@ -59250,10 +59321,15 @@ const SKIN_FX = {
     // the off hand turns the top layer a quarter at a time: four clicks, and it is back where it began
     reload: _fxR([K(.08,{py:.05,rx:.15,rz:-.20}),
       K(.20,{py:.06,rx:.20,rz:-.25,hx:.03,hy:.06,hz:-.08,hr:-.3}),
-      K(.32,{py:.06,rx:.20,rz:-.25,hx:.04,hy:.05,hz:-.08,ary:1.5708}),
-      K(.44,{py:.06,rx:.20,rz:-.25,hx:.03,hy:.06,hz:-.08,ary:3.1416}),
-      K(.56,{py:.06,rx:.20,rz:-.25,hx:.04,hy:.05,hz:-.08,ary:4.7124}),
-      K(.68,{py:.06,rx:.20,rz:-.25,hx:.03,hy:.06,hz:-.08,ary:6.2832}),
+      // each quarter is a held beat then a quick snap, so it clicks round instead of spinning like a fan
+      K(.29,{py:.06,rx:.20,rz:-.25,hx:.04,hy:.05,hz:-.08,ary:0}),
+      K(.33,{py:.06,rx:.20,rz:-.25,hx:.03,hy:.06,hz:-.08,ary:1.5708}),
+      K(.41,{py:.06,rx:.20,rz:-.25,hx:.04,hy:.05,hz:-.08,ary:1.5708}),
+      K(.45,{py:.06,rx:.20,rz:-.25,hx:.03,hy:.06,hz:-.08,ary:3.1416}),
+      K(.53,{py:.06,rx:.20,rz:-.25,hx:.04,hy:.05,hz:-.08,ary:3.1416}),
+      K(.57,{py:.06,rx:.20,rz:-.25,hx:.03,hy:.06,hz:-.08,ary:4.7124}),
+      K(.65,{py:.06,rx:.20,rz:-.25,hx:.04,hy:.05,hz:-.08,ary:4.7124}),
+      K(.69,{py:.06,rx:.20,rz:-.25,hx:.03,hy:.06,hz:-.08,ary:6.2832}),
       K(.82,{py:.04,rx:.10,rz:-.10,ary:6.2832}), K(.9995,{py:.0,ary:6.2832})],
       null, [[.32,'click'],[.44,'click'],[.56,'click'],[.68,'click']], 'ding') },
   railgun_tuning_fork: { sound: _fxS('ring', .32, .90, 1046, 1046),
