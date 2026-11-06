@@ -54645,7 +54645,7 @@ const GEN2_MELEE_MODEL_SKIN_IDS = new Set([
   'katana_donut', 'knife_hyperspace', 'knife_butterfly', 'knife_singularity', 'lightsabre_singularity',
   'katana_laser', 'katana_sakura', 'katana_thunder', 'combat_axe_frost', 'shock_baton_thunder',
   'spear_thunder', 'knife_balloon', 'bat_inflatable', 'frying_pan_pizza_cutter',
-  'sabre_balloon', 'katana_tidal_fang',
+  'sabre_balloon', 'katana_tidal_fang', 'knife_twin',
 ]);
 // 🎬 Utility skins that make an entrance come out of Gen 2 too (no skin is free).
 const GEN2_SUPPORT_MODEL_SKIN_IDS = new Set(['frag_stopwatch']);
@@ -56562,7 +56562,8 @@ const MELEE_MODEL_SKINS = [
     blurb: 'Blue in the right hand, red in the left. Inspect them. Then inspect them again.' },
   { id: 'knife_twin', melee: 'knife', name: 'Twin Knife', rarity: 'good', raw: true,
     sw: ['#d8d8d8', '#2a2c32'], build: buildTwinKnives,
-    blurb: 'A knife in each hand. It was a weapon of its own once; now it is the same knife, twice.' },
+    blurb: 'Drawn, both knives are flipped up and caught, one in each hand. It was a weapon of its own once.',
+    equip: 'flip', equipMs: 850, equipSfx: ['whoosh', 'clink'] },
   { id: 'spear_trident', melee: 'spear', name: 'Trident', rarity: 'good',
     sw: ['#d4a935', '#1f9fae'], build: buildTrident,
     blurb: 'Three points where there was one. Slightly damp.' },

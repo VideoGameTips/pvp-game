@@ -461,7 +461,7 @@ const GEN2_RARE_SKIN_IDS = [
 const GEN2_GOOD_SKIN_IDS = [
   'pistol_origami', 'xm7_bricks', 'vector_brick_labeler', 'shorty_buzzdraw', 'srx_8bit',
   'ak20_8bit', 'sg8_8bit', 'revolver_8bit', 'vector_8bit', 'shorty_8bit', 'knife_balloon',
-  'bat_inflatable', 'frying_pan_pizza_cutter', 'sabre_balloon',
+  'bat_inflatable', 'frying_pan_pizza_cutter', 'sabre_balloon', 'knife_twin',
 ];
 // The Neon Rift series: seven Gen 2 skins that light up. Ordinary rarity, so they drop alongside the other 'rare' entrances.
 GEN2_RARE_SKIN_IDS.push('ak20_cyberpunk', 'srx_cyberpunk', 'sg8_cyberpunk', 'vector_cyberpunk', 'pistol_cyberpunk', 'mp40_cyberpunk', 'revolver_cyberpunk');
@@ -672,6 +672,11 @@ function ensureShopFields(u) {
     if (typeof u.skinCasePacks[caseId] !== 'number') u.skinCasePacks[caseId] = 0;
   }
   if (!Array.isArray(u.skinInventory)) u.skinInventory = [];
+  // The Twin Knife was a weapon you could buy; it is a Gen 2 skin of the Knife now. Whoever bought it keeps it, as that skin.
+  if (u.purchased.includes('twin_knife')) {
+    u.purchased = u.purchased.filter(id => id !== 'twin_knife');
+    if (!u.skinInventory.includes('knife_twin')) u.skinInventory.push('knife_twin');
+  }
   // A skin deleted for being the same model as its twin: whoever owned it owns the twin now.
   for (const [gone, twin] of Object.entries(SKIN_SWAPS)) {
     if (!u.skinInventory.includes(gone)) continue;
