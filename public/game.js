@@ -77370,7 +77370,7 @@ function setItemWrap(kind, id, wrapId) {
     if (m) ensureHeldWrap(m);
   }
 }
-function openItemSkins(kind, id, onClose) {
+function openItemSkins(kind, id, onClose, alwaysOnClose = false) {
   const item = (kind === 'gun' ? WEAPONS : kind === 'melee' ? MELEE_ITEMS : SUPPORT_ITEMS).find(x => x.id === id);
   if (!item) return;
   closeOtherDialogs('item-skins-panel');
@@ -77484,7 +77484,7 @@ function openItemSkins(kind, id, onClose) {
       render(); panel.scrollTop = top;
     }));
   };
-  const close = () => { panel.style.display = 'none'; if (changed && onClose) onClose(); };
+  const close = () => { panel.style.display = 'none'; if ((changed || alwaysOnClose) && onClose) onClose(); };
   render();
 }
 
@@ -77695,9 +77695,15 @@ function openWeaponSkinsPanel() {
       <button id="ws-stealth-open" type="button" style="margin-left:auto;margin-right:12px;padding:8px 12px;background:#202a2f;color:#d1e0df;border:1px solid #718a8b;border-radius:4px;cursor:pointer;font-family:inherit;">Stealth Collection</button>
       <button id="ws-close" style="background:#3a1a1a;color:#ff8888;border:1px solid #ff4444;padding:4px 10px;cursor:pointer;font-family:inherit;border-radius:3px;">✕</button>
     </div>
+    <div style="margin-bottom:6px;">
+      <input id="ws-find-q" type="search" autocomplete="off" spellcheck="false" placeholder="🔎 Search a weapon or a skin: AK, katana, frag, rubik..." data-no-i18n style="width:100%;box-sizing:border-box;padding:10px 12px;background:#0f0e0a;color:#ffe9a8;border:2px solid #ccaa44;border-radius:6px;font-family:inherit;font-size:14px;letter-spacing:1px;">
+      <div id="ws-find-res" style="display:none;margin-top:8px;"></div>
+    </div>
+    <div id="ws-all">
     ${modelSkinSection()}
     ${meleeModelSkinSection()}
     ${supportModelSkinSection()}
+    </div>
     <div style="font-size:12px;letter-spacing:2px;color:#ffdd88;margin:20px 0 6px;border-top:1px solid #6a5520;padding-top:14px;">🎨 WEAPON WRAPS <button id="ws-pixelizer" style="margin-left:10px;padding:4px 8px;background:#2a1030;color:#ff99dd;border:1px solid #ff66cc;border-radius:4px;cursor:pointer;font-family:inherit;font-size:10px;letter-spacing:1px;">🎨 PAINT YOUR OWN</button></div>
     <div style="font-size:10px;color:#aa9966;margin-bottom:12px;line-height:1.4;">One pick here applies to every gun, melee and utility (to give ONE weapon its own, pick it in the loadout and press SKINS). Country themes use real national flags; the German theme is the Iron Cross military mark (no Nazi imagery).</div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">${WEAPON_SKINS.filter(s => !s.contract && (!s.approvedBy || wrapUnlocked(s.id))).map(swatch).join('')}</div>
@@ -77707,6 +77713,48 @@ function openWeaponSkinsPanel() {
     ${gen2CaseSection()}
     ${basicCaseSection()}
   `;
+  // 🔎 Find a weapon: type its name (or a skin's) and it lists the matching weapons with how many skins each has;
+  // pressing one opens that weapon's own skin page, every kind of skin it has in one place.
+  {
+    const q = panel.querySelector('#ws-find-q'), res = panel.querySelector('#ws-find-res'), all = panel.querySelector('#ws-all');
+    const norm = t => String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const items = () => {
+      const out = [], admin = !!currentUser?.isAdmin;
+      const add = (kind, list, statBy, modelBy) => { for (const it of list) {
+        if (it.archived && !admin) continue;
+        const stat = (statBy && statBy[it.id] || []).filter(x => x.id !== 'stock'), model = (modelBy && modelBy[it.id] || []).filter(m => !skinIsArchived(m) || admin);
+        out.push({ kind, id: it.id, name: it.name, n: stat.length + model.length, skins: [...stat, ...model].map(x => x.name) });
+      } };
+      add('gun', WEAPONS, GUN_STAT_SKINS_BY_WEAPON, MODEL_SKINS_BY_WEAPON);
+      add('melee', MELEE_ITEMS, MELEE_SKINS_BY_BASE, MELEE_MODEL_SKINS_BY_BASE);
+      add('support', SUPPORT_ITEMS, null, SUPPORT_MODEL_SKINS_BY_BASE);
+      return out;
+    };
+    const KIND = { gun: 'GUN', melee: 'MELEE', support: 'UTILITY' };
+    const show = () => {
+      const t = norm(q.value);
+      if (!t) { res.style.display = 'none'; res.innerHTML = ''; all.style.display = ''; return; }
+      all.style.display = 'none'; res.style.display = 'block';
+      const hits = [];
+      for (const it of items()) {
+        const byName = norm(it.name).includes(t) || norm(it.id).includes(t);
+        const bySkin = !byName && t.length >= 3 && it.skins.find(n => norm(n).includes(t));
+        if (byName || bySkin) hits.push({ it, via: bySkin || '', rank: byName ? (norm(it.name).startsWith(t) ? 0 : 1) : 2 });
+      }
+      hits.sort((a, b) => a.rank - b.rank || b.it.n - a.it.n);
+      res.innerHTML = hits.length ? hits.slice(0, 30).map((h, i) => `<button type="button" class="ws-hit" data-i="${i}" style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;margin-bottom:6px;padding:10px 12px;background:#1d1a12;color:#ffe9a8;border:1px solid #6a5520;border-radius:6px;cursor:pointer;font-family:inherit;font-size:13px;letter-spacing:1px;">
+          <span style="flex:1;">${escHtml(h.it.name.toUpperCase())}${h.via ? ` <span style="color:#99e0ff;font-size:11px;">has "${escHtml(h.via)}"</span>` : ''}</span>
+          <span style="font-size:10px;color:#aa9966;">${KIND[h.it.kind]}</span>
+          <span style="font-size:11px;color:${h.it.n ? '#88ff99' : '#777'};">${h.it.n ? h.it.n + ' skin' + (h.it.n > 1 ? 's' : '') : 'no skins yet'}</span></button>`).join('')
+        : '<div style="padding:10px;color:#998;font-size:12px;">No weapon or skin matches that.</div>';
+      res.querySelectorAll('.ws-hit').forEach(b => b.addEventListener('click', () => {
+        const it = hits[+b.dataset.i].it;
+        openItemSkins(it.kind, it.id, () => openWeaponSkinsPanel(), true);
+      }));
+    };
+    q.addEventListener('input', show);
+    q.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') res.querySelector('.ws-hit')?.click(); });
+  }
   const pxBtn = panel.querySelector('#ws-pixelizer');
   if (pxBtn) pxBtn.addEventListener('click', () => { panel.style.display = 'none'; openSkinPixelizer('gun'); });
   const ideaBtn = panel.querySelector('#ws-idea');
