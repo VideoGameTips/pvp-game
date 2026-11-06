@@ -30,6 +30,7 @@
   function equip(skin) {
     if(MODEL_SKINS.some(s=>s.id===skin.id))setModelSkin(skin.weapon,skin.id);
     else if(MELEE_MODEL_SKINS.some(s=>s.id===skin.id))setMeleeModelSkin(skin.melee,skin.id);
+    else if(SUPPORT_MODEL_SKINS.some(s=>s.id===skin.id))setSupportModelSkin(skin.support,skin.id);
     else if(skin.weapon)setGunStatSkin(skin.weapon,skin.id);
     else if(skin.skinFor)setMeleeSkin(skin.skinFor,skin.id);
   }
@@ -101,7 +102,7 @@
     result.append(label,name,rarityLabel);
     const actions=document.createElement('div');actions.style.cssText='display:flex;gap:12px;justify-content:center;';
     const button=(text,fn)=>{const b=document.createElement('button');b.type='button';b.textContent=text;b.style.cssText='min-height:48px;min-width:112px;padding:10px 18px;border:1px solid #91aabd;border-radius:4px;background:#182733;color:white;font:700 14px Arial;cursor:pointer;';b.onclick=fn;return b;};
-    if(skin.weapon || skin.melee || skin.skinFor)actions.appendChild(button('Equip',()=>{try{finish();equip(skin);openWeaponSkinsPanel();}catch(e){console.warn('[case equip]',e);}}));
+    if(skin.weapon || skin.melee || skin.support || skin.skinFor)actions.appendChild(button('Equip',()=>{try{finish();equip(skin);openWeaponSkinsPanel();}catch(e){console.warn('[case equip]',e);}}));
     actions.appendChild(button('Collect',()=>finish()));result.appendChild(actions);ui.appendChild(result);
     const skip=button('Skip',()=>{if(state)state.elapsed=Math.max(state.elapsed,3.5);});skip.style.cssText+='position:absolute;right:16px;top:58px;min-width:64px;background:#111d28bb;';ui.appendChild(skip);
     ui.addEventListener('pointerdown',e=>e.stopPropagation());ui.addEventListener('click',e=>e.stopPropagation());

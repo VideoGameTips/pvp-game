@@ -45922,6 +45922,8 @@ function startSupportEquipAnim(idx, ms) {
     const model = supportModels[idx], item = SUPPORT_ITEMS[idx];
     if (!model || !item) return;
     if (model._heldItem) model._heldItem.visible = true;
+    const wantSk = equippedSupportModelSkins[item.id], sk = wantSk && SUPPORT_MODEL_SKINS.find(s => s.id === wantSk && s.support === item.id);
+    if (sk && sk.equip && sk._model === model) { _beginEquip(model, sk, false, true); return; }     // a utility skin's own entrance
     if (model._supportEquip === 'donutbuild') {
       // The stock grenade is a donut too, but its entrance must fit the utility draw.
       const duration = ms == null ? equipMsFor(item, 'support') : Math.max(0, Math.min(ms, equipMsFor(item, 'support')));
@@ -54591,6 +54593,8 @@ function refreshLegendSkins() {
       if (MODEL_SKINS.some(m => m.id === sid && (m.rarity === 'legend' || GATED_MODEL_SKIN_IDS.has(m.id)))) applyModelSkin(wid);
     for (const [bid, sid] of Object.entries(equippedMeleeModelSkins))
       if (MELEE_MODEL_SKINS.some(m => m.id === sid && (m.rarity === 'legend' || GATED_MELEE_MODEL_SKIN_IDS.has(m.id)))) applyMeleeModelSkin(bid);
+    for (const [bid, sid] of Object.entries(equippedSupportModelSkins))
+      if (GEN2_SUPPORT_MODEL_SKIN_IDS.has(sid)) applySupportModelSkin(bid);
   } catch (e) {}
 }
 const MODEL_SKINS_BY_WEAPON = {};
@@ -54641,13 +54645,15 @@ const GEN2_MELEE_MODEL_SKIN_IDS = new Set([
   'katana_donut', 'knife_hyperspace', 'knife_butterfly', 'knife_singularity', 'lightsabre_singularity',
   'katana_laser', 'katana_sakura', 'katana_thunder', 'combat_axe_frost', 'shock_baton_thunder',
   'spear_thunder', 'knife_balloon', 'bat_inflatable', 'frying_pan_pizza_cutter',
-  'sabre_balloon',
+  'sabre_balloon', 'katana_tidal_fang',
 ]);
+// 🎬 Utility skins that make an entrance come out of Gen 2 too (no skin is free).
+const GEN2_SUPPORT_MODEL_SKIN_IDS = new Set(['frag_stopwatch']);
 // 🧟 Earned, never bought or pulled: the server hands this over the first time you call for the way out of the Zombie Tower
 // (socket 'zombieTowerWin', mirrored by ZOMBIE_TOWER_SKIN_IDS in server.js). It is in no case and no bundle.
 const TOWER_MODEL_SKIN_IDS = new Set(['ak20_field_radio']);
 const GATED_MODEL_SKIN_IDS = new Set([...GEN1_GATED_MODEL_SKIN_IDS, ...GEN2_MODEL_SKIN_IDS, ...TOWER_MODEL_SKIN_IDS, ...PVP_SHOP_CATALOG.exclusiveSkins]);
-const GATED_MELEE_MODEL_SKIN_IDS = new Set([...GEN2_MELEE_MODEL_SKIN_IDS]);
+const GATED_MELEE_MODEL_SKIN_IDS = new Set([...GEN2_MELEE_MODEL_SKIN_IDS, ...GEN2_SUPPORT_MODEL_SKIN_IDS]);   // (the lock check is by id, so utilities share it)
 for (const id of GEN1_GATED_MODEL_SKIN_IDS) {
   const ms = MODEL_SKINS.find(m => m.id === id);
   if (ms && !GEN1_SKIN_BY_ID[id]) { GEN1_SKIN_DEFS.push(ms); GEN1_SKIN_BY_ID[id] = ms; }
@@ -56429,6 +56435,68 @@ function buildThunderSpear() {
   g.position.set(0.10, -0.12, -0.20); return g;
 }
 
+function buildTidalFang() {
+  // 🌊 Katana -> Tidal Fang. A captured wave: the blade is blue water with a white foam spine, a wave curling over it near
+  // the tip and the tip hooked like a fang. Foam crawls along the edge and bubbles rise inside it. Drawn, the water
+  // rises up in the blade.
+  const g = new THREE.Group();
+  const O = [0, 0.022, -0.020];
+  const navy = new THREE.MeshPhongMaterial({ color: 0x12283c, shininess: 60, specular: 0x5a7a96 });
+  const pearl = new THREE.MeshPhongMaterial({ color: 0xeaf6f4, shininess: 200, specular: 0xffffff });
+  const brass = new THREE.MeshPhongMaterial({ color: 0xc89a48, shininess: 160, specular: 0xfff0b0 });
+  const water = new THREE.MeshPhongMaterial({ color: 0x2aa8d8, emissive: 0x0a5a8a, emissiveIntensity: 0.55, shininess: 220, specular: 0xffffff, transparent: true, opacity: 0.82 });
+  const deep = new THREE.MeshPhongMaterial({ color: 0x1470b0, emissive: 0x06304a, emissiveIntensity: 0.5, shininess: 200, specular: 0xffffff, transparent: true, opacity: 0.88 });
+  const foamM = new THREE.MeshBasicMaterial({ color: 0xf4ffff });
+  const add = (geo, mat, x, y, z, rx = 0, ry = 0) => {
+    const m = new THREE.Mesh(geo, mat); m.position.set(x + O[0], y + O[1], z + O[2]); m.rotation.set(rx, ry, 0); g.add(m); return m;
+  };
+  add(new THREE.CylinderGeometry(0.012, 0.012, 0.150, 12), navy, 0, 0, 0.078, Math.PI / 2);        // the hilt
+  for (let i = 0; i < 5; i++) add(new THREE.TorusGeometry(0.0125, 0.0016, 6, 16), brass, 0, 0, 0.030 + i * 0.026);   // its brass bands
+  add(new THREE.SphereGeometry(0.014, 12, 10), pearl, 0, 0, 0.160);                               // the pearl pommel
+  add(new THREE.CylinderGeometry(0.030, 0.030, 0.006, 20), pearl, 0, 0, 0, Math.PI / 2);          // the guard: a shell
+  for (let i = 0; i < 8; i++) {                                                                    // with a scalloped rim
+    const a = i / 8 * Math.PI * 2;
+    add(new THREE.SphereGeometry(0.0048, 8, 6), brass, Math.cos(a) * 0.030, Math.sin(a) * 0.030, 0);
+  }
+  add(new THREE.BoxGeometry(0.010, 0.022, 0.014), brass, 0, 0, -0.011);                           // the collar
+  g._water = add(new THREE.BoxGeometry(0.0075, 0.032, 0.290), water, 0, 0, -0.160);               // the blade: water. It rises on the draw.
+  add(new THREE.BoxGeometry(0.0090, 0.011, 0.290), deep, 0, -0.011, -0.160);                      // the deep, along the edge
+  add(new THREE.ConeGeometry(0.0160, 0.080, 4), water, 0, 0.0, -0.345, -Math.PI / 2 - 0.12);     // the fang: the tip, hooked down
+  add(new THREE.TorusGeometry(0.030, 0.0088, 8, 16, Math.PI * 0.9), water, 0, 0.016, -0.215, 0, -Math.PI / 2);   // the wave curling over
+  add(new THREE.SphereGeometry(0.0085, 8, 6), foamM, 0, 0.016 + 0.0093, -0.215 - 0.0285);                          // its foam lip
+  add(new THREE.TorusGeometry(0.018, 0.0066, 8, 12, Math.PI * 0.9), water, 0, 0.016, -0.100, 0, -Math.PI / 2);   // a smaller one behind
+  add(new THREE.SphereGeometry(0.0062, 8, 6), foamM, 0, 0.016 + 0.0056, -0.100 - 0.0171);
+  add(new THREE.BoxGeometry(0.0046, 0.0050, 0.290), foamM, 0, 0.0175, -0.160);                    // the foam along the spine
+  const beads = [], N = 9;                                                                          // foam crawling along it
+  for (let i = 0; i < N; i++) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.0058, 8, 6), foamM);
+    m.userData.eqFx = true; g.add(m); beads.push(m);
+  }
+  const bubbleM = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7, depthWrite: false });
+  const bubbles = [];
+  for (let i = 0; i < 6; i++) {                                                                     // and bubbles rising in the water
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.0026 + (i % 3) * 0.0006, 6, 5), bubbleM);
+    m.userData.eqFx = true; g.add(m); bubbles.push(m);
+  }
+  g._tick = (dt, now, assembling) => {
+    for (const m of beads) m.visible = !assembling;
+    for (const m of bubbles) m.visible = !assembling;
+    if (assembling) return;
+    beads.forEach((m, i) => {
+      const u = (now * 0.24 + i / N) % 1, edge = i % 2 === 0;
+      m.position.set(O[0] + Math.sin(now * 5 + i) * 0.003, O[1] + (edge ? -0.0185 : 0.0195) + Math.sin(now * 7 + i * 2) * 0.0015, O[2] - 0.02 - u * 0.30);
+      m.scale.setScalar(0.7 + 0.5 * Math.sin(u * Math.PI));                                          // swell mid-blade, vanish at the ends
+    });
+    bubbles.forEach((m, i) => {
+      const u = (now * 0.35 + i * 0.17) % 1;
+      m.position.set(O[0] + Math.sin(now * 3 + i * 1.7) * 0.0025, O[1] - 0.012 + u * 0.026, O[2] - 0.05 - i * 0.04);
+      m.scale.setScalar(Math.sin(u * Math.PI) + 0.05);
+    });
+  };
+  g._greebled = true; g._handDetailed = true;
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
 function buildBalloonSword() {
   // 🎈 Sabre -> Balloon Sword. Twisted from long red balloons, a yellow loop for
   // a guard. Drawn, it is blown up from the hilt to the tip, squeaking; held,
@@ -56614,6 +56682,10 @@ const MELEE_MODEL_SKINS = [
     sw: ['#2a2e36', '#6ad0ff'], build: buildThunderSpear,
     blurb: 'A long storm blade that arrives on a strike and crackles while held.',
     equip: 'strike', equipMs: 800, equipSfx: ['thunder', null] },
+  { id: 'katana_tidal_fang', melee: 'katana', name: 'Tidal Fang', rarity: 'rare',
+    sw: ['#2aa8d8', '#f4ffff'], build: buildTidalFang,
+    blurb: 'A captured wave with a hooked tip. Foam crawls the edge and bubbles rise inside; drawn, the water rises up in the blade.',
+    equip: 'fill', equipMs: 1000, equipSfx: ['pour', 'bloop'] },
   { id: 'knife_balloon', melee: 'knife', name: 'Balloon Knife', rarity: 'good',
     sw: ['#ff3a4a', '#ffd23a'], build: buildBalloonSword,
     blurb: 'Inflates into a squeaky little blade and wobbles like it knows.',
@@ -56751,6 +56823,48 @@ function buildDiscoBall() {
   }
   const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.016, 0.012, 10), new THREE.MeshLambertMaterial({ color: 0x2a2a2e })); cap.position.y = 0.056; g.add(cap);
   const ring = new THREE.Mesh(new THREE.TorusGeometry(0.012, 0.0022, 6, 12), new THREE.MeshPhongMaterial({ color: 0xb8bec6, shininess: 80 })); ring.position.y = 0.072; g.add(ring);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+function buildStopwatch() {
+  // ⏱️ Frag grenade -> Stopwatch. A chrome sports stopwatch in a grenade's olive rubber, a pull ring on the crown, a red second hand
+  // that ticks round the face the whole time you hold it. Drawn, it is wound and clicked on piece by piece.
+  const g = new THREE.Group();
+  const chrome = new THREE.MeshPhongMaterial({ color: 0xcfd6de, shininess: 220, specular: 0xffffff });
+  const olive = new THREE.MeshPhongMaterial({ color: 0x4d6a30, shininess: 40, specular: 0x7a9a58 });
+  const white = new THREE.MeshPhongMaterial({ color: 0xf6f3ea, shininess: 90, specular: 0xffffff });
+  const ink = new THREE.MeshBasicMaterial({ color: 0x15171a });
+  const red = new THREE.MeshBasicMaterial({ color: 0xe0281e });
+  const add = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => {
+    const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); g.add(m); return m;
+  };
+  add(new THREE.CylinderGeometry(0.047, 0.047, 0.024, 28), chrome, 0, 0, 0, Math.PI / 2);          // the case
+  add(new THREE.TorusGeometry(0.048, 0.0045, 8, 28), olive, 0, 0, 0);                                // the rubber band round it
+  add(new THREE.TorusGeometry(0.045, 0.0042, 8, 28), chrome, 0, 0, 0.011);                           // the bezel
+  add(new THREE.CylinderGeometry(0.041, 0.041, 0.002, 28), white, 0, 0, 0.0125, Math.PI / 2);       // the face
+  for (let i = 0; i < 12; i++) {                                                                      // the ticks
+    const a = i / 12 * Math.PI * 2, big = i % 3 === 0, r = big ? 0.0335 : 0.0355;
+    add(new THREE.BoxGeometry(big ? 0.0034 : 0.0022, big ? 0.0085 : 0.0050, 0.0008), ink, Math.sin(a) * r, Math.cos(a) * r, 0.0138, 0, 0, -a);
+  }
+  add(new THREE.TorusGeometry(0.0115, 0.0008, 6, 20), ink, 0, -0.0145, 0.0138);                      // the little sub-dial
+  add(new THREE.BoxGeometry(0.0020, 0.0095, 0.0008), ink, 0, -0.0145 + 0.0045, 0.0140);
+  add(new THREE.CylinderGeometry(0.0085, 0.0085, 0.018, 12), chrome, 0, 0.0555, 0);                  // the crown
+  add(new THREE.CylinderGeometry(0.0115, 0.0115, 0.008, 12), olive, 0, 0.0690, 0);                   // the button on top
+  add(new THREE.TorusGeometry(0.0145, 0.0024, 6, 14), chrome, 0, 0.0850, 0, 0, Math.PI / 2);         // the pull ring
+  add(new THREE.CylinderGeometry(0.0052, 0.0052, 0.015, 10), chrome, 0.0335, 0.0335, 0, 0, 0, -Math.PI / 4);   // the start button
+  add(new THREE.CylinderGeometry(0.0052, 0.0052, 0.015, 10), chrome, -0.0335, 0.0335, 0, 0, 0, Math.PI / 4);   // the lap button
+  // the second hand: a pivot on the face, red, with a short tail; ticks round and never stops
+  const hand = new THREE.Group(); hand.position.set(0, 0, 0.0148); hand.userData.eqFx = true; g.add(hand);
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.0024, 0.0355, 0.0010), red); arm.position.y = 0.0145; hand.add(arm);
+  const tail = new THREE.Mesh(new THREE.BoxGeometry(0.0034, 0.010, 0.0010), red); tail.position.y = -0.0065; hand.add(tail);
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.0036, 8, 6), red); hand.add(cap);
+  g._calm = () => { hand.rotation.z = 0; };
+  g._tick = (dt, now, assembling) => {
+    hand.visible = !assembling;
+    if (assembling) return;
+    hand.rotation.z = -Math.floor(now * 8) * (Math.PI * 2 / 60);                                      // eight little clicks a second
+  };
+  g.rotation.set(-0.45, -0.30, 0.0);                                                                 // tipped up so the face reads
+  g._greebled = true; g._handDetailed = true;
   g.position.set(0.10, -0.12, -0.20); return g;
 }
 function buildTeaKettle() {
@@ -56891,6 +57005,9 @@ const SUPPORT_MODEL_SKINS = [
     blurb: 'Army slang, taken literally. The pin is real.' },
   { id: 'frag_disco',      support: 'frag',        name: 'Disco Ball',       rarity: 'good', sw: ['#dfe7f0', '#ff4fd8'], build: buildDiscoBall,
     blurb: 'Everybody dances. One of them leaves early.' },
+  { id: 'frag_stopwatch', support: 'frag', name: 'Stopwatch', rarity: 'rare', sw: ['#cfd6de', '#e0281e'], build: buildStopwatch,
+    blurb: 'A sports stopwatch in grenade rubber. The red hand ticks round to nothing in particular. It is wound and clicked on piece by piece when you draw it.',
+    equip: 'windup', equipMs: 900, equipSfx: ['windup', 'ding'] },
   { id: 'frag_hacker',     support: 'frag',        name: 'Hacker Grenade',   rarity: 'rare', look: { hit: 'hack' }, sw: ['#08090a', '#2dff6a'], build: buildHackerGrenade,
     blurb: 'A black ball in a green wire cage with a band of 1s and 0s. It flies trailing code, bursts in green, every man it catches flashes, scrambles his damage number, and a kill glitches into an ERROR.' },
   { id: 'smoke_kettle',    support: 'smoke',       name: 'Tea Kettle',       rarity: 'good', sw: ['#b9c2cc', '#2a2a2e'], build: buildTeaKettle,
@@ -56916,6 +57033,7 @@ const SUPPORT_MODEL_SKINS = [
 ];
 const SUPPORT_MODEL_SKINS_BY_BASE = {};
 for (const ms of SUPPORT_MODEL_SKINS) (SUPPORT_MODEL_SKINS_BY_BASE[ms.support] ||= []).push(ms);
+for (const ms of SUPPORT_MODEL_SKINS) if (GEN2_SUPPORT_MODEL_SKIN_IDS.has(ms.id)) { GEN2_SKIN_DEFS.push(ms); GEN2_SKIN_BY_ID[ms.id] = ms; }   // utilities after melee in the case's reel and counter
 let equippedSupportModelSkins = (() => {
   try { return JSON.parse(localStorage.getItem('pvp_support_model_skins')) || {}; } catch (e) { return {}; }
 })();
@@ -56925,7 +57043,7 @@ function applySupportModelSkin(baseId) {
   if (idx < 0 || !supportModels[idx]) return;
   if (!(idx in _baseSupportModels)) _baseSupportModels[idx] = supportModels[idx];
   const want = equippedSupportModelSkins[baseId];
-  const skin = SUPPORT_MODEL_SKINS.find(s => s.id === want && s.support === baseId);
+  const skin = SUPPORT_MODEL_SKINS.find(s => s.id === want && s.support === baseId && !isCaseSkinLocked(s));
   if (skin && skin.look) _modelSkinLook[baseId] = Object.assign({ skinId: skin.id }, skin.look); else delete _modelSkinLook[baseId];       // what its hits do (the Hacker Grenade's)
   let next;
   if (!skin) next = _baseSupportModels[idx];
@@ -76803,6 +76921,7 @@ function skinIsArchived(s) {
   if (!s) return false;
   const it = s.weapon ? WEAPONS.find(w => w.id === s.weapon)
     : s.melee ? MELEE_ITEMS.find(m => m.id === s.melee)
+    : s.support ? SUPPORT_ITEMS.find(m => m.id === s.support)
     : s.skinFor ? (MELEE_ITEMS.find(m => m.id === s.skinFor) || WEAPONS.find(w => w.id === s.skinFor)) : null;
   return !!(it && it.archived);
 }
@@ -76818,7 +76937,7 @@ const RARITY_CSS = { lame: '#a1aab4', basic: '#79b8ef', good: '#62e8a0', rare: '
 const rarityCss = r => RARITY_CSS[r] || RARITY_CSS.basic;
 function skinDefById(skinId) {
   return GEN1_SKIN_BY_ID[skinId] || GEN2_SKIN_BY_ID[skinId] ||
-    MODEL_SKINS.find(s => s.id === skinId) || MELEE_MODEL_SKINS.find(s => s.id === skinId) ||
+    MODEL_SKINS.find(s => s.id === skinId) || MELEE_MODEL_SKINS.find(s => s.id === skinId) || SUPPORT_MODEL_SKINS.find(s => s.id === skinId) ||
     { name: skinId || 'Mystery Skin', rarity: 'basic', blurb: 'A thing happened.' };
 }
 
@@ -76881,7 +77000,7 @@ function showSkinCaseOpening(skinId, duplicate, caseId = 'gen1_basic') {
   const skin = skinDefById(skinId);
   // A skin with an entrance is worth seeing immediately, so the reveal offers
   // to put it on. Only for a new pull, and only for one we know how to equip.
-  const canEquip = !duplicate && !!(skin.weapon || skin.melee);
+  const canEquip = !duplicate && !!(skin.weapon || skin.melee || skin.support);
   const roll = [...c.defs()].sort(() => Math.random() - 0.5).slice(0, 9);
   roll.push(skin);
   const old = document.getElementById('skin-case-opening');
@@ -76926,6 +77045,7 @@ function showSkinCaseOpening(skinId, duplicate, caseId = 'gen1_basic') {
     try {
       if (skin.weapon) setModelSkin(skin.weapon, skin.id);
       else if (skin.melee) setMeleeModelSkin(skin.melee, skin.id);
+      else if (skin.support) setSupportModelSkin(skin.support, skin.id);
     } catch (e) { console.warn('[case equip]', e); }
     el.remove();
     openWeaponSkinsPanel();
@@ -77441,7 +77561,11 @@ function openItemSkins(kind, id, onClose, alwaysOnClose = false) {
     } else {
       const models = SUPPORT_MODEL_SKINS_BY_BASE[id] || [], onModel = equippedSupportModelSkins[id];
       if (models.length) {
-        const cells = models.map(ms => ({ name: ms.name, sub: ms.blurb, bg: bg(ms.sw), on: onModel === ms.id, run: () => { setSupportModelSkin(id, ms.id); } }));
+        const cells = models.map(ms => {
+          const gen2 = GEN2_SUPPORT_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id), note = gen2 ? 'Pull from Gen 2 cases.' : '';
+          return { name: ms.name, sub: ms.blurb, bg: bg(ms.sw), on: onModel === ms.id, locked: gen2, note,
+            run: () => { if (gen2) { alert(note); return false; } setSupportModelSkin(id, ms.id); } };
+        });
         sections.push(section('MODEL', 'A different thing in your hand. Same throw, same blast, same uses.', [cell(stockCell(!onModel, () => setSupportModelSkin(id, null))), ...cells.map(cell)]));
       }
     }
@@ -77592,7 +77716,7 @@ function openWeaponSkinsPanel() {
         <div data-smskin="${ms.id}" data-smbase="${bid}" class="sms-cell"
              style="cursor:pointer;border:2px solid ${on === ms.id ? '#99e0ff' : '#444'};border-radius:6px;padding:8px;background:${on === ms.id ? '#10222a' : '#12191c'};">
           <div style="height:26px;border-radius:4px;background:linear-gradient(90deg, ${ms.sw[0]} 0 50%, ${ms.sw[1]} 50% 100%);border:1px solid #000;margin-bottom:6px;"></div>
-          <div style="font-size:11px;letter-spacing:1px;color:${on === ms.id ? '#99e0ff' : '#ddd'};">${ms.name}</div>
+          <div style="font-size:11px;letter-spacing:1px;color:${on === ms.id ? '#99e0ff' : '#ddd'};">${GEN2_SUPPORT_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id) ? '🔒 ' : ''}${ms.name}</div>
           <div style="font-size:9px;color:#7a8a90;margin-top:3px;line-height:1.3;">${ms.blurb}</div>
         </div>`).join('');
       rows.push(`
@@ -77791,6 +77915,7 @@ function openWeaponSkinsPanel() {
   });
   panel.querySelectorAll('.sms-cell').forEach(cell => {
     cell.addEventListener('click', () => {
+      if (cell.dataset.smskin && GEN2_SUPPORT_MODEL_SKIN_IDS.has(cell.dataset.smskin) && !ownsSkin(cell.dataset.smskin)) { alert('You have not pulled that skin yet. Open Gen 2 cases in Lobby 13.'); return; }
       setSupportModelSkin(cell.dataset.smbase, cell.dataset.smskin || null);
       openWeaponSkinsPanel();
     });

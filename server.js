@@ -456,6 +456,7 @@ const GEN2_RARE_SKIN_IDS = [
   'railgun_constellation', 'knife_hyperspace', 'knife_butterfly', 'knife_singularity',
   'lightsabre_singularity', 'katana_laser', 'katana_sakura', 'katana_thunder',
   'combat_axe_frost', 'shock_baton_thunder', 'spear_thunder',
+  'katana_tidal_fang', 'frag_stopwatch',
 ];
 const GEN2_GOOD_SKIN_IDS = [
   'pistol_origami', 'xm7_bricks', 'vector_brick_labeler', 'shorty_buzzdraw', 'srx_8bit',
