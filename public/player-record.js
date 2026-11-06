@@ -16,7 +16,10 @@
     try { localStorage.setItem('pvp_player_record_v1:' + profile, JSON.stringify(record)); dirty = false; } catch (_) {}
   }
   function sync() {
-    const username = currentUser?.username || null;
+    // this file loads before game.js, and its first tick comes a second later: on a slow first load (a 4.6 MB game.js on a
+    // phone) there is no currentUser yet, and reading it threw -- the page's onerror showed every such player a red JS ERROR bar
+    let username = null;
+    try { username = currentUser?.username || null; } catch (_) {}
     if (username !== profile) {
       save(); profile = username; record = empty();
       try {
