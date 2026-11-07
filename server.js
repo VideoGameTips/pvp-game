@@ -341,7 +341,7 @@ const WEAPON_COSTS = {
   hand_cannon: 260, throwing_knives: 120, taser: 200, traffic_cone: 160, cream_pie: 140, gunslinger: 220, akimbo: 280,
   machine_pistol: 220, gatecrasher: 280, sawed_off: 260, machine_revolver: 240,
   dart_gun: 160, laser_pointer: 120, continuum: 600,
-  auto_revolver: 220, frost_blaster: 240,
+  auto_revolver: 220, frost_blaster: 240, freeze_ray: 240,
   // Batch-4 secondaries
   snub_revolver: 140, duelist_pistol: 280, mauser: 200,
   nail_gun: 180, boomstick: 220, signal_pistol: 200, throwing_axes: 240,
@@ -663,6 +663,8 @@ function ensureShopFields(u) {
     u.economyV = ECONOMY_V;
   }
   if (!Array.isArray(u.purchased)) u.purchased = [];
+  // The Freeze Ray moved from the secondaries to the utilities (id freeze_ray). Whoever bought it keeps it.
+  if (u.purchased.includes('frost_blaster') && !u.purchased.includes('freeze_ray')) u.purchased.push('freeze_ray');
   if (typeof u.fragments !== 'number') u.fragments = 0;
   if (!u.chests) u.chests = { common: 0, rare: 0 };
   if (!u.upgrades) u.upgrades = {}; // { [weaponId]: { damage, mag, reload } }

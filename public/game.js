@@ -587,7 +587,7 @@ const WEAPONS = [
     ability: { name: 'Deadeye', cd: 11000, desc: '3 s · strong aim assist', type: 'buff', duration: 3000, spreadMult: 0.1, trackingBoost: true },
   },
   {
-    id: 'frost_blaster', name: 'Freeze Ray', type: 'Cryo Ray', slot: 'secondary',
+    id: 'frost_blaster', name: 'Freeze Ray', type: 'Cryo Ray', slot: 'secondary', archived: true,   // now the utility `freeze_ray`; kept here so weapon indices do not shift and the hit id stays 'frost_blaster'
     // The combo starter. ONE shot: a hit freezes them on the spot (server: freezeRayHit) for 3 s -- rooted, and every
     // other weapon hits them for +50%. The shot comes back after 5 s. Miss and you wait.
     // (It used to be the Frost Blaster: a stream of bullets that took speed off a target until they turned to ice and died.)
@@ -1430,6 +1430,9 @@ const SUPPORT_ITEMS = [
   { id: 'tac_nuke', name: 'Tactical Nuke', type: 'Admin · End the Match', uses: 1, damage: 500, cooldown: 3000, nukeRadius: 25, nukeDelay: 5000, adminItem: true },
   { id: 'satchel', name: 'Satchel Charge', type: 'Remote Explosive', uses: 2, damage: 140, radius: 6, cooldown: 900, playerOnly: true,   // two out at a time (it was five; server.js holds the same cap)
     ability: { name: 'Detonate', type: 'satchel_detonate', cd: 0 } },
+  // The Freeze Ray used to be a secondary. It is a utility now: one shot (32 m), a hit freezes them for 3 s (server: freezeRayHit),
+  // and it comes back 5 s later. It fires through the old weapon's hitscan, so the hit still goes out as 'frost_blaster'.
+  { id: 'freeze_ray', name: 'Freeze Ray', type: 'Cryo Ray', uses: 1, recharge: true, damage: 5, cooldown: 5000, range: 32, playerOnly: true },
 ];
 const ARCHIVED_ITEM_IDS = new Set([...WEAPONS, ...MELEE_ITEMS, ...SUPPORT_ITEMS].filter(x => x.archived).map(x => x.id));
 
@@ -1599,7 +1602,7 @@ const WEAPON_COSTS = {
   hand_cannon: 260, throwing_knives: 120, taser: 200, traffic_cone: 160, cream_pie: 140, gunslinger: 220, akimbo: 280,
   machine_pistol: 220, gatecrasher: 280, sawed_off: 260, machine_revolver: 240,
   dart_gun: 160, laser_pointer: 120, continuum: 600,
-  auto_revolver: 220, frost_blaster: 240,
+  auto_revolver: 220, frost_blaster: 240, freeze_ray: 240,
   // Batch-4 secondaries
   snub_revolver: 140, duelist_pistol: 280, mauser: 200,
   nail_gun: 180, boomstick: 220, signal_pistol: 200, throwing_axes: 240,
@@ -38348,7 +38351,8 @@ const supportModels = [buildDonutFragGrenade(), buildMedkit(), buildStimShot(), 
   buildMiniTurret(),                         // mini_turret
   // 🪖 ADMIN supports
   buildC4(), buildClaymore(), buildStunGrenade(), buildThermite(),
-  buildPredatorUAV(), buildCarePackage(), buildTacNuke(), buildSatchel()];
+  buildPredatorUAV(), buildCarePackage(), buildTacNuke(), buildSatchel(),
+  buildFrostBlaster()];   // freeze_ray (the old secondary's model)
 supportModels.forEach(m => { m.visible = false; camera.add(m); });
 
 // ── Roblox-style player mesh factory ──────────────────────────────────────
@@ -52026,6 +52030,14 @@ function firstGrappleSurface(origin, dir, range) {
   return best ? { point: best, kind } : null;
 }
 
+function fireFreezeRay(item) {
+  const w = WEAPONS.find(x => x.id === 'frost_blaster');
+  const origin = camera.position.clone();
+  const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+  socket.emit('shoot', { x: origin.x, y: origin.y, z: origin.z, dx: dir.x, dy: dir.y, dz: dir.z, weapon: 'frost_blaster', projectileId: `local_${myId}_${Date.now()}_0` });
+  playSoundEvent('air_launch', { volume: 0.8, pitch: 1.5, minGap: 80 });
+  fireHitscanShot(origin, dir, 'frost_blaster', w);
+}
 function doGrappleHook(item) {
   const origin = camera.position.clone();
   const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
@@ -52276,6 +52288,10 @@ function _trySupportEffect(item, now) {
   }
   if (item.id === 'grapple_hook') {
     doGrappleHook(item);
+    return;
+  }
+  if (item.id === 'freeze_ray') {          // ❄️ the old secondary's one shot, as a utility
+    fireFreezeRay(item);
     return;
   }
   if (item.id === 'land_mine') {
@@ -67257,10 +67273,10 @@ const DICE_POOL = {
        'm:frying_pan', 'm:baguette', 'm:screwdriver', 'm:yoyo', 'm:crowbar',
        'u:caltrops', 'u:air_grenade', 'u:rubber_duck', 'u:confetti_cannon', 'u:air_blaster', 'u:flashbang_basic', 'u:ink_bomb',
        'u:bounce_pad', 'u:medkit'],
-  F:  ['laser_pointer', 'taser', 'frost_blaster', 'painter_beam', 'gravity_paint', 'traffic_controller',
+  F:  ['laser_pointer', 'taser', 'painter_beam', 'gravity_paint', 'traffic_controller',
        'm:fists', 'm:umbrella',
        'u:smoke', 'u:stim', 'u:ammo_fountain', 'u:adrenaline', 'u:cloak', 'u:berserker_serum', 'u:hologram', 'u:siren', 'u:hamburger',
-       'u:healing_pulse', 'u:nano_swarm', 'u:vampire_syringe', 'u:nano_shield', 'u:quantum_barrier', 'u:teleport_beacon', 'u:warp_beacon', 'u:heal_gun'],
+       'u:freeze_ray', 'u:healing_pulse', 'u:nano_swarm', 'u:vampire_syringe', 'u:nano_shield', 'u:quantum_barrier', 'u:teleport_beacon', 'u:warp_beacon', 'u:heal_gun'],
 };
 // The admin one-shot is in the pool (a roll is the one way anybody but an admin gets to fire it: one bullet, any hit kills),
 // but it is YOURS: a bot dealt a 9999-damage hitscan with a bot's endless reserve would not be a roll, it would be a loss.
@@ -74557,7 +74573,7 @@ const BEST_LOADOUTS = [
   { icon:'🩸', name:'Bloodletter',             desc:'Heal off their pain',           p:'sg8',       s:'hand_cannon',      m:'vampire_blade',  u:'adrenaline' },
   { icon:'🏹', name:'Sherwood Special',        desc:'Bows + bolas',                  p:'crossbow',           s:'throwing_knives',  m:'knife',          u:'tripwire' },
   { icon:'🛹', name:'No Brakes',               desc:'Sprint-only kit',               p:'p90',                s:'machine_pistol',   m:'knife',          u:'adrenaline' },
-  { icon:'🧊', name:'Permafrost',              desc:'Slow them, finish them',        p:'freeze_gun',         s:'frost_blaster',    m:'knife',          u:'smoke' },
+  { icon:'🧊', name:'Permafrost',              desc:'Slow them, finish them',        p:'freeze_gun',         s:'auto_revolver',    m:'knife',          u:'freeze_ray' },
   { icon:'⚡', name:"Thor's Allowance",        desc:'Shock therapy',                 p:'arc_rifle',          s:'taser',            m:'shock_baton',    u:'emp_grenade' },
   { icon:'🎯', name:'Steady Hand',             desc:'Mid-range scalpel',             p:'lever',              s:'duelist_pistol',   m:'bat',            u:'ammo_fountain' },
   { icon:'🍳', name:'Recipe for Disaster',     desc:'Loaded with kitchen tools',     p:'paintball',          s:'laser_pointer',    m:'frying_pan',     u:'rubber_duck' },
