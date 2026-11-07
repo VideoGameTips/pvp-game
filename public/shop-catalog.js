@@ -56,7 +56,7 @@
     exclusive:['minigun','chain_gun','railgun','cyroclasm','storm_bloom','continuum','gunslinger','lightsabre','scythe','chain_hammer','grapple_hook','blink_pearl','glitch_cube','lancer','nano_shield'],
     p2w:['javelin_launcher','event_horizon','storm_core','abs_zero','solar_lance','quantum_repeater','magnetar','nebula_mortar','prism_engine','void_harvester','pulse_needle','phase_blade','gravity_hammer','volt_whip','nano_swarm','warp_beacon','stasis_mine','specter_drone','quantum_barrier','black_hole_seed','orbital_strike','titan_hammer','vampire_blade'],
   };
-  const restricted=new Set(['hellfire','omega_pistol','m4a1_arena','gau19','mk44','xm7','barrett','m134','hkmp7','p90_spec','desert_eagle','m1911','glock18','five_seven','karambit','bayonet','tomahawk','ots04','garrote','c4','claymore','stun_grenade','thermite','predator_uav','care_package','tac_nuke']);
+  const restricted=new Set(['hellfire','omega_pistol','m4a1_arena','gau19','mk44','xm7','barrett','m134','hkmp7','p90_spec','desert_eagle','m1911','glock18','five_seven','chrono_pistol','karambit','bayonet','tomahawk','ots04','garrote','c4','claymore','stun_grenade','thermite','predator_uav','care_package','tac_nuke']);
   const tierById=Object.fromEntries(Object.entries(tierGroups).flatMap(([tier,ids])=>ids.map(id=>[id,tier])));
   function category(id,item={}) {
     if(restricted.has(id)||item.adminItem||item.prototype||item.ddayOnly||item.modeOnly)return 'exclusive';

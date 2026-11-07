@@ -321,7 +321,7 @@ const WEAPON_COSTS = {
   coilgun: 460,  painter_beam: 300, gravity_paint: 400,
   portal_launcher: 460,  traffic_controller: 320,
   // Primaries — Explosive / projectile
-  boombow: 500, gravity_launcher: 480, harpoon_gun: 440, mortar_rifle: 480,
+  boombow: 500, gravity_launcher: 480, harpoon_gun: 440, mortar_rifle: 480, phase_rifle: 550,
   firework_launcher: 360, shockwave_launcher: 460, airburst_projector: 360,
   pinball_launcher: 440, seismic_hammer: 480, glassmaker: 380,
   // Primaries — Tactical / precision / battle rifle
@@ -596,7 +596,7 @@ const ARCHIVED_ITEM_IDS = new Set([
 const ADMIN_ITEM_IDS = new Set([
   'hellfire','omega_pistol',
   'gau19', 'mk44', 'xm7', 'barrett', 'm134', 'hkmp7', 'p90_spec',
-  'desert_eagle', 'm1911', 'glock18', 'five_seven',
+  'desert_eagle', 'm1911', 'glock18', 'five_seven', 'chrono_pistol',
   'karambit', 'bayonet', 'tomahawk', 'ots04', 'garrote',
   'c4', 'claymore', 'stun_grenade', 'thermite', 'predator_uav',
   'care_package', 'tac_nuke',
@@ -2165,7 +2165,7 @@ event_horizon: 75,
   // ── NEW PRIMARIES ──────────────────────────────────────────────────────
     m1_garand: 117, plasma_carbine: 18, arc_rifle: 22,
   gravity_launcher: 75, potato_cannon: 60, sticker_blaster: 8,
-  harpoon_gun: 95, mortar_rifle: 85,
+  harpoon_gun: 95, mortar_rifle: 85, phase_rifle: 22, phase_rifle_ph: 22, chrono_pistol: 34,
   arc_torrent: 5, firework_launcher: 50, switchblade_gun: 50, switchblade_charged: 100,
   jeep_gun: 22, chernobyl_gas: 1,
   // 3rd-batch primaries
@@ -2248,7 +2248,7 @@ function serverHitDamageBase(data, shooter, target) {
   if(hellfireWeapon(data?.weapon)&&!canUseHellfire(shooter))return 0;
   const weapon = data?.weapon;
   const base = WEAPON_DAMAGE[weapon] || 25;
-  const wallScale = data?.wallPenetrated && ['gatecrasher', 'gatecrasher_slug', 'gatecrasher_beam'].includes(weapon) ? .5 : 1;
+  const wallScale = data?.wallPenetrated && ['gatecrasher', 'gatecrasher_slug', 'gatecrasher_beam', 'phase_rifle_ph'].includes(weapon) ? .5 : 1;
   const tableDmg = Math.round(base * falloffMultiplier(weapon, dist3(shooter, target)) * wallScale);
   const override = Number(data?.damageOverride);
   if (Number.isFinite(override)) {
@@ -2291,7 +2291,7 @@ const WEAPON_FALLOFF = {
   lever: FALLOFF_MARKSMAN, m1_garand: FALLOFF_MARKSMAN, air_rifle: FALLOFF_MARKSMAN, harpoon_gun: FALLOFF_MARKSMAN,
   revolver: FALLOFF_HEAVY_PISTOL, hand_cannon: FALLOFF_HEAVY_PISTOL, duelist_pistol: FALLOFF_HEAVY_PISTOL, desert_eagle: FALLOFF_HEAVY_PISTOL, m1911: FALLOFF_HEAVY_PISTOL, gunslinger: FALLOFF_HEAVY_PISTOL, akimbo: FALLOFF_AKIMBO,
   pistol: FALLOFF_SIDEARM, five_seven: FALLOFF_SIDEARM, mauser: FALLOFF_SIDEARM, snub_revolver: FALLOFF_SIDEARM, throwing_knives: FALLOFF_SIDEARM, taser: FALLOFF_SIDEARM, gatecrasher: FALLOFF_SIDEARM,
-  gatecrasher_slug: FALLOFF_MARKSMAN, gatecrasher_beam: FALLOFF_NONE, continuum: FALLOFF_HEAVY_PISTOL, lancer: FALLOFF_MARKSMAN, laser_pointer: { near: 20, far: 90, min: 0.85 },
+  gatecrasher_slug: FALLOFF_MARKSMAN, gatecrasher_beam: FALLOFF_NONE, continuum: FALLOFF_HEAVY_PISTOL, phase_rifle: FALLOFF_AR, phase_rifle_ph: FALLOFF_AR, chrono_pistol: FALLOFF_SIDEARM, lancer: FALLOFF_MARKSMAN, laser_pointer: { near: 20, far: 90, min: 0.85 },
   event_horizon: FALLOFF_ENERGY, storm_core: FALLOFF_ENERGY, abs_zero: FALLOFF_ENERGY, quantum_repeater: FALLOFF_ENERGY, pulse_needle: FALLOFF_ENERGY, magnetar: FALLOFF_MARKSMAN, void_harvester: FALLOFF_MARKSMAN, solar_lance: FALLOFF_LMG, arc_torrent: FALLOFF_LMG, slingshot: FALLOFF_LMG,
   crossbow: FALLOFF_NONE, grenade_launcher: FALLOFF_NONE, boombow: FALLOFF_NONE, flare: FALLOFF_NONE, gravity_launcher: FALLOFF_NONE, potato_cannon: FALLOFF_NONE, mortar_rifle: FALLOFF_NONE, firework_launcher: FALLOFF_NONE, seismic_hammer: FALLOFF_NONE, signal_pistol: FALLOFF_NONE, throwing_axes: FALLOFF_NONE, nebula_mortar: FALLOFF_NONE, rpg: FALLOFF_NONE, bazooka: FALLOFF_NONE, cyroclasm_laser: FALLOFF_NONE, storm_bloom_ball: FALLOFF_NONE, storm_bloom_aura: FALLOFF_NONE, javelin_launcher: FALLOFF_NONE,
   switchblade_gun: FALLOFF_SIDEARM, shockwave_launcher: FALLOFF_SIDEARM, storm_cannon: FALLOFF_SIDEARM, prism_launcher: FALLOFF_SIDEARM, foam_cannon: FALLOFF_SIDEARM, portal_launcher: FALLOFF_SIDEARM, traffic_controller: FALLOFF_SIDEARM, pinball_launcher: FALLOFF_SIDEARM, dart_gun: FALLOFF_SIDEARM, boomerang: FALLOFF_SIDEARM, traffic_cone: FALLOFF_SIDEARM, cream_pie: FALLOFF_SIDEARM,
@@ -3378,7 +3378,7 @@ io.on('connection', (socket) => {
     if (!player || player.dead || !bot || !bot.isBot || shielded(player)) return;
     if (blocksFriendlyFire(bot, player)) return;
     let dmg = Math.round((WEAPON_DAMAGE[data.weapon] || 25) * falloffMultiplier(data.weapon, dist3(bot, player)));
-    if (data.wallPenetrated && ['gatecrasher', 'gatecrasher_slug', 'gatecrasher_beam'].includes(data.weapon)) dmg = Math.round(dmg * .5);
+    if (data.wallPenetrated && ['gatecrasher', 'gatecrasher_slug', 'gatecrasher_beam', 'phase_rifle_ph'].includes(data.weapon)) dmg = Math.round(dmg * .5);
     player.hp = Math.max(0, player.hp - dmg);
     emitToMatch(player.matchId, 'playerHit', { targetId: player.id, hp: player.hp, environmentSeq: player.environmentSeq || 0, bulletId: null, shooterId: bot.id, weapon: data.weapon, headshot: !!data.headshot });
     if (player.hp <= 0) {

@@ -6282,6 +6282,71 @@
     "desc": "Empty both guns forward · a wild spray"
    },
    "traits": []
+  },
+  {
+   "id": "phase_rifle",
+   "name": "Phase Rifle",
+   "type": "Sci-Fi Rifle",
+   "slot": "primary",
+   "archived": false,
+   "damage": 22,
+   "pellets": 1,
+   "headshotMult": 2.2,
+   "headDamage": 48,
+   "damagePerShot": 22,
+   "fireRateMs": 90,
+   "shotsPerSec": 11.111,
+   "auto": true,
+   "dps": 244.444,
+   "magazine": 30,
+   "reserve": 90,
+   "reloadSec": 2,
+   "reloadStyle": "magazine",
+   "noReload": false,
+   "timeToEmptySec": 2.61,
+   "bulletSpeed": 135,
+   "adsZoom": 50,
+   "falloff": {
+    "nearM": 28,
+    "farM": 70,
+    "minPct": 55
+   },
+   "damageByRange": [
+    22,
+    22,
+    22,
+    22,
+    19,
+    17,
+    14,
+    12,
+    12,
+    12,
+    12
+   ],
+   "shotsToKill": {
+    "body": 14,
+    "head": 7
+   },
+   "ttkBodySec": 1.17,
+   "scatterDeg": 0.115,
+   "bloom": null,
+   "recoil": {
+    "kickPerShotDeg": 0.251,
+    "sideKickDeg": 0.152,
+    "climbPerShotPct": 3,
+    "climbMaxX": 1.643,
+    "steadyKickDeg": 0.412,
+    "shotsToMaxClimb": 22,
+    "recoverPerSec": 8.5,
+    "adsKickPct": 12
+   },
+   "screenKick": 0.515,
+   "ability": {
+    "name": "Phase Shift",
+    "desc": "4s · rounds pass through walls for half damage · enemies glow through cover"
+   },
+   "traits": []
   }
  ],
  "melees": [

@@ -907,6 +907,19 @@ const WEAPONS = [
     adminItem:true,prototype:true,damageLabel:'\u03a9',mag:1,reserve:0,damage:9999,fireRate:900,reloadTime:0,
     auto:false,pellets:1,spread:0,adsZoom:45,bulletSpeed:300,bulletColor:0xffffff,bulletSize:.06,
     noReload:true,hitscan:true,hitscanRange:100 },
+  { id: 'phase_rifle', name: 'Phase Rifle', type: 'Sci-Fi Rifle', slot: 'primary',
+    mag: 30, reserve: 90, damage: 22, fireRate: 90, reloadTime: 2000, headshotMult: 2.2,
+    auto: true, pellets: 1, spread: 0.002, adsZoom: 50, bulletSpeed: 135, noReload: false,
+    bulletColor: 0x66f0ff, bulletSize: 0.04,
+    // Rounds go through walls and cover for half damage while it lasts, and every enemy glows through them (see PHASE_FX).
+    ability: { name: 'Phase Shift', cd: 18000, desc: '4s · rounds pass through walls for half damage · enemies glow through cover', type: 'buff', duration: 4000, weaponAbId: 'phase_rifle_ph', bulletColor: 0xc47bff, vision: true },
+  },
+  { id: 'chrono_pistol', name: 'Chrono Pistol', type: 'Admin · Time Pistol', slot: 'secondary',
+    mag: 12, reserve: 48, damage: 34, fireRate: 140, reloadTime: 1300,
+    auto: false, pellets: 1, spread: 0.004, adsZoom: 50, bulletSpeed: 170, noReload: false,
+    bulletColor: 0x7af4ff, bulletSize: 0.04, adminItem: true,
+    ability: { name: 'Rewind', cd: 22000, desc: 'Snap back to where you were 3 s ago, with the health you had then', type: 'rewind', rewindMs: 3000 },
+  },
 ];
 
 // ── Damage drop-off by range ────────────────────────────────────────────────
@@ -975,6 +988,7 @@ Object.assign(WEAPON_FALLOFF, {
   pistol: FALLOFF_SIDEARM, five_seven: FALLOFF_SIDEARM, mauser: FALLOFF_SIDEARM, snub_revolver: FALLOFF_SIDEARM,
   throwing_knives: FALLOFF_SIDEARM, taser: FALLOFF_SIDEARM, gatecrasher: FALLOFF_SIDEARM,
   gatecrasher_slug: FALLOFF_MARKSMAN, gatecrasher_beam: FALLOFF_NONE, continuum: FALLOFF_HEAVY_PISTOL,
+  phase_rifle: FALLOFF_AR, phase_rifle_ph: FALLOFF_AR, chrono_pistol: FALLOFF_SIDEARM,
   lancer: FALLOFF_MARKSMAN, laser_pointer: { near: 20, far: 90, min: 0.85 },
   event_horizon: FALLOFF_ENERGY, storm_core: FALLOFF_ENERGY, abs_zero: FALLOFF_ENERGY,
   quantum_repeater: FALLOFF_ENERGY, pulse_needle: FALLOFF_ENERGY, magnetar: FALLOFF_MARKSMAN,
@@ -1582,7 +1596,7 @@ const WEAPON_COSTS = {
   coilgun: 460,  painter_beam: 300, gravity_paint: 400,
   portal_launcher: 460,  traffic_controller: 320,
   // Primaries — Explosive / projectile
-  boombow: 500, gravity_launcher: 480, harpoon_gun: 440, mortar_rifle: 480,
+  boombow: 500, gravity_launcher: 480, harpoon_gun: 440, mortar_rifle: 480, phase_rifle: 550,
   firework_launcher: 360, shockwave_launcher: 460, airburst_projector: 360,
   pinball_launcher: 440, seismic_hammer: 480, glassmaker: 380,
   // Primaries — Tactical / precision / battle rifle
@@ -2598,7 +2612,7 @@ const DOUBLE_JUMP_IDS = new Set(['fists','air_rifle','dart_gun']);
 //   • guns that genuinely can't aim, or are one of a kind: the paintball marker
 //     (that hopper sits right where the sights should be) and the revolver
 // Ordinary guns lost theirs. They can aim; that IS their thing.
-const ABILITY_GUNS = new Set(['paintball', 'revolver', 'cyroclasm', 'storm_bloom', 'javelin_launcher', 'railgun', 'hellfire']);
+const ABILITY_GUNS = new Set(['paintball', 'revolver', 'cyroclasm', 'storm_bloom', 'javelin_launcher', 'railgun', 'hellfire', 'phase_rifle', 'chrono_pistol']);
 function hasAbility(w) {
   if (!w) return false;
   // A marketplace ability counts even on a gun that has none of its own — that
@@ -35511,7 +35525,79 @@ const weaponModels = [
   buildAkimbo(),  // akimbo
   buildHellfire(),  // hellfire
   buildOmegaPistol(),  // omega_pistol
+  buildPhaseRifle(),  // phase_rifle
+  buildChronoPistol(),  // chrono_pistol
 ];
+function buildPhaseRifle() {
+  // 🌀 Phase Rifle. A pearl-and-graphite carbine with three glowing phase coils round the barrel. The coils hum cyan; when you
+  // press E they shift to violet and pulse, and every round goes through the walls.
+  const g = new THREE.Group();
+  const hull = new THREE.MeshPhongMaterial({ color: 0x4a5568, shininess: 120, specular: 0x9fb0c8 });
+  const dark = new THREE.MeshPhongMaterial({ color: 0x2c323c, shininess: 60, specular: 0x4a5668 });
+  const pearl = new THREE.MeshPhongMaterial({ color: 0xdfe8ef, shininess: 160, specular: 0xffffff });
+  const glow = new THREE.MeshBasicMaterial({ color: 0x66f0ff });
+  const glowSoft = new THREE.MeshBasicMaterial({ color: 0x66f0ff, transparent: true, opacity: 0.55, depthWrite: false });
+  gpBox(g, hull, 0.050, 0.068, 0.300, 0, 0, -0.010);                  // receiver
+  gpBox(g, pearl, 0.052, 0.018, 0.200, 0, 0.037, -0.035);              // the pearl top plate
+  gpBox(g, dark, 0.034, 0.040, 0.230, 0, 0.004, -0.270);               // barrel shroud
+  gpCyl(g, dark, 0.011, 0.011, 0.130, 12, 0, 0.004, -0.430);           // the barrel inside the coils
+  const rings = [-0.250, -0.300, -0.350, -0.400].map(z => {            // the phase coils
+    const m = new THREE.Mesh(new THREE.TorusGeometry(0.028, 0.0045, 8, 20), glow); m.position.set(0, 0.004, z); g.add(m); return m;
+  });
+  gpCyl(g, glow, 0.0065, 0.0065, 0.016, 10, 0, 0.004, -0.500);         // the emitter tip
+  gpBox(g, hull, 0.040, 0.066, 0.150, 0, -0.012, 0.215);               // stock
+  gpBox(g, pearl, 0.042, 0.016, 0.150, 0, 0.032, 0.215);
+  gpBox(g, dark, 0.030, 0.090, 0.040, 0, -0.080, 0.075, 0.25);         // grip
+  gpPart(g, 'magazine', () => {                                         // a glowing cell for a magazine
+    gpBox(g, dark, 0.036, 0.100, 0.054, 0, -0.082, -0.030);
+    gpBox(g, glowSoft, 0.026, 0.078, 0.032, 0, -0.082, -0.030);
+  });
+  gpReflexSight(g, 0, 0.062, -0.040, 0.046);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.004, -0.520); g.add(flash);
+  g._flash = flash; g._kickZ = 0.022; g._greebled = true; g._handDetailed = true;
+  g._tick = (dt, now) => {
+    const on = !!abilityBuff && abilityBuff.weaponId === 'phase_rifle' && Date.now() < abilityBuff.endTime;
+    const c = on ? 0xc47bff : 0x66f0ff;
+    glow.color.setHex(c); glowSoft.color.setHex(c);
+    rings.forEach((r, i) => r.scale.setScalar(1 + (on ? 0.18 : 0.06) * Math.sin(now * (on ? 14 : 4) + i * 1.3)));
+  };
+  g.position.set(0.11, -0.10, -0.24); return g;
+}
+function buildChronoPistol() {
+  // ⏳ Chrono Pistol (admin). A graphite sidearm with a brass-ringed clock set into the slide, a glass-blue seam down its side
+  // and a hand that ticks round; press E and the hand whirls backwards while you rewind.
+  const g = new THREE.Group();
+  const slide = new THREE.MeshPhongMaterial({ color: 0x4a515f, shininess: 140, specular: 0xa8b4c8 });
+  const dark = new THREE.MeshPhongMaterial({ color: 0x2e323b, shininess: 50, specular: 0x4a5058 });
+  const gold = new THREE.MeshPhongMaterial({ color: 0xd8b048, shininess: 180, specular: 0xfff0b0 });
+  const face = new THREE.MeshPhongMaterial({ color: 0xf4f1e6, shininess: 80, specular: 0xffffff });
+  const ink = new THREE.MeshBasicMaterial({ color: 0x15171a });
+  const glow = new THREE.MeshBasicMaterial({ color: 0x7af4ff });
+  gpBox(g, slide, 0.034, 0.040, 0.200, 0, 0.012, -0.050);              // slide
+  gpBox(g, dark, 0.030, 0.034, 0.150, 0, -0.016, -0.040);              // frame
+  for (const s of [-1, 1]) gpBox(g, glow, 0.002, 0.004, 0.150, s * 0.0175, 0.012, -0.060);   // the glass-blue seam
+  gpCyl(g, gold, 0.0085, 0.0085, 0.040, 12, 0, 0.012, -0.160);         // the brass muzzle ring
+  gpBox(g, dark, 0.030, 0.085, 0.040, 0, -0.065, 0.040, 0.22);         // grip
+  gpPart(g, 'magazine', () => gpBox(g, dark, 0.026, 0.060, 0.034, 0, -0.092, 0.030));
+  const dial = new THREE.Mesh(new THREE.CylinderGeometry(0.0185, 0.0185, 0.004, 22), face); dial.position.set(0, 0.0325, 0.012); g.add(dial);
+  const bezel = new THREE.Mesh(new THREE.TorusGeometry(0.0195, 0.0027, 8, 22), gold); bezel.rotation.x = Math.PI / 2; bezel.position.set(0, 0.0335, 0.012); g.add(bezel);
+  for (let i = 0; i < 12; i++) {                                         // twelve ticks round the face
+    const a = i / 12 * Math.PI * 2, m = new THREE.Mesh(new THREE.BoxGeometry(0.0016, 0.0008, i % 3 === 0 ? 0.0050 : 0.0030), ink);
+    m.position.set(Math.sin(a) * 0.0148, 0.0348, 0.012 - Math.cos(a) * 0.0148); m.rotation.y = a; g.add(m);
+  }
+  const hand = new THREE.Group(); hand.position.set(0, 0.0352, 0.012); hand.userData.eqFx = true; g.add(hand);
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.0022, 0.0010, 0.0150), glow); arm.position.z = -0.0065; hand.add(arm);
+  const pin = new THREE.Mesh(new THREE.SphereGeometry(0.0020, 6, 5), gold); hand.add(pin);
+  gpBox(g, dark, 0.006, 0.010, 0.010, 0, 0.037, -0.140);               // front sight
+  gpBox(g, dark, 0.020, 0.008, 0.008, 0, 0.034, 0.045);                // rear sight
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.012, -0.200); g.add(flash);
+  g._flash = flash; g._kickZ = 0.030; g._greebled = true; g._handDetailed = true;
+  g._tick = (dt, now) => {
+    const rewinding = Date.now() - (abilityCDs.chrono_pistol || 0) < 900;
+    hand.rotation.y = rewinding ? hand.rotation.y + dt * 40 : -Math.floor(now * 2) * (Math.PI * 2 / 60);   // forward tick, whirling back in a rewind
+  };
+  g.position.set(0.11, -0.10, -0.24); return g;
+}
 function buildOmegaPistol() {
   const g=new THREE.Group(),dark=GUN_MATS.inner(),chrome=GUN_MATS.bright();
   const red=new THREE.MeshBasicMaterial({color:0xff3344});
@@ -50362,7 +50448,11 @@ function activateAbility() {
       speedMult:  ab.speedMult  ?? 1,
       spinBoost:  ab.spinBoost  || false,
       ...(ab.shotsFromMag ? { shotsLeft: pool.ammo } : {}),
+      ...(ab.weaponAbId ? { weaponAbId: ab.weaponAbId } : {}),
+      ...(ab.bulletColor != null ? { bulletColor: ab.bulletColor } : {}),
+      ...(ab.vision ? { vision: true } : {}),
     };
+    if (ab.vision) { flashScreen('rgba(196,123,255,0.16)', 320); playSoundEvent('blink', { volume: 0.55 }); }
     if (ab.spinBoost && weaponModels[currentWeaponIdx]?._barrelCluster)
       weaponModels[currentWeaponIdx]._spinRate = 22;
     flashAbilityName(ab.name);
@@ -50380,6 +50470,9 @@ function activateAbility() {
       explodeOnHit: ab.explodeOnHit || false,
     };
     flashAbilityName(ab.name);
+  }
+  else if (ab.type === 'rewind') {
+    if (doRewind(w, ab)) flashAbilityName(ab.name);
   }
   else if (ab.type === 'fanfire') {
     pendingFanFire = { count: ab.count, total: ab.count, delay: ab.delay || 60, timer: 0, w, spread: ab.fanSpread || 0 };
@@ -51265,6 +51358,7 @@ function updatePendingFanFire(dt) {
 }
 
 function updateAbilityBuff(dt) {
+  _rewindSample();
   if (!abilityBuff) return;
   const now = Date.now();
   if (now > abilityBuff.endTime && abilityBuff.shotsLeft === undefined) {
@@ -51665,7 +51759,7 @@ function tryShoot() {
       }
       const bColor = wStats.randomBulletColor
         ? PAINTBALL_COLORS[Math.floor(Math.random() * PAINTBALL_COLORS.length)]
-        : (forcedShot?.bulletColor ?? wStats.bulletColor);
+        : (forcedShot?.bulletColor ?? ab?.bulletColor ?? wStats.bulletColor);
       spawnLocalBullet(muzzleWorld, spreadDir, `local_${myId}_${now}_${p}`, true, shotSpeed, bColor, forcedShot?.bulletSize ?? wStats.bulletSize, shotWeaponId);
     }
   }
@@ -61266,7 +61360,7 @@ function getClientWeaponDamage(weaponId) {
   const s = SUPPORT_ITEMS.find(x => x.id === weaponId && x.damage);
   if (s) return s.damage;
   const ab = { sg8_wave:20, crossbow_ab:220, crossbow_c1:140, sg100_ab:140, lever_ab:150,
-               railgun_ab:330, boombow_ab:83, boombow_c1:53, cycler_ab:32, hand_cannon_ab:175 };
+               railgun_ab:330, boombow_ab:83, boombow_c1:53, cycler_ab:32, hand_cannon_ab:175, phase_rifle_ph:22 };
   if (ab[weaponId] != null) return ab[weaponId];
   // Fall through to the big table the bot->player path uses, so synthetic ids
   // like '<weapon>_splash' resolve in BOTH directions. Without this every splash
@@ -61285,7 +61379,7 @@ function weaponPiercesDefenses(weaponId) {
 }
 
 function gatecrasherPiercesWalls(id) {
-  return id === 'gatecrasher' || id === 'gatecrasher_slug' || id === 'gatecrasher_beam';
+  return id === 'gatecrasher' || id === 'gatecrasher_slug' || id === 'gatecrasher_beam' || id === 'phase_rifle_ph';   // (the Phase Rifle's rounds while Phase Shift is up)
 }
 function projectileWallDamageScale(b, hitT = 1) {
   return gatecrasherPiercesWalls(b.weaponId) && (b.wallPenetrated || hitT >= b._wallEntryT) ? .5 : 1;
@@ -62744,6 +62838,54 @@ function activateUAV(item) {
     document.body.appendChild(mm);
   }
   mm.style.display = 'block';
+}
+// 🌀 Phase Shift's see-through-cover: while the buff has `vision`, every enemy gets a cyan silhouette that draws over walls.
+const _phaseGhosts = {};
+function updatePhaseVision(dt) {
+  const on = !!abilityBuff && abilityBuff.vision && Date.now() < abilityBuff.endTime && !isDead;
+  if (!on) { for (const k of Object.keys(_phaseGhosts)) { scene.remove(_phaseGhosts[k]); delete _phaseGhosts[k]; } return; }
+  const t = performance.now() / 1000, seen = new Set();
+  for (const [pid, mesh] of Object.entries(remoteMeshes)) {
+    if (!mesh || !mesh.visible || players[pid]?.dead || friendlyFireBlocked(pid, myId)) continue;
+    seen.add(pid);
+    let gh = _phaseGhosts[pid];
+    if (!gh) {
+      gh = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.30, 1.75, 10), new THREE.MeshBasicMaterial({ color: 0x7af4ff, transparent: true, opacity: 0.3, depthTest: false, depthWrite: false }));
+      gh.renderOrder = 999; gh.frustumCulled = false; scene.add(gh); _phaseGhosts[pid] = gh;
+    }
+    gh.position.set(mesh.position.x, mesh.position.y + 0.9, mesh.position.z);
+    gh.material.opacity = 0.22 + 0.1 * Math.sin(t * 8 + pid.length);
+  }
+  for (const k of Object.keys(_phaseGhosts)) if (!seen.has(k)) { scene.remove(_phaseGhosts[k]); delete _phaseGhosts[k]; }
+}
+// ⏳ Chrono Pistol: where you were, and how healthy, every tenth of a second for the last few seconds.
+const _rwHist = [];
+function _rewindSample() {
+  const now = Date.now();
+  if (isDead || !gameStarted) { _rwHist.length = 0; return; }
+  const last = _rwHist[_rwHist.length - 1];
+  if (last && now - last.t < 100) return;
+  _rwHist.push({ t: now, x: camera.position.x, y: camera.position.y, z: camera.position.z, hp: players[myId]?.hp ?? 100 });
+  while (_rwHist.length && now - _rwHist[0].t > 3600) _rwHist.shift();
+}
+function doRewind(w, ab) {
+  const now = Date.now(), want = now - (ab.rewindMs || 3000);
+  let best = null;
+  for (const s of _rwHist) if (!best || Math.abs(s.t - want) < Math.abs(best.t - want)) best = s;
+  if (!best || now - best.t < 1200) { delete abilityCDs[w.id]; return false; }       // nothing to go back to yet: no cooldown spent
+  spawnAbilityAOEFX(camera.position.clone().setY(Math.max(0.2, camera.position.y - 1.4)), 1.4, 0x7af4ff);   // where you left
+  camera.position.set(best.x, best.y, best.z);
+  slamState = null; playerYVel = 0; _extVel.x = 0; _extVel.z = 0; window._blastCarry = false; window._slideUntil = 0;
+  resolveWallCollisions();
+  const me = players[myId];
+  const gain = me ? Math.max(0, Math.min(150, Math.round(best.hp - me.hp))) : 0;
+  if (gain > 0) { socket.emit('healSelf', { amount: gain }); me.hp += gain; updateHealthHUD(me.hp); }
+  spawnAbilityAOEFX(camera.position.clone().setY(Math.max(0.2, camera.position.y - 1.4)), 1.6, 0x7af4ff);   // where you arrive
+  playSoundEvent('blink', { volume: 1.05 });
+  flashScreen('rgba(122,244,255,0.22)', 280);
+  _fovPunch = Math.max(_fovPunch, 6);
+  _rwHist.length = 0;
+  return true;
 }
 function updateUAV(dt) {
   const mm = document.getElementById('uav-overlay');
@@ -73897,6 +74039,7 @@ function loop() {
   safeLoopStep('edge-warning', syncEdgeWarning);             // "LOBBY 13 · CHILL ZONE · NO DAMAGE" (#35)
   safeLoopStep('admin-cheats', () => updateAdminCheats(dt));// admin cheat tick (fly, kill aura, etc.)
   safeLoopStep('admin-map-preview', updateAdminMapPreview); // green ghost where PLACE IN FRONT will drop
+  safeLoopStep('phasevision', () => updatePhaseVision(dt));
   safeLoopStep('uav', () => updateUAV(dt));        // Predator UAV overlay tick
   safeLoopStep('map-effects', () => updateMapEffects(dt)); // airport darkening, chernobyl gas, mortar prompt
   safeLoopStep('wrap-anim', () => updateWrapScroll(dt));      // the wraps that keep moving
