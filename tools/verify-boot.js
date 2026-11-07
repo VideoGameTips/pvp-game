@@ -113,6 +113,7 @@ try {
 }
 try {
   if (ok) vm.runInThisContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'volcano-map.js'), 'utf8'), { filename: 'public/volcano-map.js' });
+  if (ok) vm.runInThisContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'map-shapes.js'), 'utf8'), { filename: 'public/map-shapes.js' });   // (map outlines)
   if (ok) vm.runInThisContext(src, { filename: 'public/game.js' });
 } catch (e) {
   ok = false;
@@ -481,9 +482,71 @@ if (ok && process.argv.includes('--maps')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+if (ok && process.argv.includes('--shapes')) {
+  // Map outlines (public/map-shapes.js): no map is a rectangle, and none is a shape anybody could name. Every outline is irregular (low circularity and solidity, not a box), sits inside the floor the map
+  // was built with, holds both spawns whole, has nothing left standing outside it, can be walked from one spawn to the other, and says the same about the floor in every place that asks.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [], SH = PVP_SHAPES.SHAPES, names = Object.keys(SH), fams = {}, dims = new Set(), axes = {}, cls = {};
+    if (typeof PVP_SHAPES === 'undefined') return ['map-shapes.js is not loaded'];
+    for (const n of names) {
+      try { _upgradeMap(n); } catch (e) { issues.push(n + ': upgrade threw ' + e.message); continue; }
+      const g = MAP_GROUPS[n], sh = g && g._shaped;
+      if (!sh) { issues.push(n + ': never shaped'); continue; }
+      const R = sh.region, m = PVP_SHAPES.measure(R), S = SH[n];
+      cls[S.cls] = (cls[S.cls] || 0) + 1; axes[S.axis] = (axes[S.axis] || 0) + 1;
+      if (!sh.info) issues.push(n + ': the generator fell back to a plain blob (no outline passed its checks)');
+      if (m.solidity > 0.9 || m.circularity > 0.62 || m.fill > 0.72) issues.push(n + ': too regular (solidity ' + m.solidity.toFixed(2) + ', circularity ' + m.circularity.toFixed(2) + ', fill ' + m.fill.toFixed(2) + ')');
+      if (m.fill < 0.25) issues.push(n + ': mostly void (fill ' + m.fill.toFixed(2) + ')');
+      const key = Math.round((R.bbox.x1 - R.bbox.x0) / 4) + 'x' + Math.round((R.bbox.z1 - R.bbox.z0) / 4) + ':' + Math.round(m.area / 600); if (dims.has(key)) issues.push(n + ': the same size and floor as another outline (' + key + ')'); dims.add(key);
+      if (R.halfX > sh.orig.halfX + 2 || R.halfZ > sh.orig.halfZ + 2) issues.push(n + ': the outline is larger than the floor the map was built with');
+      const area = m.area, size = Math.max(R.bbox.x1 - R.bbox.x0, R.bbox.z1 - R.bbox.z0);
+      if (S.cls === 'cqb' && (area > 9000 || size > 150)) issues.push(n + ': a close-quarters map should be small: ' + Math.round(area) + ' m2, ' + Math.round(size) + ' m');
+      if (S.cls === 'mid' && (area < 9000 || area > 24000)) issues.push(n + ': a middle-sized map is 9,000 to 24,000 m2: ' + Math.round(area));
+      if (S.cls === 'big' && area < 25000) issues.push(n + ': a semi-massive map is 25,000 m2 or more: ' + Math.round(area));
+      // the spawns: whole, inside, apart
+      const sp = MAP_SPAWNS[n];
+      for (const [team, r] of Object.entries(sp)) for (let i = 0; i <= 8; i++) for (let j = 0; j <= 4; j++) if (!R.inside(r.x0 + (r.x1 - r.x0) * i / 8, r.z0 + (r.z1 - r.z0) * j / 4)) { issues.push(n + ': ' + team + ' spawn is not wholly on the floor'); i = 9; break; }
+      const c = t => [(t.x0 + t.x1) / 2, (t.z0 + t.z1) / 2], a = c(sp.ally), e = c(sp.enemy), apart = Math.hypot(a[0] - e[0], a[1] - e[1]);
+      if (apart < 55) issues.push(n + ': the spawns are only ' + Math.round(apart) + ' m apart');
+      if (S.cls === 'cqb' && apart > 110) issues.push(n + ': a close-quarters map has its spawns ' + Math.round(apart) + ' m apart');
+      // nothing left standing outside
+      let strays = 0; g.updateMatrixWorld(true);
+      g.traverse(o => { if (!o.isMesh || !o.geometry || o.userData.shapeKeep) return; const b = new THREE.Box3().setFromObject(o); if (Math.max(b.max.x - b.min.x, b.max.z - b.min.z) < 60 && !R.inside((b.min.x + b.max.x) / 2, (b.min.z + b.max.z) / 2) && !o.userData.themeDecor && !o.userData.mapWear) strays++; });
+      if (strays) issues.push(n + ': ' + strays + ' meshes stand outside the outline');
+      const cols = MAP_COLLIDERS[n].filter(b => b.max.y > 0.5 && !R.inside((b.min.x + b.max.x) / 2, (b.min.z + b.max.z) / 2));
+      if (cols.length) issues.push(n + ': ' + cols.length + ' colliders stand outside the outline');
+      // walkable from one spawn to the other (2 m cells, colliders at body height block)
+      { const cell = 2, x0 = Math.floor(R.bbox.x0 / cell), x1 = Math.ceil(R.bbox.x1 / cell), z0 = Math.floor(R.bbox.z0 / cell), z1 = Math.ceil(R.bbox.z1 / cell), W = x1 - x0, H = z1 - z0, blocked = new Uint8Array(W * H);
+        for (const b of MAP_COLLIDERS[n]) { if (!(b.max.y > 0.7 && b.min.y < 1.8)) continue; for (let i = Math.max(0, Math.floor((b.min.x - 0.45) / cell) - x0); i <= Math.min(W - 1, Math.floor((b.max.x + 0.45) / cell) - x0); i++) for (let j = Math.max(0, Math.floor((b.min.z - 0.45) / cell) - z0); j <= Math.min(H - 1, Math.floor((b.max.z + 0.45) / cell) - z0); j++) blocked[i * H + j] = 1; }
+        const free = (i, j) => i >= 0 && j >= 0 && i < W && j < H && !blocked[i * H + j] && R.inside((x0 + i + 0.5) * cell, (z0 + j + 0.5) * cell);
+        const start = [Math.floor(a[0] / cell) - x0, Math.floor(a[1] / cell) - z0], goal = [Math.floor(e[0] / cell) - x0, Math.floor(e[1] / cell) - z0], seen = new Uint8Array(W * H), st = [start]; let ok = false;
+        while (st.length) { const [i, j] = st.pop(); if (!free(i, j) || seen[i * H + j]) continue; seen[i * H + j] = 1; if (Math.abs(i - goal[0]) <= 2 && Math.abs(j - goal[1]) <= 2) { ok = true; break; } st.push([i + 1, j], [i - 1, j], [i, j + 1], [i, j - 1]); }
+        if (!ok) { const rr = PVP_SHAPES.route(n, R); issues.push(n + ': no way on foot from one spawn to the other' + (process.env.SHAPE_DEBUG ? ' (route made: ' + g.userData.shapeRoute + ', cost ' + rr.cost + ', in the way: ' + rr.blockers.map(ci => { const b = MAP_COLLIDERS[n][ci]; return [b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z].map(Math.round).join('x') + '@' + Math.round((b.min.x + b.max.x) / 2) + ',' + Math.round((b.min.z + b.max.z) / 2) + (b.shapeWall ? ' OURS' : ''); }).join(' ; ') + ')' : '')); } }
+      // every place that asks where the floor is gives the same answer
+      const v = MAP_VOID[n]; if (!v || typeof v.inside !== 'function') { issues.push(n + ': MAP_VOID has no inside'); continue; }
+      { const saved = activeMapName; activeMapName = n; let bad = 0;
+        for (let k = 0; k < 600; k++) { const x = R.bbox.x0 + (k * 7.31 % 1) * (R.bbox.x1 - R.bbox.x0) + (k % 13) * 0.1, z = R.bbox.z0 + (k * 3.77 % 1) * (R.bbox.z1 - R.bbox.z0) + (k % 7) * 0.1; if (floorExistsAt(x, z) !== R.inside(x, z)) bad++; }
+        for (const r of v.rects) if (!R.inside((r.x0 + r.x1) / 2, (r.z0 + r.z1) / 2)) bad++;
+        activeMapName = saved; if (bad) issues.push(n + ': floorExistsAt and the outline disagree ' + bad + ' times'); }
+      if (!(sh.posts >= 20)) issues.push(n + ': the edge has no tape and posts (' + sh.posts + ')');
+      const b = MAP_BOUNDS[n]; if (Math.abs(b.halfX - R.halfX) > 0.01 || Math.abs(b.halfZ - R.halfZ) > 0.01) issues.push(n + ': MAP_BOUNDS is not the outline\\'s');
+      const gim = MAP_GIMMICKS[n]; for (const k of Object.keys(gim)) for (const z of gim[k] || []) { const x0 = z.x ?? z.cx, z0 = z.z ?? z.cz; if (Number.isFinite(x0) && Number.isFinite(z0) && !R.inside(x0, z0)) issues.push(n + ': a ' + k + ' entry lies outside the outline'); }
+      try { PVP_SHAPES.apply(n); } catch (e) { issues.push(n + ': the second pass threw ' + e.message); }
+    }
+    // the set: every size, every way round, and no two alike
+    if (names.length < 20) issues.push('only ' + names.length + ' maps have an outline');
+    if ((cls.cqb || 0) < 4 || (cls.mid || 0) < 10 || (cls.big || 0) < 2) issues.push('the sizes: ' + JSON.stringify(cls) + ' (wanted 4+ close quarters, 10+ middle, 2+ semi-massive)');
+    if ((axes.z || 0) < 3 || (axes.x || 0) < 3 || (axes.d || 0) < 3) issues.push('the ways round: ' + JSON.stringify(axes) + ' (wanted 3+ of each)');
+    for (const n of names) if (SH[n].family !== 'irregular') issues.push(n + ': ' + SH[n].family + ' is a shape with a name; outlines are irregular');
+    console.log('shape checks: ' + names.length + ' maps with an irregular outline (' + JSON.stringify(cls) + ', ways round ' + JSON.stringify(axes) + ')');
+    return issues;
+  })()`);
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 if (ok && process.argv.includes('--props')) {
   const issues = vm.runInThisContext(`(() => {
-    const issues = [], props = mapDestructibles.filter(d => d.propId);
+    const issues = []; let props = mapDestructibles.filter(d => d.propId);
     const ids = new Set();
     for (const d of props) {
       if (ids.has(d.propId)) issues.push('duplicate prop: ' + d.propId);
@@ -502,6 +565,7 @@ if (ok && process.argv.includes('--props')) {
       spawnExplosion = spawnAbilityAOEFX = playSoundEvent = showDamageNumber = spawnHitParticle = showAnnouncement = () => {};
       emitHit = () => { hits++; }; applyBotDamageToPlayer = () => { localHits++; };
       activateMap('refinery');
+      props = mapDestructibles.filter(d => d.propId);                       // (the outline takes away what stood off the floor when the map is first played)
       const a = props.find(d => d.mapName === 'refinery');
       if (!a) throw new Error('refinery has no explosives');
       if (!a.mesh.parent) issues.push('static merge swallowed explosive');

@@ -6016,6 +6016,7 @@ function playerFeetY() {
 function floorExistsAt(x, z) {
   const v = MAP_VOID[activeMapName];
   if (!v) return true;
+  if (v.inside) return v.inside(x, z);                                    // an outline (public/map-shapes.js): the region's own test, exact
   if (v.rects) { for (const r of v.rects) if (x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1) return true; return false; }   // a harbour: islands of ground
   return Math.abs(x) <= v.halfX && Math.abs(z) <= v.halfZ;
 }
@@ -6425,6 +6426,7 @@ function activateMap(name) {
     else if (g.parent) g.parent.remove(g);
   }
   if (typeof dressThemeMap === 'function') { try { dressThemeMap(name); } catch (e) { console.warn('[theme]', name, e); } }
+  try { if (window.PVP_SHAPES) PVP_SHAPES.apply(name); } catch (e) { console.warn('[shape]', name, e); }      // (again: the dressing may have put something outside the outline)
   try { buildMapGlow(name); } catch (e) { console.warn('[glow]', name, e); }      // once per map, after its dressing
   // Then bake this map's static boxes into one draw call per material (#66).
   // After the dressing, because the dressing is what reads the per-box tags;
@@ -6433,6 +6435,7 @@ function activateMap(name) {
   // The haze takes the colour of the sky it hangs under, so a dark map is not wrapped in pale blue.
   if (scene.fog && scene.fog.color && MAP_GROUPS[name] && MAP_GROUPS[name]._skyColor != null) scene.fog.color.setHex(MAP_GROUPS[name]._skyColor);
   if (typeof atmoActivate === 'function') { try { atmoActivate(name); } catch (e) { console.warn('[atmo]', name, e); } }
+  try { if (window.PVP_SHAPES) PVP_SHAPES.apply(name); } catch (e) { console.warn('[shape]', name, e); }      // (and the atmosphere's own ground, which is a plane the size of the old floor)
   applyMapLighting(name);
   clearPlantedSpears();                       // last map's spears; their boxes go with the colliders below
   wallColliders.length = 0;
@@ -19100,6 +19103,8 @@ function _gimMap(name) {
     free(x, z, r = 1.5, o = {}) {
       const b = MAP_BOT_BOUNDS[name] || MAP_BOUNDS[name], m = o.edge == null ? 6 : o.edge, y1 = o.h || 2.2;
       if (Math.abs(x) > b.halfX - m || Math.abs(z) > b.halfZ - m) return false;
+      const vi = MAP_VOID[name] && MAP_VOID[name].inside;               // an irregular outline (public/map-shapes.js): the floor has to be there, a few metres in every way (a close-quarters map is narrow)
+      if (vi) { const e = Math.min(m, 3.5); if (!(vi(x, z) && vi(x + e, z) && vi(x - e, z) && vi(x, z + e) && vi(x, z - e))) return false; }
       for (const c of MAP_COLLIDERS[name]) {
         if (c.max.y <= 0.4) continue;
         if (x <= c.min.x - r || x >= c.max.x + r || z <= c.min.z - r || z >= c.max.z + r) continue;
@@ -22064,9 +22069,11 @@ function _upgradeMap(name) {
   try { addBreakableMapWalls(name); } catch (e) { console.warn('[upgrade] breakable walls', name, e); }
   try { _eggsMap(name); } catch (e) { console.warn('[upgrade] eggs', name, e); }
   try { _outskirtsMap(name); } catch (e) { console.warn('[upgrade] outskirts', name, e); }
+  try { if (window.PVP_SHAPES) PVP_SHAPES.apply(name); } catch (e) { console.warn('[upgrade] shape', name, e); }   // the map's outline (public/map-shapes.js): before the gimmick, the realism and the wear, so they are placed on the floor that is there
   try { _gimMap(name); } catch (e) { console.warn('[upgrade] gimmick', name, e); }
   try { addMapRealism(name); } catch (e) { console.warn('[upgrade] realism', name, e); }
   try { addMapWear(name); } catch (e) { console.warn('[upgrade] wear', name, e); }
+  try { if (window.PVP_SHAPES) PVP_SHAPES.apply(name); } catch (e) { console.warn('[upgrade] shape', name, e); }   // (the second pass: whatever the dressing put out beyond the edge goes)
   // what was just added gets the same surface as the rest
   try { g._weathered = false; weatherMapGroup(g); } catch (e) {}
   g.userData.upgradeMs = Math.round(performance.now() - t0);
