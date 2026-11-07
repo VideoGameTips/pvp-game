@@ -1540,12 +1540,14 @@ if (ok && process.argv.includes('--duel')) {
       const b = MAP_BOUNDS[name], sp = MAP_SPAWNS[name], cols = MAP_COLLIDERS[name] || [];
       if (!MAP_IDS.includes(name)) issues.push(name + ': not in MAP_IDS');
       if (!b || !sp) { issues.push(name + ': no bounds or spawns'); continue; }
-      // sixteen times the floor of the first duel maps (36 x 56): "too tiny" was the verdict, then twice the length and breadth again
-      if (b.halfX * 2 < 140 || b.halfZ * 2 < 220) issues.push(name + ': smaller than a duel map should be (' + b.halfX * 2 + ' x ' + b.halfZ * 2 + ', want 144 x 224)');
-      if (b.halfX * 2 > 150 || b.halfZ * 2 > 232) issues.push(name + ': bigger than a duel map should be (' + b.halfX * 2 + ' x ' + b.halfZ * 2 + ')');
+      // two families: the BIG ones (144 x 224, room for four: 2v2's) and the SMALL ones (56 x 88: 1v1's: the big ones were far too much floor for two)
+      const small = DUEL_SMALL_IDS.includes(name), want = small ? [56, 88] : [144, 224];
+      if (b.halfX * 2 < want[0] - 4 || b.halfZ * 2 < want[1] - 4) issues.push(name + ': smaller than a ' + (small ? 'small' : 'big') + ' duel map should be (' + b.halfX * 2 + ' x ' + b.halfZ * 2 + ', want ' + want.join(' x ') + ')');
+      if (b.halfX * 2 > want[0] + 6 || b.halfZ * 2 > want[1] + 8) issues.push(name + ': bigger than a ' + (small ? 'small' : 'big') + ' duel map should be (' + b.halfX * 2 + ' x ' + b.halfZ * 2 + ')');
       const ca = { x: (sp.ally.x0 + sp.ally.x1) / 2, z: (sp.ally.z0 + sp.ally.z1) / 2 }, ce = { x: (sp.enemy.x0 + sp.enemy.x1) / 2, z: (sp.enemy.z0 + sp.enemy.z1) / 2 };
       const secs = Math.hypot(ca.x - ce.x, ca.z - ce.z) / walk;
-      if (secs < 20 || secs > 36) issues.push(name + ': spawn to spawn takes ' + secs.toFixed(1) + ' s at a walk, want 20 to 36');
+      const secsWant = small ? [7, 14] : [20, 36];
+      if (secs < secsWant[0] || secs > secsWant[1]) issues.push(name + ': spawn to spawn takes ' + secs.toFixed(1) + ' s at a walk, want ' + secsWant.join(' to '));
       for (const side of [sp.ally, sp.enemy]) {
         if (side.x0 < -b.halfX + 1 || side.x1 > b.halfX - 1 || side.z0 < -b.halfZ + 1 || side.z1 > b.halfZ - 1) issues.push(name + ': a spawn rectangle is outside the walls');
         for (const c of cols) {
@@ -1591,7 +1593,8 @@ if (ok && process.argv.includes('--duel')) {
       // RAMPS: every duel map has some, in rotationally mirrored pairs, and each one leads onto something solid
       // whose top is the ramp's own height (a deck, a bridge, a plateau, a tower) rather than into the air.
       const ramps = MAP_RAMPS[name] || [];
-      if (ramps.length < 2) issues.push(name + ': only ' + ramps.length + ' ramps, every duel map needs them');
+      if (ramps.length < 2 && !small) issues.push(name + ': only ' + ramps.length + ' ramps, every big duel map needs them');
+      if (ramps.length % 2) issues.push(name + ': ' + ramps.length + ' ramps (they come in rotated pairs)');
       for (const r of ramps) {
         if (r.rise < 2) issues.push(name + ': a ramp that only rises ' + r.rise + ' m is not worth the climb');
         const m = ramps.find(q => Math.abs(q.x0 + r.x0) < 0.02 && Math.abs(q.z0 + r.z0) < 0.02 && Math.abs(q.ux + r.ux) < 0.02 && Math.abs(q.uz + r.uz) < 0.02 && Math.abs(q.rise - r.rise) < 0.02);
@@ -1614,18 +1617,24 @@ if (ok && process.argv.includes('--duel')) {
       }
       if (kinds.longWall < 2) issues.push(name + ': only ' + kinds.longWall + ' long walls');
       if (kinds.lowWall < 2) issues.push(name + ': only ' + kinds.lowWall + ' low walls');
-      if (kinds.overhead < 2) issues.push(name + ': nothing overhead (windows, arches, a bridge): ' + kinds.overhead);
+      if (kinds.overhead < 2 && !small) issues.push(name + ': nothing overhead (windows, arches, a bridge): ' + kinds.overhead);
       if (kinds.pillar > 36 || kinds.pillar > (kinds.longWall + kinds.lowWall + kinds.overhead + kinds.block) * 0.7) issues.push(name + ': mostly pillars (' + kinds.pillar + ')');
       // HIGH walls: "some maps just don't have enough". A high wall is a long wall too tall to see over from the floor (4.5 m or
       // more); every map needs plenty, spread over the whole floor (every quarter of the map has some), and one across the
       // middle (which is also what cuts the two spawns off from each other).
-      const high = inner.filter(c => { const d = dims(c); return c.min.y < 0.1 && d.h >= 4.5 && d.long >= 10 && d.thin <= 2; });
-      if (high.length < 24) issues.push(name + ': only ' + high.length + ' high walls (want 24 or more)');
-      for (const [qx, qz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+      const high = inner.filter(c => { const d = dims(c); return c.min.y < 0.1 && d.h >= 4.5 && d.long >= 10 && d.thin <= (small ? 2.8 : 2); });
+      if (high.length < (small ? 4 : 24)) issues.push(name + ': only ' + high.length + ' high walls (want ' + (small ? 4 : 24) + ' or more)');
+      if (!small) for (const [qx, qz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
         const n = high.filter(c => ((c.min.x + c.max.x) / 2) * qx > 0 && ((c.min.z + c.max.z) / 2) * qz > 0).length;
         if (n < 5) issues.push(name + ': a quarter of the map has only ' + n + ' high walls');
       }
       if (!high.some(c => c.min.x < -9 && c.max.x > 9 && c.min.z < 2 && c.max.z > -2)) issues.push(name + ': no high wall across the middle');
+      // a small arena is a corridor you can fight in, not a box with a post in it: the floor round the middle wall is open enough to
+      // go round (and every piece of cover leaves room: nothing is built into a corner of the border)
+      if (small) {
+        const nearBorder = inner.filter(c => c.min.y < 0.1 && (c.min.x < -b.halfX + 0.3 || c.max.x > b.halfX - 0.3) && Math.max(c.max.x - c.min.x, c.max.z - c.min.z) > 14);
+        if (nearBorder.length > 2) issues.push(name + ': ' + nearBorder.length + ' long pieces are built flat against the border wall');
+      }
       HIGH_COUNTS[name] = high.length;
       // each map reads differently: no two share a wall recipe
       MAP_RECIPES[name] = JSON.stringify(kinds);
@@ -1635,11 +1644,15 @@ if (ok && process.argv.includes('--duel')) {
     // 2v2 is dealt the duel maps now and then (1v1 only them, nobody else any), on the vote screen and in the random draw
     if (effectivePickedMap('2v2', 'duel_grid') !== 'duel_grid') issues.push('a duel map picked for 2v2 should stay itself');
     if (effectivePickedMap('5v5', 'duel_grid') !== 'auto') issues.push('a duel map picked for 5v5 should be random (they are not dealt to it)');
-    if (!DUEL_MAP_IDS.every(m => mapPoolForMode('2v2').includes(m))) issues.push('2v2 pool should include the duel maps');
+    if (!DUEL_BIG_IDS.every(m => mapPoolForMode('2v2').includes(m))) issues.push('2v2 pool should include the big duel maps');
+    if (DUEL_SMALL_IDS.some(m => mapPoolForMode('2v2').includes(m))) issues.push('the small duel maps are too small for four: 2v2 must not be dealt them');
+    if (JSON.stringify(mapPoolForMode('1v1')) !== JSON.stringify(DUEL_SMALL_IDS)) issues.push('1v1 should be dealt exactly the small duel maps');
     if (mapPoolForMode('5v5').some(m => DUEL_ONLY_MAPS.has(m))) issues.push('only 1v1 and 2v2 deal duel maps');
     const draws = { '1v1': 0, '2v2': 0, '5v5': 0 };
     for (let i = 0; i < 4000; i++) for (const k of Object.keys(draws)) if (DUEL_ONLY_MAPS.has(randomMapForMode(k))) draws[k]++;
     if (draws['1v1'] !== 4000) issues.push('1v1 should always be dealt a duel map');
+    for (let i = 0; i < 2000; i++) { if (!DUEL_SMALL_IDS.includes(randomMapForMode('1v1'))) { issues.push('1v1 was dealt a map that is not a small duel map'); break; } }
+    for (let i = 0; i < 2000; i++) { if (DUEL_SMALL_IDS.includes(randomMapForMode('2v2'))) { issues.push('2v2 was dealt a small duel map'); break; } }
     if (draws['5v5'] !== 0) issues.push('5v5 must never be dealt a duel map');
     if (draws['2v2'] < 4000 * 0.2 || draws['2v2'] > 4000 * 0.4) issues.push('2v2 should be dealt a duel map about 3 times in 10, got ' + (draws['2v2'] / 40).toFixed(0) + '%');
     notes.push('high walls ' + JSON.stringify(HIGH_COUNTS) + ' · 2v2 duel share ' + (draws['2v2'] / 40).toFixed(0) + '%');
@@ -1647,9 +1660,10 @@ if (ok && process.argv.includes('--duel')) {
   })()`);
   const issues = duelOut.issues;
   const serverSrc = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
-  if (!/mode === '2v2' \? LOBBY_MAP_POOL\.concat\(DUEL_MAP_IDS\)/.test(serverSrc)) issues.push('server does not deal 2v2 the duel maps');
+  if (!/mode === '2v2' \? LOBBY_MAP_POOL\.concat\(DUEL_BIG_IDS\)/.test(serverSrc)) issues.push('server does not deal 2v2 the big duel maps');
+  if (!/mode === '1v1' \? DUEL_SMALL_IDS/.test(serverSrc)) issues.push('server does not deal 1v1 the small duel maps');
   if (!/function randomMapFor\(mode\)/.test(serverSrc) || /const mapId = mapPoolFor\(mode\)\[Math\.floor/.test(serverSrc)) issues.push('server random draws should go through randomMapFor');
-  for (const id of ['duel_grid', 'duel_crossroads', 'duel_pillars', 'duel_platform']) {
+  for (const id of ['duel_grid', 'duel_crossroads', 'duel_pillars', 'duel_platform', 'duel_alley', 'duel_cells', 'duel_loft', 'duel_yard']) {
     if (!serverSrc.includes("'" + id + "'")) issues.push('server does not know ' + id);
   }
   if (!/LOBBY_MAP_POOL = MAP_IDS\.filter\(.*DUEL_ONLY_MAPS/.test(serverSrc)) issues.push('server random pool does not exclude the duel maps');
@@ -2605,18 +2619,21 @@ if (ok && process.argv.includes('--mappick')) {
       if (grids[ids[a]].cells.join() === grids[ids[b]].cells.join()) issues.push(ids[a] + ' and ' + ids[b] + ' look identical');
     }
     // the bot reads the picture: its taste decides, and it is a different map for different tastes
-    const picks = {};
-    for (const t of Object.keys(MAP_BOT_TASTES)) {
-      const r = botPickMap(DUEL_MAP_IDS, t, 'hard', () => 0.5);
-      if (!DUEL_MAP_IDS.includes(r.mapId)) issues.push(t + ' picked ' + r.mapId + ', not one of the options');
-      picks[t] = r.mapId;
+    // (the vote is among the maps of one mode: the big ones for 2v2, the small ones for 1v1)
+    for (const [label, opts, climber] of [['big', DUEL_BIG_IDS, ['duel_platform']], ['small', DUEL_SMALL_IDS, ['duel_loft', 'duel_yard']]]) {
+      const picks = {};
+      for (const t of Object.keys(MAP_BOT_TASTES)) {
+        const r = botPickMap(opts, t, 'hard', () => 0.5);
+        if (!opts.includes(r.mapId)) issues.push(t + ' picked ' + r.mapId + ', not one of the options');
+        picks[t] = r.mapId;
+      }
+      info.push(label + ' picks ' + JSON.stringify(picks));
+      if (!climber.includes(picks.climber)) issues.push('a bot that wants the high ground picked ' + picks.climber + ', not ' + climber.join(' or ') + ' (' + label + ')');
+      if (new Set(Object.values(picks)).size < (label === 'big' ? 3 : 2)) issues.push('bots with different tastes should not all agree: ' + JSON.stringify(picks));
     }
-    info.push('picks ' + JSON.stringify(picks));
-    if (picks.climber !== 'duel_platform') issues.push('a bot that wants the high ground picked ' + picks.climber + ', not duel_platform');
-    if (new Set(Object.values(picks)).size < 3) issues.push('bots with different tastes should not all agree: ' + JSON.stringify(picks));
     // an easy bot wanders: over many looks it does not always say the same thing
     const easy = new Set();
-    for (let k = 0; k < 60; k++) easy.add(botPickMap(DUEL_MAP_IDS, 'rusher', 'easy').mapId);
+    for (let k = 0; k < 60; k++) easy.add(botPickMap(DUEL_SMALL_IDS, 'rusher', 'easy').mapId);
     if (easy.size < 2) issues.push('an easy bot never changed its mind in 60 looks');
     // the pre-pick is gone: a duel map picked on the mode screen counts as random everywhere, 1v1 included
     // what the lobby is asked for: never a pre-picked duel map (the vote comes after the opponent is found)

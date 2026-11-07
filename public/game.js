@@ -6232,26 +6232,30 @@ var MAP_BOT_BOUNDS = {}, MAP_VOID = {};
 // Every map that can be played, and the subset the random draw skips (#66).
 // Mirrors server.js — MAP_IDS and THIN_MAPS have to stay identical there
 // (CLAUDE.md #4), because the server picks the map and the client honours it.
-const MAP_IDS = ['blank', 'urban', 'warehouse', 'forest', 'vietnam', 'volcano', 'cyber', 'desert', 'tundra', 'space', 'airport', 'trenches', 'chernobyl', 'refinery', 'skydock', 'sewer', 'gravity_lab', 'glassworks', 'carrier', 'overgrowth', 'orbital_station', 'foundry', 'carnival', 'biosphere', 'lockdown', 'studio', 'temple', 'holiday', 'labyrinth', 'arena', 'opera', 'doomsday', 'train', 'dreamscape', 'pearl_harbor', 'titanic', 'supermarket', 'pyongyang', 'traffic_cone_republic', 'flying_moai', 'big_arena', 'super_arena', 'big_harbor', 'storm_pier', 'pinball_arcade', 'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise', 'neon_tokyo', 'sky_arena', 'shipyard', 'battleground', 'atoll', 'duel_grid', 'duel_crossroads', 'duel_pillars', 'duel_platform'];
+const MAP_IDS = ['blank', 'urban', 'warehouse', 'forest', 'vietnam', 'volcano', 'cyber', 'desert', 'tundra', 'space', 'airport', 'trenches', 'chernobyl', 'refinery', 'skydock', 'sewer', 'gravity_lab', 'glassworks', 'carrier', 'overgrowth', 'orbital_station', 'foundry', 'carnival', 'biosphere', 'lockdown', 'studio', 'temple', 'holiday', 'labyrinth', 'arena', 'opera', 'doomsday', 'train', 'dreamscape', 'pearl_harbor', 'titanic', 'supermarket', 'pyongyang', 'traffic_cone_republic', 'flying_moai', 'big_arena', 'super_arena', 'big_harbor', 'storm_pier', 'pinball_arcade', 'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise', 'neon_tokyo', 'sky_arena', 'shipyard', 'battleground', 'atoll', 'duel_grid', 'duel_crossroads', 'duel_pillars', 'duel_platform', 'duel_alley', 'duel_cells', 'duel_loft', 'duel_yard'];
 const THIN_MAPS = new Set([]);
 // ⚔️ 1v1 duel maps: plain arenas, 72 x 112 m (about fourteen seconds spawn to spawn), dealt only to 1v1. They are in
 // MAP_IDS so that a server-sent id activates, and kept out of the random pool of every other mode.
-const DUEL_MAP_IDS = ['duel_grid', 'duel_crossroads', 'duel_pillars', 'duel_platform'];
+// Two sizes. The four BIG ones are 144 x 224 m: room for four, so 2v2 is dealt them now and then. 1v1 is dealt the SMALL ones,
+// 56 x 88 m (about ten seconds spawn to spawn): the big ones were far too much floor for two people to cross.
+const DUEL_BIG_IDS = ['duel_grid', 'duel_crossroads', 'duel_pillars', 'duel_platform'];
+const DUEL_SMALL_IDS = ['duel_alley', 'duel_cells', 'duel_loft', 'duel_yard'];
+const DUEL_MAP_IDS = DUEL_BIG_IDS.concat(DUEL_SMALL_IDS);
 const DUEL_ONLY_MAPS = new Set(DUEL_MAP_IDS);
 // A picked map only counts in the mode it was made for: a duel map left over from a 1v1 is 'auto' anywhere else.
 // Which map a pick means in a mode: a duel map is 1v1's (anywhere else the pick counts as random). It is what
 // spawnGameBots resolves the map from, so it has to keep the duel map the VOTE chose (lobbyStart puts it in
 // selectedMap); returning 'auto' for it here re-rolled a random duel map and ignored the vote.
 function effectivePickedMap(modeId, map) { return DUEL_ONLY_MAPS.has(map) && modeId !== '1v1' && modeId !== '2v2' ? 'auto' : map; }
-// 2v2 plays the main pool and, every so often, a duel arena (they are twice the size they were: room for four). Mirrors server.js DUEL_SHARE_2V2.
+// 2v2 plays the main pool and, every so often, one of the big duel arenas (room for four). Mirrors server.js DUEL_SHARE_2V2.
 const DUEL_SHARE_2V2 = 0.3;
 function mapPoolForMode(modeId) {
   const main = MAP_IDS.filter(m => !THIN_MAPS.has(m) && !DUEL_ONLY_MAPS.has(m));
-  return modeId === '1v1' ? DUEL_MAP_IDS : modeId === '2v2' ? main.concat(DUEL_MAP_IDS) : main;
+  return modeId === '1v1' ? DUEL_SMALL_IDS : modeId === '2v2' ? main.concat(DUEL_BIG_IDS) : main;
 }
 function randomMapForMode(modeId) {
   const main = MAP_IDS.filter(m => !THIN_MAPS.has(m) && !DUEL_ONLY_MAPS.has(m));
-  const pool = modeId === '1v1' ? DUEL_MAP_IDS : (modeId === '2v2' && Math.random() < DUEL_SHARE_2V2) ? DUEL_MAP_IDS : main;
+  const pool = modeId === '1v1' ? DUEL_SMALL_IDS : (modeId === '2v2' && Math.random() < DUEL_SHARE_2V2) ? DUEL_BIG_IDS : main;
   return pool[Math.floor(Math.random() * pool.length)];
 }
 // What a player asks the lobby for before anyone is found: nothing. Every lobby match picks its map by a vote once the
@@ -6911,20 +6915,22 @@ function _duelGridTexture(floor, fine, bold) {
   return t;
 }
 function buildDuelMap(name, o) {
+  const W = o.w || DUEL_W, D = o.d || DUEL_D, SZ = o.spawnZ || DUEL_SPAWN_Z;   // (the small 1v1 arenas say their own size)
   registerMap(name);
-  setMapBounds(name, DUEL_W, DUEL_D);
+  setMapBounds(name, W, D);
   const G = MAP_GROUPS[name];
+  G._duelSize = { w: W, d: D, spawnZ: SZ };
   const tex = _duelGridTexture(o.floor, o.fine, o.bold);
-  tex.repeat.set(DUEL_W / 4, DUEL_D / 4);
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(DUEL_W, DUEL_D), new THREE.MeshLambertMaterial({ map: tex }));
+  tex.repeat.set(W / 4, D / 4);
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(W, D), new THREE.MeshLambertMaterial({ map: tex }));
   ground.rotation.x = -Math.PI / 2;
   G.add(ground);
   // The border: a wall too tall to be anything but a wall.
   const T = 1, H = 10;
-  addMapBox(name, 0, H / 2, -DUEL_D / 2 - T / 2, DUEL_W + 2 * T, H, T, o.wall);
-  addMapBox(name, 0, H / 2,  DUEL_D / 2 + T / 2, DUEL_W + 2 * T, H, T, o.wall);
-  addMapBox(name, -DUEL_W / 2 - T / 2, H / 2, 0, T, H, DUEL_D, o.wall);
-  addMapBox(name,  DUEL_W / 2 + T / 2, H / 2, 0, T, H, DUEL_D, o.wall);
+  addMapBox(name, 0, H / 2, -D / 2 - T / 2, W + 2 * T, H, T, o.wall);
+  addMapBox(name, 0, H / 2,  D / 2 + T / 2, W + 2 * T, H, T, o.wall);
+  addMapBox(name, -W / 2 - T / 2, H / 2, 0, T, H, D, o.wall);
+  addMapBox(name,  W / 2 + T / 2, H / 2, 0, T, H, D, o.wall);
   // Cover is listed once and placed twice: where it is, and turned half a circle about the middle.
   // [x, z, width, height, depth, tone, elevation]: elevation is how far off the floor its bottom is (a lintel, a
   // parapet on a deck, a crate on a crate); left out it sits on the floor.
@@ -6956,11 +6962,11 @@ function buildDuelMap(name, o) {
     addRamp(name, -r.x, -r.z, -r.ux, -r.uz, opt);
   }
   // Where each of you starts: a flat pad, blue and red.
-  for (const [z, col] of [[DUEL_SPAWN_Z, 0x3a6aff], [-DUEL_SPAWN_Z, 0xff4a4a]]) {
+  for (const [z, col] of [[SZ, 0x3a6aff], [-SZ, 0xff4a4a]]) {
     const pad = new THREE.Mesh(new THREE.BoxGeometry(14, 0.04, 5), new THREE.MeshLambertMaterial({ color: col, transparent: true, opacity: 0.55 }));
     pad.position.set(0, 0.03, z); G.add(pad);
   }
-  MAP_SPAWNS[name] = { ally: { x0: -6, x1: 6, z0: DUEL_SPAWN_Z - 2, z1: DUEL_SPAWN_Z + 2 }, enemy: { x0: -6, x1: 6, z0: -DUEL_SPAWN_Z - 2, z1: -DUEL_SPAWN_Z + 2 } };
+  MAP_SPAWNS[name] = { ally: { x0: -6, x1: 6, z0: SZ - 2, z1: SZ + 2 }, enemy: { x0: -6, x1: 6, z0: -SZ - 2, z1: -SZ + 2 } };
   G._skyColor = o.sky;
   G._duelOpts = o;      // _duelFinish (below, once the decoration kit exists) dresses the arena from this
   // the palette the map-vote picture is drawn in (mapPictureGrid / drawMapPicture)
@@ -7086,6 +7092,78 @@ buildDuelMap('duel_platform', {
     [0, 78, 22, DUEL_HIGH_WALL, 1.6, 'tall'], [-64, 30, 1.6, DUEL_HIGH_WALL, 24, 'tall'],   // a screen in front of each spawn; a long wall down the flank
     [40, -50, 16, DUEL_HIGH_WALL, 1.6, 'tall'], [-36, -90, 1.6, DUEL_HIGH_WALL, 16, 'tall'], [58, 20, 1.6, DUEL_HIGH_WALL, 16, 'tall'],
   ],
+});
+
+// ── ⚔️ THE SMALL 1v1 ARENAS ───────────────────────────────────────────────────────────────────────────────────────────────────────────
+// The four above are 144 x 224 m: room for four, and far too much floor for two people to cross (that was the verdict
+// on them for 1v1). These four are 56 x 88 m, the spawns 68 m apart, about ten seconds at a walk, and each is one
+// piece of cover listed once and turned half a circle about the middle (so neither side has the better half), with
+// a high wall across the middle that keeps the two starts out of each other's sight. Written straight in the map's own
+// coordinates (x -28 to 28, z -44 to 44), as the "whole map" pieces of the big ones are.
+const DUEL_SMALL = { w: 56, d: 88, spawnZ: 34, centre: [6, 8] };
+// 5. BACK ALLEY: a corridor of high walls out of each start, and the fight in the lanes either side of the middle and
+//    round the back of each start (the corridor walls stop short of the back wall).
+buildDuelMap('duel_alley', {
+  ...DUEL_SMALL,
+  floor: '#2a1a1d', fine: '#47282d', bold: '#b05560', wall: 0x4a2a30, cover_: 0xa06068, tall: 0x703e46, accent: 0xff5a5a, sky: 0x140a0c,
+  cover: [], ramps: [],
+  macro: [
+    [0, 0, 22, DUEL_HIGH_WALL, 1.6, 'tall'],                                              // the wall between the starts
+    [-10, -24, 1.6, DUEL_HIGH_WALL, 20, 'tall'], [10, -24, 1.6, DUEL_HIGH_WALL, 20, 'tall'],   // the corridor out of a start
+    [-19, -7, 8, 1.2, 1.2, 'cover'], [19, -9, 3.4, 2.2, 3.4, 'hi'],                      // the lane by the middle
+    [20, -18, 7, 2.2, 1.4, 'cover'], [23.3, -22.2, 1.4, 2.2, 7, 'cover'],                // an L bunker in one side pocket
+    [-20, -30, 3.4, 2.2, 3.4, 'hi'], [-17, -38, 6, 1.2, 1.2, 'cover'],                   // a crate and a low wall in the other
+    [0, -22, 6, 1.0, 1.0, 'cover'],                                                       // a low wall in the corridor
+  ],
+});
+// 6. CELL BLOCK: a row of rooms in front of each start, each with a door; between the two rows, the yard, with a wall
+//    with a window to shoot through.
+buildDuelMap('duel_cells', {
+  ...DUEL_SMALL,
+  floor: '#1c2a1a', fine: '#2f4a2c', bold: '#6aa850', wall: 0x2f4a2a, cover_: 0x6f9a60, tall: 0x4a7040, accent: 0x9aff5a, sky: 0x0b140a,
+  cover: [], ramps: [],
+  macro: [
+    [0, 0, 22, DUEL_HIGH_WALL, 1.6, 'tall'],
+    [-18, -24, 20, DUEL_HIGH_WALL, 1.6, 'tall'], [12, -24, 16, DUEL_HIGH_WALL, 1.6, 'tall'],     // the wall of the rooms, with two doors
+    [-14, -37, 1.6, DUEL_HIGH_WALL, 14, 'tall'], [14, -37, 1.6, DUEL_HIGH_WALL, 14, 'tall'],     // between the rooms (a door at the front of each)
+    [-21, -38, 3.4, 2.2, 3.4, 'hi'], [21, -38, 6, 1.2, 1.2, 'cover'], [0, -28, 6, 1.2, 1.2, 'cover'],   // what is in the rooms
+    [-18, -10, 8, 1.2, 1.2, 'cover'], [18, -12, 3.4, 2.2, 3.4, 'hi'],                            // the yard
+    [6, -15, 1.2, 3.4, 1.4, 'tall'], [14, -15, 1.2, 3.4, 1.4, 'tall'],                           // a windowed wall: two piers,
+    [10, -15, 6.8, 1.0, 1.4, 'cover'], [10, -15, 6.8, 0.9, 1.4, 'tall', 2.5],                    // a sill and a lintel
+  ],
+});
+// 7. MEZZANINE: a gallery along one side of each start's half, up a ramp from behind the other start, with a parapet;
+//    on the floor a windowed wall, a crate stack, and a long wall.
+buildDuelMap('duel_loft', {
+  ...DUEL_SMALL,
+  floor: '#2e1a2e', fine: '#4a2c4a', bold: '#b868b0', wall: 0x4a2a4a, cover_: 0xa070a0, tall: 0x704070, accent: 0xff6ad0, sky: 0x140a14,
+  cover: [], ramps: [],
+  macro: [
+    [0, 0, 22, DUEL_HIGH_WALL, 1.6, 'tall'],
+    [22, -18, 12, 3.0, 30, 'hi'], [16.3, -18, 0.4, 1.0, 28, 'cover', 3.0],                       // the gallery and its parapet
+    [-20, -24, 1.4, 3.4, 1.4, 'tall'], [-8, -24, 1.4, 3.4, 1.4, 'tall'],                         // a windowed wall: piers,
+    [-14, -24, 10.6, 1.0, 1.4, 'cover'], [-14, -24, 10.6, 0.9, 1.4, 'tall', 2.5],                // a sill and a lintel
+    [-12, -10, 3.4, 2.2, 3.4, 'hi'], [-12, -10, 2.2, 2.0, 2.2, 'cover', 2.2],                    // a crate with a crate on it
+    [-6, -14, 7, 1.2, 1.2, 'cover'], [8, -30, 6, 1.2, 1.2, 'cover'],
+    [-22, -12, 1.6, DUEL_HIGH_WALL, 12, 'tall'], [-14, -36, 10, DUEL_HIGH_WALL, 1.6, 'tall'],          // a long wall on the floor, and a screen behind the start
+  ],
+  macroRamps: [{ x: 22, z: -41, ux: 0, uz: 1, w: 6, rise: 3.0, run: 8, land: 0 }],
+});
+// 8. CONTAINER YARD: shipping containers (a double-high stack across the middle, a row and a short stack on the floor), a
+//    loading dock up a ramp in one corner, crates, jersey barriers, and a high fence by each start.
+buildDuelMap('duel_yard', {
+  ...DUEL_SMALL,
+  floor: '#2a2814', fine: '#4a4624', bold: '#b0a040', wall: 0x4a4624, cover_: 0xa09858, tall: 0x706a38, accent: 0xffd84a, sky: 0x14130a,
+  cover: [], ramps: [],
+  macro: [
+    [0, 0, 24, 5.2, 2.6, 'hi'],                                                          // two containers high, across the middle
+    [-8, -26, 1.6, DUEL_HIGH_WALL, 12, 'tall'], [8, -39, 10, DUEL_HIGH_WALL, 1.6, 'tall'],   // a fence by the start, and one behind it
+    [-14, -12, 12, 2.6, 2.6, 'hi'], [15, -15, 2.6, 2.6, 10, 'hi'],                       // single containers on the floor
+    [22, -28, 10, 2.6, 14, 'hi'],                                                         // the loading dock (the ramp is on its other side)
+    [-18, -30, 3.4, 2.2, 3.4, 'hi'], [-24, -22, 3.4, 2.2, 3.4, 'hi'],
+    [-4, -18, 7, 1.2, 1.2, 'cover'], [8, -8, 6, 1.0, 1.0, 'cover'],
+  ],
+  macroRamps: [{ x: 22, z: -13, ux: 0, uz: -1, w: 6, rise: 2.6, run: 8, land: 0 }],
 });
 
 // ── 🧟 THE TUNNEL: the map Zombie Survival was played on (ARCHIVED: Zombie Tower plays in THE TOWER now; this is kept, not built) ── ──────────────────────────────────────────────────
@@ -15456,7 +15534,7 @@ const MUSIC_FOR_MAP = {
   // the ones that had a track of their own
   atoll: 'tropic', sky_arena: 'heaven', dreamscape: 'heaven', shipyard: 'industry', battleground: 'arena', neon_tokyo: 'neon', cyber: 'neon', space: 'drift', orbital_station: 'drift', gravity_lab: 'drift',
   // and now every other place, by what kind of place it is
-  blank: 'groove', urban: 'groove', duel_grid: 'groove', duel_crossroads: 'groove', duel_pillars: 'groove', duel_platform: 'groove', m4_tower: 'groove', m4_tower_big: 'groove', m4_tower_super: 'groove',
+  blank: 'groove', urban: 'groove', duel_grid: 'groove', duel_crossroads: 'groove', duel_pillars: 'groove', duel_platform: 'groove', duel_alley: 'groove', duel_cells: 'groove', duel_loft: 'groove', duel_yard: 'groove', m4_tower: 'groove', m4_tower_big: 'groove', m4_tower_super: 'groove',
   warehouse: 'industry', refinery: 'industry', cargo_belts: 'industry',
   volcano: 'forge', magma_rise: 'forge', foundry: 'forge',
   forest: 'jungle', vietnam: 'jungle', overgrowth: 'jungle', biosphere: 'jungle', flying_moai: 'jungle',
@@ -17826,6 +17904,10 @@ const _DUEL_LOOK = {
   duel_crossroads:{ glow: 0xffb060, sky: 0x3a2c22, hor: 0x2d2018, zen: 0x0a0705, motes: [0xffb060, 0xffe0b0], tower: 'stack' },
   duel_pillars:   { glow: 0x66ffd8, sky: 0x1f3a36, hor: 0x143028, zen: 0x040a09, motes: [0x66ffd8, 0xc8fff0], tower: 'column' },
   duel_platform:  { glow: 0xd08aff, sky: 0x33264d, hor: 0x241a3a, zen: 0x07040d, motes: [0xd08aff, 0xecd0ff], tower: 'ziggurat' },
+  duel_alley:     { glow: 0xff5a5a, sky: 0x3a2024, hor: 0x2c161a, zen: 0x0a0405, motes: [0xff5a5a, 0xffc0b8], tower: 'stack' },
+  duel_cells:     { glow: 0x9aff5a, sky: 0x24381c, hor: 0x1a2a14, zen: 0x060a04, motes: [0x9aff5a, 0xe0ffc8], tower: 'column' },
+  duel_loft:      { glow: 0xff6ad0, sky: 0x40204a, hor: 0x2e1636, zen: 0x0b040d, motes: [0xff6ad0, 0xffc8ee], tower: 'pylon' },
+  duel_yard:      { glow: 0xffd84a, sky: 0x3a3418, hor: 0x2c2812, zen: 0x0a0903, motes: [0xffd84a, 0xfff0b0], tower: 'ziggurat' },
 };
 for (const id of DUEL_MAP_IDS) {
   const L = _DUEL_LOOK[id];
@@ -17844,11 +17926,11 @@ function _duelFinish(name) {
   const B = (x, y, z, w, h, d, hex) => _thBox(body, _TH_WORLD, x, y, z, w, h, d, hex);
   const Lt = (x, y, z, w, h, d, hex) => _thBox(lit, _TH_WORLD, x, y, z, w, h, d, hex);
   const dim = _duelMix(L.glow, o.wall, 0.55), dark = _duelMix(o.wall, 0x000000, 0.45), faint = _duelMix(L.glow, o.wall, 0.78);
-  const HX = DUEL_W / 2, HZ = DUEL_D / 2, T = 1, WH = 10;
+  const DW = G._duelSize.w, DD = G._duelSize.d, SZ = G._duelSize.spawnZ, HX = DW / 2, HZ = DD / 2, T = 1, WH = 10;
   // The border: a dark skirt, pilasters every 12 m with a lit slit between each pair, and two lit lines (one a third of the
   // way up, one along the very top). Along z (the long sides) and along x (the short ends) are the same walls turned.
   const border = (alongZ, sgn) => {
-    const len = alongZ ? DUEL_D : DUEL_W, face = (alongZ ? HX : HZ) * sgn;
+    const len = alongZ ? DD : DW, face = (alongZ ? HX : HZ) * sgn;
     const put = (u, y, su, sy, ss, hex, lighted) => {            // u runs along the wall, the wall's face is `face`
       const f = face - sgn * ss / 2;
       (lighted ? Lt : B)(alongZ ? f : u, y, alongZ ? u : f, alongZ ? ss : su, sy, alongZ ? su : ss, hex);
@@ -17889,7 +17971,7 @@ function _duelFinish(name) {
     }
   }
   // Each spawn pad: a lit frame, and chevrons on the floor in front of it pointing the way to the middle.
-  for (const [sz, col] of [[DUEL_SPAWN_Z, 0x6a9aff], [-DUEL_SPAWN_Z, 0xff6a6a]]) {
+  for (const [sz, col] of [[SZ, 0x6a9aff], [-SZ, 0xff6a6a]]) {
     const dir = -Math.sign(sz);
     for (const [cx, cz, w, d] of [[0, sz - 2.6, 14.6, 0.3], [0, sz + 2.6, 14.6, 0.3], [-7.15, sz, 0.3, 5.5], [7.15, sz, 0.3, 5.5]]) Lt(cx, 0.03, cz, w, 0.06, d, col);
     for (let k = 0; k < 3; k++) for (let i = 0; i < 5; i++) {
@@ -17898,7 +17980,7 @@ function _duelFinish(name) {
     }
   }
   // The centre of the map: two squares inlaid in the floor, with a tick at each corner.
-  for (const half of [13, 17]) {
+  for (const half of o.centre || [13, 17]) {
     for (const sg of [-1, 1]) { Lt(0, 0.03, sg * half, half * 2 + 0.3, 0.06, 0.3, dim); Lt(sg * half, 0.03, 0, 0.3, 0.06, half * 2, dim); }
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) Lt(sx * (half + 1.6), 0.03, sz * (half + 1.6), 1.2, 0.06, 1.2, L.glow);
   }
@@ -78881,10 +78963,14 @@ const MAP_DESCS = {
   pyongyang: 'Pyongyang — monuments, squares and wide-sweeping live-fire searchlights',
   traffic_cone_republic: '🚧 Traffic Cone Republic — giant cones, a roundabout, a flyover · TOLL LANES charge health for speed',
   flying_moai: '🗿 Flying Moai — a plateau of stone heads',
-  duel_grid:      '⚔️ Duel Grid — 1v1 and 2v2 · 144 × 224 m grid arena: high walls make rooms with doors, windowed walls, L bunkers, crates, and galleries up ramps',
-  duel_crossroads:'⚔️ Crossroads — 1v1 and 2v2 · 144 × 224 m · long high walls stagger into an S through the field; ramps take you over the middle on bridges',
-  duel_pillars:   '⚔️ Pillar Hall — 1v1 and 2v2 · 144 × 224 m · colonnades with arches, high aisle walls with doors, and raised stages up broad ramps',
-  duel_platform:  '⚔️ High Ground — 1v1 and 2v2 · 144 × 224 m · plateaus with ramps, corner towers, and high curtain walls that cut the floor into approaches',
+  duel_grid:      '⚔️ Duel Grid — 2v2 · 144 × 224 m grid arena: high walls make rooms with doors, windowed walls, L bunkers, crates, and galleries up ramps',
+  duel_crossroads:'⚔️ Crossroads — 2v2 · 144 × 224 m · long high walls stagger into an S through the field; ramps take you over the middle on bridges',
+  duel_pillars:   '⚔️ Pillar Hall — 2v2 · 144 × 224 m · colonnades with arches, high aisle walls with doors, and raised stages up broad ramps',
+  duel_platform:  '⚔️ High Ground — 2v2 · 144 × 224 m · plateaus with ramps, corner towers, and high curtain walls that cut the floor into approaches',
+  duel_alley:     '⚔️ Back Alley — 1v1 · 56 × 88 m · a wall between you, a corridor out of each start, and the fight in the side lanes and round the back',
+  duel_cells:     '⚔️ Cell Block — 1v1 · 56 × 88 m · rooms with doors on each side, a window to shoot through, and the yard between',
+  duel_loft:      '⚔️ Mezzanine — 1v1 · 56 × 88 m · a gallery up a ramp on each side, a windowed wall and crate stacks on the floor',
+  duel_yard:      '⚔️ Container Yard — 1v1 · 56 × 88 m · stacked containers, a loading dock up a ramp, and jersey barriers to crouch behind',
 };
 function selectMapPick(mapId) {
   selectedMap = pickedMap = mapId;
