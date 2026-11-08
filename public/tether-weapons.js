@@ -67,17 +67,41 @@
     const d=camera.position.clone().sub(own.point).setY(0).normalize();
     bot.kbVX=d.x*34;bot.kbVZ=d.z*34;bot.yVel=Math.max(bot.yVel||0,2);
   }
-  function reel(){
-    const own=[...bolts.values()].reverse().find(b=>b.phase==='latched');
-    if(!live()||!held()||!own||performance.now()<(own.nextReel||0))return;
-    own.nextReel=performance.now()+450;
-    if(own.target&&!players[own.target]?.dead){
-      if(socket.connected)socket.emit('harpoonReel',{id:own.id});
-      else pullLocalBot(own);
-    }else{
-      const d=own.point.clone().sub(camera.position).setY(0).normalize();_extVel.x=d.x*24;_extVel.z=d.z*24;
+  // Reeling (hold R, or tap E for a short pull): every bolt that is stuck in a wall or the ground pulls ME toward it, and the pulls ADD UP -- two
+  // bolts on one wall pull twice as hard, two on different walls drag you between them. A bolt stuck in an enemy drags THEM straight to me.
+  let reelHeld=false, reelUntil=0, clickAt=0;
+  const reeling=()=>reelHeld||performance.now()<reelUntil;
+  const PULL=62, PULL_MAX_SPEED=30, PULL_MAX_LIFT=24;
+  function reel(){if(live()&&held())reelUntil=performance.now()+450;}
+  function reelHold(on){reelHeld=!!on&&live()&&held();}
+  function applyReel(dt){
+    const now=performance.now(), eye=camera.position, sum=new THREE.Vector3();
+    let anchors=0;
+    for(const own of bolts.values()){
+      if(own.phase!=='latched')continue;
+      if(own.target){
+        if(players[own.target]?.dead||now<(own.nextReel||0))continue;
+        own.nextReel=now+450;
+        if(socket.connected)socket.emit('harpoonReel',{id:own.id});else pullLocalBot(own);
+        continue;
+      }
+      const d=own.point.clone().sub(eye),dist=d.length();
+      if(dist<0.8)continue;
+      sum.addScaledVector(d.divideScalar(dist),Math.min(1,(dist-0.8)/2.5));      // it lets go of you as you arrive
+      anchors++;
     }
-    playSoundEvent('click',{volume:.7,minGap:100});
+    if(!anchors||sum.lengthSq()<1e-6)return;
+    _extVel.x+=sum.x*PULL*dt;_extVel.z+=sum.z*PULL*dt;
+    const sp=Math.hypot(_extVel.x,_extVel.z);
+    if(sp>PULL_MAX_SPEED){_extVel.x*=PULL_MAX_SPEED/sp;_extVel.z*=PULL_MAX_SPEED/sp;}
+    window._blastCarry=true;                                                      // no ground drag while it is hauling you
+    const lift=sum.y*PULL*dt;
+    if(lift>0){                                                                   // anchors above you lift you off the ground
+      if(slamState)slamState.vel=Math.min(PULL_MAX_LIFT,slamState.vel+lift);
+      else if(playerYVel!==0||!isPlayerGrounded())playerYVel=Math.min(PULL_MAX_LIFT,playerYVel+lift);
+      else slamState={vel:Math.max(3,lift),type:'jump'};
+    }
+    if(now>clickAt){clickAt=now+320;playSoundEvent('click',{volume:.5,minGap:100});}
   }
   function draw(s,start){
     const d=s.point.clone().sub(start),len=d.length();s.line.visible=len>.03;
@@ -86,6 +110,8 @@
     if(s.bolt)s.bolt.position.copy(s.point);
   }
   function step(dt){
+    if(reelHeld&&!(live()&&held()))reelHeld=false;
+    if(bolts.size&&live()&&held()&&reeling())applyReel(dt);
     if(bolts.size&&(!live()||bolts.values().next().value.epoch!==matchEpoch)){clear(true);setBoltAmmo(capacity());return;}
     const start=bolts.size?muzzle():null;
     for(const own of bolts.values()){
@@ -154,5 +180,5 @@
   });
   socket.on('harpoonTripped',({id})=>{if(!players[id]?.dead)window.PVP_RAGDOLL?.knockdown(id);});
   socket.on('weaponSwap',({positions})=>{if(gameStarted&&!inLobby&&Array.isArray(positions))positions.forEach(place);});
-  window.PVP_TETHER_WEAPONS={fired,latch,recall,reel,step,swap,clear,get deployed(){return bolts.size>0;},get full(){return bolts.size>=capacity();},get latched(){return [...bolts.values()].some(b=>b.phase==='latched');}};
+  window.PVP_TETHER_WEAPONS={fired,latch,recall,reel,reelHold,step,swap,clear,get deployed(){return bolts.size>0;},get full(){return bolts.size>=capacity();},get latched(){return [...bolts.values()].some(b=>b.phase==='latched');}};
 })();

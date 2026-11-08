@@ -45963,7 +45963,7 @@ document.addEventListener('keydown', e => {
   // 💬 V — open the custom chat box (filtered; bots never react to it)
   if (e.code === 'KeyV' && !e.repeat && !commsMenuOpen && document.activeElement?.tagName !== 'INPUT') { e.preventDefault(); openVChat(); return; }
   if (e.code==='KeyR' && !e.repeat && reloading && (activeSlot === 'primary' || activeSlot === 'secondary')) tryActiveReload();
-  if (e.code==='KeyR' && activeSlot==='primary' && currentWeapon?.id==='harpoon_gun') window.PVP_TETHER_WEAPONS?.recall();
+  if (e.code==='KeyR' && activeSlot==='primary' && currentWeapon?.id==='harpoon_gun') window.PVP_TETHER_WEAPONS?.reelHold(true);   // hold R: reel (right-click recalls)
   if (e.code==='KeyR' && (activeSlot === 'primary' || activeSlot === 'secondary') && !reloading && !currentWeapon.noReload && weaponAmmo[currentWeaponIdx].ammo < currentWeapon.mag && weaponAmmo[currentWeaponIdx].reserve > 0) startReload();
   // 🔎 T — look the gun over. Cancelled by anything that needs the weapon.
   if (e.code === 'KeyT' && !e.repeat && !isDead && document.activeElement?.tagName !== 'INPUT'
@@ -46090,6 +46090,7 @@ document.addEventListener('keyup', e => {
   keys[e.code] = false;
   if (e.code==='Tab') showScoreboard(false);
   if (e.code === 'KeyE') minigunBraceHeld = false;
+  if (e.code === 'KeyR') window.PVP_TETHER_WEAPONS?.reelHold(false);
   if (e.code === 'KeyE' || e.code === 'KeyG') releaseHeldAbility();           // the instant you let go, a rev stops
   if (e.code === 'KeyE' && GAMEPLAY_SETTINGS.adsMode === 'hold'
       && isADS && activeSlot !== 'melee' && activeSlot !== 'support') {
@@ -52153,9 +52154,9 @@ function _updateAbilityHUD() {
   if (!nameEl || !fillEl) return;
   if(activeSlot==='primary'&&currentWeapon?.id==='harpoon_gun'){
     const ready=window.PVP_TETHER_WEAPONS?.latched;
-    nameEl.textContent='Tug Line';fillEl.style.width='100%';fillEl.style.background=ready?'#4caf50':'#555';
-    if(descEl)descEl.textContent='Hits yank enemies · Right-click or Reload recalls all bolts';
-    if(keyEl){keyEl.textContent='[E]';keyEl.style.opacity=ready?'1':'.4';}
+    nameEl.textContent='Reel';fillEl.style.width='100%';fillEl.style.background=ready?'#4caf50':'#555';
+    if(descEl)descEl.textContent='Hold R: bolts in walls pull you (they add up), bolts in enemies drag them to you · Right-click recalls all bolts';
+    if(keyEl){keyEl.textContent='[R]';keyEl.style.opacity=ready?'1':'.4';}
     return;
   }
   if(activeSlot==='primary'&&currentWeapon?.id==='hellfire'){
@@ -80858,7 +80859,7 @@ document.getElementById('btn-ads').addEventListener('touchstart', e => {
 document.getElementById('btn-reload-mobile').addEventListener('touchstart', e => {
   e.stopPropagation(); e.preventDefault();
   if (activeSlot !== 'primary' && activeSlot !== 'secondary') return;
-  if (currentWeapon?.id==='harpoon_gun') { window.PVP_TETHER_WEAPONS?.recall();return; }
+  if (currentWeapon?.id==='harpoon_gun') { window.PVP_TETHER_WEAPONS?.reel();return; }
   const pool = weaponAmmo[currentWeaponIdx];
   if (reloading) tryActiveReload();
   else if (!currentWeapon.noReload && pool.ammo < currentWeapon.mag && pool.reserve > 0) startReload();
