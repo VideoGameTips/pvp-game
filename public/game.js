@@ -29697,7 +29697,7 @@ function buildTectonic() {
   const oldTick = g._tick;
   const rock = (c, s) => new THREE.MeshPhongMaterial({ color: c, shininess: 14, specular: 0x2a2622, flatShading: true });
   _reskinByLum(g, [rock(0x34302d), rock(0x4d4640), rock(0x6d645a)]);
-  const crackM = new THREE.MeshBasicMaterial({ color: 0xff5a14, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false });
+  const crackM = new THREE.MeshBasicMaterial({ color: 0xc41408, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false });
   const meshes = []; g.traverse(m => { if (m.isMesh && m !== g._flash && m.geometry && m.geometry.type === 'BoxGeometry') meshes.push(m); });
   const spots = [];
   g.updateMatrixWorld(true);
@@ -29720,9 +29720,9 @@ function buildTectonic() {
   const fx = new THREE.Group(); fx.userData.eqFx = true; g.add(fx);
   const slabs = [0, 1, 2, 3].map(i => { const m = new THREE.Mesh(new THREE.IcosahedronGeometry(0.0085 + (i % 2) * 0.003, 0), rock(0x4d4640)); m.userData.ph = i * 1.57; fx.add(m); return m; });
   const embers = [];
-  for (let i = 0; i < 12; i++) { const m = new THREE.Mesh(new THREE.BoxGeometry(0.0025, 0.0025, 0.0025), new THREE.MeshBasicMaterial({ color: 0xffa040, transparent: true, depthWrite: false })); m.visible = false; fx.add(m); embers.push({ m, age: 9, life: 1 }); }
+  for (let i = 0; i < 12; i++) { const m = new THREE.Mesh(new THREE.BoxGeometry(0.0025, 0.0025, 0.0025), new THREE.MeshBasicMaterial({ color: 0xff3a14, transparent: true, depthWrite: false })); m.visible = false; fx.add(m); embers.push({ m, age: 9, life: 1 }); }
   let heat = 0, was = false, acc = 0;
-  const cold = new THREE.Color(0x7a1c06), hot = new THREE.Color(0xffe27a);
+  const cold = new THREE.Color(0x8a0a02), hot = new THREE.Color(0xff3a14);   // red all the way: deep blood-red when cool, a hot red-orange at most -- never yellow
   g._tick = (dt, now, assembling) => {
     if (oldTick) oldTick(dt, now, assembling);
     fx.visible = !assembling; if (assembling) return;
@@ -29735,7 +29735,7 @@ function buildTectonic() {
     acc += dt * heat * 16; while (acc >= 1 && spots.length) { acc -= 1; const e = embers.find(x => x.age >= x.life); if (!e) break; const s = spots[Math.floor(Math.random() * spots.length)]; e.m.position.copy(s); e.age = 0; e.life = 0.5 + Math.random() * 0.6; e.m.visible = true; }
     for (const e of embers) { if (e.age >= e.life) { e.m.visible = false; continue; } e.age += dt; e.m.position.y += 0.05 * dt; e.m.position.x += Math.sin(now * 9 + e.life * 7) * 0.01 * dt; e.m.material.opacity = 1 - e.age / e.life; }
   };
-  if (g._flash) _hackFlash(g._flash, 0xff9a3a);
+  if (g._flash) _hackFlash(g._flash, 0xff3a14);
   return g;
 }
 
@@ -55785,7 +55785,7 @@ const MODEL_SKINS = [
     sw: ['#7fc6ea', '#eaf8ff'], build: buildAbsoluteZero,
     blurb: 'Polished ice from stock to scope: a frosted barrel hung with icicles, crystals growing off the scope, and snowflakes drifting off it all the time. A shot or a reload shakes a flurry loose.' },
   { id: 'sg8_tectonic', weapon: 'sg8', name: 'Tectonic', rarity: 'rare',
-    sw: ['#4d4640', '#ff5a14'], build: buildTectonic,
+    sw: ['#4d4640', '#d01808'], build: buildTectonic,
     blurb: 'A pump shotgun cut from dark rock with magma in the cracks. Every shot makes the seams glow hotter and they cool when you stop; run it hot and embers lift off it. Loose slabs of stone hang round the muzzle.' },
   { id: 'ak20_hacker', weapon: 'ak20', name: 'Hacker AK', rarity: 'rare', look: { hit: 'hack' },
     sw: ['#08090a', '#2dff6a'], build: buildHackerAK,
