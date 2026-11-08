@@ -1,0 +1,29 @@
+newmtl black_steel
+Kd 0.035 0.038 0.043
+Ks 0.350 0.350 0.350
+Ns 56.000
+
+newmtl worn_steel
+Kd 0.420 0.450 0.480
+Ks 0.350 0.350 0.350
+Ns 56.000
+
+newmtl dark_rubber
+Kd 0.015 0.016 0.018
+Ks 0.350 0.350 0.350
+Ns 56.000
+
+newmtl walnut
+Kd 0.340 0.170 0.055
+Ks 0.350 0.350 0.350
+Ns 56.000
+
+newmtl walnut_light
+Kd 0.550 0.310 0.100
+Ks 0.350 0.350 0.350
+Ns 56.000
+
+newmtl red_mark
+Kd 0.720 0.180 0.100
+Ks 0.350 0.350 0.350
+Ns 56.000

@@ -3591,11 +3591,15 @@ if (ok && process.argv.includes('--sample')) {
           setAll(() => ({ buf: null, loading: true, failed: false })); if (boom(1.1).length) issues.push('until a clip is decoded the made-up boom plays');
           setAll(() => ({ buf: null, loading: false, failed: true })); if (boom(1.1).length) issues.push('if the files never load the made-up boom plays');
           setAll(() => ({ buf: SAMPLE, loading: false, failed: false })); } }
-      // a gun is the gun under any skin: the MP5 one, and the ones with a gag sound of their own, all play the recording (checked on a rifle, a pistol and the Vector)
+      // a skin that is only another real gun (the MP5 Vector) plays the recording; a skin with a voice of its own (a zip, a bubble gun, a laser...) keeps it, whatever
+      // gun it sits on (checked on a rifle, a pistol and the Vector). A remote shot has no skin known and is always the gun recording.
       const keepFx = _skinFxFor;
-      for (const who of ['vector', 'srx', 'hand_cannon']) for (const snd of [{ kind: 'auto_blast', vol: 0.18, dur: 0.07, f1: 0, f2: 0, action: 'slide' }, { kind: 'zip', vol: 0.22, dur: 0.06, f1: 1800, f2: 3400 }, { kind: 'bubblegun', vol: 0.2, dur: 0.07, f1: 420, f2: 980 }]) {
+      for (const who of ['vector', 'srx', 'hand_cannon']) for (const [snd, recorded] of [[{ kind: 'auto_blast', vol: 0.18, dur: 0.07, f1: 0, f2: 0, action: 'slide' }, true], [{ kind: 'zip', vol: 0.22, dur: 0.06, f1: 1800, f2: 3400 }, false], [{ kind: 'bubblegun', vol: 0.2, dur: 0.07, f1: 420, f2: 980 }, false]]) {
         _skinFxFor = (i) => i === who ? { sound: snd } : keepFx(i);
-        clear(); sampleHits = 0; _sampleVoices = 0; playWeaponSound(who, {}); if (sampleHits !== 1) issues.push('a ' + who + ' skin (' + snd.kind + ') should play the recording too');
+        clear(); sampleHits = 0; _sampleVoices = 0; playWeaponSound(who, {});
+        if (recorded && sampleHits !== 1) issues.push('a ' + who + ' skin that is only a real gun (' + snd.kind + ') should play the recording');
+        if (!recorded && sampleHits) issues.push('a ' + who + ' skin with a voice of its own (' + snd.kind + ') should keep it, not play the recording');
+        clear(); sampleHits = 0; _sampleVoices = 0; playWeaponSound(who, { remote: true }); if (sampleHits !== 1) issues.push('another player ' + who + ' is the gun recording whatever skin it wears');
       }
       _skinFxFor = keepFx;
       // the realistic skins that have a recording of their own (SKIN_SAMPLES): YOUR shot with the skin on plays it, someone else's shot (no skin known) and a skin without one play the gun's own
@@ -3611,8 +3615,9 @@ if (ok && process.argv.includes('--sample')) {
           _activeModelSkin[gun] = { id: skinId };
           const mine = played(gun); if (mine.join() !== d.file) issues.push('your ' + gun + ' wearing the ' + skinId + ' skin should play the skin recording (' + d.file + '), played ' + mine.join());
           const theirs = played(gun, { remote: true, position: new THREE.Vector3(20, 1, 0) }); if (theirs.join() !== own) issues.push('someone else shot with a ' + skinId + ' has no skin you can know of: it is the gun, ' + own + ', played ' + theirs.join());
-          // the skin recording is not loaded yet: the gun's own plays (never silence)
-          _sampleState[d.file] = { buf: null, loading: true, failed: false }; const early = played(gun); if (own !== d.file && early.join() !== own) issues.push('until the ' + skinId + ' recording is there the gun own recording plays, played ' + early.join());
+          // the skin recording is not loaded yet (never silence): a skin that is only another real gun plays the gun own recording; a skin with a voice of its own (the neon lasers) plays that made-up voice, which is no sample at all
+          const fxv = SKIN_FX[skinId], ownVoice = !!(fxv && fxv.sound && !REAL_GUN_VOICES.has(fxv.sound.kind)), wantEarly = ownVoice ? '' : own;
+          _sampleState[d.file] = { buf: null, loading: true, failed: false }; const early = played(gun); if ((own !== d.file || ownVoice) && early.join() !== wantEarly) issues.push('until the ' + skinId + ' recording is there ' + (ownVoice ? 'its own made-up voice' : 'the gun own recording') + ' plays, played ' + early.join());
           withTags(); delete _activeModelSkin[gun];
         }
         // a realistic skin with no recording of its own: the gun's
@@ -3946,6 +3951,95 @@ if (ok && process.argv.includes('--hair')) {
   })()`);
   console.log('hair checks: a hairstyle goes on every skin (headwear comes off), Bald is bald, Skin Default leaves the head alone');
   if (issues.length) { ok = false; console.log(issues.slice(0, 20).join('\n')); }
+}
+
+if (ok && process.argv.includes('--oblivion')) {
+  // Oblivion, a skin of the Railgun: a black rod ringed with white silver; its shot (the charged beam, and the bullet other players see) leaves a trail of pure black that hangs and thins;
+  // a hit closes on itself like a tiny hole; the damage counter is white on black; whatever it kills is drawn into a black hole and fades (the skin's own finisher, not one anybody can pick).
+  const out = vm.runInThisContext(`(() => {
+    const issues = [], skin = MODEL_SKINS.find(m => m.id === 'railgun_oblivion');
+    if (!skin) return ['there is no railgun_oblivion skin'];
+    if (skin.weapon !== 'railgun') issues.push('Oblivion is a skin of the railgun, not of ' + skin.weapon);
+    if (!GATED_MODEL_SKIN_IDS.has(skin.id) || !GEN2_MODEL_SKIN_IDS.has(skin.id)) issues.push('no skin is free: it must be pulled from the Gen 2 case (GEN2_MODEL_SKIN_IDS)');
+    if (!SKIN_FX[skin.id] || !SKIN_FX[skin.id].equip) issues.push('a Gen 2 skin plays an entrance when you draw it');
+    const look = skinLookFor(skin);
+    if (look.hit !== 'void' || look.beam !== 'void') issues.push('its look should name the void hit and the void beam, got ' + JSON.stringify({ hit: look.hit, beam: look.beam }));
+    if (!HIT_STYLES.void || !HIT_STYLES.void.void) issues.push('there is no void hit style');
+    if (FINISHER_IDS.includes('void')) issues.push('the black hole belongs to the skin: nobody can pick it');
+    const T = SKIN_SHOT[skin.id];
+    if (!T || !T.shot || T.shot.shape !== 'voidbolt') issues.push('its round should be the voidbolt shape');
+    else {
+      const P = SKIN_SHAPES.voidbolt(0x050506, 0xf4f8ff, 0.1);
+      if (!P.wakeDark || !(P.wakeLen >= 20)) issues.push('the trail should be dark and long (wakeDark, wakeLen 20 or more)');
+      const mesh = makeBulletMesh(0xffffff, 0.055, 'railgun', true, look);
+      let dark = 0; mesh.traverse(o => { const m = o.material; if (m && m.color && m.color.getHex() === 0 && m.blending === THREE.NormalBlending && m.transparent) dark++; });
+      if (!dark) issues.push('the trail should be pure black with normal blending (not additive: that cannot be dark)');
+    }
+    const g = buildOblivionRail();
+    if (!g._flash || typeof g._tick !== 'function') issues.push('the model needs a muzzle flash and its tick (the pulse down the rings)');
+    else { try { g._tick(0.016, 1); g._tick(0.016, 2); } catch (e) { issues.push('the ring pulse throws: ' + e.message); } }
+    let adds = 0; g.traverse(o => { if (o.material && o.material.blending === THREE.AdditiveBlending) adds++; });
+    if (adds < 16) issues.push('the rod should carry at least 16 glowing rings, found ' + adds + ' additive parts');
+    if (_playSkinFinisher('void', 'nobody') !== false) issues.push('a kill with no body to play on should give false');
+    const saved = { sound: playSoundEvent, flash: flashScreen, feed: pushFeedLine, raf: requestAnimationFrame, st: setTimeout, rd: window.PVP_RAGDOLL, now: performance.now };
+    playSoundEvent = () => {}; flashScreen = () => {}; const feed = []; pushFeedLine = (a) => { feed.push(a); };
+    let clock = 1000, rafQ = [], timers = [];
+    Object.defineProperty(performance, 'now', { value: () => clock, configurable: true, writable: true });
+    requestAnimationFrame = cb => { rafQ.push(cb); return rafQ.length; };
+    setTimeout = (fn, ms) => { timers.push([clock + (ms || 0), fn]); return timers.length; };
+    const pump = ms => { const end = clock + ms; while (clock < end) { clock += 16; const q = rafQ; rafQ = []; q.forEach(f => f()); const due = timers.filter(t => t[0] <= clock); timers = timers.filter(t => t[0] > clock); due.forEach(t => t[1]()); } };
+    let ragdolls = 0; window.PVP_RAGDOLL = { death: () => { ragdolls++; return true; }, reset() {}, blast() {}, tick() {}, clear() {}, hit: () => null };
+    const keepLook = _modelSkinLook.railgun;
+    const make = key => { const m = makePlayerMesh('Dummy', true, 'enemy', 'default', {}); m.position.set(10, 0, 10); m.visible = true; scene.add(m); remoteMeshes[key] = m; players[key] = { name: 'V', dead: true }; return m; };
+    const drop = key => { scene.remove(remoteMeshes[key]); delete remoteMeshes[key]; delete players[key]; };
+    try {
+      // a hit: a ball and a ring and specks, all gone again
+      { const before = scene.children.length; skinHitFX('void', new THREE.Vector3(1, 1, 1), true);
+        if (scene.children.length < before + 2) issues.push('a hit should put a ball and a ring in the scene');
+        pump(700); if (scene.children.length !== before) issues.push('the hit left ' + (scene.children.length - before) + ' things in the scene'); }
+      // the beam: a black tube and a hair of white, hanging for a second and a half and then gone
+      { const before = scene.children.length; _spawnVoidBeam(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 1, -50), 0.05);
+        if (scene.children.length !== before + 2) issues.push('the beam should be two meshes, a black tube and a white core');
+        pump(900); if (scene.children.length !== before + 1 && scene.children.length !== before + 2) issues.push('the black tube should still hang there after 0.9 s');
+        pump(900); if (scene.children.length !== before) issues.push('the beam was not cleaned up: ' + (scene.children.length - before) + ' left'); }
+      // a kill with it: the body goes into a black hole and is gone, with no ragdoll, and everything it made is cleaned up
+      for (const who of ['mine', 'theirs']) {
+        const key = 'ob_' + who, mesh = make(key), start = mesh.position.clone(), ss = mesh.scale.clone(), before = scene.children.length;
+        _modelSkinLook.railgun = look; ragdolls = 0; feed.length = 0;
+        if (who === 'mine') triggerFinisher(key, 'railgun', myId); else { delete _modelSkinLook.railgun; triggerFinisher(key, 'railgun', 'someone_else', skin.id); }
+        if (!mesh._finisher) { issues.push(who + ': the kill did not take the body'); drop(key); continue; }
+        if (ragdolls) issues.push(who + ': the ragdoll started on a body that was meant to collapse');
+        if (feed[0] !== 'ERASED') issues.push(who + ': the kill feed should say ERASED, got ' + feed[0]);
+        pump(500); if (scene.children.length <= before) issues.push(who + ': no black hole opened');
+        let smallest = 1; for (let i = 0; i < 120 && mesh.visible; i++) { pump(16); smallest = Math.min(smallest, mesh.scale.x); }
+        if (smallest > 0.5) issues.push(who + ': the body should have been drawn thin, its smallest width was ' + smallest.toFixed(2));
+        if (mesh.visible) issues.push(who + ': the body never went away');
+        pump(900); if (scene.children.length !== before) issues.push(who + ': the hole left ' + (scene.children.length - before) + ' things in the scene');
+        if (mesh._finisher || mesh._finisherMats) issues.push(who + ': the body was not given back');
+        if (mesh.position.distanceTo(start) > 0.01 || mesh.scale.distanceTo(ss) > 0.01) issues.push(who + ': the body was not put back');
+        drop(key);
+      }
+      // it comes back to life half way: the hole must not outlive it
+      { pump(900); const key = 'ob_alive', mesh = make(key), before = scene.children.length; _modelSkinLook.railgun = look;
+        triggerFinisher(key, 'railgun', myId); pump(500); players[key].dead = false; pump(2200);
+        if (scene.children.length !== before) issues.push('a body that came back to life left ' + (scene.children.length - before) + ' things in the scene'); if (!mesh.visible) issues.push('and it should stay visible'); drop(key); }
+      // a stock railgun kill is not collapsed
+      { const key = 'ob_stock', mesh = make(key); delete _modelSkinLook.railgun; ragdolls = 0; triggerFinisher(key, 'railgun', myId); if (mesh._finisher && mesh._finisher.id === 'void') issues.push('a stock railgun kill must not collapse into a hole'); drop(key); }
+    } finally {
+      playSoundEvent = saved.sound; flashScreen = saved.flash; pushFeedLine = saved.feed; requestAnimationFrame = saved.raf; setTimeout = saved.st; window.PVP_RAGDOLL = saved.rd;
+      Object.defineProperty(performance, 'now', { value: saved.now, configurable: true, writable: true });
+      if (keepLook) _modelSkinLook.railgun = keepLook; else delete _modelSkinLook.railgun;
+    }
+    return issues;
+  })()`);
+  { // no skin is free: the six made with it are dealt by the Gen 2 case (the server owns the roll), in the tier their entrance and effort earn
+    const srv = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+    const tier = (name) => { const m = srv.match(new RegExp('const ' + name + ' = \\[([\\s\\S]*?)\\];')); return m ? m[1] : ''; };
+    const want = { GEN2_LEGENDARY_SKIN_IDS: ['railgun_oblivion'], GEN2_RARE_SKIN_IDS: ['akimbo_apex'], GEN2_GOOD_SKIN_IDS: ['machine_pistol_money_gun', 'sawed_off_baguette', 'freeze_gun_lava_lamp', 'cycler_smartphone'] };
+    for (const [name, ids] of Object.entries(want)) for (const id of ids) if (!tier(name).includes("'" + id + "'")) out.push(id + ' should be in server.js ' + name + ' (no skin is free)');
+  }
+  console.log('oblivion checks: a Gen 2 railgun skin, a black rod with a pulse down its white rings, a round on a long pure-black trail, the charged beam is a black tube that hangs and thins, a hit closes like a hole, a kill (yours, or the skin id the server passes on) collapses the body into a black hole that cleans up after itself');
+  if (out.length) { ok = false; console.log(out.join('\n')); }
 }
 
 if (ok && process.argv.includes('--finisher')) {

@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   let C=null,physics=null,map=null,lastBlast=null,accumulator=0;
-  const active=[],statics=new Map();
+  const active=[],resting=[],statics=new Map();
   const ready=import('./vendor/cannon-es.js').then(module=>{C=module;}).catch(error=>console.warn('[ragdoll] physics unavailable',error));
   const vec=p=>new C.Vec3(p.x,p.y,p.z);
   function setup(point){
@@ -23,17 +23,28 @@
     const body=new C.Body({mass:0,shape:new C.Box(size),collisionFilterGroup:1});body._terrain=terrain;body.position.set((box.max.x+box.min.x)/2,(box.max.y+box.min.y)/2,(box.max.z+box.min.z)/2);physics.addBody(body);statics.set(box,body);
   }
   function release(entry,restore=false){
-    const i=active.indexOf(entry);if(i<0)return;active.splice(i,1);
-    scene.remove(entry.visual);for(const joint of entry.joints)physics?.removeConstraint(joint);for(const part of entry.parts)physics?.removeBody(part.body);
+    const list=entry.settled?resting:active,i=list.indexOf(entry);if(i<0)return;list.splice(i,1);
+    scene.remove(entry.visual);if(!entry.settled){for(const joint of entry.joints)physics?.removeConstraint(joint);for(const part of entry.parts)physics?.removeBody(part.body);}
     if(entry.source._ragdoll===entry){entry.source._ragdoll=null;if(restore&&!entry.dead)entry.source.visible=true;}
     if(entry.owned)disposeBody(entry.source);
   }
-  function clear(){for(const entry of [...active])release(entry,!entry.dead);physics=null;map=null;statics.clear();accumulator=0;lastBlast=null;}
-  function create(source,id,dead,velocity){
+  function clear(){for(const entry of [...active,...resting])release(entry,!entry.dead);physics=null;map=null;statics.clear();accumulator=0;lastBlast=null;}
+  function settle(entry){
+    const i=active.indexOf(entry);if(i<0)return;active.splice(i,1);
+    for(const joint of entry.joints)physics.removeConstraint(joint);
+    for(const part of entry.parts)physics.removeBody(part.body);
+    entry.settled=true;resting.push(entry);
+  }
+  function create(source,id,dead,velocity,persistent=false){
     if(!C||!source?._rig)return null;
     let entry=source._ragdoll;
     if(entry){if(dead){entry.dead=true;entry.life=Math.max(entry.life,entry.age+4);}return entry;}
-    setup(source.position);while(active.length>=8)recover(active[0]);
+    setup(source.position);
+    // Low Effects keeps articulated hips/shoulders without simulating every
+    // finger-sized segment. A single upright box could balance on its feet.
+    const simple=persistent&&(window.PVP_BATTLE_SIM?.lowEffects||active.filter(e=>!e.simple).length>=24);
+    const limit=persistent?300:8;
+    while(active.length>=limit){const oldest=active[0];if(oldest.persistent)settle(oldest);else recover(oldest);}
     source.updateWorldMatrix(true,true);
     const visual=source.clone(true),sourceNodes=[],cloneNodes=[],mapping=new Map();source.traverse(n=>sourceNodes.push(n));visual.traverse(n=>cloneNodes.push(n));sourceNodes.forEach((n,i)=>mapping.set(n,cloneNodes[i]));
     const rig=source._rig,parts=[],byName={},joints=[];visual.visible=true;visual._ragdollVisual=true;scene.add(visual);visual.updateWorldMatrix(true,true);
@@ -45,11 +56,24 @@
     const defs=[['pelvis',B.pelvisW,B.pelvisH,B.chestD,5,0,0],['torso',B.chestW,B.torsoH,B.chestD,8,0,0],['head',B.headHalfW*2,B.headH,B.headHalfD*2,3,0,0]];
     for(const side of ['L','R'])defs.push(['arm'+side,B.upperArmW,B.upperArm,B.upperArmW,2,-B.upperArm/2,0],['elbow'+side,B.foreArmW,B.foreArm,B.foreArmW,1.5,-B.foreArm/2,0],['wrist'+side,B.handW,B.handH,B.handW,.6,-B.handH/2,0],['leg'+side,B.thighW,B.thigh,B.thighD,3,-B.thigh/2,0],['knee'+side,B.shinW,B.shin,B.shinD,2,-B.shin/2,0],['foot'+side,B.bootW,B.bootH,B.bootD,1,-B.bootH/2,B.bootZ]);
     for(const [name,w,h,d,mass,oy,oz] of defs){
+      if(simple&&/^(elbow|wrist|knee|foot)/.test(name))continue;
       const original=rig[name],node=mapping.get(original);if(!node)continue;
       const offset=new THREE.Vector3(0,oy,oz),center=original.localToWorld(offset.clone()),q=original.getWorldQuaternion(new THREE.Quaternion());
       const body=new C.Body({mass,shape:new C.Box(new C.Vec3(w*.48,h*.48,d*.48)),linearDamping:.15,angularDamping:.55,collisionFilterGroup:2,collisionFilterMask:1,sleepSpeedLimit:.18,sleepTimeLimit:.7});
       body.position.copy(vec(center));body.quaternion.set(q.x,q.y,q.z,q.w);body.velocity.copy(vec(velocity));body.angularVelocity.set(spin.x+(Math.random()-.5),spin.y,spin.z+(Math.random()-.5));physics.addBody(body);
       const part={name,node,body,offset};parts.push(part);byName[name]=part;
+    }
+    if(simple){
+      // Keep the original bent limb pose, but fit separate collision shapes to
+      // each segment instead of an oversized box spanning empty space.
+      for(const [name,w,h,d,mass,oy,oz] of defs){
+        const base=name.replace(/^(elbow|wrist)/,'arm').replace(/^(knee|foot)/,'leg');
+        if(base===name||!byName[base]||!rig[name])continue;
+        const part=byName[base],original=rig[name],center=vec(original.localToWorld(new THREE.Vector3(0,oy,oz))),q=original.getWorldQuaternion(new THREE.Quaternion());
+        const rotation=part.body.quaternion.conjugate().mult(new C.Quaternion(q.x,q.y,q.z,q.w));
+        part.body.addShape(new C.Box(new C.Vec3(w*.48,h*.48,d*.48)),part.body.pointToLocalFrame(center),rotation);
+        part.body.mass+=mass;part.body.updateMassProperties();
+      }
     }
     function join(a,b,anchorNode,angle=1.3){
       const A=byName[a]?.body,B=byName[b]?.body;if(!A||!B||!anchorNode)return;
@@ -58,16 +82,25 @@
     }
     join('pelvis','torso',rig.pelvis,.5);join('torso','head',rig.neck,.65);
     for(const side of ['L','R']){join('torso','arm'+side,rig['arm'+side],1.8);join('arm'+side,'elbow'+side,rig['elbow'+side],1.7);join('elbow'+side,'wrist'+side,rig['wrist'+side],.7);join('pelvis','leg'+side,rig['leg'+side],1.3);join('leg'+side,'knee'+side,rig['knee'+side],1.5);join('knee'+side,'foot'+side,rig['foot'+side],.55);}
-    entry={id,source,visual,parts,joints,byName,dead,owned:false,age:0,life:dead?5:3.5};source._ragdoll=entry;source.visible=false;active.push(entry);return entry;
+    // Break the balanced standing stance, even for a stationary, non-explosive
+    // death. Opposing chest/hip motion starts a fall without launching a body.
+    if(dead){
+      const fall=new THREE.Vector3(velocity.x,0,velocity.z);
+      if(fall.lengthSq()<.01)fall.set(0,0,1).applyQuaternion(source.getWorldQuaternion(new THREE.Quaternion()));
+      fall.y=0;fall.normalize();
+      byName.torso.body.velocity.x+=fall.x*1.8;byName.torso.body.velocity.z+=fall.z*1.8;
+      byName.pelvis.body.velocity.x-=fall.x*.6;byName.pelvis.body.velocity.z-=fall.z*.6;
+    }
+    entry={id,source,visual,parts,joints,byName,dead,owned:false,age:0,life:persistent?Infinity:dead?5:3.5,persistent,simple};source._ragdoll=entry;source.visible=false;active.push(entry);return entry;
   }
   function sourceFor(id){
     if(id!==myId)return remoteMeshes[id];
     const mesh=makePlayerMesh(currentUser?.username||'You',false,localPlayerTeam(),mySkin||'default',{hair:myHair});
     mesh.position.copy(camera.position);mesh.position.y-=window._crouchEye||1.65;mesh.rotation.y=euler.y+Math.PI;return mesh;
   }
-  function death(id,weaponId){
+  function death(id,weaponId,opts={}){
     if(!C)return false;
-    const previous=active.find(e=>e.id===id);if(previous){previous.dead=true;previous.life=Math.max(previous.life,previous.age+4);return true;}
+    const previous=[...active,...resting].find(e=>e.id===id);if(previous){previous.dead=true;previous.life=Math.max(previous.life,previous.age+4);return true;}
     const source=sourceFor(id);if(!source||(!source.visible&&id!==myId))return false;
     const bot=resolveBot(id),velocity=new THREE.Vector3(bot?.kbVX||0,Math.max(0,bot?.yVel||0),bot?.kbVZ||0);
     const info=_killInfo[id],weapon=info?.weapon||weaponId||'',base=weapon.replace(/_splash$/,''),explosive=EXPLOSIVE_KINDS.has(projectileKind(base,projectileWeaponSpec(base)))||/^(frag|c4|satchel|explosive_barrel|airburst|mortar)(_|$)/.test(weapon)||info?.cause==='hazard'&&/bomb|explos|air.?raid|mortar/i.test(info.label||'');
@@ -77,7 +110,8 @@
       const kick=impulse(origin,source.position.clone().add(new THREE.Vector3(0,.3,0)),24,recent?BLAST_RADIUS:100);if(kick)velocity.add(kick);
     }
     if(velocity.length()<.5)velocity.set((Math.random()-.5)*1.8,.7,(Math.random()-.5)*1.8);
-    const entry=create(source,id,true,velocity);if(entry){entry.explosive=!!explosive;if(id===myId){entry.owned=true;exitSpectator();stopSocialView();if(PLAYER_VIEW.actor)PLAYER_VIEW.actor.visible=false;}}return !!entry;
+    const persistent=!!opts.persistent&&window.PVP_BATTLE_SIM?.active&&id.startsWith('sim_');
+    const entry=create(source,id,true,velocity,persistent);if(entry){entry.explosive=!!explosive;if(id===myId){entry.owned=true;exitSpectator();stopSocialView();if(PLAYER_VIEW.actor)PLAYER_VIEW.actor.visible=false;}}return !!entry;
   }
   function impulse(pos,point,power,radius){const away=point.clone().sub(pos),d=away.length();if(d>=radius)return null;away.y=Math.max(.7,away.y);return away.normalize().multiplyScalar(power*(1-d/radius));}
   function blast(pos){
@@ -113,7 +147,8 @@
         if(entry.id===myId){camera.position.set(root.position.x,root.position.y+.8,root.position.z);shooting=false;}
         else {entry.source.position.set(root.position.x,root.position.y-.8,root.position.z);if(bot){bot.x=root.position.x;bot.z=root.position.z;bot.y=root.position.y-.8;if(players[entry.id])Object.assign(players[entry.id],{x:bot.x,y:bot.y+1.65,z:bot.z});}}
       }
-      if(entry.age>entry.life||root.position.y < -80||!entry.dead&&entry.age>1.2&&entry.parts.every(p=>p.body.sleepState===C.Body.SLEEPING))recover(entry);
+      if(entry.persistent&&entry.age>1.5&&entry.parts.every(p=>p.body.sleepState===C.Body.SLEEPING))settle(entry);
+      else if(entry.age>entry.life||root.position.y < -80||!entry.dead&&entry.age>1.2&&entry.parts.every(p=>p.body.sleepState===C.Body.SLEEPING))recover(entry);
     }
   }
   const followCamera=new THREE.PerspectiveCamera(75,1,.04,1000);
@@ -139,5 +174,12 @@
     if(entry.dead && entry.age>=3 && match?.type==='elim' && match.roundActive && !match.over && getLiveAllies().length)return null;
     return entry;
   }
-  window.PVP_RAGDOLL={ready,death,blast,tick,clear,viewCamera,hit,reset:mesh=>{if(mesh?._ragdoll)release(mesh._ragdoll,false);},resetLocal:()=>{for(const e of [...active])if(e.id===myId)release(e,false);},get entries(){return active;},get controlling(){return !!localCameraEntry();}};
+  function knockdown(id){
+    if(!C||players[id]?.dead||resolveBot(id)?.boss||active.some(e=>e.id===id))return false;
+    const source=sourceFor(id);if(!source||!source.visible)return false;
+    const dir=new THREE.Vector3(Math.sin(source.rotation.y)*3,.55,Math.cos(source.rotation.y)*3);
+    const entry=create(source,id,false,dir);if(!entry)return false;
+    entry.life=1.35;entry.owned=id===myId;return true;
+  }
+  window.PVP_RAGDOLL={ready,death,knockdown,blast,tick,clear,viewCamera,hit,reset:mesh=>{if(mesh?._ragdoll)release(mesh._ragdoll,false);},resetLocal:()=>{for(const e of [...active])if(e.id===myId)release(e,false);},get entries(){return [...active,...resting];},get controlling(){return !!localCameraEntry();}};
 })();

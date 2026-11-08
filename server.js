@@ -321,7 +321,7 @@ const WEAPON_COSTS = {
   coilgun: 460,  painter_beam: 300, gravity_paint: 400,
   portal_launcher: 460,  traffic_controller: 320,
   // Primaries — Explosive / projectile
-  boombow: 500, gravity_launcher: 480, harpoon_gun: 440, mortar_rifle: 480, phase_rifle: 550,
+  boombow: 500, gravity_launcher: 480, harpoon_gun: 440, mortar_rifle: 480, phase_rifle: 550, swap_gun: 600,
   firework_launcher: 360, shockwave_launcher: 460, airburst_projector: 360,
   pinball_launcher: 440, seismic_hammer: 480, glassmaker: 380,
   // Primaries — Tactical / precision / battle rifle
@@ -445,9 +445,10 @@ const DONUT_SKIN_IDS = [
 // (gotcha #4): that list decides what the picker locks, this one what drops.
 const GEN2_MYTHIC_SKIN_IDS = DONUT_SKIN_IDS;   // one list, so the two cannot drift apart
 const GEN2_LEGENDARY_SKIN_IDS = [
-  'ak20_rainbow',
+  'ak20_rainbow', 'railgun_oblivion',
 ];
 const GEN2_RARE_SKIN_IDS = [
+  'revolver_final_notice','vector_crimson',
   'ak20_hyperspace', 'ak20_blueprint', 'sg8_portal', 'vector_portal',
   'railgun_portal_detector', 'p90_quantum_scanner', 'freeze_hyperslush', 'firework_showman',
   'shorty_outlaw', 'snub_gunslinger', 'deagle_glitch', 'deagle_phantom',
@@ -457,11 +458,14 @@ const GEN2_RARE_SKIN_IDS = [
   'lightsabre_singularity', 'katana_laser', 'katana_sakura', 'katana_thunder',
   'combat_axe_frost', 'shock_baton_thunder', 'spear_thunder',
   'katana_tidal_fang', 'frag_stopwatch',
+  'akimbo_apex',
 ];
 const GEN2_GOOD_SKIN_IDS = [
+  'katana_tape_measure',
   'pistol_origami', 'xm7_bricks', 'vector_brick_labeler', 'shorty_buzzdraw', 'srx_8bit',
   'ak20_8bit', 'sg8_8bit', 'revolver_8bit', 'vector_8bit', 'shorty_8bit', 'knife_balloon',
   'bat_inflatable', 'frying_pan_pizza_cutter', 'sabre_balloon', 'knife_twin',
+  'machine_pistol_money_gun', 'sawed_off_baguette', 'freeze_gun_lava_lamp', 'cycler_smartphone',
 ];
 // The Neon Rift series: seven Gen 2 skins that light up. Ordinary rarity, so they drop alongside the other 'rare' entrances.
 GEN2_RARE_SKIN_IDS.push('ak20_cyberpunk', 'srx_cyberpunk', 'sg8_cyberpunk', 'vector_cyberpunk', 'pistol_cyberpunk', 'mp40_cyberpunk', 'revolver_cyberpunk');
@@ -482,8 +486,8 @@ for (const id of GEN2_NEW_MYTHIC_SKIN_IDS) GEN2_SKIN_WEIGHTS[id] = 0.5;    // ha
 // the admin still gets everything). Mirrors the skins of every `archived: true` item in public/game.js (gotcha #4);
 // tools/verify-boot.js --archivedskins fails if the two lists ever differ.
 const ARCHIVED_SKIN_IDS = new Set([
-  'arc_rifle_jumper_cables', 'plasma_carbine_lava_lamp', 'smart_smg_smartphone', 'potato_cannon_crisp_tube', 'foam_cannon_extinguisher',
-  'harpoon_selfie_stick', 'boomstick_binoculars', 'signal_pistol_bike_horn', 'amr_pool_net', 'glassmaker_squeegee',
+  'arc_rifle_jumper_cables', 'potato_cannon_crisp_tube', 'foam_cannon_extinguisher',
+  'harpoon_selfie_stick', 'frost_blaster_window_ac', 'boomstick_binoculars', 'signal_pistol_bike_horn', 'amr_pool_net', 'glassmaker_squeegee',
   'painter_beam_roller', 'seismic_pogo_stick', 'traffic_stop_sign', 'switchblade_pocket_knife', 'flechette_bullpup',
   'firework_showman', 'plasma_carbine_fishbowl', 'coilgun_clockwork', 'smart_smg_neon',
   'portal_launcher_constellation', 'burst_cannon_phantom', 'lancer_fencing_foil', 'arc_torrent_cord_reel',
@@ -505,6 +509,7 @@ for (const id of Object.keys(WEAPON_COSTS)) {
 // (gotcha #4) -- pulled from the shop, and from chest/wheel reward pools
 // below, but still a valid purchase for anyone who already owns one.
 const ARCHIVED_ITEM_IDS = new Set([
+  'bazooka',
   'amr',
   'shockwave_launcher',
   'storm_cannon',
@@ -539,7 +544,6 @@ const ARCHIVED_ITEM_IDS = new Set([
   'gravity_launcher',
   'potato_cannon',
   'sticker_blaster',
-  'harpoon_gun',
   'boomstick',
   'signal_pistol',
   'throwing_axes',
@@ -605,7 +609,7 @@ const ADMIN_ITEM_IDS = new Set([
 function sanitizeBotWeaponId(id, ownerMode = '') {
   if (M4_TOWER_MODES.has(ownerMode)) return 'm4a1_arena';
   id = String(id || 'ak20');
-  if (id === 'm4a1_arena') return 'ak20';
+  if (id === 'm4a1_arena' || id === 'harpoon_gun' || id === 'swap_gun') return 'ak20';
   if (ARCHIVED_ITEM_IDS.has(id) || ADMIN_ITEM_IDS.has(id)) return 'ak20';
   if (!Object.prototype.hasOwnProperty.call(WEAPON_DAMAGE, id)) return 'ak20';
   return id;
@@ -799,6 +803,7 @@ app.post('/shop/upgrade-weapon', (req, res) => {
   const u = authedUser(req);
   if (!u) return res.status(401).json({ error: 'auth failed' });
   if (!UPGRADE_STATS.includes(stat)) return res.status(400).json({ error: 'invalid stat' });
+  if (weaponId==='harpoon_gun') return res.status(400).json({ error: 'Harpoon Gun has fixed stats' });
   if (!u.purchased.includes(weaponId) && !FREE_WEAPONS.has(weaponId)) return res.status(400).json({ error: 'weapon not owned' });
   const up = u.upgrades[weaponId] || { damage: 0, mag: 0, reload: 0 };
   const currentLvl = up[stat] || 0;
@@ -905,6 +910,47 @@ function authedUser(req) {
   return u;
 }
 
+// Career records are cumulative per browser. Retrying a save (including an
+// unload save) must not add the same match twice or roll back newer counters.
+app.post('/profile/career', (req, res) => {
+  const u = authedUser(req);
+  if (!u) return res.status(401).json({ error: 'auth failed' });
+  const { device, record } = req.body;
+  if (typeof device !== 'string' || !/^[a-f0-9]{32}$/.test(device) || !record || typeof record !== 'object') return res.status(400).json({error:'invalid career record'});
+  const count = value => Number.isFinite(value) ? Math.max(0, Math.min(1e10, value)) : 0;
+  const totals = ['seconds','wins','losses','draws','kills'];
+  const devices = u.careerDevices ||= {};
+  if (!devices[device] && Object.keys(devices).length >= 64) return res.status(400).json({error:'too many career devices'});
+  const previous = devices[device], now = Date.now();
+  const stamp = value => Number.isFinite(value) ? Math.max(0,Math.min(now,value)) : 0;
+  const incoming = {since:stamp(record.since)||now, lastResult:stamp(record.lastResult), streak:count(record.streak), best:count(record.best), weapons:{}};
+  for (const key of totals) incoming[key]=count(record[key]);
+  for (const [id, use] of Object.entries(record.weapons || {}).slice(0,512)) {
+    if (/^[a-z0-9_]{1,48}$/.test(id) && !['constructor','prototype','__proto__'].includes(id) && use) incoming.weapons[id]={seconds:count(use.seconds),kills:count(use.kills)};
+  }
+  if (previous) {
+    for (const key of [...totals,'best']) incoming[key]=Math.max(incoming[key],previous[key]);
+    incoming.since=Math.min(incoming.since,previous.since);
+    if (previous.lastResult>incoming.lastResult) { incoming.lastResult=previous.lastResult;incoming.streak=previous.streak; }
+    for (const [id,use] of Object.entries(previous.weapons)) {
+      const next=incoming.weapons[id] ||= {seconds:0,kills:0};
+      next.seconds=Math.max(next.seconds,use.seconds);next.kills=Math.max(next.kills,use.kills);
+    }
+  }
+  if (JSON.stringify(previous)!==JSON.stringify(incoming)) { devices[device]=incoming;saveUsers(); }
+  const others={since:now,seconds:0,wins:0,losses:0,draws:0,kills:0,best:0,streak:0,lastResult:0,weapons:{}};
+  for (const [key, other] of Object.entries(devices)) {
+    if (key===device) continue;
+    for (const field of totals) others[field]+=other[field];
+    others.since=Math.min(others.since,other.since);others.best=Math.max(others.best,other.best);
+    if (other.lastResult>=others.lastResult) { others.lastResult=other.lastResult;others.streak=other.streak; }
+    for (const [id,use] of Object.entries(other.weapons)) {
+      const sum=others.weapons[id] ||= {seconds:0,kills:0};sum.seconds+=use.seconds;sum.kills+=use.kills;
+    }
+  }
+  res.json({ok:true,record:incoming,others});
+});
+
 
 // 🎛️ Ability marketplace — mirrors ABILITY_OPTIONS in public/game.js.
 // Prices live on the server because credits do; the client table is display only.
@@ -1008,8 +1054,6 @@ const ABILITY_COSTS = {
   nebula_mortar_airburst:      900,
   rpg_salvo:                   360,
   rpg_shaped:                  390,
-  bazooka_salvo:               430,
-  bazooka_shaped:              470,
   revolver_fan:                90,
   revolver_quick:              80,
   flare_fan:                   80,
@@ -1062,8 +1106,6 @@ const ABILITY_COSTS = {
   traffic_cone_heavy:          90,
   cream_pie_triple:            80,
   cream_pie_heavy:             80,
-  harpoon_gun_charge:          310,
-  harpoon_gun_quick:           240,
   dart_gun_charge:             110,
   dart_gun_quick:              90,
   plasma_carbine_over:         250,
@@ -2116,7 +2158,7 @@ event_horizon: 75,
   // Primaries
   ak20: 25,  sg8: 18,
   srx: 95, rpd: 10, mp40: 20, p90: 10,
-  paintball: 30, burst: 47, lever: 93,
+  paintball: 60, burst: 47, lever: 93,
   vector: 18, crossbow: 100, flamethrower: 3,
   grenade_launcher: 90, railgun: 200, minigun: 27, chain_gun: 22, javelin_launcher: 30,
   freeze_gun: 13, boombow: 50,
@@ -2165,7 +2207,7 @@ event_horizon: 75,
   // ── NEW PRIMARIES ──────────────────────────────────────────────────────
     m1_garand: 117, plasma_carbine: 18, arc_rifle: 22,
   gravity_launcher: 75, potato_cannon: 60, sticker_blaster: 8,
-  harpoon_gun: 95, mortar_rifle: 85, phase_rifle: 22, phase_rifle_ph: 22, chrono_pistol: 34,
+  harpoon_gun: 95, mortar_rifle: 85, phase_rifle: 22, phase_rifle_ph: 22, chrono_pistol: 34, swap_gun: 0,
   arc_torrent: 5, firework_launcher: 50, switchblade_gun: 50, switchblade_charged: 100,
   jeep_gun: 22, chernobyl_gas: 1,
   // 3rd-batch primaries
@@ -2235,6 +2277,35 @@ function freezeRayHit(shooter, target) {
 }
 const BOSS_PHASE_MULT = { 1: 0.6, 2: 1.6, 3: 0.2 }, BOSS_SHIELD_MULT = 0.05;
 const BOSS_HIT_CAP = 450;   // the Warden has 12,000 health: nothing takes a quarter of it at once
+const DEFLECT_GUARDS = { katana: { duration: 1000, cooldown: 4000, extend: 100, maxExtend: 2000 }, tennis_racket: { duration: 2000, cooldown: 8000, extend: 0, maxExtend: 0 } };
+const DEFLECTABLE_WEAPONS = new Set(JSON.parse(fs.readFileSync(path.join(__dirname, 'public/weapon-stats.json'), 'utf8')).guns
+  .filter(w => !/Rocket|Explosive|Indirect|Mortar|Launcher|Flame/i.test(w.type) && !['boombow','hellfire'].includes(w.id)).map(w => w.id));
+function tryDeflectPlayerHit(data, shooter, target, damage) {
+  const now = Date.now();
+  const guard = target._deflectGuard;           // only while a Deflect ability is on (the 'deflectGuard' event opens it for a window): a katana held idle returns nothing
+  const katana = !!guard && guard.weapon === 'katana';   // while it IS on, the katana's return is the blunt one: it sends back a round that ignores defences too, and it goes through a shield
+  if (!guard || now >= guard.until || target.weaponId !== guard.weapon || !DEFLECTABLE_WEAPONS.has(data.weapon) || (!katana && data.weapon==='gatecrasher') || damage <= 0) return false;
+  const key = `${shooter.id}:${data.bulletId || ''}`;
+  if (data.bulletId && guard.hits.has(key)) return true;
+  if (guard.hits.size >= 200) guard.hits.clear();
+  if (data.bulletId) guard.hits.add(key);
+  const config = DEFLECT_GUARDS[guard.weapon];
+  if (now - guard.lastExtend >= 60 && guard.extendLeft > 0) {
+    const extra = Math.min(config.extend, guard.extendLeft);guard.until += extra;guard.extendLeft -= extra;guard.lastExtend = now;
+  }
+  emitToMatch(target.matchId, 'projectileDeflected', { defenderId: target.id, shooterId: shooter.id, bulletId: data.bulletId, weapon: data.weapon, remainingMs: guard.until-now, extendLeft: guard.extendLeft });
+  if (!katana && shielded(shooter)) return true;
+  const hpBefore = shooter.hp;
+  shooter.hp = Math.max(0, shooter.hp - damage);
+  creditFfaDamage(target, hpBefore - shooter.hp);
+  emitToMatch(target.matchId, 'playerHit', { targetId: shooter.id, hp: shooter.hp, environmentSeq: shooter.environmentSeq || 0,
+    bulletId: `reflected_${data.bulletId || now}`, shooterId: target.id, weapon: data.weapon, headshot: false, reflected: true });
+  if (shooter.hp <= 0) {
+    shooter.dead = true;shooter.deaths++;target.kills++;target.matchKills = (target.matchKills || 0) + 1;
+    emitToMatch(target.matchId, 'playerDied', { targetId: shooter.id, killerId: target.id, weapon: data.weapon, headshot: false, reflected: true });
+  }
+  return true;
+}
 function serverHitDamage(data, shooter, target) {
   const dmg = serverHitDamageBase(data, shooter, target);
   if (data?.weapon !== 'frost_blaster' && dmg > 0 && isFrozen(target)) { data._shattered = true; return Math.round(dmg * FREEZE.shatter); }
@@ -2288,7 +2359,7 @@ const WEAPON_FALLOFF = {
   ak20: FALLOFF_AR, burst: { near: 31, far: 76, min: 0.68 }, cyroclasm: FALLOFF_AR, freeze_gun: FALLOFF_AR, plasma_carbine: FALLOFF_AR, arc_rifle: FALLOFF_AR, flechette: FALLOFF_AR, burst_cannon: FALLOFF_AR, twin_ar: FALLOFF_AR, glassmaker: FALLOFF_AR, auto_revolver: FALLOFF_AR, xm7: { near: 38, far: 96, min: 0.72 }, hkmp7: FALLOFF_SMG, m4a1_arena: FALLOFF_ARENA_AR,
   paintball: FALLOFF_PAINT, nail_gun: FALLOFF_PAINT, sticker_blaster: FALLOFF_PAINT,
   srx: FALLOFF_SNIPER, railgun: FALLOFF_SNIPER, coilgun: FALLOFF_SNIPER, amr: FALLOFF_SNIPER, barrett: FALLOFF_SNIPER,
-  lever: FALLOFF_MARKSMAN, m1_garand: FALLOFF_MARKSMAN, air_rifle: FALLOFF_MARKSMAN, harpoon_gun: FALLOFF_MARKSMAN,
+  lever: FALLOFF_MARKSMAN, m1_garand: FALLOFF_MARKSMAN, air_rifle: FALLOFF_MARKSMAN, harpoon_gun: FALLOFF_SNIPER,
   revolver: FALLOFF_HEAVY_PISTOL, hand_cannon: FALLOFF_HEAVY_PISTOL, duelist_pistol: FALLOFF_HEAVY_PISTOL, desert_eagle: FALLOFF_HEAVY_PISTOL, m1911: FALLOFF_HEAVY_PISTOL, gunslinger: FALLOFF_HEAVY_PISTOL, akimbo: FALLOFF_AKIMBO,
   pistol: FALLOFF_SIDEARM, five_seven: FALLOFF_SIDEARM, mauser: FALLOFF_SIDEARM, snub_revolver: FALLOFF_SIDEARM, throwing_knives: FALLOFF_SIDEARM, taser: FALLOFF_SIDEARM, gatecrasher: FALLOFF_SIDEARM,
   gatecrasher_slug: FALLOFF_MARKSMAN, gatecrasher_beam: FALLOFF_NONE, continuum: FALLOFF_HEAVY_PISTOL, phase_rifle: FALLOFF_AR, phase_rifle_ph: FALLOFF_AR, chrono_pistol: FALLOFF_SIDEARM, lancer: FALLOFF_MARKSMAN, laser_pointer: { near: 20, far: 90, min: 0.85 },
@@ -2445,6 +2516,7 @@ function movePlayerToMatch(socketId, newMatchId) {
   const prev = p.matchId;
   if (prev === newMatchId) { sendMatchRoster(socketId); broadcastAdminMatchTime(newMatchId); return; }
   p._satchelIds = new Set();
+  p._harpoons?.clear();
   // 1. Their bots stay behind — deleted, not carried. Bots belong to the match they
   //    were spawned for and the client sends spawnBots again for every match it
   //    starts, so carrying them only ever brought frozen bodies along: Lobby 13's
@@ -2657,9 +2729,17 @@ io.on('connection', (socket) => {
     if(hellfireWeapon(id)&&!canUseHellfire(p))return;
     if(id==='omega_pistol'&&!canUseHellfire(p))return;
     p.weaponId = id ? String(id).slice(0, 32) : null;
+    if (p._deflectGuard?.weapon !== p.weaponId) p._deflectGuard = null;
     // The skin on it: cosmetic like the weapon id, so only a plain id is passed on (others look it up by weapon + id).
     p.weaponSkin = p.weaponId && typeof data.skin === 'string' && /^[a-z0-9_]{1,48}$/.test(data.skin) ? data.skin : null;
     emitToMatch(p.matchId, 'weaponChanged', { id: socket.id, weaponId: p.weaponId, skin: p.weaponSkin });
+  });
+
+  socket.on('deflectGuard', data => {
+    const p = players[socket.id], config = Object.hasOwn(DEFLECT_GUARDS,data?.weapon) ? DEFLECT_GUARDS[data.weapon] : null, now = Date.now();
+    if (!p || p.dead || p.matchId === HUB_MATCH || !config || p.weaponId !== data.weapon || now < (p._nextDeflectAt || 0)) return;
+    p._nextDeflectAt = now + config.cooldown;
+    p._deflectGuard = { weapon: data.weapon, until: now + config.duration, extendLeft: config.maxExtend, lastExtend: -Infinity, hits: new Set() };
   });
 
   // ── 🌐 PvP matchmaking: player wants to find others playing the same elim mode ──
@@ -2719,6 +2799,7 @@ io.on('connection', (socket) => {
   socket.on('move', (data) => {
     const p = players[socket.id];
     if (!p || p.dead) return;
+    if(Date.now()<(p._swapIgnoreMoveUntil||0))return;
     p.x = data.x; p.y = data.y; p.z = data.z;
     p.rotY = data.rotY; p.rotX = data.rotX;
     p.at = Date.now();   // when this position was true — clients interpolate on this, not on when the broadcast happened to fire
@@ -2728,11 +2809,15 @@ io.on('connection', (socket) => {
     p.emote = emote;
   });
 
-  socket.on('shoot', (data) => {
+  socket.on('shoot', (data = {}) => {
     const p = players[socket.id];
-    if (!p || p.dead) return;
+    if (!p || p.dead || !data) return;
     const now = Date.now();
     const w = data.weapon || 'ak20';
+    const tetherShot=w==='harpoon_gun'||w==='swap_gun';
+    if(tetherShot && (p.weaponId!==w||p.matchId==='lobby'||p.matchId===HUB_MATCH||
+      (w==='harpoon_gun'&&(p._harpoons?.size>=3||p._harpoons?.has(data.projectileId)))||typeof data.projectileId!=='string'||!data.projectileId.startsWith(`local_${p.id}_`)||data.projectileId.length>=150||
+      ![data.x,data.y,data.z,data.dx,data.dy,data.dz].every(Number.isFinite)||Math.hypot(data.x-p.x,data.y-p.y,data.z-p.z)>5||Math.hypot(data.dx,data.dy,data.dz)<.01))return;
     if(hellfireWeapon(w)&&!canUseHellfire(p))return;
     if(w==='omega_pistol'&&(!canUseHellfire(p)||p._omegaSpent))return;
     const minInterval = 15; // generous server-side rate limit
@@ -2753,7 +2838,7 @@ io.on('connection', (socket) => {
     if (w === 'spear_throw' && data.spear === true) { const left = p._spearsLeft ?? 5; if (left <= 0) return; p._spearsLeft = left - 1; }   // five spears a life; the client keeps the same count (the Hatchet and Tomahawk throw the same projectile and are not counted)
     p.lastShot = now;
     let projectileId = `${socket.id}_${now}_${Math.random()}`;
-    if ((w === 'rpg' || w === 'traffic_cone') && typeof data.projectileId === 'string'
+    if ((w === 'rpg' || w === 'traffic_cone' || tetherShot) && typeof data.projectileId === 'string'
         && data.projectileId.startsWith(`local_${p.id}_`) && data.projectileId.length < 150
         && [data.x, data.y, data.z, data.dx, data.dy, data.dz].every(Number.isFinite)) {
       projectileId = data.projectileId;
@@ -2761,6 +2846,7 @@ io.on('connection', (socket) => {
       for (const [id, shot] of p._counterShots) if (now - shot.at > 2500) p._counterShots.delete(id);
       if (p._counterShots.size < 150) p._counterShots.set(projectileId, { weapon: w, at: now, matchId: p.matchId,
         x: data.x, y: data.y, z: data.z, dx: data.dx, dy: data.dy, dz: data.dz });
+      if(w==='harpoon_gun')(p._harpoons ||= new Map()).set(projectileId,null);
     }
     emitToMatch(p.matchId, 'bulletFired', {
       id: projectileId,
@@ -2791,6 +2877,63 @@ io.on('connection', (socket) => {
     emitToMatch(p.matchId, 'projectileIntercept', { coneId: data.coneId, rocketId: data.rocketId,
       ownerId: owner.id, x: data.x, y: data.y, z: data.z });
   });
+  function tetherTarget(p,id){
+    const target=players[id];
+    return target&&target!==p&&!target.dead&&!target.boss&&target.matchId===p.matchId&&!blocksFriendlyFire(p,target)?target:null;
+  }
+  function shotNear(p,id,weapon,point,tolerance){
+    const shot=p?._counterShots?.get(id);
+    if(!shot||p.dead||shot.weapon!==weapon||shot.matchId!==p.matchId||Date.now()-shot.at>2000||![point.x,point.y,point.z].every(Number.isFinite))return false;
+    const dx=point.x-shot.x,dy=point.y-shot.y,dz=point.z-shot.z,len=Math.hypot(shot.dx,shot.dy,shot.dz);
+    const along=(dx*shot.dx+dy*shot.dy+dz*shot.dz)/len;
+    return along>=-1&&along<=(weapon==='harpoon_gun'?62:44)&&Math.hypot(dx-shot.dx*along/len,dy-shot.dy*along/len,dz-shot.dz*along/len)<=tolerance;
+  }
+  socket.on('swapGunHit',data=>{
+    const p=players[socket.id],target=p&&tetherTarget(p,data?.targetId);
+    if(!target||shielded(target)||!shotNear(p,data.id,'swap_gun',target,2.6))return;
+    p._counterShots.delete(data.id);
+    const a={id:p.id,x:target.x,y:target.y,z:target.z,fromBot:!!target.isBot};
+    const b={id:target.id,x:p.x,y:p.y,z:p.z,fromBot:false};
+    const until=Date.now()+150;
+    Object.assign(p,{x:a.x,y:a.y+(a.fromBot ? .65 : 0),z:a.z,_swapIgnoreMoveUntil:until});
+    Object.assign(target,{x:b.x,y:b.y-(target.isBot ? .65 : 0),z:b.z,_swapIgnoreMoveUntil:until});
+    emitToMatch(p.matchId,'weaponSwap',{positions:[a,b]});
+  });
+  socket.on('harpoonLatch',data=>{
+    const p=players[socket.id];
+    if(!p||!data||p._harpoons?.get(data.id)!==null||!shotNear(p,data.id,'harpoon_gun',data,.8))return;
+    const target=tetherTarget(p,data.targetId),point={x:data.x,y:data.y,z:data.z};
+    if(data.targetId&&(!target||dist3(target,point)>3.4))return;
+    const tether={id:data.id,point,targetId:target?.id,offset:target?{x:point.x-target.x,y:point.y-target.y,z:point.z-target.z}:null,tripped:new Set()};
+    p._harpoons.set(data.id,tether);
+    emitToMatch(p.matchId,'harpoonState',{id:data.id,ownerId:p.id,point,targetId:target?.id});
+    pullHarpoonTarget(p,tether,target);
+  });
+  socket.on('harpoonRecall',data=>{
+    const p=players[socket.id];if(!p||!data?.id||!p._harpoons?.delete(data.id))return;
+    p._counterShots?.delete(data.id);
+    emitToMatch(p.matchId,'harpoonState',{id:data.id,ownerId:p.id});
+  });
+  function pullHarpoonTarget(p,h,target){
+    const now=Date.now();
+    if(!target||p.dead||now<(h.nextReel||0)||dist3(p,target)>72||shielded(target))return;
+    h.nextReel=now+400;const dx=p.x-target.x,dz=p.z-target.z,len=Math.hypot(dx,dz)||1;
+    io.to(target.isBot?target.ownerId:target.id).emit('grapplePulled',{botId:target.isBot?target.id:undefined,x:dx/len,z:dz/len,force:34,harpoon:true});
+  }
+  socket.on('harpoonReel',data=>{
+    const p=players[socket.id],h=p?._harpoons?.get(data?.id);
+    if(h&&p.weaponId==='harpoon_gun')pullHarpoonTarget(p,h,tetherTarget(p,h.targetId));
+  });
+  socket.on('harpoonTrip',data=>{
+    const p=players[socket.id],h=p?._harpoons?.get(data?.id),target=p&&tetherTarget(p,data?.targetId);
+    if(!h||!target||p.dead||h.id!==data.id||target.id===h.targetId||h.tripped.has(target.id)||shielded(target))return;
+    const end=h.targetId&&tetherTarget(p,h.targetId),q=end?{x:end.x+h.offset.x,y:end.y+h.offset.y,z:end.z+h.offset.z}:h.point;
+    const sy=p.y-.4,dx=q.x-p.x,dy=q.y-sy,dz=q.z-p.z,den=dx*dx+dy*dy+dz*dz;
+    if(den<.04||den>72**2)return;
+    const ty=target.y-(target.isBot ? .35 : 1),t=Math.max(0,Math.min(1,((target.x-p.x)*dx+(ty-sy)*dy+(target.z-p.z)*dz)/den));
+    if(Math.hypot(target.x-p.x-t*dx,ty-sy-t*dy,target.z-p.z-t*dz)>1.4)return;
+    h.tripped.add(target.id);emitToMatch(p.matchId,'harpoonTripped',{id:target.id});
+  });
 
   socket.on('hellfireCore', data => {
     const p=players[socket.id];
@@ -2806,6 +2949,20 @@ io.on('connection', (socket) => {
   });
 
   // 🕳️ Black Hole Seed: the thrower's client simulates and damages; everyone else only needs to see it and be pulled.
+  // Swap Gun portals: the shooter opens one on a wall; the others only draw it (each client moves its own player through it).
+  socket.on('swapPortal', data => {
+    const p = players[socket.id];
+    if (!p || p.dead || !p.matchId || p.matchId === 'lobby' || p.matchId === HUB_MATCH || p.weaponId !== 'swap_gun' || !data) return;
+    const ny = Number.isFinite(data.ny) ? data.ny : 0;
+    const v = [data.x, data.y, data.z, data.nx, data.nz];
+    if (!v.every(Number.isFinite) || Math.abs(data.nx) > 1.01 || Math.abs(data.nz) > 1.01 || Math.abs(ny) > 1.01) return;
+    if (Math.hypot(data.x - p.x, data.z - p.z) > 60) return;                 // a swap shot flies 42 m
+    const now = Date.now();
+    if (now - (p._swapPortalAt || 0) < 300) return;
+    p._swapPortalAt = now;
+    emitToMatchExcept(p.matchId, p.id, 'swapPortal', { ownerId: p.id, x: data.x, y: data.y, z: data.z, nx: data.nx, ny, nz: data.nz });
+  });
+
   socket.on('blackHole', data => {
     const p = players[socket.id];
     if (!p || p.dead || !p.matchId || !data) return;
@@ -2961,11 +3118,12 @@ io.on('connection', (socket) => {
 
   socket.on('hit', (data) => {
     if (!data || typeof data !== 'object') return;
+    if(data.weapon==='swap_gun')return;
     const target  = players[data.targetId];
     const shooter = players[socket.id];
     if(hellfireWeapon(data.weapon)&&!canUseHellfire(shooter))return;
     if(data.weapon==='omega_pistol'&&(!canUseHellfire(shooter)||!shooter._omegaPermit||Date.now()>shooter._omegaPermit))return;
-    if (!target || !shooter || target.dead || target.isBot || shielded(target)) return;
+    if (!target || !shooter || target.dead || target.isBot) return;
     // airBlast and grapplePull both have this line; the two handlers that
     // actually deal gunfire did not. blocksFriendlyFire is not a substitute —
     // it returns false (allow) when the two are in different matches, so a
@@ -2973,6 +3131,8 @@ io.on('connection', (socket) => {
     if (shooter.matchId !== target.matchId) return;
     if (blocksFriendlyFire(shooter, target)) return;
     const dmg = serverHitDamage(data, shooter, target);
+    if (tryDeflectPlayerHit(data, shooter, target, dmg)) return;
+    if (shielded(target)) return;
     if (data.weapon === 'frost_blaster' && !target.dead) freezeRayHit(shooter, target);
     const hpBefore = target.hp;
     target.hp = Math.max(0, target.hp - dmg);
@@ -2991,6 +3151,7 @@ io.on('connection', (socket) => {
   // Allow hitting bots (client detected)
   socket.on('hitBot', (data) => {
     if (!data || typeof data !== 'object') return;
+    if(data.weapon==='swap_gun')return;
     const bot     = players[data.botId];
     const requestedKiller = data.killerId ? players[data.killerId] : null;
     const shooter = requestedKiller && requestedKiller.isBot && requestedKiller.ownerId === socket.id
@@ -3007,7 +3168,7 @@ io.on('connection', (socket) => {
     // differently (their own tables, zone bonuses, positions), and with other real players in
     // the match a kill that stays on one screen leaves a frozen, unkillable bot on everyone else's.
     if (data.fatal && data.instakill && !bot.boss) dmg = bot.hp;
-    if (bot.boss) {
+    if (bot.boss && !(data.reflectedDamage && shooter.weaponId==='katana')) {
       dmg = Math.min(dmg, BOSS_HIT_CAP);
       // How hard it is to hurt depends on the phase it is in (its health when the hit lands): the first is tough, the second is the easy one, the
       // third is nearly impossible. And while it is deflecting (the client says so with 'bossShield') almost nothing gets through.
@@ -3126,6 +3287,7 @@ io.on('connection', (socket) => {
   socket.on('readyRespawn', (data = {}) => {
     const p = players[socket.id];
     if (!p || !p.dead) return;
+    p._harpoons?.clear();
     p._omegaSpent=false;p._omegaPermit=0;
     const s = nextSpawn();
     const x = data.x != null ? Number(data.x) : s.x;
@@ -3139,6 +3301,7 @@ io.on('connection', (socket) => {
   socket.on('resetSelf', (data = {}) => {
     const p = players[socket.id];
     if (!p) return;
+    p._harpoons?.clear();
     p._omegaSpent=false;p._omegaPermit=0;
     const x = data.x != null ? Number(data.x) : p.x;
     const z = data.z != null ? Number(data.z) : p.z;
@@ -3365,22 +3528,25 @@ io.on('connection', (socket) => {
     for (const m of moves) {
       if (!m || typeof m !== 'object') continue;
       const bot = players[m.id];
-      if (bot && bot.isBot && bot.ownerId === socket.id) {
-        bot.x = m.x; bot.y = 1; bot.z = m.z;
+      if (bot && bot.isBot && bot.ownerId === socket.id && !(Date.now()<bot._swapIgnoreMoveUntil)) {
+        bot.x = m.x; bot.y = Number.isFinite(m.y) ? m.y-.65 : 1; bot.z = m.z;
         bot.rotY = m.rotY; bot.rotX = 0; bot.at = Date.now();
       }
     }
   });
 
   socket.on('botHitMe', (data) => {
+    if(!data||data.weapon==='swap_gun')return;
     const player = players[socket.id];
     const bot    = players[data.botId];
-    if (!player || player.dead || !bot || !bot.isBot || shielded(player)) return;
+    const reflected = Number.isFinite(data.reflectedDamage) && bot?.ownerId===socket.id;
+    if (!player || player.dead || !bot || !bot.isBot || (!reflected && shielded(player))) return;
     if (blocksFriendlyFire(bot, player)) return;
-    let dmg = Math.round((WEAPON_DAMAGE[data.weapon] || 25) * falloffMultiplier(data.weapon, dist3(bot, player)));
+    let dmg = Math.round((WEAPON_DAMAGE[data.weapon] || 25) * (data.headshot ? (WEAPON_HS_MULT[data.weapon] || 2) : 1) * falloffMultiplier(data.weapon, dist3(bot, player)));
+    if (reflected) dmg=Math.max(0,Math.min(9999,Math.round(data.reflectedDamage)));
     if (data.wallPenetrated && ['gatecrasher', 'gatecrasher_slug', 'gatecrasher_beam', 'phase_rifle_ph'].includes(data.weapon)) dmg = Math.round(dmg * .5);
     player.hp = Math.max(0, player.hp - dmg);
-    emitToMatch(player.matchId, 'playerHit', { targetId: player.id, hp: player.hp, environmentSeq: player.environmentSeq || 0, bulletId: null, shooterId: bot.id, weapon: data.weapon, headshot: !!data.headshot });
+    emitToMatch(player.matchId, 'playerHit', { targetId: player.id, hp: player.hp, environmentSeq: player.environmentSeq || 0, bulletId: null, shooterId: bot.id, weapon: data.weapon, headshot: !!data.headshot, reflected, damage: dmg });
     if (player.hp <= 0) {
       player.dead = true; player.deaths++;
       bot.kills++;

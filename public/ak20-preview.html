@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>AK20 Model Preview</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #101216; color: #e7eaee; font-family: Arial, sans-serif; overflow: hidden; }
+    #label { position: fixed; left: 18px; top: 16px; font-size: 13px; letter-spacing: 2px; color: #d8b25e; text-transform: uppercase; }
+    #hint { position: fixed; left: 18px; bottom: 16px; font-size: 12px; color: #9aa3ad; }
+  </style>
+</head>
+<body>
+  <div id="label">AK20 starter rifle</div>
+  <div id="hint">Drag to orbit · scroll to zoom</div>
+  <script src="three.min.js"></script>
+  <script>
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x101216);
+    const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 100);
+    camera.position.set(4.1, 2.3, 6.4);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+    document.body.appendChild(renderer.domElement);
+
+    scene.add(new THREE.HemisphereLight(0xe8f0ff, 0x252018, 1.45));
+    const key = new THREE.DirectionalLight(0xffe2b0, 2.1);
+    key.position.set(4, 5, 4); scene.add(key);
+    const rim = new THREE.DirectionalLight(0x88b7ff, 1.1);
+    rim.position.set(-5, 2, -3); scene.add(rim);
+
+    const mats = {
+      black: new THREE.MeshPhongMaterial({ color: 0x141619, shininess: 54, specular: 0x70747a }),
+      steel: new THREE.MeshPhongMaterial({ color: 0x6a7075, shininess: 90, specular: 0xc7d0da }),
+      rubber: new THREE.MeshLambertMaterial({ color: 0x050607 }),
+      wood: new THREE.MeshLambertMaterial({ color: 0x5a2c0e }),
+      amber: new THREE.MeshLambertMaterial({ color: 0x8d501b }),
+      red: new THREE.MeshLambertMaterial({ color: 0xb33a26 }),
+    };
+    const rifle = new THREE.Group();
+    scene.add(rifle);
+
+    function box(mat, size, pos, rot) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(...size), mat);
+      m.position.set(...pos);
+      if (rot) m.rotation.set(...rot);
+      rifle.add(m);
+      return m;
+    }
+    function cyl(mat, radius, length, pos, rot = [Math.PI / 2, 0, 0], segments = 16) {
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, length, segments), mat);
+      m.rotation.set(...rot);
+      m.position.set(...pos);
+      rifle.add(m);
+      return m;
+    }
+    function sidePlate(mat, pts, width, x = 0) {
+      const verts = [], indices = [];
+      pts.forEach(p => verts.push(x - width / 2, p[1], p[0]));
+      pts.forEach(p => verts.push(x + width / 2, p[1], p[0]));
+      const n = pts.length;
+      for (let i = 1; i < n - 1; i++) indices.push(0, i, i + 1, n, n + i + 1, n + i);
+      for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n;
+        indices.push(i, j, n + j, i, n + j, n + i);
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+      geo.setIndex(indices);
+      geo.computeVertexNormals();
+      const mesh = new THREE.Mesh(geo, mat);
+      rifle.add(mesh);
+      return mesh;
+    }
+    function curve(a, b, steps, bend = 0) {
+      const pts = [];
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const z = a[0] + (b[0] - a[0]) * t;
+        const y = a[1] + (b[1] - a[1]) * t + Math.sin(t * Math.PI) * bend;
+        pts.push([z, y]);
+      }
+      return pts;
+    }
+    function stripPlate(mat, centers, height, width, x = 0) {
+      const left = [], right = [];
+      for (let i = 0; i < centers.length; i++) {
+        const prev = centers[Math.max(0, i - 1)];
+        const next = centers[Math.min(centers.length - 1, i + 1)];
+        const dz = next[0] - prev[0], dy = next[1] - prev[1];
+        const len = Math.hypot(dz, dy) || 1;
+        const nz = -dy / len, ny = dz / len;
+        left.push([centers[i][0] + nz * height / 2, centers[i][1] + ny * height / 2]);
+        right.push([centers[i][0] - nz * height / 2, centers[i][1] - ny * height / 2]);
+      }
+      const verts = [], indices = [], n = centers.length;
+      const add = (px, p) => verts.push(px, p[1], p[0]) / 3 - 1;
+      for (let i = 0; i < n; i++) add(x - width / 2, left[i]);
+      for (let i = 0; i < n; i++) add(x - width / 2, right[i]);
+      for (let i = 0; i < n; i++) add(x + width / 2, left[i]);
+      for (let i = 0; i < n; i++) add(x + width / 2, right[i]);
+      for (let i = 0; i < n - 1; i++) {
+        indices.push(i, i + 1, n + i + 1, i, n + i + 1, n + i);
+        indices.push(n * 2 + i, n * 3 + i + 1, n * 2 + i + 1, n * 2 + i, n * 3 + i, n * 3 + i + 1);
+        indices.push(i, n * 2 + i, n * 2 + i + 1, i, n * 2 + i + 1, i + 1);
+        indices.push(n + i, n + i + 1, n * 3 + i + 1, n + i, n * 3 + i + 1, n * 3 + i);
+      }
+      indices.push(0, n, n * 3, 0, n * 3, n * 2);
+      indices.push(n - 1, n * 2 + n - 1, n * 3 + n - 1, n - 1, n * 3 + n - 1, n + n - 1);
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+      geo.setIndex(indices);
+      geo.computeVertexNormals();
+      const mesh = new THREE.Mesh(geo, mat);
+      rifle.add(mesh);
+      return mesh;
+    }
+
+    sidePlate(mats.black, [
+      [-5.90,0.10],[-4.85,0.10],[-4.80,0.58],[-4.68,0.68],[-4.52,0.58],
+      [-4.30,0.20],[-3.40,0.18],[-3.12,0.40],[-1.76,0.40],
+      [-1.56,0.60],[-0.64,0.60],[0.96,0.58],[1.50,0.32],
+      [1.50,-0.38],[2.10,0.16],[3.32,0.20],[4.06,-0.14],
+      [3.72,-0.52],[2.14,-0.54],[1.26,-0.46],[0.94,-0.56],
+      [1.28,-0.84],[1.32,-1.54],[1.00,-1.80],[0.66,-1.08],
+      [0.50,-0.60],[-0.60,-0.58],[-0.70,-0.64],[-0.96,-0.96],
+      [-1.22,-1.54],[-1.54,-2.24],[-1.82,-2.86],[-1.50,-3.02],
+      [-1.08,-2.50],[-0.80,-1.80],[-0.62,-1.02],[-0.82,-0.60],
+      [-1.60,-0.52],[-1.90,-0.12],[-3.24,-0.10],[-3.52,0.14],
+    ], 0.52);
+    cyl(mats.steel, 0.062, 3.45, [0, 0.18, -3.98], [Math.PI / 2, 0, 0], 32);
+    cyl(mats.steel, 0.050, 2.70, [0, 0.45, -3.42], [Math.PI / 2, 0, 0], 28);
+    cyl(mats.steel, 0.095, 0.38, [0, 0.18, -5.75], [Math.PI / 2, 0, 0], 28);
+    sidePlate(mats.steel, [[-1.50,0.38],[-1.18,0.58],[0.96,0.56],[1.36,0.38],[0.78,0.30],[-1.28,0.30]], 0.46);
+    sidePlate(mats.rubber, [[-0.24,-0.16],[0.92,-0.14],[1.10,-0.34],[-0.12,-0.38]], 0.53);
+    sidePlate(mats.wood, [[1.54,-0.38],[2.14,0.12],[3.26,0.14],[3.90,-0.14],[3.60,-0.44],[2.18,-0.48]], 0.47);
+    sidePlate(mats.wood, [[0.80,-0.64],[1.12,-0.90],[1.16,-1.48],[0.98,-1.64],[0.76,-1.08],[0.68,-0.70]], 0.35);
+    stripPlate(mats.rubber, curve([-0.80,-0.96], [-1.58,-2.58], 12, -0.10), 0.28, 0.54, 0.01);
+    sidePlate(mats.wood, [[-3.36,0.02],[-3.04,0.30],[-1.86,0.30],[-1.66,0.10],[-1.92,-0.02],[-3.20,-0.02]], 0.52);
+    box(mats.steel, [0.18, 0.26, 0.18], [0, 0.34, -4.16]);
+    box(mats.rubber, [0.26, 0.09, 0.38], [0, 0.64, -0.62]);
+    box(mats.red, [0.12, 0.03, 0.46], [0, 0.61, 0.46]);
+    rifle.rotation.y = -0.55;
+
+    let dragging = false, lastX = 0, lastY = 0;
+    document.addEventListener('pointerdown', e => { dragging = true; lastX = e.clientX; lastY = e.clientY; });
+    document.addEventListener('pointerup', () => dragging = false);
+    document.addEventListener('pointermove', e => {
+      if (!dragging) return;
+      rifle.rotation.y += (e.clientX - lastX) * 0.008;
+      rifle.rotation.x += (e.clientY - lastY) * 0.006;
+      rifle.rotation.x = Math.max(-0.75, Math.min(0.75, rifle.rotation.x));
+      lastX = e.clientX; lastY = e.clientY;
+    });
+    document.addEventListener('wheel', e => {
+      camera.position.z = Math.max(3.5, Math.min(10, camera.position.z + e.deltaY * 0.004));
+    }, { passive: true });
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+    function loop() {
+      if (!dragging) rifle.rotation.y += 0.004;
+      renderer.render(scene, camera);
+      requestAnimationFrame(loop);
+    }
+    loop();
+  </script>
+</body>
+</html>

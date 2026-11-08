@@ -103,9 +103,7 @@ const WEAPONS = [
   },
   {
     id: 'paintball', name: 'Paintball', type: 'Paintball', slot: 'primary',
-    // 30 a splat, 16 to a hopper, 8 a second: it is a volume weapon now, 240 DPS,
-    // instead of a slow 40-damage marker with an 8-shot mag.
-    mag: 16,  reserve: 48,  damage: 30, fireRate: 125,  reloadTime: 1600,
+    mag: 16,  reserve: 16,  damage: 60, fireRate: 125,  reloadTime: 1600,
     auto: true,  pellets: 1, spread: 0.018, adsZoom: 52, bulletSpeed: 50, noReload: false,
     randomBulletColor: true, bulletSize: 0.2,
     visionHit: { color: 'rgba(255,68,255,0.30)', blur: 4, duration: 1500 }, // splat on the lens
@@ -231,7 +229,11 @@ const WEAPONS = [
   },
   {
     id: 'pistol', killReload: 0.5,   name: 'Pistol',   type: 'Secondary', slot: 'secondary',
-    mag: 15,  reserve: 45,  damage: 20, fireRate: 200,  reloadTime: 1400,
+    // Still semi-auto -- one click, one round -- but the 200 ms click gate is gone, so it
+    // fires as fast as you can click. fireRate 83 is only the CEILING: 12 rounds/s, which
+    // is what an auto-clicker or the auto-shoot assist gets (both go through tryShoot).
+    // Making it full-auto instead would let holding the trigger melt people at 240 dps.
+    mag: 15,  reserve: 45,  damage: 20, fireRate: 83,  reloadTime: 1400,
     auto: false, pellets: 1, spread: 0.005, adsZoom: 52, bulletSpeed: 150, noReload: false,
     ability: { name: 'Rapid Fire', cd: 8000, desc: '1 s burst · shoot 8 times fast', type: 'fanfire', count: 8, delay: 55 },
   },
@@ -327,12 +329,10 @@ const WEAPONS = [
     ability: { name: 'Sticker Bomb', cd: 11000, desc: 'Throw sticker · 1 s immobilize · 35 dmg', type: 'throwbomb', radius: 3, color: 0xff44ff, weaponAbId: 'sticker_bomb' },
   },
   {
-    id: 'harpoon_gun', archived: true, name: 'Harpoon Gun', type: 'Heavy Projectile', slot: 'primary',
-    mag: 1, reserve: 6, damage: 95, fireRate: 1100, reloadTime: 2400,
-    auto: false, pellets: 1, spread: 0.002, adsZoom: 40, bulletSpeed: 110, noReload: false,
-    bulletColor: 0xb8b8b8, bulletSize: 0.08,
-    pinOnHit: { dur: 1500 }, // pin target for 1.5s (heavy slow)
-    ability: { name: 'Chain Pull', cd: 13000, desc: 'Drag hit enemy toward you', type: 'powershot', pellets: 1, spreadMult: 0, weaponAbId: 'chain_pull' },
+    id: 'harpoon_gun', name: 'Harpoon Gun', type: 'Heavy Projectile', slot: 'primary', playerOnly:true,
+    mag: 3, reserve: 0, damage: 95, fireRate: 650, reloadTime: 600,
+    auto: false, pellets: 1, spread: 0, adsZoom: 40, bulletSpeed: 220, noReload: true,
+    bulletColor: 0xb8b8b8, bulletSize: 0.08, maxRange:60,
   },
   {
     id: 'mortar_rifle', name: 'Mortar Rifle', type: 'Indirect Explosive', slot: 'primary',
@@ -797,7 +797,7 @@ const WEAPONS = [
     ability: { name: 'Triple Warhead', cd: 16000, desc: 'Fire 3 rockets in a spread', type: 'multishot', count: 3, spread: 0.10, noADS: true },
   },
   {
-    id: 'bazooka', name: 'Bazooka', type: 'Rocket', slot: 'primary',
+    id: 'bazooka', name: 'Bazooka', type: 'Rocket', slot: 'primary', archived: true,
     mag: 1, reserve: 8, damage: 140, fireRate: 1100, reloadTime: 2600,
     auto: false, pellets: 1, spread: 0.005, adsZoom: 48, bulletSpeed: 64, noReload: false,
     bulletColor: 0xffaa33, bulletSize: 0.17, splashRadius: 6,
@@ -907,6 +907,9 @@ const WEAPONS = [
     adminItem:true,prototype:true,damageLabel:'\u03a9',mag:1,reserve:0,damage:9999,fireRate:900,reloadTime:0,
     auto:false,pellets:1,spread:0,adsZoom:45,bulletSpeed:300,bulletColor:0xffffff,bulletSize:.06,
     noReload:true,hitscan:true,hitscanRange:100 },
+  { id:'swap_gun', name:'Swap Gun', type:'Position Swap', slot:'secondary', playerOnly:true,
+    mag:3,reserve:9,damage:0,fireRate:1250,reloadTime:1850,auto:false,pellets:1,spread:0,
+    adsZoom:55,bulletSpeed:140,bulletColor:0x70e9db,bulletSize:.055,maxRange:42 },
   { id: 'phase_rifle', name: 'Phase Rifle', type: 'Sci-Fi Rifle', slot: 'primary',
     mag: 30, reserve: 90, damage: 22, fireRate: 90, reloadTime: 2000, headshotMult: 2.2,
     auto: true, pellets: 1, spread: 0.002, adsZoom: 50, bulletSpeed: 135, noReload: false,
@@ -982,7 +985,7 @@ Object.assign(WEAPON_FALLOFF, {
   xm7: { near: 38, far: 96, min: 0.72 }, hkmp7: FALLOFF_SMG, m4a1_arena: FALLOFF_ARENA_AR,
   paintball: FALLOFF_PAINT, nail_gun: FALLOFF_PAINT, sticker_blaster: FALLOFF_PAINT,
   srx: FALLOFF_SNIPER, railgun: FALLOFF_SNIPER, coilgun: FALLOFF_SNIPER, amr: FALLOFF_SNIPER, barrett: FALLOFF_SNIPER,
-  lever: FALLOFF_MARKSMAN, m1_garand: FALLOFF_MARKSMAN, air_rifle: FALLOFF_MARKSMAN, harpoon_gun: FALLOFF_MARKSMAN,
+  lever: FALLOFF_MARKSMAN, m1_garand: FALLOFF_MARKSMAN, air_rifle: FALLOFF_MARKSMAN, harpoon_gun: FALLOFF_SNIPER,
   revolver: FALLOFF_HEAVY_PISTOL, hand_cannon: FALLOFF_HEAVY_PISTOL, duelist_pistol: FALLOFF_HEAVY_PISTOL,
   desert_eagle: FALLOFF_HEAVY_PISTOL, m1911: FALLOFF_HEAVY_PISTOL, gunslinger: FALLOFF_HEAVY_PISTOL, akimbo: FALLOFF_AKIMBO,
   pistol: FALLOFF_SIDEARM, five_seven: FALLOFF_SIDEARM, mauser: FALLOFF_SIDEARM, snub_revolver: FALLOFF_SIDEARM,
@@ -1074,7 +1077,7 @@ const MELEE_ITEMS = [
   { id: 'baguette',   name: 'Baguette',   type: 'Melee',       damage: 28, range: 2.0, cooldown: 300,
     ability: { name: 'Eat It',       cd: 10000, desc: 'Munch the baguette · restore 40 HP', type: 'melee_eat', heal: 40 } },
   { id: 'knife',      name: 'Knife',      type: 'Melee',       damage: 80, range: 1.6, cooldown: 380, speedMult: 2.0,
-    ability: { name: 'Backstab',  cd: 7500, desc: 'Glide behind a target · 999 damage from behind, an ordinary stab from the front', type: 'melee_instakill' } },
+    ability: { name: 'Backstab',  cd: 7500, desc: 'A normal stab · 999 damage from behind, 80 from the front · no automatic movement', type: 'melee_instakill' } },
   { id: 'chainsaw',   name: 'Chainsaw',   type: 'Heavy Melee', damage: 45, range: 1.9, cooldown: 150,
     ability: { name: 'Rev Up',       cd: 0, desc: 'HOLD E · the saw revs: it swings by itself, 2.5× as fast, and burns fuel · let go and it stops', type: 'melee_revup', hold: true, autoMs: 60, fuelDrain: 12 } },
   { id: 'lightsabre', archived: true, name: 'Lightsabre', type: 'Melee · Jedi',  damage: 72, range: 2.5, cooldown: 420, doubleJump: true,
@@ -1124,7 +1127,7 @@ const MELEE_ITEMS = [
     healOnHit: 20, // heals 20 HP per landed swing
     ability: { name: 'Blood Frenzy', cd: 12000, desc: '4 s · double lifesteal (40/hit)', type: 'melee_revup', duration: 4000, lifestealMult: 2, autoMs: 150, lunge: 0.9 } },
   // ── The Classic ──────────────────────────────────────────────────────────
-  { id: 'fists',      name: 'Fists',      type: 'Brass Knuckles', damage: 24, range: 1.4, cooldown: 220, speedMult: 1.6,
+  { id: 'fists',      name: 'Fists',      type: 'Boxing', damage: 50, range: 2.2, cooldown: 1000 / 3, hitboxRadius: .65, speedMult: 1.6,
     dual: true, // two separate fists, thrown alternately — not one box sliding sideways
     ability: { name: 'Boxing Combo', cd: 1500, desc: 'E uppercut · E rising cross · E ground pound', type: 'melee_uppercut', damage: 50, up: 8.5, hop: 3.5, reach: 2.6, popVel: 9, color: 0xffd9a0,
       radius: 3.4, slamDamage: 60, leap: 12, leapForward: 3, dive: 28,
@@ -1371,7 +1374,7 @@ const SUPPORT_ITEMS = [
   { id: 'blink_pearl', name: 'Blink Pearl', type: 'Teleport', uses: 2, blink: 10, cooldown: 900 },
   { id: 'ammo_fountain', name: 'Ammo Fountain', type: 'Resupply', uses: 1, refill: 0.65, cooldown: 1000 },
   { id: 'confetti_cannon', name: 'Confetti Cannon', type: 'Chaos', uses: 3, damage: 8, burst: 14, spread: 0.85, cooldown: 520, bulletSpeed: 76, randomBulletColor: true, bulletSize: 0.055 },
-  { id: 'moon_mine', name: 'Moon Mine', type: 'Floaty Bomb', uses: 2, damage: 65, cooldown: 800, bulletSpeed: 32, bulletColor: 0xbca7ff, bulletSize: 0.16 },
+  { id: 'moon_mine', name: 'Moon Mine', type: 'Floaty Bomb', uses: 2, damage: 65, cooldown: 800, bulletSpeed: 32, bulletColor: 0xbca7ff, bulletSize: 0.16, proximityRadius: 4 },
   { id: 'rubber_duck', name: 'Rubber Duck', type: 'Bouncer', uses: 4, damage: 18, cooldown: 360, bulletSpeed: 68, bulletColor: 0xffe55c, bulletSize: 0.12 },
   { id: 'black_hole_seed', name: 'Black Hole Seed', type: 'Void', uses: 1, damage: 52, blackHole: true, cooldown: 1300, bulletSpeed: 36, bulletColor: 0x4b0082, bulletSize: 0.20 },
   { id: 'glitch_cube', archived: true, name: 'Glitch Cube', type: 'Wild Card', uses: 2, damage: 42, burst: 5, spread: 0.55, cooldown: 780, bulletSpeed: 92, randomBulletColor: true, bulletSize: 0.10 },
@@ -1542,6 +1545,7 @@ const GAME_MODE_CONFIGS = {
   'boss':       { type: 'boss',       bossId: 'warden', allies: 0, enemies: 0, forcedMap: 'boss_arena', playerHp: 400 },   // 🤖 1v1 against THE WARDEN, a giant stationary robot
   'boss_core':  { type: 'boss',       bossId: 'core',   allies: 0, enemies: 0, forcedMap: 'boss_arena', playerHp: 400 },   // 🔷 THE CORE: rings, shockwaves, beams
   'boss_hydra': { type: 'boss',       bossId: 'hydra',  allies: 0, enemies: 0, forcedMap: 'boss_arena', playerHp: 400 },   // 🐍 THE HYDRA: acid, ice, lightning   // 🤖 1v1 against THE WARDEN, a giant stationary robot
+  'boss_arsenal': { type: 'boss', bossId: 'arsenal', allies: 0, enemies: 0, forcedMap: 'boss_arena', playerHp: 400 },
   'laststand':  { type: 'laststand',  allies: 3, enemies: 0, forcedMap: 'battlefield', playerHp: 300 },   // 🧟 zombie waves, three teammates, the Battlefield's farmhouse
   'dday':       { type: 'dday',       allies: 3, enemies: 0 },
   'base_raid':  { type: 'race',       allies: 4, enemies: 16, killGoal: 16, timeLimit: 420,
@@ -1596,7 +1600,7 @@ const WEAPON_COSTS = {
   coilgun: 460,  painter_beam: 300, gravity_paint: 400,
   portal_launcher: 460,  traffic_controller: 320,
   // Primaries — Explosive / projectile
-  boombow: 500, gravity_launcher: 480, harpoon_gun: 440, mortar_rifle: 480, phase_rifle: 550,
+  boombow: 500, gravity_launcher: 480, harpoon_gun: 440, mortar_rifle: 480, phase_rifle: 550, swap_gun: 600,
   firework_launcher: 360, shockwave_launcher: 460, airburst_projector: 360,
   pinball_launcher: 440, seismic_hammer: 480, glassmaker: 380,
   // Primaries — Tactical / precision / battle rifle
@@ -1727,7 +1731,7 @@ function adminPassMsLeft() {
 function botLegalGun(w, slot = null) {
   return !!w
     && (!slot || w.slot === slot)
-    && !w.adminItem && !w.archived && !w.skinOnly && !w.modeOnly && !w.ddayOnly;
+    && !w.adminItem && !w.archived && !w.skinOnly && !w.modeOnly && !w.ddayOnly && !w.playerOnly;
 }
 function botLegalMelee(m) {
   return !!m && !m.adminItem && !m.archived && !m.skinOnly;
@@ -2446,10 +2450,6 @@ const ABILITY_OPTIONS = {
   ],
 
   // ── Bows & bolt throwers ────────────────────────────────
-  harpoon_gun: [
-      { id:'harpoon_gun_charge', name:'Charge Shot', price:310, ...{ type:'charge' }, desc:'Hold to draw · longer hold = faster bolt + more damage' },
-      { id:'harpoon_gun_quick', name:'Quick Draw', price:240, ...{ type:'buff', cd:9000, duration:4000, rateMult:0.45, dmgMult:0.7 }, desc:'4 s · fire twice as fast for 70% damage' },
-  ],
   dart_gun: [
       { id:'dart_gun_charge', name:'Charge Shot', price:110, ...{ type:'charge' }, desc:'Hold to draw · longer hold = faster bolt + more damage' },
       { id:'dart_gun_quick', name:'Quick Draw', price:90, ...{ type:'buff', cd:9000, duration:4000, rateMult:0.45, dmgMult:0.7 }, desc:'4 s · fire twice as fast for 70% damage' },
@@ -2588,6 +2588,7 @@ function ownsAbility(opt) {
   return !!(currentUser && (currentUser.purchased || []).includes(opt.id));
 }
 function equippedAbility(w) {
+  if (w?.id==='harpoon_gun') return null;
   const opts = abilityOptionsFor(w);
   if (!opts.length) return null;
   const chosen = opts.find(o => o.id === equippedAbilities[w.id] && ownsAbility(o));
@@ -4726,6 +4727,7 @@ function skinSampleFor(ctx, id) {                                   // the recor
 // light, silly ones higher; any skin not named here gets a pitch of its own from its id (deterministic, 4.5 % to 11 % off), so a skin added later has one too.
 // A skin with a recording of its own (SKIN_SAMPLES) already sounds like itself, with a pitch tuned in that table, so it is left alone. Only your own shots: see playWeaponSound.
 const SKIN_PITCH = {
+  revolver_sheriff: 1.24,
   aug: 0.88,
   rpd_m249: 0.90, flamethrower_m2: 0.92, grenade_launcher_mgl: 0.92, srx_dragunov: 0.90, srx_m24: 0.92, sg8_remington870: 0.92, lever_winchester94: 0.93,
   revolver_python: 0.92, m1_garand_fal: 0.93, burst_scar_h: 0.94, m4a1_arena_hk416: 1.05, ak20_aks74u: 1.08, flechette_bullpup: 1.06, vector_mp5: 1.06, pistol_m9: 1.06,
@@ -4805,7 +4807,11 @@ function burstClipStillSounding(id, opts) {
   _burstClipAt[key] = now;
   return false;
 }
+// The synthesised kinds that are a real gun's report (the realistic skins: AUG, M4A1, AKS-74U, M9, Python...). A skin voiced with one of these is only another
+// real gun and plays the recording; any other kind is the skin's own sound and plays instead of it.
+const REAL_GUN_VOICES = new Set(['auto_blast', 'auto_blast_heavy', 'rifle', 'crack', 'heavy', 'boom', 'thump', 'pistol']);
 function playWeaponSound(idOrWeapon, opts = {}) {
+  if(window.PVP_BATTLE_SIM?.lowEffects&&!window.PVP_BATTLE_SIM.allowSound())return;
   const wid = typeof idOrWeapon === 'object' ? idOrWeapon && idOrWeapon.id : idOrWeapon;
   _wpnPitch = (opts.remote || !wid) ? 1 : skinPitchFor(wid);              // somebody else's shot is the gun's own voice: what they wear is not yours to know
   _wpnDry = DRY_WEAPONS.has(wid);                                         // (the gun, whatever it wears, and for everybody who hears it)
@@ -4885,10 +4891,13 @@ function _playWeaponSound(idOrWeapon, opts = {}) {
   const start = ctx.currentTime + 0.002;
   const voice = !opts.remote && id ? skinVoiceFor(id) : null;                     // a skin that makes its own shot (SKIN_VOICE): that, and nothing of the gun's
   if (voice) { voice(ctx, start, mult); return; }
-  // A recorded shot (see WEAPON_SAMPLES): the gun is the gun whatever skin is on it, so every skin plays the recording too (the skins' own made-up sounds are not used for a weapon that has one). Its own path, none of the made-up layers
+  // A recorded shot (see WEAPON_SAMPLES): the gun is the gun whatever skin is on it, so a skin that is only another real gun plays the recording too.
+  // A skin with a voice of its own (a hair dryer, a laser, a cap gun, a donut...) keeps it: that voice is the whole point of the skin, and a recording
+  // laid over it made every costume sound like the gun underneath. Its own path, none of the made-up layers
   if (id) {
     const stealth = !opts.remote && _activeModelSkin[id]?.series === 'stealth';
-    const smp = stealth ? sampleFor(ctx, { file: 'stealth', gain: .6, from: .085, len: 1.75, fade: .04, rate: [1, 1] }) : ((!opts.remote && skinSampleFor(ctx, id)) || weaponSampleFor(ctx, id));
+    const ownVoice = !!(fx && fx.sound && !REAL_GUN_VOICES.has(fx.sound.kind));
+    const smp = stealth ? sampleFor(ctx, { file: 'stealth', gain: .6, from: .085, len: 1.75, fade: .04, rate: [1, 1] }) : ((!opts.remote && skinSampleFor(ctx, id)) || (ownVoice ? null : weaponSampleFor(ctx, id)));
     if (smp) { if (burstClipStillSounding(id, opts)) return; playWeaponSample(ctx, start, smp, mult, distGain, !!opts.remote); return; }
   }
   const mainGain = ctx.createGain();
@@ -4993,6 +5002,11 @@ function playObjectShot(ctx, start, out, p, m) {
     case 'whirr':    // a motor
       playTone(ctx, start, d, out, f1, f2, v, 'sawtooth');
       playNoise(ctx, start, d, out, v * 0.35, 0.4); return true;
+    case 'flick':    // a bill snapped off a stack: a dry paper crack, a quick riffle of flutter, a swish of air. No tone in it at all.
+      playFilteredNoise(ctx, start, 0.010, out, v * 0.95, 'highpass', 3600, 0.6, 0.0002, 1.4);
+      for (let i = 0; i < 4; i++)
+        playFilteredNoise(ctx, start + 0.010 + i * 0.013, 0.016, out, v * (0.55 - i * 0.1), 'bandpass', f1 + Math.random() * f2, 1.8, 0.0003, 1.6);
+      playSweptNoise(ctx, start + 0.004, d * 0.8, out, v * 0.45, 'highpass', 2800, 6200, 0.8); return true;
     case 'swish':    // air past something long
       playSweptNoise(ctx, start, d, out, v, 'bandpass', f1, f2, 1.0); return true;
     case 'ding':     // a bell: the fundamental and its inharmonic partial
@@ -5275,6 +5289,9 @@ function playObjectSfx(ctx, out, name, t, v) {
       break;
     case 'brick':    // snapped together, one after another
       for (let i = 0; i < 5; i++) playObjectSfx(ctx, out, 'snapin', t + i * 0.12, v * 0.6); break;
+    case 'bleep':    // the soft version for the 8-bit skins: two quick triangle notes, quiet. (The arpeggio below was played on the draw, on every pixel of a reload, and again at the end.)
+      playTone(ctx, t, 0.05, out, 784, 784, v * 0.09, 'triangle');
+      playTone(ctx, t + 0.055, 0.07, out, 1175, 1175, v * 0.09, 'triangle'); break;
     case 'blip':     // a chiptune arpeggio
       [523, 659, 784, 1047].forEach((f, i) => playTone(ctx, t + i * 0.06, 0.06, out, f, f, v * 0.14, 'square')); break;
     case 'warp':
@@ -5379,10 +5396,10 @@ const PROP_SFX = {
   band: ['boing', 'boing'], dust: ['brush', 'brush'], popper: ['rustle', 'click'],
   beater: ['click', 'snapin'], refill: ['glug', 'glug'], bubble: ['bloop', 'bloop'],
   puck: ['tap', 'tap'], crisp: ['crunch', 'crunch'], pin: ['click', 'click'],
-  coin: ['clink', 'clink'], gumball: ['rattle', 'rattle'], comb: ['click', 'snapin'],
+  coin: ['clink', 'clink'], cash: ['rustle', 'rustle'], gumball: ['rattle', 'rattle'], comb: ['click', 'snapin'],
   candle: ['tap', 'tap'], reel: ['rattle', 'click'], paint: ['splat', 'splat'],
   filter: ['slideout', 'snapin'], canister: ['hiss', 'snapin'], dash: ['type', 'type'],
-  shard: ['clink', 'clink'], paper: ['fold', 'fold'], brick: ['click', 'snapin'], pixel: ['blip', 'blip'],
+  shard: ['clink', 'clink'], paper: ['fold', 'fold'], brick: ['click', 'snapin'], pixel: ['tick', 'tick'],
   soul: ['whoosh', 'fireup'], ash: ['brush', 'brush'], coal: ['crunch', 'hiss'], magma: ['hiss', 'snapin'],
   holomag: ['slideout', 'beep'], rainbowmag: ['slideout', 'snapin'], bloodoutline: ['whoosh', 'ignite'], blooddagger: ['ignite', 'clink'],
 };
@@ -5420,6 +5437,7 @@ function assemblyBeats(id, trackOverride) {
 }
 
 function playReloadSound(w, durMs, plan) {
+  try { if (_activeModelSkin[w?.id]?.rarity === 'donut') return; } catch (e) {}
   const ctx = getAudioCtx();
   if (!ctx) return;
   unlockAudio();
@@ -22798,7 +22816,7 @@ function gpReflexSight(g, x, y, z, deckY, holographic = false) {
   g.add(optic);g._sightLine={space:optic,rear:new THREE.Vector3(0,0,.006),front:new THREE.Vector3(0,0,-.006)};
   g._hasDefaultAimer=true;return optic;
 }
-function gpOptic(g, x, y, z, length, radius, deckY) {
+function gpOptic(g, x, y, z, length, radius, deckY, clearBore = false) {
   y = Math.min(y, deckY + radius * 1.55 + .002);
   const optic = new THREE.Group();optic.position.set(x,y,z);optic.userData.weaponOptic=true;
   g._sightLine = { space: optic, rear: new THREE.Vector3(0, 0, length * .5), front: new THREE.Vector3(0, 0, -length * .52) };
@@ -22829,7 +22847,8 @@ function gpOptic(g, x, y, z, length, radius, deckY) {
   for(const zz of [-length*.22,length*.2]){
     ring(radius*1.035,radius*.15,zz);
     const h=y-deckY;
-    gpBox(optic,shell,radius*1.9,h,.014,0,-h/2,zz);
+    const inset=clearBore?radius*.91:0;
+    gpBox(optic,shell,radius*1.9,h-inset,.014,0,-(h+inset)/2,zz);
     gpBox(optic,steel,radius*2.2,.004,.021,0,-h+.001,zz);
     for(const side of [-1,1])gpCyl(optic,steel,.0023,.0023,.003,12,side*radius*1.08,-h+.006,zz,0,Math.PI/2);
   }
@@ -23012,7 +23031,10 @@ function buildM1911() {
   gpPlate(g, steel, [[0.010,-0.014],[0.042,-0.024],[0.050,-0.104],[0.020,-0.118],[-0.008,-0.052],[-0.010,-0.018]], 0.036, 0);
   [-1, 1].forEach(sd => gpBox(g, wood, 0.005, 0.062, 0.032, sd * 0.019, -0.062, 0.020, 0.30));
   for (let i = 0; i < 4; i++) [-1, 1].forEach(sd => gpBox(g, inner, 0.006, 0.004, 0.030, sd * 0.020, -0.040 - i * 0.016, 0.024 + i * 0.005, 0.30));
-  gpBox(g, steel, 0.032, 0.010, 0.040, 0, -0.116, 0.016, 0.22);     // magazine floorplate
+  gpPart(g, 'magazine', () => {
+    gpBox(g, blued, .025, .080, .030, 0, -.076, .010, .22);
+    gpBox(g, steel, 0.032, 0.010, 0.040, 0, -0.116, 0.016, 0.22);
+  }, {x:0,y:-.036,z:.010});
   // Controls: spur hammer, grip safety tang, thumb safety, slide stop.
   gpBox(g, bright, 0.012, 0.020, 0.014, 0, 0.044, 0.036, -0.40);
   gpCyl(g, inner, 0.0040, 0.0040, 0.014, 8, 0, 0.048, 0.038, 0, Math.PI/2);
@@ -23050,9 +23072,11 @@ function buildGlock18() {
   for (let i = 0; i < 3; i++) [-1, 1].forEach(sd => gpCyl(g, inner, 0.0060, 0.0060, 0.032, 8, sd * 0.000, -0.044 - i * 0.022, 0.014 + i * 0.006, 0, Math.PI/2));
   [-1, 1].forEach(sd => gpBox(g, grip, 0.004, 0.070, 0.030, sd * 0.018, -0.064, 0.016, 0.30));
   // The 33-round stick magazine, hanging well below the frame.
-  gpBox(g, poly, 0.026, 0.090, 0.030, 0, -0.150, 0.008, 0.22);
-  for (let i = 0; i < 4; i++) gpBox(g, inner, 0.027, 0.004, 0.010, 0, -0.120 - i * 0.022, 0.002 + i * 0.005, 0.22);
-  gpBox(g, poly, 0.030, 0.012, 0.038, 0, -0.196, 0.020, 0.22);
+  gpPart(g, 'magazine', () => {
+    gpBox(g, poly, 0.026, 0.090, 0.030, 0, -0.150, 0.008, 0.22);
+    for (let i = 0; i < 4; i++) gpBox(g, inner, 0.027, 0.004, 0.010, 0, -0.120 - i * 0.022, 0.002 + i * 0.005, 0.22);
+    gpBox(g, poly, 0.030, 0.012, 0.038, 0, -0.196, 0.020, 0.22);
+  }, {x:0,y:-.106,z:.008});
   // Controls and sights.
   gpBox(g, bright, 0.008, 0.012, 0.014, 0.018, 0.004, 0.024);       // selector switch
   gpBox(g, bright, 0.006, 0.008, 0.018, -0.017, 0.006, -0.010);     // slide stop
@@ -23087,7 +23111,10 @@ function buildDesertEagle() {
   gpBox(g, steel, 0.038, 0.026, 0.140, 0, -0.006, -0.040);
   gpPlate(g, grip, [[0.020,-0.016],[0.054,-0.028],[0.062,-0.114],[0.030,-0.130],[0.000,-0.058],[-0.002,-0.020]], 0.040, 0);
   for (let i = 0; i < 4; i++) gpBox(g, inner, 0.042, 0.005, 0.030, 0, -0.044 - i * 0.018, 0.022 + i * 0.006, 0.28);
-  gpBox(g, steel, 0.036, 0.010, 0.044, 0, -0.130, 0.028, 0.20);     // floorplate
+  gpPart(g, 'magazine', () => {
+    gpBox(g, blued, .028, .090, .033, 0, -.085, .019, .20);
+    gpBox(g, steel, 0.036, 0.010, 0.044, 0, -0.130, 0.028, 0.20);
+  }, {x:0,y:-.040,z:.019});
   // Squared guard, hammer, safeties, sights.
   gpBox(g, steel, 0.008, 0.006, 0.056, 0, -0.048, -0.020);
   [-0.048, 0.008].forEach(z => gpBox(g, steel, 0.008, 0.024, 0.006, 0, -0.036, z));
@@ -23369,9 +23396,12 @@ function buildP90Spec() {
   // The flat top magazine, lying along the deck. Translucent, like the real one.
   const magMat = new THREE.MeshPhongMaterial({ color: 0x6a6f5c, shininess: 80,
     specular: 0xb6bfa6, transparent: true, opacity: 0.72 });
-  gpBox(g, magMat, 0.034, 0.024, 0.190, 0, 0.048, 0.010);
-  for (let i = 0; i < 7; i++) gpCyl(g, bright, 0.0058, 0.0058, 0.030, 8, 0, 0.048, -0.062 + i * 0.024, 0, Math.PI/2);
-  gpBox(g, poly, 0.036, 0.016, 0.026, 0, 0.048, 0.116);             // mag rear block
+  gpPart(g, 'magazine', () => {
+    gpBox(g, magMat, 0.034, 0.024, 0.190, 0, 0.048, 0.010);
+    for (let i = 0; i < 7; i++) gpCyl(g, bright, 0.0058, 0.0058, 0.030, 8, 0, 0.048, -0.062 + i * 0.024, 0, Math.PI/2);
+    gpBox(g, poly, 0.036, 0.016, 0.026, 0, 0.048, 0.116);
+  }, {x:0,y:.048,z:.01});
+  g._parts.magazine.userData.topMagazine = true;
   // Wraparound carry handle with the integral sight tunnel.
   gpBox(g, poly, 0.040, 0.012, 0.150, 0, 0.070, -0.010);
   [-0.070, 0.056].forEach(z => gpBox(g, poly, 0.038, 0.020, 0.014, 0, 0.062, z));
@@ -23413,7 +23443,10 @@ function buildFiveSeven() {
   for (let i = 0; i < 2; i++) gpBox(g, inner, 0.018, 0.006, 0.012, 0, -0.018, -0.084 + i * 0.022);
   gpPlate(g, grip, [[0.010,-0.014],[0.042,-0.022],[0.048,-0.102],[0.020,-0.114],[-0.006,-0.052],[-0.008,-0.018]], 0.032, 0);
   for (let i = 0; i < 4; i++) gpBox(g, inner, 0.033, 0.004, 0.026, 0, -0.036 - i * 0.018, 0.012 + i * 0.005, 0.26);
-  gpBox(g, poly, 0.028, 0.010, 0.034, 0, -0.114, 0.016, 0.24);      // floorplate
+  gpPart(g, 'magazine', () => {
+    gpBox(g, steel, .023, .078, .027, 0, -.075, .007, .24);
+    gpBox(g, poly, 0.028, 0.010, 0.034, 0, -0.114, 0.016, 0.24);
+  }, {x:0,y:-.036,z:.007});
   const guard = new THREE.Mesh(new THREE.TorusGeometry(0.017, 0.0032, 6, 12, Math.PI * 1.05), poly);
   guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.028, -0.014); g.add(guard);
   gpBox(g, bright, 0.005, 0.013, 0.005, 0, -0.020, -0.014, 0.2);
@@ -24020,11 +24053,13 @@ function buildHarpoonGun() {
   // Harpoon lying in an open track on top.
   gpBox(g, steel, 0.016, 0.010, 0.400, 0, 0.036, -0.100);
   gpBox(g, inner, 0.008, 0.006, 0.380, 0, 0.040, -0.100);
-  gpCyl(g, bright, 0.0060, 0.0060, 0.480, 8, 0, 0.044, -0.130);     // shaft
-  gpCyl(g, bright, 0.0090, 0.0090, 0.050, 8, 0, 0.044, -0.348);     // head shoulder
-  gpCyl(g, bright, 0.0090, 0.0004, 0.048, 8, 0, 0.044, -0.396);     // point
-  [-1, 1].forEach(sd => gpBox(g, bright, 0.003, 0.020, 0.038, sd * 0.008, 0.044, -0.336, 0, 0, sd * 0.5)); // barbs
-  gpCyl(g, inner, 0.0075, 0.0075, 0.014, 8, 0, 0.044, 0.096);       // shaft tail notch
+  gpPart(g,'ammo',()=>{
+    gpCyl(g, bright, 0.0060, 0.0060, 0.480, 8, 0, 0.044, -0.130);
+    gpCyl(g, bright, 0.0090, 0.0090, 0.050, 8, 0, 0.044, -0.348);
+    gpCyl(g, bright, 0.0090, 0.0004, 0.048, 8, 0, 0.044, -0.396);
+    [-1, 1].forEach(sd => gpBox(g, bright, 0.003, 0.020, 0.038, sd * 0.008, 0.044, -0.336, 0, 0, sd * 0.5));
+    gpCyl(g, inner, 0.0075, 0.0075, 0.014, 8, 0, 0.044, 0.096);
+  });
   // Line: tied to the harpoon, run back and down onto a spool.
   gpCyl(g, line, 0.0026, 0.0026, 0.230, 6, 0.008, 0.030, -0.190, 0.12, 0);
   gpCyl(g, line, 0.0026, 0.0026, 0.120, 6, 0.008, -0.006, -0.020, 0.9, 0);
@@ -26111,7 +26146,7 @@ function buildVoidHarvester() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
-function buildAK20() {
+function buildAK20(stockDetail = false) {
   const g = new THREE.Group();
   // 🔫 AK-20, black furniture. Keep the AK silhouette, but make every attachment
   // visibly socket into a larger part: magwell sleeve, stock hinge, handguard
@@ -26155,7 +26190,9 @@ function buildAK20() {
 
   const sideStripe = (x, y, z, d) => box(stripe, 0.0032, 0.006, d, x, y, z);
 
-  box(steel, 0.048, 0.100, 0.320, 0, 0.005, -0.010);                 // receiver
+  if (stockDetail) gpContouredPart(g,steel,[[-.170,-.031],[-.154,-.045],[.124,-.045],[.150,-.030],
+    [.150,.031],[.125,.055],[-.151,.055],[-.170,.037]],.045,0,.009);
+  else box(steel, 0.048, 0.100, 0.320, 0, 0.005, -0.010);              // receiver
   box(steel, 0.050, 0.025, 0.080, 0, -0.044, -0.056);                 // magwell sleeve: magazine grows out of this, not a thread
   box(inner, 0.044, 0.014, 0.080, 0, 0.053, -0.060);                 // dust cover / ejection port
   cyl(bright,.0035,.0035,.003,20,.028,.014,.026,0,Math.PI/2); // selector pivot
@@ -26187,6 +26224,7 @@ function buildAK20() {
 
   // Magazine: still curved, but the top segment is buried inside the magwell so
   // it reads as locked in, not pinched on by a tiny edge.
+  const magazine = () => {
   gpContouredPart(g,magMat,[[-.034,-.044],[-.084,-.044],[-.089,-.092],[-.101,-.143],
     [-.121,-.190],[-.074,-.211],[-.056,-.166],[-.042,-.112]],.030);
   for(const side of [-1,1]){
@@ -26195,6 +26233,9 @@ function buildAK20() {
     box(inner,.0008,.007,.026,side*.017,-.191,-.095,0.38);
   }
   box(blued,.034,.009,.052,0,-.198,-.097,.38); // fitted magazine floorplate
+  };
+  if (stockDetail) gpPart(g,'magazine',magazine,{x:0,y:-.042,z:-.056});
+  else magazine();
 
   // Pistol grip: ONE piece, the cap flared into the same outline instead of a
   // second box stuck on the bottom at its own angle (which is exactly the
@@ -26220,6 +26261,9 @@ function buildAK20() {
     [-0.336,0.012],[-0.310,0.052],[-0.186,0.052],[-0.164,0.012],[-0.190,-0.008],[-0.320,-0.006],
   ], 0.050, 0);
   box(steel, 0.052, 0.060, 0.024, 0, 0.018, -0.336);                 // front handguard collar
+  if (stockDetail) for (const side of [-1,1]) for(let i=0;i<4;i++) {
+    box(grip,.0028,.007,.018,side*.025,.023,-.212-i*.027);
+  }
   cyl(blued, 0.0052, 0.0052, 0.180, 14, 0, 0.046, -0.256);           // gas tube
 
   // Barrel, front sight, slant brake -- the AKM's signature angled cut.
@@ -28204,6 +28248,209 @@ function buildTapeGun() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+function buildMoneyGun() {
+  // 💵 Machine pistol -> money gun. Red body with a gold dollar sign down each
+  // side, a clear hopper on top with a stack of bills in it under a hinged gold
+  // lid, and two rubber flywheels at the front with a bill poking out between
+  // them. Reload: the lid flips up, the old stack goes, a fresh wad goes in, the
+  // lid shuts. Its flash is red and so are its shots (SKIN_SHOT).
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const red  = new THREE.MeshPhongMaterial({ color: 0xc8202a, shininess: 130, specular: 0xffb0b0 });
+  const dkred  = new THREE.MeshPhongMaterial({ color: 0x7a1219, shininess: 90, specular: 0xe06a72 });
+  const gold   = new THREE.MeshPhongMaterial({ color: 0xd8b02a, shininess: 190, specular: 0xfff2b8 });
+  const glass  = new THREE.MeshPhongMaterial({ color: 0xf7c4c8, shininess: 230, specular: 0xffffff, transparent: true, opacity: 0.26, depthWrite: false });
+  const rubber = new THREE.MeshPhongMaterial({ color: 0x1a1d20, shininess: 30, specular: 0x30363c });
+  const billA  = new THREE.MeshPhongMaterial({ color: 0xd6303a, shininess: 30, specular: 0xf0a0a4 });
+  const billB  = new THREE.MeshPhongMaterial({ color: 0xf08a92, shininess: 30, specular: 0xffd0d4 });
+  const band   = new THREE.MeshPhongMaterial({ color: 0xe6d27a, shininess: 20, specular: 0x8a8050 });
+  gpBox(g, red, 0.040, 0.046, 0.165, 0, -0.002, -0.032);              // body
+  gpBox(g, gold, 0.041, 0.005, 0.165, 0, 0.021, -0.032);                // gold top band
+  gpBox(g, dkred, 0.041, 0.006, 0.165, 0, -0.024, -0.032);             // dark underside
+  // A gold $ on each flank: a bar down the middle and the three strokes of the S.
+  [-1, 1].forEach(sx => {
+    const x = sx * 0.0207;
+    gpBox(g, gold, 0.002, 0.026, 0.003, x, -0.002, -0.034);             // the bar through it
+    gpBox(g, gold, 0.002, 0.003, 0.014, x, 0.0085, -0.034);             // top stroke
+    gpBox(g, gold, 0.002, 0.003, 0.014, x, -0.002, -0.034);             // middle
+    gpBox(g, gold, 0.002, 0.003, 0.014, x, -0.0125, -0.034);            // bottom
+    gpBox(g, gold, 0.002, 0.008, 0.003, x, 0.0045, -0.0405);            // upper bowl, front side
+    gpBox(g, gold, 0.002, 0.008, 0.003, x, -0.0075, -0.0275);           // lower bowl, rear side
+  });
+  // The hopper: a clear box with gold corner posts, the stack standing in it.
+  gpBox(g, glass, 0.046, 0.046, 0.108, 0, 0.046, -0.040);
+  [[-1, -0.094], [1, -0.094], [-1, 0.014], [1, 0.014]].forEach(([sx, z]) =>
+    gpBox(g, gold, 0.004, 0.046, 0.004, sx * 0.023, 0.046, z));
+  for (let i = 0; i < 8; i++) {
+    gpPart(g, 'ammo', () => {
+      gpBox(g, i % 2 ? billB : billA, 0.038, 0.0042, 0.092, 0, 0.0265 + i * 0.0052, -0.040);   // a bill
+      gpBox(g, band, 0.040, 0.0046, 0.012, 0, 0.0265 + i * 0.0052, -0.040);                    // its paper strap
+    });
+  }
+  // The lid, hinged along its rear edge: positive arx lifts the front of it.
+  gpPart(g, 'main', () => {
+    gpBox(g, gold, 0.050, 0.005, 0.114, 0, 0.0715, -0.043);
+    gpBox(g, dkred, 0.014, 0.007, 0.016, 0, 0.0775, -0.085);           // thumb knob
+    gpBox(g, dkred, 0.030, 0.002, 0.060, 0, 0.0745, -0.040);          // inlay
+  }, { x: 0, y: 0.0705, z: 0.014 });
+  // The flywheels. A bill goes in between them from the hopper and comes out the front.
+  gpBox(g, dkred, 0.044, 0.038, 0.034, 0, 0.004, -0.128);              // housing
+  [0.0175, -0.0075].forEach(y => {
+    gpCyl(g, rubber, 0.0125, 0.0125, 0.048, 14, 0, y, -0.128, 0, Math.PI / 2);
+    [-1, 1].forEach(sx => gpCyl(g, gold, 0.0055, 0.0055, 0.004, 10, sx * 0.0245, y, -0.128, 0, Math.PI / 2));
+  });
+  gpBox(g, inner, 0.040, 0.003, 0.012, 0, 0.005, -0.147);               // the slot
+  gpBox(g, billA, 0.032, 0.0016, 0.030, 0, 0.005, -0.157);              // a bill on its way out
+  gpPlate(g, dkred, [
+    [0.040,-0.020],[0.070,-0.036],[0.080,-0.138],[0.050,-0.152],[0.022,-0.066],[0.016,-0.024],
+  ], 0.034, 0);
+  gpBox(g, gold, 0.006, 0.016, 0.006, 0, -0.034, 0.006, 0.22);         // trigger
+  gpBox(g, dkred, 0.012, 0.004, 0.034, 0, -0.046, -0.010);            // guard
+  // makeMuzzleFlash() is orange all through and only exposes its heart as .material
+  // (which triggerMuzzleBlast also uses for the light and the sparks), so a red
+  // flash is repainted piece by piece: jet and petals, the heart, the needle.
+  const flash = makeMuzzleFlash();
+  flash.traverse(o => {
+    if (!o.isMesh || !o.material || !o.material.color) return;
+    if (o === flash.children[1]) o.material.color.setHex(0xff6666);
+    else o.material.color.setHex(o.material.color.getHex() === 0xffffff ? 0xffe0e0 : 0xff2a2a);
+  });
+  flash.position.set(0, 0.005, -0.176); g.add(flash);
+  g._flash = flash; g._kickZ = 0.008; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildBaguetteShotgun() {
+  // 🥖 Sawed-off -> two baguettes. Side by side, taped up at the ends with a rubber band round each third, the cut
+  // ends pale and open at the front, five scores across each crust, and a wooden grip because bread has none.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), wood = GUN_MATS.wood();
+  const crust = new THREE.MeshPhongMaterial({ color: 0xd9a35a, shininess: 28, specular: 0x6a5030 });
+  const dark  = new THREE.MeshPhongMaterial({ color: 0xb87a32, shininess: 18, specular: 0x4a3018 });
+  const crumb = new THREE.MeshPhongMaterial({ color: 0xf3dfa6, shininess: 8, specular: 0x6a6040 });
+  const band  = new THREE.MeshPhongMaterial({ color: 0xc8342a, shininess: 40, specular: 0x8a4038 });
+  [-1, 1].forEach(sx => {
+    const x = sx * 0.0175;
+    gpCyl(g, crust, 0.017, 0.012, 0.230, 14, x, 0.016, -0.085);                    // the loaf, tapering to the muzzle
+    gpCyl(g, crumb, 0.0118, 0.0118, 0.004, 14, x, 0.016, -0.2015);                 // the cut end
+    gpCyl(g, inner, 0.0065, 0.0065, 0.005, 10, x, 0.016, -0.2035);                 // and the bore
+    for (let i = 0; i < 5; i++) gpBox(g, dark, 0.004, 0.003, 0.036, x, 0.0335, -0.010 - i * 0.034, 0, 0.7, 0);   // scores
+  });
+  [-0.030, -0.100, -0.170].forEach(z => {                                          // a rubber band round both, as four thin strips
+    gpBox(g, band, 0.074, 0.004, 0.008, 0, 0.0345, z); gpBox(g, band, 0.074, 0.004, 0.008, 0, -0.0025, z);
+    gpBox(g, band, 0.004, 0.040, 0.008, -0.0355, 0.016, z); gpBox(g, band, 0.004, 0.040, 0.008, 0.0355, 0.016, z);
+  });
+  gpPlate(g, wood, [[0.034,-0.004],[0.064,-0.020],[0.072,-0.108],[0.044,-0.122],[0.016,-0.060],[0.012,-0.012]], 0.034, 0);
+  gpBox(g, wood, 0.006, 0.014, 0.006, 0, -0.016, 0.006, 0.2);                       // trigger
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.016, -0.212); g.add(flash);
+  g._flash = flash; g._kickZ = 0.014; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildLavaLamp() {
+  // 🌋 Freeze gun -> lava lamp. A gold base at the rear, the tapering glass bulb pointing downrange full of purple fluid,
+  // wax blobs hanging in it that burn orange, and the gold cap at the muzzle. It was already glowing.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner();
+  const gold  = new THREE.MeshPhongMaterial({ color: 0xd8a820, shininess: 170, specular: 0xfff0b0 });
+  const glass = new THREE.MeshPhongMaterial({ color: 0xe8d8ff, shininess: 240, specular: 0xffffff, transparent: true, opacity: 0.22, depthWrite: false });
+  const fluid = new THREE.MeshBasicMaterial({ color: 0x9a3aa8, transparent: true, opacity: 0.55, depthWrite: false });
+  const wax   = new THREE.MeshBasicMaterial({ color: 0xff6a2a });
+  const hot   = new THREE.MeshBasicMaterial({ color: 0xffb04a });
+  gpCyl(g, gold, 0.027, 0.017, 0.062, 18, 0, 0.012, 0.010);                          // the base
+  gpCyl(g, inner, 0.0175, 0.0175, 0.006, 16, 0, 0.012, -0.020);                      // the dark collar between base and glass
+  gpCyl(g, glass, 0.020, 0.010, 0.170, 20, 0, 0.012, -0.108);                        // the glass
+  gpCyl(g, fluid, 0.0172, 0.0082, 0.162, 20, 0, 0.012, -0.108);                      // the fluid in it
+  [[0, 0.012, -0.045, 0.011], [0.004, 0.017, -0.082, 0.0085], [-0.003, 0.008, -0.118, 0.0075], [0.002, 0.014, -0.150, 0.0055]].forEach(([x, y, z, r], i) => {
+    const b = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 9), i % 2 ? hot : wax);   // wax blobs
+    b.scale.set(1, 1, 1.5); b.position.set(x, y, z); g.add(b);
+  });
+  gpCyl(g, gold, 0.0105, 0.0085, 0.020, 14, 0, 0.012, -0.203);                       // the cap
+  gpPlate(g, gold, [[0.040,-0.004],[0.066,-0.020],[0.074,-0.112],[0.046,-0.126],[0.018,-0.062],[0.014,-0.012]], 0.032, 0);
+  gpBox(g, inner, 0.006, 0.014, 0.006, 0, -0.016, 0.008, 0.2);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.012, -0.220); g.add(flash);
+  g._flash = flash; g._kickZ = 0.012; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildSmartphone() {
+  // 📱 Cycler -> a smartphone. A slab held flat with the screen up: a lit display with a grid of app icons and a red
+  // badge on one of them, a thin case rim, and the camera bump at the front end, which is where it points. Fully charged.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const case_ = new THREE.MeshPhongMaterial({ color: 0x2a2d34, shininess: 90, specular: 0x7a828c });
+  const screen = new THREE.MeshBasicMaterial({ color: 0x9fd8ff });
+  const bar = new THREE.MeshBasicMaterial({ color: 0x2a75ff });
+  const lens = new THREE.MeshPhongMaterial({ color: 0x14161a, shininess: 240, specular: 0xffffff });
+  gpBox(g, case_, 0.068, 0.010, 0.160, 0, 0.016, -0.040);                            // the phone, in its case
+  gpBox(g, screen, 0.058, 0.0016, 0.144, 0, 0.0218, -0.040);                         // the display
+  gpBox(g, bar, 0.058, 0.0018, 0.012, 0, 0.0222, -0.100 + 0.050);                    // status bar across the top of it
+  const cols = [0xff4a5a, 0x2ad47a, 0xffd23a, 0xb06aff, 0x2a75ff, 0xff9a2a];
+  for (let r = 0; r < 4; r++) for (let c = 0; c < 3; c++)
+    gpBox(g, new THREE.MeshBasicMaterial({ color: cols[(r * 3 + c) % cols.length] }), 0.011, 0.0018, 0.011, -0.016 + c * 0.016, 0.0224, -0.016 - r * 0.020 - 0.0);   // app icons
+  gpBox(g, new THREE.MeshBasicMaterial({ color: 0xff2a3a }), 0.0045, 0.0022, 0.0045, 0.0185, 0.0226, -0.0095);      // a red notification badge
+  gpCyl(g, case_, 0.013, 0.013, 0.010, 18, 0.016, 0.012, -0.118, Math.PI / 2, 0);   // camera bump at the front
+  gpCyl(g, lens, 0.0088, 0.0088, 0.011, 18, 0.016, 0.012, -0.1205);
+  gpCyl(g, bright, 0.0098, 0.0098, 0.002, 18, 0.016, 0.012, -0.1245);
+  gpPlate(g, case_, [[0.034,-0.004],[0.064,-0.020],[0.072,-0.108],[0.044,-0.122],[0.016,-0.060],[0.012,-0.012]], 0.034, 0);
+  gpBox(g, inner, 0.006, 0.014, 0.006, 0, -0.016, 0.006, 0.2);
+  const flash = makeMuzzleFlash(); flash.position.set(0.016, 0.012, -0.136); g.add(flash);
+  g._flash = flash; g._kickZ = 0.008; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildOblivionRail() {
+  // ⚫ Railgun -> Oblivion. A plain black rod, and nothing on it but light: a ring of hard white silver every few centimetres from the
+  // breech to the muzzle, each with a faint bloom round it, and a pulse of brightness that runs down them toward the front. The
+  // receiver, the stock, the grip and the sights are all black, so what you see of it is the rings.
+  const g = new THREE.Group();
+  const inner = GUN_MATS.inner();
+  const black = new THREE.MeshPhongMaterial({ color: 0x2a2d33, shininess: 200, specular: 0xa4acb8 });
+  const matte = new THREE.MeshPhongMaterial({ color: 0x23262b, shininess: 70, specular: 0x555b63 });
+  const white = new THREE.MeshBasicMaterial({ color: 0xf2f6ff });
+  gpCyl(g, black, 0.0215, 0.0215, 0.600, 28, 0, 0.014, -0.110);                      // the rod, z -0.41 .. +0.19
+  gpBox(g, black, 0.042, 0.048, 0.150, 0, 0.012, 0.100);                              // receiver
+  gpBox(g, matte, 0.034, 0.040, 0.130, 0, 0.010, 0.235);                              // stock
+  gpBox(g, inner, 0.036, 0.042, 0.010, 0, 0.010, 0.302, 0.08);                        // butt pad
+  gpBox(g, matte, 0.014, 0.012, 0.070, 0, 0.0445, 0.080);                             // sight rail
+  gpBox(g, white, 0.004, 0.008, 0.004, 0, 0.052, -0.250);                             // front sight, a white point
+  gpCyl(g, inner, 0.0165, 0.0165, 0.014, 20, 0, 0.014, -0.408);                       // the bore
+  gpCyl(g, white, 0.0095, 0.0095, 0.003, 14, 0, 0.014, -0.4155);                      // lit at the bottom of it
+  const rings = [];
+  const ring = (z, r, h) => {
+    const mat = new THREE.MeshBasicMaterial({ color: 0xf2f6ff });
+    gpCyl(g, mat, r, r, h, 28, 0, 0.014, z);                                          // a stripe of white silver round the rod
+    const bloom = new THREE.MeshBasicMaterial({ color: 0xdfe8ff, transparent: true, opacity: 0.30, blending: THREE.AdditiveBlending, depthWrite: false });
+    gpCyl(g, bloom, r + 0.003, r + 0.003, h + 0.010, 28, 0, 0.014, z);                // and a soft glow round that
+    rings.push({ mat, bloom, z });
+  };
+  for (let i = 0; i < 13; i++) ring(-0.372 + i * 0.0335, 0.0228, 0.0045);            // along the rod
+  ring(-0.392, 0.0262, 0.008); ring(-0.404, 0.0262, 0.008);                           // two heavier ones at the muzzle
+  [0.052, 0.094, 0.136].forEach(z => ring(z, 0.0262, 0.0045));                         // round the receiver end
+  gpPlate(g, black, [[0.076,-0.020],[0.104,-0.034],[0.108,-0.108],[0.078,-0.122],[0.056,-0.060],[0.054,-0.026]], 0.036, 0);   // pistol grip
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.0036, 6, 12, Math.PI * 1.05), black);
+  guard.rotation.set(0, Math.PI / 2, -0.4); guard.position.set(0, -0.032, 0.044); g.add(guard);
+  gpBox(g, white, 0.005, 0.016, 0.005, 0, -0.022, 0.044, 0.2);                        // trigger, a white line
+  // The flash: white silver, to match its rings (makeMuzzleFlash is orange all through; child 1 is the core and sets the light's colour).
+  const flash = makeMuzzleFlash();
+  flash.traverse(o => {
+    if (!o.isMesh || !o.material || !o.material.color) return;
+    if (o === flash.children[1]) o.material.color.setHex(0xffffff);
+    else o.material.color.setHex(o.material.color.getHex() === 0xffffff ? 0xffffff : 0xcfdcff);
+  });
+  flash.position.set(0, 0.014, -0.424); g.add(flash);
+  g._tick = () => {                                                                   // a pulse of brightness runs down the rings toward the muzzle
+    const t = performance.now() * 0.001;
+    for (let i = 0; i < rings.length; i++) {
+      const k = 0.5 + 0.5 * Math.sin(t * 5.5 - rings[i].z * 22);
+      rings[i].bloom.opacity = 0.14 + 0.46 * k;
+      rings[i].mat.color.setRGB(0.80 + 0.20 * k, 0.85 + 0.15 * k, 1);
+    }
+  };
+  g._flash = flash; g._kickZ = 0.030; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
 function buildKeytar() {
   // 🎹 Mk 44 -> keytar. Two octaves down the body, the neck with the pitch
   // ribbon and mod wheel, and a strap. Suppressive fire, but in C major.
@@ -28618,8 +28865,10 @@ function buildM4A1() {
     for (let i = 0; i < 6; i++) gpBox(g, inner, 0.054, 0.005, 0.007, 0, 0.010, -0.150 - i * 0.032, 0, ry);
   gpBox(g, poly, 0.020, 0.040, 0.026, 0.030, -0.030, -0.220, 0, 0, 0.3); // vertical foregrip
   // Straight PMAG.
-  gpBox(g, mag, 0.030, 0.190, 0.048, 0, -0.140, -0.010, 0.02);
-  gpBox(g, inner, 0.031, 0.006, 0.050, 0, -0.050, -0.010, 0.02);
+  gpPart(g, 'magazine', () => {
+    gpBox(g, mag, 0.030, 0.190, 0.048, 0, -0.140, -0.010, 0.02);
+    gpBox(g, inner, 0.031, 0.006, 0.050, 0, -0.050, -0.010, 0.02);
+  }, {x:0,y:-.045,z:-.010});
   // Pistol grip.
   gpPlate(g, poly, [
     [0.076,-0.012],[0.108,-0.058],[0.114,-0.146],[0.090,-0.164],[0.064,-0.084],[0.058,-0.016],
@@ -29978,7 +30227,6 @@ function buildBrickXM7() {
 function buildPixelSniper() {
   // 👾 SR-X -> 8-bit. A sprite, one voxel per pixel, drawn from the grid below.
   // When it is drawn the pixels pop in one at a time, in no order at all.
-  const g = new THREE.Group();
   const SPRITE = [
     '........bbbbbbbbb...........',
     '.......bggggggggcb..........',
@@ -29992,49 +30240,49 @@ function buildPixelSniper() {
     '....k.......................',
   ];
   const COL = { k: 0x2a2e34, g: 0x6a7078, w: 0x8a5a2a, c: 0x55ddff, b: 0x0d0d0d };
-  const mats = {};
-  for (const [ch, c] of Object.entries(COL))
-    mats[ch] = ch === 'c' ? new THREE.MeshBasicMaterial({ color: c })
-                          : new THREE.MeshPhongMaterial({ color: c, shininess: 30, specular: 0x555555 });
-  const V = 0.017, VOX = new THREE.BoxGeometry(V * 0.98, V * 0.98, V * 0.98);
-  const VOXW = new THREE.BoxGeometry(0.030, V * 0.98, V * 0.98);
-  SPRITE.forEach((row, r) => {
-    for (let col = 0; col < row.length; col++) {
-      const ch = row[col];
-      if (!mats[ch]) continue;
-      const m = new THREE.Mesh(ch === 'k' || ch === 'w' ? VOXW : VOX, mats[ch]);
-      // Placed so the butt is in front of the eye and the grip rows clear the
-      // bottom of the frame. Measured, not guessed: drawn from z 0.27 the
-      // whole stock and a third of the receiver sat behind the camera, which is
-      // why neither shrinking the pixels nor lifting the sprite moved it.
-      m.position.set(0, 0.110 - r * V, 0.110 - col * V);
-      g.add(m);
-    }
-  });
-  const flash = makeMuzzleFlash(); flash.position.set(0, 0.042, -0.365); g.add(flash);
-  g._flash = flash; g._kickZ = 0.016; g._greebled = true; g._handDetailed = true;
-  g.position.set(0.12, -0.1, -0.25); return g;
+  return buildPixelGunModel(SPRITE, COL, { emissive: ['c'] });
 }
 
-// Shared by the rest of the 8-bit family below — same technique as the SR-X's
-// pixel sprite: a grid of characters becomes a grid of voxel cubes. Pulled out
-// once there was more than one of these, rather than copy-pasting the loop.
-// buildPixelSniper is left as it was, hand-built before this existed.
+// Shared by every 8-bit skin (the SR-X's too): a grid of characters becomes a grid of small solids,
+// each with a rounded cross-section, so the gun has a body and not just a silhouette.
 function buildPixelGunModel(SPRITE, COL, opts = {}) {
+  // Each sprite cell is a little solid, not a flat tile: a bar of the sprite is a thick rounded section (six
+  // half-voxels across in the middle, stepped in at the top and bottom edge), and a lone row such as a barrel is
+  // a round rod (an octagon in section, two voxels across). One mesh per cell, so the entrance can still pop the
+  // pixels in one at a time and the hands still measure the gun cell by cell.
   const g = new THREE.Group();
   const emissive = new Set(opts.emissive || []);
-  const wide = new Set(opts.wide || ['k', 'w']);
   const mats = {};
   for (const [ch, c] of Object.entries(COL))
     mats[ch] = emissive.has(ch) ? new THREE.MeshBasicMaterial({ color: c })
                                 : new THREE.MeshPhongMaterial({ color: c, shininess: 30, specular: 0x555555 });
-  const V = 0.017, VOX = new THREE.BoxGeometry(V * 0.98, V * 0.98, V * 0.98);
-  const VOXW = new THREE.BoxGeometry(0.030, V * 0.98, V * 0.98);
+  const V = 0.017, U = V / 2, D = V * 0.98;
+  const merge = (list) => {                                    // boxes [width, height, centre y] -> one geometry
+    const pos = [], nor = [], uv = [], idx = []; let off = 0;
+    for (const [w, h, yc] of list) {
+      const b = new THREE.BoxGeometry(w, h, D); b.translate(0, yc, 0);
+      const P = b.attributes.position, N = b.attributes.normal, T = b.attributes.uv;
+      for (let i = 0; i < P.count; i++) { pos.push(P.getX(i), P.getY(i), P.getZ(i)); nor.push(N.getX(i), N.getY(i), N.getZ(i)); uv.push(T.getX(i), T.getY(i)); }
+      for (let i = 0; i < b.index.count; i++) idx.push(b.index.getX(i) + off);
+      off += P.count; b.dispose();
+    }
+    const m = new THREE.BufferGeometry();
+    m.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); m.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); m.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    m.setIndex(idx); return m;
+  };
+  const SECTION = {
+    full: merge([[6 * U, V, 0]]),                                                               // inside a bar
+    top:  merge([[6 * U, V / 2, -V / 4], [4 * U, V / 2, V / 4]]),                               // the top edge of a bar, stepped in
+    bot:  merge([[4 * U, V / 2, -V / 4], [6 * U, V / 2, V / 4]]),                               // the bottom edge
+    thin: merge([[2 * U, V / 4, 3 * V / 8], [4 * U, V / 2, 0], [2 * U, V / 4, -3 * V / 8]]),    // a lone row: a round rod
+  };
+  const filled = (r, col) => { const row = SPRITE[r]; return !!row && col >= 0 && col < row.length && !!mats[row[col]]; };
   SPRITE.forEach((row, r) => {
     for (let col = 0; col < row.length; col++) {
       const ch = row[col];
       if (!mats[ch]) continue;
-      const m = new THREE.Mesh(wide.has(ch) ? VOXW : VOX, mats[ch]);
+      const up = filled(r - 1, col), down = filled(r + 1, col);
+      const m = new THREE.Mesh(SECTION[up && down ? 'full' : up ? 'bot' : down ? 'top' : 'thin'], mats[ch]);
       m.position.set(0, 0.110 - r * V, 0.110 - col * V);
       g.add(m);
     }
@@ -30694,6 +30942,8 @@ function buildRubiksCube() {
   const black = _skM(0x111214, 60, 0x555a66), dark = _skM(0x23252a, 70, 0x667088);
   const cols = { px: 0xd8281e, nx: 0xf27a12, py: 0xf4f4f0, ny: 0xf2d21a, pz: 0x1f9a3a, nz: 0x1f5fcf };
   const U = 0.034, CZ = -0.062;
+  const stick = {};   // one material per colour, not one per sticker
+  const cubies = [];
   const cubie = (ix, iy, iz) => {
     const cg = new THREE.Group(); cg.position.set(ix * U, iy * U, CZ + iz * U); g.add(cg);
     gpBox(cg, black, 0.0335, 0.0335, 0.0335, 0, 0, 0);
@@ -30704,6 +30954,9 @@ function buildRubiksCube() {
     if (iy === -1) st(cols.ny, 0.027, 0.0016, 0.027, 0, -0.0170, 0);
     if (iz === 1)  st(cols.pz, 0.027, 0.027, 0.0016, 0, 0, 0.0170);
     if (iz === -1) st(cols.nz, 0.027, 0.027, 0.0016, 0, 0, -0.0170);
+    // where it sits when the cube is solved: the entrance and every redraw come back to this
+    cg.userData.eqHome = { p: cg.position.clone(), q: cg.quaternion.clone(), s: cg.scale.clone() };
+    cubies.push({ cg, home: [ix, iy, iz], at: [ix, iy, iz] });
   };
   for (let ix = -1; ix <= 1; ix++) for (let iy = -1; iy <= 1; iy++) for (let iz = -1; iz <= 1; iz++) cubie(ix, iy, iz);
   gpPart(g, 'main', () => {}, { x: 0, y: U, z: CZ });   // the reload drives this one's turn; _tick applies it to whatever is on top
@@ -31007,8 +31260,6 @@ function buildMousetrap() {
   gpBox(g, cheese, 0.024, 0.010, 0.026, 0, 0.012, -0.120);               // the cheese
   gpBox(g, hole, 0.006, 0.0105, 0.006, 0.006, 0.0125, -0.126);
   gpBox(g, hole, 0.005, 0.0105, 0.005, -0.006, 0.0125, -0.114);
-  const stick = {};   // one material per colour, not one per sticker
-  const cubies = [];
   [-1, 1].forEach(sd => {
     const coil = new THREE.Mesh(new THREE.TorusGeometry(0.0075, 0.0018, 6, 12), steel);
     coil.rotation.y = Math.PI / 2; coil.position.set(sd * 0.0155, 0.011, 0.040); g.add(coil);
@@ -31019,9 +31270,6 @@ function buildMousetrap() {
   gpPart(g, 'main', () => {                                              // the bar, hinged at the back
     ham = new THREE.Group(); ham.position.set(0, 0.012, 0.040); ham.rotation.x = REST; g.add(ham);
     [-1, 1].forEach(sd => gpCyl(ham, steel, 0.003, 0.003, 0.200, 6, sd * 0.022, 0, -0.100));
-    // where it sits when the cube is solved: the entrance and every redraw come back to this
-    cg.userData.eqHome = { p: cg.position.clone(), q: cg.quaternion.clone(), s: cg.scale.clone() };
-    cubies.push({ cg, home: [ix, iy, iz], at: [ix, iy, iz] });
     gpCyl(ham, steel, 0.003, 0.003, 0.048, 6, 0, 0, -0.200, 0, Math.PI / 2);
     gpCyl(ham, steel, 0.003, 0.003, 0.048, 6, 0, 0, 0, 0, Math.PI / 2);
   }, { x: 0, y: 0.012, z: 0.040 });
@@ -31039,24 +31287,58 @@ function buildMousetrap() {
 // 🎺 Lever Rifle -> Trombone. The bell is the barrel; reloading is three long pulls on the slide.
 function buildTrombone() {
   const g = new THREE.Group();
-  const brass = _skM(0xd0a038, 210, 0xfff0b0), steel = _skM(0xd4d8de, 220, 0xffffff), dark = _skM(0x2a1c14, 60, 0x7a6a5a);
-  const bellM = new THREE.MeshPhongMaterial({ color: 0xd8aa3c, shininess: 220, specular: 0xfff4c0, emissive: 0xffb030, emissiveIntensity: 0 });
-  gpCyl(g, brass, 0.0105, 0.0105, 0.200, 12, 0, 0.010, 0.000);           // the upper tube
-  gpCyl(g, bellM, 0.011, 0.056, 0.170, 22, 0, 0.010, -0.185);            // the bell
-  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.056, 0.004, 8, 26), bellM); rim.position.set(0, 0.010, -0.270); g.add(rim);
-  const bend = new THREE.Mesh(new THREE.TorusGeometry(0.025, 0.0095, 8, 16, Math.PI), brass);
-  bend.rotation.set(0, Math.PI / 2, Math.PI / 2); bend.position.set(0, -0.015, 0.100); g.add(bend);
-  gpCyl(g, brass, 0.0075, 0.0075, 0.032, 8, 0, -0.040, 0.100, 0, Math.PI / 2);   // the joint at the back
-  [-1, 1].forEach(sd => gpCyl(g, steel, 0.0065, 0.0065, 0.150, 10, sd * 0.014, -0.040, 0.025));   // the inner slide
-  gpPart(g, 'main', () => {                                              // the slide: two outer tubes and the brace
-    [-1, 1].forEach(sd => gpCyl(g, steel, 0.0095, 0.0095, 0.180, 12, sd * 0.014, -0.040, -0.110));
-    gpCyl(g, brass, 0.0045, 0.0045, 0.062, 8, 0, -0.040, -0.195, 0, Math.PI / 2);
-    [-1, 1].forEach(sd => gpCyl(g, brass, 0.0075, 0.0075, 0.008, 8, sd * 0.034, -0.040, -0.195, 0, Math.PI / 2));
-  }, { x: 0, y: -0.040, z: -0.110 });
-  _skGrip(g, dark, 0.002);
+  const brass = new THREE.MeshPhongMaterial({color:0xd6a344,shininess:235,specular:0xfff1cf});
+  const steel = new THREE.MeshPhongMaterial({color:0xdce2e8,shininess:250,specular:0xffffff});
+  const warm = new THREE.MeshPhongMaterial({color:0x9c702d,shininess:150,specular:0xf9d78d});
+  const bellM = new THREE.MeshPhongMaterial({color:0xe0af4d,shininess:240,specular:0xfff6dc,emissive:0xffa629,emissiveIntensity:0});
+  const tube=(points,radius,material=brass)=>{
+    const path=new THREE.CatmullRomCurve3(points.map(p=>new THREE.Vector3(...p)),false,'centripetal');
+    const mesh=new THREE.Mesh(new THREE.TubeGeometry(path,48,radius,12,false),material);
+    mesh.castShadow=true;g.add(mesh);return mesh;
+  };
+  const ring=(radius,thickness,x,y,z,material=steel)=>{
+    const mesh=new THREE.Mesh(new THREE.TorusGeometry(radius,thickness,8,48),material);
+    mesh.position.set(x,y,z);g.add(mesh);return mesh;
+  };
+  // The profile returns along the inside wall, leaving the bell genuinely hollow.
+  const profile=[];
+  for(let i=0;i<=24;i++){const t=i/24;profile.push(new THREE.Vector2(.011+ .052*Math.pow(t,3),t*.170));}
+  for(let i=24;i>=0;i--){const t=i/24;profile.push(new THREE.Vector2(.0097+ .052*Math.pow(t,3),t*.170));}
+  profile.push(profile[0].clone());
+  const bell=new THREE.Mesh(new THREE.LatheGeometry(profile,56),bellM);
+  bell.rotation.x=-Math.PI/2;bell.position.set(0,.020,-.110);bell.castShadow=true;
+  bell.userData.hollowBell=true;g.add(bell);
+  ring(.063,.0018,0,.020,-.280);
+  gpCyl(g,brass,.011,.011,.220,24,0,.020,0);
+  ring(.0118,.0012,0,.020,-.103,warm);
+  // The bell bow returns into one slide leg; the other ends at the mouthpiece.
+  tube([[0,.020,.110],[0,.020,.145],[-.014,.005,.165],[-.025,-.020,.148],[-.025,-.038,.110]],.0085);
+  [-1,1].forEach(sd=>{
+    gpCyl(g,steel,.006,.006,.215,20,sd*.025,-.038,.0025);
+    ring(.008,.0015,sd*.025,-.038,.085,warm);
+  });
+  tube([[.025,-.038,.110],[.025,-.020,.137],[.025,.006,.150],[.025,.015,.174]],.006,steel);
+  const cupProfile=[[.005,0],[.0055,.008],[.010,.017],[.0105,.023],[.0088,.023],[.007,.018],[.0038,.008],[.0038,0]].map(p=>new THREE.Vector2(...p));
+  const cup=new THREE.Mesh(new THREE.LatheGeometry(cupProfile,32),steel);
+  cup.rotation.x=Math.PI/2;cup.position.set(.025,.015,.174);g.add(cup);
+  let slide;
+  gpPart(g,'main',()=>{
+    slide=tube([[-.025,-.038,-.040],[-.025,-.038,-.205],[-.019,-.038,-.224],[0,-.038,-.232],[.019,-.038,-.224],[.025,-.038,-.205],[.025,-.038,-.040]],.008);
+    slide.userData.tromboneSlide=true;
+    gpCyl(g,steel,.0035,.0035,.050,16,0,-.038,-.065,0,Math.PI/2);
+    [-1,1].forEach(sd=>gpCyl(g,warm,.009,.009,.012,20,sd*.025,-.038,-.044));
+    gpBox(g,steel,.004,.003,.029,.029,-.047,-.202,0,.12);
+  },{x:0,y:-.038,z:-.110});
+  gpCyl(g,brass,.003,.003,.058,16,-.025,-.009,.060,0);
+  gpCyl(g,brass,.003,.003,.050,16,0,-.038,.060,0,Math.PI/2);
+  ring(.0118,.0013,0,.020,.060,warm);
+  // Small soldered saddles make the brace meet both the bell tube and slide.
+  gpCyl(g,warm,.0045,.0045,.050,16,0,.020,.060,0,Math.PI/2);
   g._blare = 0;
   g._onFire = () => { g._blare = 1; };
   g._tick = (dt) => { g._blare = Math.max(0, g._blare - dt * 3); bellM.emissiveIntensity = g._blare * 0.7; };
+  g._calm = () => { g._blare=0;bellM.emissiveIntensity=0; };
+  g._tromboneSlide=slide;
   return _skFinish(g, -0.285, 0.010, 0.020);
 }
 
@@ -31619,9 +31901,7 @@ function buildRainbowAK() {
 // environment map for a PBR metal to reflect, so a StandardMaterial with
 // metalness would just render dark).
 function _donutMats(flavor = 'strawberry') {
-  // Every doughnut is caramel and pink now -- dough the colour of caramel, glaze somewhere between hot pink and
-  // caramel -- and every one of them is lit from within. The old flavours (blueberry, lime, grape...) are kept as names,
-  // so the builders still say which gun is which, and each is dealt one of three caramel/pink mixes.
+  // Flavor stays in the glaze; the chassis is dark metal with restrained gold trim.
   const palettes = {
     pink:    { dough:0xd9955a, glaze:0xff4fa8, cream:0xffd9ec, deep:0xe0307f, steel:0xf2b27a, dark:0x7a3a1c, grip:0xb5642e, glow:0xff3d9a },
     caramel: { dough:0xd9a068, glaze:0xcf8f4c, cream:0xffe9c8, deep:0xa86c30, steel:0xeabf86, dark:0x5a3418, grip:0x8a5428, glow:0x9a6430 },
@@ -31635,20 +31915,20 @@ function _donutMats(flavor = 'strawberry') {
   const lit = (color, shininess, emissive, ei) => new THREE.MeshPhongMaterial({
     color, shininess, specular: 0xfff0f6, emissive, emissiveIntensity: ei });
   return {
-    dough: lit(P.dough, 170, P.glow, 0.45),
-    glaze: lit(P.glaze, 230, P.glaze, 1.10),
-    cream: lit(P.cream, 240, P.cream, 0.70),
-    deep:  lit(P.deep, 200, P.glow, 0.90),
-    steel: lit(P.steel, 250, P.steel, 0.50),
-    dark:  lit(P.dark, 170, P.glow, 0.25),
-    grip:  lit(P.grip, 160, P.glow, 0.45),
+    dough: lit(0xb58b42, 210, 0x8c561a, 0.10),
+    glaze: lit(P.glaze, 240, P.glaze, 0.35),
+    cream: lit(0xf3cf74, 250, 0xffb92e, 0.18),
+    deep:  lit(0x252b34, 220, P.glow, 0.04),
+    steel: lit(0xd8e0e8, 250, 0x000000, 0),
+    dark:  lit(0x0b1018, 130, 0x000000, 0),
+    grip:  lit(0x171c24, 70, 0x000000, 0),
   };
 }
 
 function _donutSprinkleMat(i) {
   const colors = [0xff4a9a, 0xff9ac8, 0xffd27a, 0xffffff, 0xff8a5a, 0xe8a060];   // pink, caramel, gold, icing white
-  const c = colors[i % colors.length];
-  return new THREE.MeshPhongMaterial({ color: c, shininess: 240, specular: 0xffffff, emissive: c, emissiveIntensity: 1.0 });
+  const c = i % 4 ? 0xf6cb64 : colors[i % colors.length];
+  return new THREE.MeshPhongMaterial({ color: c, shininess: 240, specular: 0xffffff, emissive: c, emissiveIntensity: .18 });
 }
 
 function _donutOctPart(g, mat, w, h, d, x, y, z, rx = 0, ry = 0, rz = 0) {
@@ -31670,11 +31950,12 @@ function _donutOctPart(g, mat, w, h, d, x, y, z, rx = 0, ry = 0, rz = 0) {
 }
 
 function _buildDonutRing(radius = 0.038, tube = 0.010, glazeScale = 0.92, flavor = 'strawberry') {
+  tube *= .52;
   const mats = _donutMats(flavor);
   const ring = new THREE.Group();
-  const dough = new THREE.Mesh(new THREE.TorusGeometry(radius, tube, 8, 8), mats.dough);
+  const dough = new THREE.Mesh(new THREE.TorusGeometry(radius, tube, 8, 32), mats.dough);
   dough.castShadow = true; ring.add(dough);
-  const glaze = new THREE.Mesh(new THREE.TorusGeometry(radius, tube * 0.42, 8, 8, Math.PI * 2), mats.glaze);
+  const glaze = new THREE.Mesh(new THREE.TorusGeometry(radius, tube * 0.42, 8, 32, Math.PI * 2), mats.glaze);
   glaze.scale.set(glazeScale, glazeScale, 1.03);
   glaze.position.z = tube * 0.36;
   glaze.castShadow = true; ring.add(glaze);
@@ -31691,42 +31972,19 @@ function _buildDonutRing(radius = 0.038, tube = 0.010, glazeScale = 0.92, flavor
 }
 
 function _addDonutOrbit(g, radius = 0.075, z = -0.060) {
-  const orbit = [];
-  for (let i = 0; i < 8; i++) {
-    const s = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.003, 0.004), _donutSprinkleMat(i));
-    s.userData.eqFx = true;
-    g.add(s);
-    orbit.push(s);
+  const rails = [];
+  for (let i = 0; i < 2; i++) {
+    const rail = new THREE.Mesh(new THREE.TorusGeometry(radius * .64, .0009, 4, 32, Math.PI * .72),
+      new THREE.MeshBasicMaterial({color:0xffd36a}));
+    rail.position.set(0,.018,z); rail.rotation.z = i * Math.PI;
+    rail.userData.eqFx = true; g.add(rail); rails.push(rail);
   }
-  // Light that spills off the whole thing: soft additive halos round the ring, ahead of the muzzle and behind the body,
-  // pulsing out of step. They are sprites, so they cost nothing to light and stay readable at any angle.
-  const halos = [];
-  const addHalo = (x, y, zz, size, color, ph) => {
-    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: _getGlowPuffTex(), color, transparent: true, opacity: 0.45,
-      blending: THREE.AdditiveBlending, depthWrite: false }));
-    sp.position.set(x, y, zz); sp.scale.setScalar(size); sp.renderOrder = 996;
-    sp.userData.eqFx = true; sp.userData.size = size; sp.userData.ph = ph; g.add(sp); halos.push(sp);
-  };
-  // Built the first time the thing is in your hands: the glow texture is declared further down the file than the
-  // builders, which run at load for the grenade.
-  const makeHalos = () => {
-    addHalo(0, 0.02, z, 0.24, 0xff4fa8, 0);
-    addHalo(0, 0.02, z - 0.17, 0.15, 0xffb070, 1.7);
-    addHalo(0, 0.00, z + 0.15, 0.16, 0xff8fcf, 3.1);
-  };
-  g._calm = () => { orbit.forEach(s => { s.visible = false; }); halos.forEach(h => { h.visible = false; }); };
+  g._donutSleek = true;
+  g._calm = () => { rails.forEach(s => { s.visible = false; }); };
   g._tick = (dt, now, assembling) => {
-    if (!halos.length) makeHalos();
-    halos.forEach(h => {
-      h.visible = !assembling;
-      const k = 0.5 + 0.5 * Math.sin(now * 3.0 + h.userData.ph);
-      h.material.opacity = 0.30 + 0.30 * k; h.scale.setScalar(h.userData.size * (0.92 + 0.18 * k));
-    });
-    orbit.forEach((s, i) => {
+    rails.forEach((s, i) => {
       s.visible = !assembling;
-      const a = now * 1.9 + i * (Math.PI * 2 / orbit.length);
-      s.position.set(Math.cos(a) * radius, 0.018 + Math.sin(a * 1.4) * 0.028, z + Math.sin(a) * radius * 0.55);
-      s.rotation.set(now * 2 + i, 0, -a);
+      s.rotation.z = now * .45 + i * Math.PI;
     });
   };
 }
@@ -31734,10 +31992,10 @@ function _addDonutOrbit(g, radius = 0.075, z = -0.060) {
 function buildDonutRevolver() {
   const g = new THREE.Group();
   const M = _donutMats('strawberry');
-  _donutOctPart(g, M.deep, 0.034, 0.050, 0.088, 0, 0.018, 0.036);  // magenta frame
+  _donutTechChassis(g,M,.028,.034,.088,.012,.036);
   _donutOctPart(g, M.dark, 0.035, 0.006, 0.070, 0, 0.044, 0.038);  // rear sight groove
   const drum = gpPart(g, 'main', () => {
-    const ring = _buildDonutRing(0.033, 0.010, 0.94, 'strawberry');
+  const ring = _buildDonutRing(0.030, 0.010, 0.94, 'strawberry');
     ring.position.set(0, 0.018, -0.030);
     g.add(ring);
     for (let i = 0; i < 6; i++) {
@@ -31748,13 +32006,16 @@ function buildDonutRevolver() {
   }, { x: 0, y: 0.018, z: -0.030 });
   g._parts.main._chambers = 6;
   drum.userData.donutMain = true;   // the donut the equip entrance threads on
-  gpCyl(g, M.steel, 0.0105, 0.0105, 0.126, 8, 0, 0.021, -0.126);
-  gpCyl(g, M.dark, 0.0060, 0.0060, 0.010, 8, 0, 0.021, -0.188);
-  _donutOctPart(g, M.deep, 0.020, 0.014, 0.118, 0, 0.004, -0.122);
-  _donutOctPart(g, M.cream, 0.016, 0.006, 0.080, 0, 0.036, -0.128);
-  _donutOctPart(g, M.cream, 0.005, 0.012, 0.007, 0, 0.044, -0.180);
-  gpPlate(g, M.grip, [[0.040,-0.006],[0.070,-0.020],[0.074,-0.096],[0.044,-0.112],[0.020,-0.052],[0.018,-0.012]], 0.038, 0);
-  for (let i = 0; i < 4; i++) _donutOctPart(g, M.deep, 0.040, 0.004, 0.024, 0, -0.030 - i * 0.018, 0.040 + i * 0.006, 0.27);
+  gpPart(g, 'foldBarrel', () => {
+    gpCyl(g, M.steel, 0.0105, 0.0105, 0.126, 8, 0, 0.021, -0.126);
+    gpCyl(g, M.dark, 0.0060, 0.0060, 0.010, 8, 0, 0.021, -0.188);
+    _donutOctPart(g, M.deep, 0.020, 0.014, 0.118, 0, 0.004, -0.122);
+    _donutOctPart(g, M.cream, 0.016, 0.003, 0.080, 0, 0.036, -0.128);
+    _donutOctPart(g, M.cream, 0.005, 0.012, 0.007, 0, 0.044, -0.180);
+  }, {x:0,y:.018,z:-.062});
+  g._parts.foldBarrel.userData.donutFold = 'barrel';
+  gpPlate(g, M.grip, [[0.040,-0.006],[0.062,-0.020],[0.066,-0.096],[0.044,-0.106],[0.026,-0.052],[0.024,-0.012]], 0.028, 0);
+  for (let i = 0; i < 4; i++) _donutOctPart(g, M.cream, 0.029, 0.0015, 0.020, 0, -0.030 - i * 0.018, 0.040 + i * 0.006, 0.27);
   const guard = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.0034, 6, 12, Math.PI * 1.05), M.steel);
   guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.024, 0.018); g.add(guard);
   _donutOctPart(g, M.cream, 0.005, 0.014, 0.005, 0, -0.016, 0.018, 0.2);
@@ -31762,7 +32023,7 @@ function buildDonutRevolver() {
   const flash = makeMuzzleFlash(); flash.position.set(0, 0.021, -0.196); g.add(flash);
   _addDonutOrbit(g, 0.070, -0.040);
   g._flash = flash; g._kickZ = 0.022; g._greebled = true; g._handDetailed = true;
-  g.position.set(0.1, -0.1, -0.22); return g;
+  g.position.set(0.065, -0.1, -0.34); return g;
 }
 
 function buildDonutKatana() {
@@ -31773,23 +32034,49 @@ function buildDonutKatana() {
   guard.position.set(0, 0.006, 0.050);
   guard.userData.donutMain = true;   // the donut the equip entrance threads on
   g.add(guard);
-  _donutOctPart(g, M.deep, 0.026, 0.038, 0.135, 0, -0.055, 0.095, 0.10);
-  for (let i = 0; i < 5; i++) _donutOctPart(g, M.cream, 0.028, 0.005, 0.018, 0, -0.022 - i * 0.020, 0.076 + i * 0.010, 0.10);
+  _donutOctPart(g, M.deep, 0.021, 0.026, 0.135, 0, -0.055, 0.095, 0.10);
+  for (let i = 0; i < 5; i++) _donutOctPart(g, M.cream, 0.023, 0.002, 0.018, 0, -0.022 - i * 0.020, 0.076 + i * 0.010, 0.10);
   _donutOctPart(g, M.cream, 0.022, 0.028, 0.020, 0, -0.130, 0.142, 0.10);
-  _donutOctPart(g, M.steel, 0.018, 0.020, 0.385, 0, 0.036, -0.170, -0.06);
-  _donutOctPart(g, M.glaze, 0.020, 0.006, 0.350, 0, 0.051, -0.185, -0.06);
-  _donutOctPart(g, M.dark, 0.004, 0.024, 0.370, -0.012, 0.037, -0.175, -0.06);
+  gpPart(g, 'foldBlade', () => {
+  _donutOctPart(g, M.steel, 0.012, 0.012, 0.385, 0, 0.036, -0.170, -0.06);
+  _donutOctPart(g, M.cream, 0.013, 0.002, 0.350, 0, 0.043, -0.185, -0.06);
+  _donutOctPart(g, M.dark, 0.002, 0.014, 0.370, -0.007, 0.037, -0.175, -0.06);
   for (let i = 0; i < 14; i++) {
-    const s = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.003, 0.004), _donutSprinkleMat(i));
-    s.position.set((i % 2 ? 0.006 : -0.006), 0.057, -0.025 - i * 0.023);
+    const s = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.001, 0.010), M.glaze);
+    s.position.set((i % 2 ? 0.003 : -0.003), 0.046, -0.025 - i * 0.023);
     s.rotation.z = (i % 3 - 1) * 0.7;
     g.add(s);   // an ordinary piece (no eqFx) so it flies in with the blade instead of hanging in mid-air
   }
   const tip = new THREE.Mesh(new THREE.ConeGeometry(0.015, 0.046, 8), M.steel);
   tip.rotation.x = -Math.PI / 2 - 0.06; tip.position.set(0, 0.036, -0.392); g.add(tip);
+  }, {x:0,y:.006,z:.050});
+  g._parts.foldBlade.userData.donutFold = 'blade';
   _addDonutOrbit(g, 0.082, -0.135);
   g._greebled = true; g._handDetailed = true;
   g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+function _donutTechChassis(g, M, width, height, length, y, z) {
+  g.userData.donutReceiverWidth = width;
+  for (let section=0;section<3;section++) {
+    const center=z+(section-1)*length*.34;
+    const span=length*(section===1 ? .36 : .32);
+    const pivot=section===0 ? z-length*.18 : section===2 ? z+length*.18 : center;
+    const part=gpPart(g,'techReceiver'+section,()=>{
+      // An open truss: the two side windows expose a coil and its actuator rail.
+      for(const side of [-1,1]) {
+        for(const top of [-1,1])_donutOctPart(g,M.deep,.004,.005,span,side*width*.44,y+top*height*.42,center);
+        for(const end of [-1,1])_donutOctPart(g,M.steel,.004,height,.008,side*width*.44,y,center+end*(span*.5-.004));
+        _donutOctPart(g,M.deep,.003,height*.5,span*.24,side*width*.49,y,center);
+        for(let i=0;i<3;i++)_donutOctPart(g,M.cream,.004,.0015,span*.12,side*width*.50,y-height*.12+i*height*.12,center);
+      }
+      gpCyl(g,M.steel,height*.14,height*.14,span,12,0,y,center);
+      for(let i=0;i<6;i++)gpCyl(g,M.glaze,height*.23,height*.23,.002,12,0,y,center-span*.36+i*span*.144);
+      for(const side of [-1,1])_donutOctPart(g,M.cream,.002,.002,span,side*width*.27,y+height*.30,center);
+      _donutOctPart(g,M.dark,width*.50,.005,span,0,y-height*.43,center);
+    },{x:0,y,z:pivot});
+    if(section!==1)part.userData.donutFold=section===0?'receiverFront':'receiverRear';
+  }
 }
 
 function buildDonutClassicGun(kind = 'rifle', flavor = 'strawberry') {
@@ -31804,36 +32091,45 @@ function buildDonutClassicGun(kind = 'rifle', flavor = 'strawberry') {
     launcher:{ body:[0.086,0.086,0.360,0,0.016,-0.100], barrel:[0.034,0.500,-0.125], stock:false, mag:false, ring:[0.050,0.014,0,0.016,-0.100], orbit:[0.090,-0.100], flash:-0.400 },
     heavy:   { body:[0.076,0.090,0.340,0,0.016,-0.070], barrel:[0.016,0.300,-0.330], stock:true,  mag:true,  ring:[0.044,0.013,0,0.020,-0.075], orbit:[0.090,-0.075], flash:-0.500 },
   }[kind] || {};
-  const [bw,bh,bd,bx,by,bz] = cfg.body;
+  const [ow,oh,bd,bx,by,bz] = cfg.body;
+  const bw = ow * .72, bh = oh * .55;
   const [br, bl, bz2] = cfg.barrel;
-  _donutOctPart(g, M.deep, bw, bh, bd, bx, by, bz);
-  _donutOctPart(g, M.cream, bw * 0.82, 0.010, bd * 0.82, bx, by + bh * 0.53, bz - 0.006);
-  _donutOctPart(g, M.dark, bw * 1.02, 0.008, bd * 0.65, bx, by - bh * 0.50, bz + 0.006);
-  gpCyl(g, M.steel, br, br, bl, 8, 0, by + bh * 0.03, bz2);
+  _donutTechChassis(g,M,bw,bh,bd,by,bz);
+  _donutOctPart(g,M.dark,bw*.65,.012,bd*.22,bx,by-bh*.55-.004,bz);
+  gpPart(g, 'foldBarrel', () => {
+  gpCyl(g, M.steel, br, br, bl, 16, 0, by + bh * 0.03, bz2);
   gpCyl(g, M.dark, br * 0.58, br * 0.58, 0.016, 8, 0, by + bh * 0.03, bz2 - bl * 0.52 - 0.008);
   if (kind === 'launcher') {
-    gpCyl(g, M.glaze, 0.060, 0.032, 0.090, 8, 0, by + 0.002, bz2 - bl * 0.54);
-    gpCyl(g, M.dark, 0.052, 0.052, 0.016, 8, 0, by + 0.002, bz2 + bl * 0.50);
+    gpCyl(g, M.steel, 0.039, 0.028, 0.060, 16, 0, by + 0.002, bz2 - bl * 0.54);
+    gpCyl(g, M.dark, 0.033, 0.033, 0.016, 16, 0, by + 0.002, bz2 + bl * 0.50);
   }
+  }, {x:0,y:by,z:bz2+bl*.5});
+  g._parts.foldBarrel.userData.donutFold = 'barrel';
   if (cfg.stock) {
-    _donutOctPart(g, M.grip, bw * 0.95, bh * 0.55, 0.140, 0, by - 0.004, bz + bd * 0.58);
-    _donutOctPart(g, M.cream, bw * 0.70, 0.012, 0.110, 0, by + bh * 0.31, bz + bd * 0.58);
+    gpPart(g, 'foldStock', () => {
+    _donutOctPart(g, M.steel, bw * .55, .008, .140, 0, by+.008, bz+bd*.58);
+    _donutOctPart(g, M.dark, bw * .55, .008, .140, 0, by-.016, bz+bd*.58);
+    _donutOctPart(g, M.grip, bw * .8, .038, .018, 0, by-.004, bz+bd*.58+.065);
+    _donutOctPart(g, M.cream, bw * .25, .002, .110, 0, by+.013, bz+bd*.58);
+    }, {x:0,y:by,z:bz+bd*.42});
+    g._parts.foldStock.userData.donutFold = 'stock';
   }
-  gpPlate(g, M.grip, [[0.020,-0.020],[0.052,-0.034],[0.056,-0.108],[0.028,-0.122],[0.004,-0.070],[0.000,-0.026]], 0.038, 0);
+  gpPart(g, 'foldGrip', () => {
+  gpPlate(g, M.grip, [[0.020,-0.014],[0.044,-0.028],[0.050,-0.102],[0.028,-0.112],[0.010,-0.070],[0.006,-0.020]], 0.027, 0);
+  }, {x:0,y:-.014,z:.020});
+  g._parts.foldGrip.userData.donutFold = 'grip';
   if (cfg.mag) {
-    _donutOctPart(g, M.deep, 0.036, 0.095, 0.040, 0, -0.074, bz + bd * 0.04, -0.16);
-    _donutOctPart(g, M.cream, 0.038, 0.010, 0.042, 0, -0.124, bz + bd * 0.045, -0.16);
+    gpPart(g, 'magazine', () => {
+      _donutOctPart(g, M.deep, 0.025, 0.095, 0.032, 0, -0.060, bz + bd * 0.04, -0.16);
+      _donutOctPart(g, M.cream, 0.027, 0.004, 0.034, 0, -0.110, bz + bd * 0.045, -0.16);
+      _donutOctPart(g, M.glaze, .026, .002, .026, 0, -.060, bz+bd*.04);
+    }, {x:0,y:-.012,z:bz+bd*.04});
+    g._parts.magazine.userData.donutFold = 'grip';
   }
   const guard = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.0038, 6, 12, Math.PI * 1.05), M.steel);
   guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.032, bz + bd * 0.22); g.add(guard);
   _donutOctPart(g, M.steel, 0.006, 0.018, 0.006, 0, -0.023, bz + bd * 0.22, 0.2);
-  for (let i = 0; i < 9; i++) {
-    const s = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.003, 0.004), _donutSprinkleMat(i));
-    s.position.set((i % 3 - 1) * bw * 0.22, by + bh * 0.62, bz - bd * 0.32 + i * bd * 0.07);
-    s.rotation.z = (i % 4 - 1.5) * 0.55;
-    g.add(s);
-  }
-  const ring = _buildDonutRing(cfg.ring[0], cfg.ring[1], 0.94, flavor);
+  const ring = _buildDonutRing(cfg.ring[0] * .85, cfg.ring[1], 0.94, flavor);
   ring.position.set(cfg.ring[2], cfg.ring[3], cfg.ring[4]);
   ring.userData.donutMain = true;
   g.add(ring);
@@ -31841,7 +32137,7 @@ function buildDonutClassicGun(kind = 'rifle', flavor = 'strawberry') {
   const flash = makeMuzzleFlash(); flash.position.set(0, by + bh * 0.03, cfg.flash); g.add(flash);
   g._flash = flash; g._kickZ = kind === 'launcher' ? 0.030 : 0.016;
   g._greebled = true; g._handDetailed = true;
-  g.position.set(0.1, -0.1, -0.22);
+  g.position.set(0.065, -0.1, -0.36);
   return g;
 }
 function buildDonutAK20() { return buildDonutClassicGun('rifle', 'blueberry'); }
@@ -32128,7 +32424,7 @@ function buildSG100() {
 }
 
 // SR-X sniper
-function buildSRX() {
+function buildSRX(stockDetail = false) {
   // 🔫 SVD-pattern marksman rifle. Rebuilt for one continuous silhouette instead
   // of a scatter of separate islands: the stock and its grip are ONE wood plate
   // (a target stock's "grip" is just its own wrist, not a bolted-on AK handle),
@@ -32156,15 +32452,21 @@ function buildSRX() {
   // ── Barrel: smooth, one gold band, plain tip rings (no fluting barcode) ──
   gpCyl(g, blued, 0.0068, 0.0068, 0.360, 20, 0, 0.016, -0.290);         // barrel
   gpCyl(g, gold,  0.0080, 0.0080, 0.014, 16, 0, 0.016, -0.360);         // gold band
-  gpCyl(g, steel, 0.0092, 0.0092, 0.040, 16, 0, 0.016, -0.470);         // muzzle device
-  gpCyl(g, gold,  0.0096, 0.0096, 0.005, 16, 0, 0.016, -0.492);         // one gold ring at the tip, not a cluster
+  if (stockDetail) {
+    gpOpenMuzzle(g,.0092,.0045,.041,0,.016,-.473,steel,inner,true);
+    const rim=new THREE.Mesh(new THREE.TorusGeometry(.009,.0008,8,32),gold);
+    rim.position.set(0,.016,-.4935);g.add(rim);
+  } else {
+    gpCyl(g, steel, 0.0092, 0.0092, 0.040, 16, 0, 0.016, -0.470);
+    gpCyl(g, gold,  0.0096, 0.0096, 0.005, 16, 0, 0.016, -0.492);
+  }
 
   // ── Handguard, forward of the receiver ───────────────────────────────
   gpPlate(g, wood, [[-0.110,0.030],[-0.088,0.044],[-0.234,0.044],[-0.254,0.028],[-0.234,0.014],[-0.108,0.014]], 0.044, 0);
   for (let i = 0; i < 3; i++) gpBox(g, inner, 0.046, 0.006, 0.008, 0, 0.036, -0.135 - i * 0.036);
 
   // ── Bipod: a yoke on the handguard, two legs in a clear V, feet visible ──
-  gpBox(g, steel, 0.032, 0.016, 0.024, 0, -0.002, -0.300);              // yoke, clamped under the handguard
+  gpBox(g, steel, 0.032, stockDetail?.028:.016, 0.024, 0, stockDetail?.002:-.002, -0.300);
   [-1, 1].forEach(sd => gpBox(g, steel, 0.005, 0.090, 0.005, sd * 0.020, -0.052, -0.300, 0, 0, sd * 0.34));
   [-1, 1].forEach(sd => gpBox(g, inner, 0.012, 0.006, 0.016, sd * 0.036, -0.094, -0.300));
 
@@ -32191,7 +32493,14 @@ function buildSRX() {
 
   // Centred optic, clamped directly to the receiver rail.
   gpBox(g, steel, 0.020, 0.010, 0.180, 0, 0.044, -0.020);                // rail
-  gpOptic(g,0,.076,-.030,.166,.015,.049);
+  const optic = gpOptic(g,0,.076,-.030,.166,.015,.049,stockDetail);
+  if (stockDetail) {
+    // Ocular grip rings leave the lens and the sight axis open.
+    for(const z of [.062,.067,.072]) {
+      const ring=new THREE.Mesh(new THREE.TorusGeometry(.019,.0011,8,32),inner);
+      ring.position.z=z;optic.add(ring);
+    }
+  }
 
   const flash = makeMuzzleFlash(); flash.position.set(0, 0.016, -0.500); g.add(flash);
   g._flash = flash; g._kickZ = 0.010; g._greebled = true; g._handDetailed = true;
@@ -32299,9 +32608,12 @@ function buildP90() {
   gpBox(g, inner, 0.050, 0.024, 0.030, 0, -0.010, -0.116);
   gpBox(g, inner, 0.050, 0.006, 0.070, 0, 0.006, -0.140);              // top handguard slot
   // Horizontal magazine lying along the top deck, rounds visible through it.
-  gpBox(g, mag, 0.040, 0.020, 0.170, 0, 0.056, -0.010);
-  for (let i = 0; i < 7; i++) gpCyl(g, bright, 0.0055, 0.0055, 0.034, 8, 0, 0.056, -0.078 + i * 0.023, 0, Math.PI/2);
-  gpBox(g, poly, 0.042, 0.008, 0.024, 0, 0.056, 0.082);                // mag rear catch
+  gpPart(g, 'magazine', () => {
+    gpBox(g, mag, 0.040, 0.020, 0.170, 0, 0.056, -0.010);
+    for (let i = 0; i < 7; i++) gpCyl(g, bright, 0.0055, 0.0055, 0.034, 8, 0, 0.056, -0.078 + i * 0.023, 0, Math.PI/2);
+    gpBox(g, poly, 0.042, 0.008, 0.024, 0, 0.056, 0.082);
+  }, {x:0,y:.056,z:-.01});
+  g._parts.magazine.userData.topMagazine = true;
   // A real open optic, not a solid housing blocking the aiming axis.
   gpReflexSight(g, 0, .094, .052, .066);
   g._hasDefaultAimer = true;
@@ -32331,15 +32643,15 @@ function buildP90() {
 }
 
 // ── Paintball Gun ─────────────────────────────────────────────────────────
-function buildPaintball() {
+function buildPaintball(stockDetail = false) {
   // 🎨 Paintball marker: gravity hopper full of visible balls, a CO2 tank
   // screwed into the rear grip, ported aluminium barrel, and a real feed neck
   // with a clamping collar. Anodised, because they all are.
   const g = new THREE.Group();
   const steel = GUN_MATS.steel(), bright = GUN_MATS.bright(), inner = GUN_MATS.inner();
   const grip = GUN_MATS.grip();
-  const anod = new THREE.MeshPhongMaterial({ color: 0x2f5f8a, shininess: 118, specular: 0xa8ccdf });
-  const tank = new THREE.MeshPhongMaterial({ color: 0x8a8f96, shininess: 140, specular: 0xe2e8ee });
+  const anod = stockDetail ? gpFinish(0x2f5f8a,.33,.72,'steel') : new THREE.MeshPhongMaterial({ color: 0x2f5f8a, shininess: 118, specular: 0xa8ccdf });
+  const tank = stockDetail ? gpFinish(0x64717b,.41,.62,'steel') : new THREE.MeshPhongMaterial({ color: 0x8a8f96, shininess: 140, specular: 0xe2e8ee });
   const shellMat = new THREE.MeshPhongMaterial({ color: 0xd8d2c4, shininess: 70, specular: 0xf0ece2,
                                                  transparent: true, opacity: 0.72 });
   gpBox(g, anod, 0.032, 0.048, 0.150, 0, 0.014, 0.010);             // body
@@ -32348,7 +32660,7 @@ function buildPaintball() {
   // Feed neck and the hopper, with balls showing through.
   gpCyl(g, anod, 0.020, 0.020, 0.030, 14, 0, 0.052, -0.006, 0, 0);
   gpBox(g, bright, 0.024, 0.010, 0.026, 0, 0.062, -0.006);          // clamping collar
-  const hop = new THREE.Mesh(new THREE.SphereGeometry(0.048, 14, 12), shellMat);
+  const hop = new THREE.Mesh(new THREE.SphereGeometry(0.048, stockDetail?24:14, stockDetail?18:12), shellMat);
   hop.scale.set(1, 0.86, 1.15); hop.position.set(0, 0.108, -0.010); g.add(hop);
   const ballMats = [0xd83a3a, 0xf0c020, 0x35b45a, 0x3a6ad8].map(c =>
     new THREE.MeshPhongMaterial({ color: c, shininess: 120, specular: 0xffffff }));
@@ -32359,19 +32671,44 @@ function buildPaintball() {
   }
   gpBox(g, inner, 0.062, 0.008, 0.070, 0, 0.152, -0.010);           // hopper lid
   // Ported barrel.
-  gpCyl(g, anod, 0.0135, 0.0135, 0.240, 14, 0, 0.020, -0.190);
+  gpCyl(g, anod, 0.0135, 0.0135, stockDetail?.212:.240, stockDetail?24:14, 0, 0.020, stockDetail?-.176:-.190);
   for (let i = 0; i < 8; i++) {
-    [-1, 1].forEach(sd => gpCyl(g, inner, 0.0040, 0.0040, 0.010, 6, sd * 0.013, 0.020, -0.230 - i * 0.014, 0, Math.PI/2));
-    gpCyl(g, inner, 0.0040, 0.0040, 0.010, 6, 0, 0.033, -0.223 - i * 0.014);
+    if(stockDetail){
+      for(const angle of [-Math.PI/2,0,Math.PI/2]){
+        const port=new THREE.Mesh(new THREE.CircleGeometry(.0024,12),inner);
+        port.position.set(Math.sin(angle)*.01355,.020+Math.cos(angle)*.01355,-.203-i*.010);
+        port.rotation.set(-Math.PI/2,0,-angle,'ZXY');g.add(port);
+      }
+    }else{
+      [-1, 1].forEach(sd => gpCyl(g, inner, 0.0040, 0.0040, 0.010, 6, sd * 0.013, 0.020, -0.230 - i * 0.014, 0, Math.PI/2));
+      gpCyl(g, inner, 0.0040, 0.0040, 0.010, 6, 0, 0.033, -0.223 - i * 0.014);
+    }
   }
   gpCyl(g, bright, 0.0155, 0.0155, 0.014, 14, 0, 0.020, -0.078);    // barrel collar
-  gpCyl(g, inner, 0.0095, 0.0095, 0.012, 12, 0, 0.020, -0.304);
+  if (stockDetail) gpOpenMuzzle(g,.0135,.0095,.031,0,.020,-.295,anod,inner);
+  else gpCyl(g, inner, 0.0095, 0.0095, 0.012, 12, 0, 0.020, -0.304);
   // CO2 tank on the back, through an ASA block.
   gpBox(g, bright, 0.028, 0.026, 0.030, 0, -0.030, 0.076);
   gpCyl(g, tank, 0.026, 0.026, 0.130, 16, 0, -0.052, 0.150, Math.PI/2 + 0.28, 0);
   gpCyl(g, tank, 0.026, 0.020, 0.020, 16, 0, -0.084, 0.212, Math.PI/2 + 0.28, 0);
   gpCyl(g, bright, 0.012, 0.012, 0.026, 12, 0, -0.028, 0.098, Math.PI/2 + 0.28, 0); // valve
   gpBox(g, inner, 0.054, 0.008, 0.040, 0, -0.050, 0.150, 0.28);     // tank label band
+  if (stockDetail) {
+    const seam=new THREE.Mesh(new THREE.TorusGeometry(.046,.0017,8,32),inner);
+    seam.rotation.x=Math.PI/2;seam.scale.set(1,1.15,1);seam.position.copy(hop.position);g.add(seam);
+    gpCyl(g,inner,.021,.021,.007,24,0,.063,-.006,0);
+    gpBox(g,steel,.029,.023,.046,0,-.035,.080,.20);
+    gpCyl(g,bright,.006,.006,.004,20,.015,-.034,.084,0,Math.PI/2);
+    // An offset sight clears the hopper without a tower in the player's view.
+    for(const z of [.038,-.110]) {
+      gpBox(g,inner,.041,.007,.013,.031,.028,z);
+      gpBox(g,steel,.010,.032,.011,.050,.044,z);
+    }
+    for(const x of [.046,.054])gpBox(g,inner,.003,.006,.006,x,.062,.038);
+    gpBox(g,bright,.0025,.008,.003,.050,.060,-.110);
+    g._sightLine={space:g,rear:new THREE.Vector3(.05,.064,.038),front:new THREE.Vector3(.05,.064,-.110)};
+    g._hasDefaultAimer=true;
+  }
   // Grip, trigger frame, sight rail.
   gpPlate(g, grip, [[0.026,-0.010],[0.056,-0.024],[0.060,-0.096],[0.030,-0.110],[0.006,-0.050],[0.004,-0.014]], 0.034, 0);
   for (let i = 0; i < 4; i++) gpBox(g, inner, 0.036, 0.004, 0.026, 0, -0.028 - i * 0.018, 0.028 + i * 0.006, 0.28);
@@ -32385,19 +32722,130 @@ function buildPaintball() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+function buildBlackoutPaintball() {
+  const g=new THREE.Group();
+  const shell=gpFinish(0x35383c,.24,.86,'steel'), armor=gpFinish(0x42464a,.18,.91,'steel');
+  const rubber=gpFinish(0x191b1d,.99,0,'polymer'), recess=gpFinish(0x101214,1,0,'polymer');
+  gpContouredPart(g,shell,[[-.132,-.018],[-.115,-.033],[.067,-.033],[.096,-.010],[.091,.024],[.070,.047],[-.112,.047],[-.135,.025]],.046);
+  gpContouredPart(g,armor,[[-.125,.035],[-.116,.052],[.067,.052],[.089,.034],[.077,.027],[-.125,.027]],.048);
+  for(const side of [-1,1]){
+    gpContouredPart(g,armor,[[-.104,-.010],[-.088,-.020],[.034,-.020],[.054,-.005],[.045,.014],[-.096,.014]],.003,side*.023,.005);
+    for(const z of [-.084,.035])gpCyl(g,recess,.0027,.0027,.0012,16,side*.026,-.003,z,0,Math.PI/2);
+  }
+  gpContouredPart(g,rubber,[[.003,-.023],[.051,-.025],[.069,-.057],[.073,-.105],[.063,-.121],[.033,-.116],[.022,-.087],[-.003,-.040]],.035);
+  for(const side of [-1,1])for(let i=0;i<5;i++)gpBox(g,shell,.0018,.004,.025,side*.018,-.053-i*.010,.035+i*.004,.19);
+  gpBox(g,shell,.012,.041,.007,0,-.041,-.042,-.24);
+  gpBox(g,shell,.012,.007,.066,0,-.060,-.015);
+  gpBox(g,armor,.005,.022,.006,0,-.041,-.017,.30);
+
+  // The angular hopper sits directly on a wide feed block, not a tall neck.
+  gpBox(g,armor,.043,.031,.043,0,.055,-.027);
+  gpContouredPart(g,shell,[[-.101,.071],[-.077,.057],[.046,.057],[.070,.076],[.059,.105],[-.072,.109],[-.097,.094]],.067,0,.012);
+  gpContouredPart(g,armor,[[-.093,.092],[-.072,.111],[.055,.107],[.066,.092],[.052,.088],[-.085,.088]],.068,0,.006);
+  gpBox(g,rubber,.018,.008,.013,0,.095,.062,-.20);
+
+  // Full-length fore-end with low-profile vents and an open muzzle.
+  gpContouredPart(g,armor,[[-.269,-.005],[-.256,-.023],[-.118,-.023],[-.109,.031],[-.253,.031],[-.269,.017]],.038);
+  for(const side of [-1,1])for(let i=0;i<5;i++)gpBox(g,recess,.0012,.007,.013,side*.0204,.006,-.156-i*.020,0,0,.10);
+  for(let i=0;i<4;i++)gpBox(g,rubber,.032,.003,.009,0,-.025,-.164-i*.024);
+  gpOpenMuzzle(g,.011,.008,.061,0,.008,-.291,shell,recess);
+
+  // The air cylinder doubles as a shoulder stock, with a rubber butt pad.
+  gpBox(g,armor,.036,.035,.043,0,-.006,.100);
+  gpCyl(g,shell,.026,.026,.118,32,0,-.008,.165);
+  for(const z of [.117,.207])gpCyl(g,rubber,.027,.027,.009,32,0,-.008,z);
+  gpContouredPart(g,rubber,[[.212,.023],[.232,.022],[.234,-.050],[.218,-.055],[.209,-.033]],.048);
+  gpBox(g,armor,.038,.008,.086,0,.019,.168);
+
+  for(const z of [.036,-.207]){
+    gpBox(g,armor,.033,.008,.013,.034,.029,z);
+    gpBox(g,shell,.010,.019,.011,.046,.039,z);
+  }
+  for(const x of [.042,.050])gpBox(g,rubber,.003,.007,.006,x,.050,.036);
+  gpBox(g,armor,.003,.008,.004,.046,.049,-.207);
+  g._sightLine={space:g,rear:new THREE.Vector3(.046,.053,.036),front:new THREE.Vector3(.046,.053,-.207)};
+  const flash=new THREE.Mesh(new THREE.SphereGeometry(.018,8,7),new THREE.MeshBasicMaterial({color:0xff66cc}));
+  flash.position.set(0,.008,-.328);flash.visible=false;g.add(flash);
+  g._flash=flash;g._kickZ=.006;g._greebled=true;g._handDetailed=true;g._hasDefaultAimer=true;
+  g.position.set(.12,-.1,-.25);return g;
+}
+
 // ── Revolver ──────────────────────────────────────────────────────────────
-function buildRevolver() {
+function buildSheriffRevolver() {
+  const g=new THREE.Group();
+  const nickel=new THREE.MeshPhongMaterial({color:0xb9c4ce,shininess:190,specular:0xffffff});
+  const blued=new THREE.MeshPhongMaterial({color:0x343c46,shininess:150,specular:0xc0d4e8});
+  const brass=new THREE.MeshPhongMaterial({color:0xc99b47,shininess:180,specular:0xffe6a7});
+  const walnut=new THREE.MeshPhongMaterial({color:0x62301d,shininess:50,specular:0xbc8b62});
+  const grain=new THREE.MeshPhongMaterial({color:0x311b15,shininess:30});
+  const inner=GUN_MATS.inner();
+  gpBox(g,nickel,.025,.043,.078,0,.012,.018);
+  gpBox(g,blued,.021,.007,.069,0,.037,.013);
+  gpPart(g,'main',()=>{
+    gpCyl(g,blued,.020,.020,.047,36,0,.012,-.015);
+    for(let i=0;i<6;i++){
+      const a=i*Math.PI/3,x=Math.cos(a),y=Math.sin(a);
+      gpCyl(g,inner,.0043,.0043,.049,12,x*.0125,.012+y*.0125,-.015);
+      gpBox(g,nickel,.002,.004,.027,x*.0198,.012+y*.0198,-.014,0,0,-a);
+    }
+    gpCyl(g,brass,.003,.003,.050,12,0,.012,-.015);
+  },{x:0,y:.012,z:-.015});
+  g._parts.main._chambers=6;
+  // Return along the bore so the octagonal barrel has an actual recessed opening.
+  const profile=[[.0105,0],[.009,.162],[.0045,.162],[.0045,.145],[.0045,0],[.0105,0]].map(p=>new THREE.Vector2(...p));
+  const barrel=new THREE.Mesh(new THREE.LatheGeometry(profile,8),blued);
+  barrel.rotation.x=-Math.PI/2;barrel.position.set(0,.012,-.039);g.add(barrel);
+  gpCyl(g,nickel,.003,.003,.137,16,.008,-.003,-.113);
+  gpCyl(g,brass,.004,.004,.009,16,.008,-.003,-.046);
+  gpBox(g,nickel,.003,.008,.007,0,.024,-.190);
+  [-1,1].forEach(sd=>gpBox(g,blued,.003,.005,.010,sd*.005,.043,.043));
+  const gripOutline=[[.041,-.004],[.065,-.010],[.072,-.039],[.083,-.082],[.071,-.097],[.033,-.092],[.042,-.068],[.036,-.033]];
+  gpPlate(g,brass,gripOutline,.026,0);
+  [-1,1].forEach(sd=>{
+    gpPlate(g,walnut,[[.044,-.017],[.061,-.019],[.065,-.043],[.076,-.081],[.068,-.089],[.040,-.086],[.048,-.064],[.042,-.037]],.005,sd*.014);
+    for(let j=0;j<3;j++){
+      const points=[[-.028,.048],[-.047,.050+j*.003],[-.068,.057+j*.004],[-.083,.053+j*.005]].map(([y,z])=>new THREE.Vector3(sd*.017,y,z));
+      const path=new THREE.CatmullRomCurve3(points);
+      g.add(new THREE.Mesh(new THREE.TubeGeometry(path,16,.0005,4,false),grain));
+    }
+    gpCyl(g,brass,.0025,.0025,.002,12,sd*.018,-.057,.055,0,Math.PI/2);
+    const star=new THREE.Shape();
+    for(let i=0;i<12;i++){const a=i*Math.PI/6,r=i%2?.0033:.0065,x=Math.cos(a)*r,y=Math.sin(a)*r;if(i)star.lineTo(x,y);else star.moveTo(x,y);}
+    star.closePath();
+    const badge=new THREE.Mesh(new THREE.ShapeGeometry(star),brass);
+    badge.rotation.y=sd*Math.PI/2;badge.position.set(sd*.0178,-.033,.051);g.add(badge);
+    // Shallow scrollwork stays on the metal frame rather than floating beside it.
+    for(let j=0;j<2;j++){
+      const points=[];
+      for(let k=0;k<=24;k++){const a=k/24*Math.PI*2;points.push(new THREE.Vector3(sd*.0128,.006+Math.sin(a)*.006*(1-k/32),.024+j*.014+Math.cos(a)*.006*(1-k/32)));}
+      g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points),24,.0006,5,false),brass));
+    }
+  });
+  const guard=new THREE.Mesh(new THREE.TorusGeometry(.016,.0026,10,32),brass);
+  guard.rotation.y=Math.PI/2;guard.position.set(0,-.016,.022);guard.scale.set(1.15,1,1);g.add(guard);
+  gpBox(g,nickel,.004,.014,.004,0,-.008,.024,-.23);
+  gpBox(g,blued,.006,.014,.013,0,.043,.054,-.5);
+  gpBox(g,nickel,.007,.004,.011,0,.049,.058,-.5);
+  const flash=makeMuzzleFlash();flash.position.set(0,.012,-.207);g.add(flash);
+  g._flash=flash;g._kickZ=.022;g._greebled=true;g._handDetailed=true;
+  g.position.set(.10,-.10,-.22);return g;
+}
+
+function buildFinalNoticeRevolver() { return buildRevolver(true); }
+function buildRevolver(finalNotice = false) {
   // 🔫 Magnum-pattern wheelgun: fluted six-shot cylinder, vent-ribbed barrel over
   // a full-length ejector shroud, spurred hammer, walnut grips.
   const g = new THREE.Group();
-  const steel = GUN_MATS.steel(), blued = GUN_MATS.blued(), bright = GUN_MATS.bright();
-  const wood = GUN_MATS.wood(), inner = GUN_MATS.inner();
+  const blued = finalNotice ? gpFinish(0x24272b,.31,.8,'steel') : GUN_MATS.blued();
+  const bright = finalNotice ? gpFinish(0xc19a56,.32,.77,'steel') : GUN_MATS.bright();
+  const wood = finalNotice ? gpFinish(0x332322,.65,.1,'grip') : GUN_MATS.wood(), inner = GUN_MATS.inner();
   gpBox(g, blued, 0.022, 0.044, 0.076, 0, 0.014, 0.020);               // frame
   gpBox(g, inner, 0.023, 0.014, 0.040, 0, 0.030, 0.030);               // topstrap channel
   // The cylinder turns one chamber every shot.
   gpPart(g, 'main', () => {
     // Cylinder: six chambers and the flutes between them.
-    gpCyl(g, blued, 0.019, 0.019, 0.042, 6, 0, 0.012, -0.008);
+    gpCyl(g, blued, 0.019, 0.019, 0.042, finalNotice ? 28 : 6, 0, 0.012, -0.008);
+    if(finalNotice)for(const z of [-.027,.011])gpCyl(g,bright,.0195,.0195,.002,28,0,.012,z);
     for (let i = 0; i < 6; i++) {
       const a = (i / 6) * Math.PI * 2;
       gpCyl(g, inner, 0.0042, 0.0042, 0.044, 8, Math.cos(a) * 0.0125, 0.012 + Math.sin(a) * 0.0125, -0.008);
@@ -32416,6 +32864,11 @@ function buildRevolver() {
   // Grip frame + walnut panels.
   gpPlate(g, blued, [[0.052,0.004],[0.074,-0.020],[0.080,-0.086],[0.052,-0.098],[0.034,-0.040],[0.032,-0.004]], 0.022, 0);
   [-0.014, 0.014].forEach(x => gpBox(g, wood, 0.006, 0.058, 0.030, x, -0.048, 0.058, 0.28));
+  if(finalNotice)for(const side of [-1,1]){
+    gpBox(g,bright,.002,.020,.015,side*.018,-.047,.058,.28);
+    for(let i=0;i<3;i++)gpBox(g,inner,.002,.0014,.008,side*.0195,-.052+i*.004,.058);
+    gpBox(g,bright,.002,.002,.085,side*.0085,.023,-.103);
+  }
   gpBox(g, inner, 0.030, 0.008, 0.026, 0, -0.082, 0.062, 0.28);        // grip cap
   // Fire control + sights.
   const guard = new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.0032, 6, 12, Math.PI * 1.05), blued);
@@ -32519,17 +32972,22 @@ function buildFlare() {
 }
 
 // ── Pistol ────────────────────────────────────────────────────────────────
-function buildPistol() {
+function buildPistol(stockDetail = false) {
   // 🔫 M1911-pattern: slide with cocking serrations, ejection port, beavertail,
   // hammer, thumb safety, checkered grip panels.
   const g = new THREE.Group();
   const steel=gpFinish(0x3a424b,.43,.78,'steel'),blued=gpFinish(0x343e48,.31,.86,'steel');
   const bright=gpFinish(0x8d959d,.17,.93,'steel'),grip=gpFinish(0x20262b,.76,0,'polymer');
   const inner=GUN_MATS.inner();
-  gpBox(g, blued, 0.026, 0.030, 0.150, 0, 0.020, -0.040);              // slide
-  gpBox(g, inner, 0.027, 0.006, 0.120, 0, 0.036, -0.044);              // slide top flat
-  for (let i = 0; i < 6; i++) gpBox(g, inner, 0.027, 0.020, 0.0035, 0, 0.020, 0.014 - i * 0.007); // serrations
-  gpBox(g, inner, 0.005, 0.014, 0.044, 0.013, 0.026, -0.056);          // ejection port
+  const slideShell=()=>{
+    if(stockDetail) gpContouredPart(g,blued,[[-.114,.013],[-.102,.006],[.028,.006],[.036,.012],[.035,.031],
+      [.028,.037],[-.096,.037],[-.111,.031]],.025,0,.005);
+    else gpBox(g, blued, 0.026, 0.030, 0.150, 0, 0.020, -0.040);
+    gpBox(g, inner, 0.027, 0.006, 0.120, 0, 0.036, -0.044);
+    for (let i = 0; i < 6; i++) gpBox(g, inner, stockDetail?.028:.027, 0.020, 0.0035, 0, 0.020, 0.014 - i * 0.007);
+    gpBox(g, inner, 0.005, 0.014, 0.044, 0.013, 0.026, -0.056);
+  };
+  if(stockDetail)gpPart(g,'slide',slideShell);else slideShell();
   gpBox(g, steel, 0.024, 0.026, 0.100, 0, -0.004, -0.020);             // frame
   gpOpenMuzzle(g,.0062,.0042,.020,0,.020,-.116,bright,inner);
   gpCyl(g, bright, 0.0038, 0.0038, 0.030, 10, 0, 0.004, -0.110);       // recoil spring plug
@@ -32554,14 +33012,18 @@ function buildPistol() {
   gpBox(g, bright, 0.006, 0.014, 0.008, 0, 0.042, 0.044, -0.4);        // hammer
   gpBox(g, bright, 0.005, 0.006, 0.020, 0.013, 0.012, 0.026);          // thumb safety
   gpBox(g, bright, 0.004, 0.008, 0.010, 0.013, 0.014, -0.012);         // slide stop
-  gpBox(g,inner,.0008,.003,.040,.015,.024,-.055);
-  gpBox(g,bright,.0012,.005,.026,.0156,.026,-.054); // visible chamber hood
   gpCyl(g,blued,.0025,.0025,.002,20,-.014,-.020,.020,0,Math.PI/2); // magazine release
   gpBox(g,inner,.0006,.001,.022,-.017,-.095,.038,.30); // floorplate seam
-  for(const side of [-1,1])for(let i=0;i<3;i++)gpBox(g,bright,.0004,.0005,.006,side*.0144,.032,-.089+i*.018);
-  for (const x of [-.007,.007]) gpBox(g, inner, .004, .008, .006, x, .049, .026); // open rear notch
-  gpBox(g, bright, .004, .014, .004, 0, .046, -.104);                 // matching front tip
-  g._sightLine = { space:g, rear:new THREE.Vector3(0,.053,.026), front:new THREE.Vector3(0,.053,-.104) };
+  const sights=()=>{
+    gpBox(g,inner,.0008,.003,.040,.015,.024,-.055);
+    gpBox(g,bright,.0012,.005,.026,.0156,.026,-.054); // visible chamber hood
+    for(const side of [-1,1])for(let i=0;i<3;i++)gpBox(g,bright,.0004,.0005,.006,side*.0144,.032,-.089+i*.018);
+    if(stockDetail)gpBox(g,blued,.020,.008,.010,0,.043,.026);
+    for (const x of [-.007,.007]) gpBox(g, inner, .004, .008, .006, x, stockDetail?.050:.049, .026);
+    gpBox(g, bright, .004, .014, .004, 0, .046, -.104);
+  };
+  if(stockDetail)gpPart(g,'slide',sights);else sights();
+  g._sightLine = { space:g._parts?.slide||g, rear:new THREE.Vector3(0,.053,.026), front:new THREE.Vector3(0,.053,-.104) };
   const flash = makeMuzzleFlash(); flash.position.set(0, 0.020, -0.135); g.add(flash);
   g._flash = flash; g._kickZ = 0.018; g._greebled = true; g._handDetailed = true;
   g._anchorOverride={mag:{x:0,y:-.078,z:.035},breech:{x:.014,y:.026,z:-.054}};
@@ -32973,7 +33435,8 @@ function updateAkimboHands(dt) {
     const reloading = model._reloadStart && model._reloadDur && !model._inspectMode;
     const rt = reloading ? Math.min(1, (Date.now() - model._reloadStart) / model._reloadDur) : 0;
     const roll = reloading ? Math.sin(Math.PI * rt) : 0;
-    for (let i = 0; i < 2; i++) {
+    const tossing = !!(_equip && _equip.model === model && _equip.type === 'flip');   // the entrance is spinning the holders: leave their pose to it, the hands still follow
+    for (let i = 0; i < 2 && !tossing; i++) {
       A.kick[i] *= Math.exp(-dt * 16);
       if (A.kick[i] < 0.002) A.kick[i] = 0;
       const k = A.kick[i], side = i === 0 ? 1 : -1, holder = A.holders[i];
@@ -32988,44 +33451,93 @@ function updateAkimboHands(dt) {
 }
 
 function buildFartGun() {
+  // 💨 Pistol -> the fart gun, as a gadget. A chrome-and-green gizmo that happens to be shaped like a pistol: a clear tank of
+  // glowing green gas on top with bubbles drifting up in it, a pressure gauge on each flank with a needle that never settles,
+  // a yellow bellows under the front that is the pump, an antenna with a bulb, and a chrome flared nozzle ringed in green.
+  // (It used to be a green cushion with brown hoses, which read as something else entirely.)
   const g = new THREE.Group();
-  const green = new THREE.MeshPhongMaterial({ color: 0x4f7f24, shininess: 62, specular: 0xa0c86a });
-  const brown = new THREE.MeshPhongMaterial({ color: 0x6b4a22, shininess: 34, specular: 0x967247 });
-  const dark = new THREE.MeshPhongMaterial({ color: 0x1b2212, shininess: 40, specular: 0x556044 });
+  const chrome = new THREE.MeshPhongMaterial({ color: 0xcfd6dc, shininess: 210, specular: 0xffffff });
+  const green  = new THREE.MeshPhongMaterial({ color: 0x39c24a, shininess: 120, specular: 0xb8ffc0 });
+  const yellow = new THREE.MeshPhongMaterial({ color: 0xffd02a, shininess: 110, specular: 0xfff0a0 });
+  const teal   = new THREE.MeshPhongMaterial({ color: 0x1f6f78, shininess: 70, specular: 0x6ac0c8 });
+  const dark   = new THREE.MeshPhongMaterial({ color: 0x2a3036, shininess: 60, specular: 0x5a626a });
+  const white  = new THREE.MeshPhongMaterial({ color: 0xf4f6f8, shininess: 90, specular: 0xffffff });
+  const glass  = new THREE.MeshPhongMaterial({ color: 0xd8ffe0, shininess: 240, specular: 0xffffff, transparent: true, opacity: 0.24, depthWrite: false });
+  const fluid  = new THREE.MeshBasicMaterial({ color: 0x7dff4a, transparent: true, opacity: 0.55, depthWrite: false });
+  const lit    = new THREE.MeshBasicMaterial({ color: 0xa6ff4a });
   const gas = new THREE.MeshBasicMaterial({ color: 0xa6ff4a, transparent: true, opacity: 0.34,
     blending: THREE.AdditiveBlending, depthWrite: false });
-  const cushion = new THREE.Mesh(new THREE.SphereGeometry(0.066, 18, 10), green);
-  cushion.scale.set(1.22, 0.44, 0.90); cushion.position.set(0, -0.012, -0.014); g.add(cushion);
-  const seam = new THREE.Mesh(new THREE.TorusGeometry(0.064, 0.0035, 6, 30), dark);
-  seam.scale.set(1.18, 0.46, 0.82); seam.rotation.x = Math.PI / 2; seam.position.copy(cushion.position); g.add(seam);
-  gpBox(g, dark, 0.036, 0.052, 0.030, 0, -0.080, 0.012, 0.18);        // soft handle tab
-  gpBox(g, brown, 0.054, 0.012, 0.034, 0, -0.107, 0.018, 0.18);
-  gpCyl(g, dark, 0.014, 0.014, 0.032, 12, 0, 0.020, -0.076);          // valve collar
-  gpCyl(g, brown, 0.010, 0.012, 0.088, 12, 0, 0.018, -0.126);         // hose neck
-  gpCyl(g, brown, 0.010, 0.010, 0.078, 12, 0.036, 0.024, -0.158, Math.PI / 2, 0.52);
-  gpCyl(g, brown, 0.010, 0.010, 0.078, 12, -0.036, 0.024, -0.158, Math.PI / 2, -0.52);
-  gpCyl(g, dark, 0.030, 0.017, 0.050, 18, 0, 0.020, -0.202);          // silly trumpet nozzle
-  gpCyl(g, dark, 0.021, 0.021, 0.008, 18, 0, 0.020, -0.230);
-  for (let i = 0; i < 5; i++) gpBox(g, dark, 0.006, 0.006, 0.014, -0.048 + i * 0.024, 0.012, -0.042, 0, 0, i % 2 ? 0.35 : -0.35);
+  gpBox(g, chrome, 0.038, 0.044, 0.140, 0, 0.004, -0.045);                       // the housing
+  gpBox(g, green, 0.0394, 0.008, 0.120, 0, 0.004, -0.045);                       // a green band round it
+  [-1, 1].forEach(sx => {
+    for (let i = 0; i < 3; i++) gpBox(g, dark, 0.0022, 0.010, 0.004, sx * 0.0192, 0.016, -0.080 - i * 0.010);   // vents
+  });
+  // the tank on top, the gas in it, and bubbles rising
+  gpCyl(g, glass, 0.016, 0.016, 0.110, 18, 0, 0.044, -0.050);
+  gpCyl(g, fluid, 0.0135, 0.0135, 0.104, 18, 0, 0.044, -0.050);
+  [-0.1075, 0.0075].forEach(z => gpCyl(g, chrome, 0.0175, 0.0175, 0.008, 18, 0, 0.044, z));
+  const bubbles = [];
+  for (let i = 0; i < 4; i++) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.0034 + (i % 2) * 0.0016, 8, 6), new THREE.MeshBasicMaterial({ color: 0xeaffd8, transparent: true, opacity: 0.85, depthWrite: false }));
+    m.position.set((i - 1.5) * 0.003, 0.040, -0.085 + i * 0.026); g.add(m); bubbles.push({ m, ph: i * 1.7, x: m.position.x, z: m.position.z });
+  }
+  // a pressure gauge on each flank, with a needle
+  const needles = [];
+  [-1, 1].forEach(sx => {
+    gpCyl(g, chrome, 0.0135, 0.0135, 0.003, 18, sx * 0.0198, 0.006, 0.006, 0, Math.PI / 2);   // bezel
+    gpCyl(g, white, 0.0112, 0.0112, 0.004, 18, sx * 0.0200, 0.006, 0.006, 0, Math.PI / 2);    // face
+    gpBox(g, new THREE.MeshBasicMaterial({ color: 0xff3a2a }), 0.0016, 0.0016, 0.0095, sx * 0.0224, 0.006, 0.006).userData.needle = true;
+    needles.push(g.children[g.children.length - 1]);
+    gpBox(g, dark, 0.0014, 0.0014, 0.0030, sx * 0.0224, 0.006, 0.0125);                         // the red zone, a tick at the end of the scale
+  });
+  // the bellows under the front: stacked discs that squeeze
+  const bellows = [];
+  for (let i = 0; i < 5; i++) {
+    const d = gpCyl(g, i % 2 ? yellow : dark, i % 2 ? 0.0145 : 0.0122, i % 2 ? 0.0145 : 0.0122, 0.008, 16, 0, -0.016, -0.062 - i * 0.0085);
+    bellows.push({ m: d, z: d.position.z });
+  }
+  // the nozzle: flared chrome, a lit green ring and a dark mouth
+  gpCyl(g, chrome, 0.012, 0.026, 0.044, 20, 0, 0.010, -0.137);
+  gpCyl(g, lit, 0.0272, 0.0272, 0.004, 20, 0, 0.010, -0.1585);
+  gpCyl(g, dark, 0.0205, 0.0205, 0.003, 20, 0, 0.010, -0.1612);
+  // the antenna and its bulb, and a knob
+  gpCyl(g, chrome, 0.0016, 0.0016, 0.040, 6, -0.010, 0.056, 0.016);
+  const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.0055, 10, 8), lit); bulb.position.set(-0.010, 0.0775, 0.016); g.add(bulb);
+  gpCyl(g, yellow, 0.007, 0.007, 0.010, 12, 0.011, 0.034, 0.020);
+  // grip, guard, trigger
+  gpPlate(g, teal, [[0.034,-0.016],[0.062,-0.032],[0.070,-0.110],[0.042,-0.124],[0.016,-0.058],[0.012,-0.020]], 0.034, 0);
+  [-1, 1].forEach(sx => gpBox(g, green, 0.0022, 0.040, 0.003, sx * 0.0178, -0.062, 0.050));
+  gpBox(g, chrome, 0.010, 0.004, 0.036, 0, -0.040, -0.012);
+  gpBox(g, chrome, 0.010, 0.022, 0.004, 0, -0.029, -0.030);
+  gpBox(g, yellow, 0.006, 0.016, 0.006, 0, -0.026, 0.004, 0.2);
+  // the gas hanging about at the muzzle (always on) and the flash
+  const puffs = [];
   for (let i = 0; i < 3; i++) {
     const puff = new THREE.Mesh(new THREE.SphereGeometry(0.014 + i * 0.004, 8, 6), gas);
-    puff.position.set((i - 1) * 0.014, 0.024 + i * 0.004, -0.246 - i * 0.016);
+    puff.position.set((i - 1) * 0.014, 0.016 + i * 0.004, -0.186 - i * 0.016);
     puff.scale.set(1.25, 0.75, 1.0);
     puff.userData.legendFx = true;
-    g.add(puff);
+    g.add(puff); puffs.push(puff);
   }
   const flash = new THREE.Mesh(new THREE.SphereGeometry(0.030, 8, 7), gas);
-  flash.visible = false; flash.position.set(0, 0.020, -0.244); g.add(flash);
+  flash.visible = false; flash.position.set(0, 0.010, -0.184); g.add(flash);
   const oldTick = g._tick;
   g._tick = (dt, now, assembling) => {
     if (oldTick) oldTick(dt, now, assembling);
     if (assembling) return;
-    g.children.forEach(o => {
-      if (o.userData && o.userData.legendFx) {
-        o.material.opacity = 0.22 + 0.12 * Math.sin(now * 5.2 + o.position.z * 40);
-        o.scale.x = 1.25 + 0.10 * Math.sin(now * 3.6 + o.position.x * 20);
-      }
+    const t = performance.now() * 0.001;
+    puffs.forEach(o => {
+      o.material.opacity = 0.22 + 0.12 * Math.sin(t * 5.2 + o.position.z * 40);
+      o.scale.x = 1.25 + 0.10 * Math.sin(t * 3.6 + o.position.x * 20);
     });
+    bubbles.forEach(b => {                                                      // up through the gas and round again
+      const k = (t * 0.45 + b.ph) % 1;
+      b.m.position.set(b.x + Math.sin(t * 3 + b.ph) * 0.003, 0.034 + k * 0.020, b.z);
+      b.m.material.opacity = 0.85 * Math.sin(k * Math.PI);
+    });
+    needles.forEach((n, i) => { n.rotation.x = 0.9 * Math.sin(t * 2.1 + i) + 0.35 * Math.sin(t * 7.3); });   // the gauge cannot make up its mind
+    bellows.forEach((bl, i) => { bl.m.position.z = bl.z + 0.0018 * Math.sin(t * 2.4 + i * 0.5) * (i % 2 ? 1 : -1); });   // and the bellows breathes
+    bulb.scale.setScalar(1 + 0.25 * Math.sin(t * 6));
   };
   g._flash = flash; g._kickZ = 0.010; g._greebled = true; g._handDetailed = true;
   g.position.set(0.1, -0.1, -0.22);
@@ -33033,24 +33545,54 @@ function buildFartGun() {
 }
 
 function buildBlaster() {
+  // 🔴 Pistol -> sci-fi blaster. A matte black sidearm with a wedge-cut slide, a
+  // vented flank, a fin-guarded emitter at the front and an energy cell in the
+  // body. Everything that is not black is red and lit: the light strips down both
+  // sides, the cell, the three rings and the lens of the emitter, the front sight,
+  // the trigger. (It was a toy: cream and blue plastic.)
   const g = new THREE.Group();
-  const red = new THREE.MeshPhongMaterial({ color: 0xd82a3a, shininess: 120, specular: 0xffffff });
-  const blue = new THREE.MeshPhongMaterial({ color: 0x2a75ff, shininess: 150, specular: 0xffffff });
-  const cream = new THREE.MeshPhongMaterial({ color: 0xf3ead8, shininess: 70, specular: 0xffffff });
-  const dark = new THREE.MeshPhongMaterial({ color: 0x20222a, shininess: 50, specular: 0x606070 });
-  const glow = new THREE.MeshBasicMaterial({ color: 0xff3344 });
-  gpCyl(g, cream, 0.032, 0.040, 0.110, 18, 0, 0.018, -0.028);
-  gpCyl(g, red, 0.026, 0.026, 0.136, 18, 0, 0.018, -0.118);
-  gpCyl(g, blue, 0.035, 0.024, 0.054, 18, 0, 0.018, -0.214);
-  gpCyl(g, glow, 0.010, 0.010, 0.010, 12, 0, 0.018, -0.246);
-  for (let i = 0; i < 4; i++) gpBox(g, blue, 0.010, 0.024, 0.030, (i - 1.5) * 0.012, 0.050, -0.100 - i * 0.022, 0, 0, (i - 1.5) * 0.15);
-  gpPlate(g, dark, [[0.044,-0.016],[0.074,-0.030],[0.078,-0.096],[0.050,-0.112],[0.026,-0.054],[0.026,-0.022]], 0.035, 0);
-  gpBox(g, red, 0.042, 0.014, 0.030, 0, -0.110, 0.030, 0.25);
-  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.0035, 6, 12, Math.PI * 1.05), red);
-  guard.rotation.set(0, Math.PI / 2, -0.4); guard.position.set(0, -0.032, 0.010); g.add(guard);
-  gpBox(g, cream, 0.005, 0.016, 0.006, 0, -0.022, 0.010, 0.2);
-  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.024, 8, 7), glow);
-  flash.visible = false; flash.position.set(0, 0.018, -0.250); g.add(flash);
+  const inner = GUN_MATS.inner(), steel = GUN_MATS.steel();
+  const black = new THREE.MeshPhongMaterial({ color: 0x2b2f35, shininess: 150, specular: 0x8a929c });
+  const grip  = new THREE.MeshPhongMaterial({ color: 0x25282d, shininess: 60, specular: 0x4a5058 });
+  const red   = new THREE.MeshBasicMaterial({ color: 0xff2a3a });                 // lit
+  const dim   = new THREE.MeshBasicMaterial({ color: 0xc01828 });                 // lit, lower
+  gpPlate(g, black, [                                                              // the body: one wedge-cut side profile
+    [0.054, 0.030], [0.030, 0.042], [-0.040, 0.042], [-0.100, 0.034], [-0.140, 0.022],
+    [-0.146, 0.000], [-0.120, -0.010], [-0.040, -0.012], [0.020, -0.014], [0.054, -0.004],
+  ], 0.030, 0);
+  gpBox(g, steel, 0.012, 0.006, 0.100, 0, 0.0455, -0.040);                         // spine rail
+  [-1, 1].forEach(sx => gpBox(g, steel, 0.003, 0.008, 0.004, sx * 0.006, 0.052, 0.040)); // rear sight
+  gpBox(g, red, 0.003, 0.008, 0.004, 0, 0.050, -0.120);                            // front sight, lit
+  [-1, 1].forEach(sx => {
+    const x = sx * 0.0153;
+    gpBox(g, red, 0.002, 0.004, 0.110, x, 0.020, -0.075);                          // the long light strip
+    gpBox(g, dim, 0.002, 0.0025, 0.060, x, 0.006, -0.050);                         // and a shorter one under it
+    for (let i = 0; i < 3; i++) gpBox(g, inner, 0.0022, 0.009, 0.004, x, 0.032, -0.004 - i * 0.012);  // vents
+    gpBox(g, steel, 0.0025, 0.016, 0.038, x, -0.001, 0.008);                       // frame round the cell window
+    gpBox(g, red, 0.0030, 0.010, 0.030, x * 1.003, -0.001, 0.008);                 // the energy cell, lit
+    gpBox(g, steel, 0.004, 0.024, 0.040, sx * 0.017, 0.012, -0.168);               // the fins that guard the emitter
+    gpBox(g, dim, 0.002, 0.046, 0.003, sx * 0.0178, -0.062, 0.064);                // light line down the grip
+  });
+  // The emitter: a short shroud with three lit rings and the lens at the end.
+  gpCyl(g, steel, 0.0135, 0.0155, 0.052, 14, 0, 0.012, -0.172);
+  [-0.156, -0.172, -0.188].forEach(z => gpCyl(g, red, 0.0166, 0.0166, 0.003, 14, 0, 0.012, z));
+  gpCyl(g, red, 0.0085, 0.0085, 0.004, 12, 0, 0.012, -0.199);
+  const halo = new THREE.Mesh(new THREE.SphereGeometry(0.014, 10, 8),
+    new THREE.MeshBasicMaterial({ color: 0xff2a3a, transparent: true, opacity: 0.30, blending: THREE.AdditiveBlending, depthWrite: false }));
+  halo.position.set(0, 0.012, -0.202); g.add(halo);
+  gpPlate(g, grip, [[0.044,-0.016],[0.074,-0.030],[0.078,-0.096],[0.050,-0.112],[0.026,-0.054],[0.026,-0.022]], 0.035, 0);
+  gpBox(g, steel, 0.010, 0.004, 0.040, 0, -0.036, -0.002);                         // angular trigger guard
+  gpBox(g, steel, 0.010, 0.024, 0.004, 0, -0.025, -0.020);
+  gpBox(g, red, 0.005, 0.016, 0.005, 0, -0.024, 0.010, 0.2);                       // trigger, lit
+  // Red, like the rest of it (makeMuzzleFlash is orange all through and only exposes its
+  // heart as .material, which triggerMuzzleBlast also uses for the light and the sparks).
+  const flash = makeMuzzleFlash();
+  flash.traverse(o => {
+    if (!o.isMesh || !o.material || !o.material.color) return;
+    if (o === flash.children[1]) o.material.color.setHex(0xff6a74);
+    else o.material.color.setHex(o.material.color.getHex() === 0xffffff ? 0xffe0e2 : 0xff2a3a);
+  });
+  flash.position.set(0, 0.012, -0.206); g.add(flash);
   g._flash = flash; g._kickZ = 0.012; g._greebled = true; g._handDetailed = true;
   g.position.set(0.1, -0.1, -0.22); return g;
 }
@@ -33338,15 +33880,21 @@ function buildAutoShotgun() {
   g._flash = flash; g._kickZ = 0.028; g.position.set(0.12, -0.1, -0.25); return g;
 }
 
-function buildVectorSMG() {
+function buildCrimsonVector() { return buildVectorSMG(true,true); }
+function buildVectorSMG(stockDetail = false, crimson = false) {
   // 🔫 KRISS Vector: the angular chassis with the deep offset lower, vertical
   // pistol magazine, folding stock and a full-length top rail.
   const g = new THREE.Group();
   const steel = GUN_MATS.steel(), blued = GUN_MATS.blued(), bright = GUN_MATS.bright();
   const poly = GUN_MATS.polymer(), inner = GUN_MATS.inner();
+  const shell=crimson?gpFinish(0xa71b24,.43,.46,'steel'):poly;
   // Upper chassis, in profile: flat deck, stepped nose, the offset lower behind
   // the grip that gives the Vector its unmistakable outline.
-  gpPlate(g, poly, [
+  gpPlate(g, shell, crimson ? [
+    [-.170,.015],[-.154,.037],[.122,.037],[.149,.019],[.149,-.014],
+    [.106,-.017],[.064,-.019],[.034,-.045],[.020,-.101],[-.033,-.101],
+    [-.048,-.062],[-.082,-.026],[-.166,-.011],
+  ] : [
     [-0.170,0.008],[-0.156,0.030],[-0.030,0.030],[-0.020,0.040],[0.096,0.040],
     [0.108,0.020],[0.150,0.018],[0.150,-0.014],[0.104,-0.018],[0.096,-0.048],
     [0.030,-0.052],[0.016,-0.020],[-0.030,-0.018],[-0.040,-0.006],[-0.164,-0.006],
@@ -33356,26 +33904,50 @@ function buildVectorSMG() {
   gpBox(g, blued, 0.026, 0.008, 0.240, 0, 0.048, -0.028);
   for (let i = 0; i < 11; i++) gpBox(g, inner, 0.028, 0.005, 0.006, 0, 0.052, -0.136 + i * 0.022);
   // Vertical magazine ahead of the grip.
-  gpBox(g, steel, 0.026, 0.024, 0.038, 0, -0.026, -0.006);             // magwell
-  gpBox(g, blued, 0.022, 0.110, 0.034, 0, -0.086, -0.006);
-  for (let i = 0; i < 4; i++) gpBox(g, inner, 0.023, 0.004, 0.010, 0, -0.050 - i * 0.024, -0.006);
-  gpBox(g, poly, 0.024, 0.010, 0.036, 0, -0.146, -0.006);              // floorplate
+  gpBox(g, steel, 0.026, 0.024, 0.038, 0, crimson?-.091:-.026, -0.006); // magwell
+  const magDrop=crimson?.061:0;
+  const magazine=()=>{
+    gpBox(g, blued, 0.022, 0.110, 0.034, 0, -0.086-magDrop, -0.006);
+    for (let i = 0; i < 4; i++) gpBox(g, inner, 0.023, 0.004, 0.010, 0, -0.050-magDrop-i*0.024, -0.006);
+    gpBox(g, crimson?shell:poly, 0.024, 0.010, 0.036, 0, -0.146-magDrop, -0.006);
+  };
+  if(stockDetail)gpPart(g,'magazine',magazine,{x:0,y:-.032-magDrop,z:-.006});else magazine();
   // Grip, trigger, controls.
   gpPlate(g, poly, [[0.078,-0.020],[0.100,-0.042],[0.102,-0.098],[0.078,-0.108],[0.058,-0.056],[0.056,-0.024]], 0.030, 0);
   const guard = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.0034, 6, 12, Math.PI * 1.05), poly);
   guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.032, 0.030); g.add(guard);
   gpBox(g, bright, 0.005, 0.015, 0.005, 0, -0.024, 0.030, 0.2);
-  gpBox(g, bright, 0.012, 0.010, 0.014, 0.019, 0.004, 0.056);          // charging handle
+  const handle=()=>gpBox(g, bright, 0.012, 0.010, 0.014, stockDetail?.026:.019, 0.004, 0.056);
+  if(stockDetail)gpPart(g,'main',handle).userData.chargingHandle=true;else handle();
   gpBox(g, bright, 0.008, 0.008, 0.010, 0.019, -0.010, 0.020);         // selector
   gpBox(g, inner, 0.005, 0.016, 0.044, 0.021, 0.010, -0.040);          // ejection port
   // Folding stock: struts and a shoulder plate.
-  [-0.014, 0.014].forEach(x => gpBox(g, steel, 0.006, 0.006, 0.110, x, 0.010, 0.196));
-  gpBox(g, poly, 0.040, 0.044, 0.012, 0, 0.006, 0.252, 0.08);
+  if(crimson){
+    gpBox(g,poly,.031,.017,.106,0,.014,.196);
+    gpPlate(g,poly,[[.145,-.009],[.160,-.019],[.241,-.058],[.249,-.050],[.175,-.001]],.019);
+    gpBox(g,inner,.034,.081,.014,0,-.017,.252,.08);
+    for(let i=0;i<6;i++)gpBox(g,poly,.034,.003,.003,0,-.044+i*.011,.260);
+  }else{
+    [-0.014, 0.014].forEach(x => gpBox(g, steel, 0.006, 0.006, 0.110, x, 0.010, 0.196));
+    gpBox(g, poly, 0.040, 0.044, 0.012, 0, 0.006, 0.252, 0.08);
+  }
   gpBox(g, inner, 0.030, 0.008, 0.020, 0, 0.030, 0.150);               // hinge
   // Barrel and shroud.
   gpCyl(g, blued, 0.0070, 0.0070, 0.090, 14, 0, 0.010, -0.200);
   gpCyl(g, steel, 0.0105, 0.0105, 0.030, 16, 0, 0.010, -0.176);        // shroud
-  gpCyl(g, steel, 0.0115, 0.0115, 0.020, 16, 0, 0.010, -0.238);        // brake
+  if(stockDetail){
+    gpOpenMuzzle(g,.0115,.005,.032,0,.010,-.242,steel,inner,true);
+    gpReflexSight(g,0,.083,.021,.055);
+    gpContouredPart(g,poly,[[.136,.005],[.145,.027],[.161,.025],[.167,.006],[.161,-.010],[.138,-.010]],.035);
+    for(const side of [-1,1]) {
+      gpBox(g,steel,.003,.014,.064,side*.023,.016,-.090);
+      for(let i=0;i<4;i++)gpBox(g,inner,.0009,.007,.004,side*.0246,.016,-.113+i*.014);
+      if(crimson){
+        gpPlate(g,poly,[[-.060,-.018],[.052,-.018],[.029,-.051],[.016,-.091],[-.025,-.091],[-.041,-.053]],.004,side*.023);
+        for(const [y,z] of [[.024,-.137],[.021,.092],[-.061,-.006]])gpCyl(g,steel,.0035,.0035,.004,10,side*.026,y,z,0,Math.PI/2);
+      }
+    }
+  } else gpCyl(g, steel, 0.0115, 0.0115, 0.020, 16, 0, 0.010, -0.238);
   const flash = makeMuzzleFlash(); flash.position.set(0, 0.010, -0.256); g.add(flash);
   g._flash = flash; g._kickZ = 0.008; g._greebled = true; g._handDetailed = true;
   g.position.set(0.12, -0.1, -0.25); return g;
@@ -34091,9 +34663,11 @@ function buildMachinePistol() {
   gpCyl(g, inner, 0.0060, 0.0060, 0.012, 12, 0, 0.010, -0.204);
   // Grip: magazine goes THROUGH it. That is the whole design.
   gpPlate(g, grip, [[0.006,-0.014],[0.036,-0.020],[0.040,-0.086],[0.010,-0.094],[-0.014,-0.070],[-0.016,-0.018]], 0.040, 0);
-  gpBox(g, blued, 0.024, 0.070, 0.034, 0, -0.078, 0.014, -0.10);   // magazine below the grip
-  for (let i = 0; i < 3; i++) gpBox(g, inner, 0.026, 0.004, 0.010, 0, -0.062 - i * 0.022, 0.016 + i * 0.002, -0.10);
-  gpBox(g, steel, 0.026, 0.010, 0.036, 0, -0.112, 0.018, -0.10);   // floorplate
+  gpPart(g, 'magazine', () => {
+    gpBox(g, blued, 0.024, 0.070, 0.034, 0, -0.078, 0.014, -0.10);
+    for (let i = 0; i < 3; i++) gpBox(g, inner, 0.026, 0.004, 0.010, 0, -0.062 - i * 0.022, 0.016 + i * 0.002, -0.10);
+    gpBox(g, steel, 0.026, 0.010, 0.036, 0, -0.112, 0.018, -0.10);
+  }, {x:0,y:-.043,z:.014});
   gpBox(g, bright, 0.006, 0.030, 0.010, 0, -0.038, 0.036, -0.14);  // grip safety
   // Trigger group and selector.
   const guard = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.0036, 6, 12, Math.PI * 1.05), blued);
@@ -34220,7 +34794,10 @@ function buildHandCannon() {
   gpBox(g, steel, 0.048, 0.030, 0.130, 0, -0.010, -0.020);
   gpPlate(g, grip, [[0.028,-0.018],[0.062,-0.030],[0.070,-0.108],[0.040,-0.126],[0.010,-0.060],[0.008,-0.022]], 0.044, 0);
   for (let i = 0; i < 4; i++) gpBox(g, inner, 0.046, 0.005, 0.030, 0, -0.046 - i * 0.018, 0.030 + i * 0.006, 0.30);
-  gpBox(g, steel, 0.040, 0.010, 0.050, 0, -0.126, 0.038, 0.18);    // magazine floorplate
+  gpPart(g, 'magazine', () => {
+    gpBox(g, blued, .031, .090, .038, 0, -.081, .030, .18);
+    gpBox(g, steel, 0.040, 0.010, 0.050, 0, -0.126, 0.038, 0.18);
+  }, {x:0,y:-.036,z:.030});
   // Trigger group.
   const guard = new THREE.Mesh(new THREE.TorusGeometry(0.022, 0.0038, 6, 12, Math.PI * 1.05), steel);
   guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.040, 0.006); g.add(guard);
@@ -34323,7 +34900,10 @@ function buildTaser() {
   // Grip with a magazine-style battery pack.
   gpPlate(g, grip, [[0.026,-0.010],[0.056,-0.024],[0.058,-0.096],[0.028,-0.108],[0.006,-0.050],[0.004,-0.014]], 0.034, 0);
   for (let i = 0; i < 4; i++) gpBox(g, inner, 0.036, 0.004, 0.024, 0, -0.028 - i * 0.018, 0.028 + i * 0.005, 0.28);
-  gpBox(g, black, 0.030, 0.014, 0.036, 0, -0.106, 0.038, 0.24);
+  gpPart(g, 'magazine', () => {
+    gpBox(g, black, .024, .074, .028, 0, -.069, .030, .24);
+    gpBox(g, black, 0.030, 0.014, 0.036, 0, -0.106, 0.038, 0.24);
+  }, {x:0,y:-.032,z:.030});
   const guard = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.0034, 6, 12, Math.PI * 1.05), black);
   guard.rotation.set(0, Math.PI/2, -0.4); guard.position.set(0, -0.018, 0.000); g.add(guard);
   gpBox(g, bright, 0.005, 0.014, 0.005, 0, -0.010, 0.000, 0.2);
@@ -35402,17 +35982,17 @@ function detailItemText(item) {
 // the old generic gun factory.
 const handcraftedWeapon = id => HandcraftedModels.buildWeapon(id);
 const weaponModels = [
-  buildAK20(),  // ak20
+  buildAK20(true),  // ak20
   buildSG8(),  // sg8
-  buildSRX(),  // srx
+  buildSRX(true),  // srx
   buildRPD(),  // rpd
   buildMP40(),  // mp40
   buildP90(),  // p90
-  buildPaintball(),  // paintball
+  buildPaintball(true),  // paintball
   buildBurstRifle(),  // burst
   buildM4A1(),  // m4a1_arena
   buildLeverRifle(),  // lever
-  buildVectorSMG(),  // vector
+  buildVectorSMG(true),  // vector
   buildCrossbow(),  // crossbow
   buildFlamethrower(),  // flamethrower
   buildGrenadeLauncher(),  // grenade_launcher
@@ -35422,7 +36002,7 @@ const weaponModels = [
   buildBoombow(),  // boombow
   buildRevolver(),  // revolver
   buildFlare(),  // flare
-  buildPistol(),  // pistol
+  buildPistol(true),  // pistol
   buildShorty(),  // shorty
   buildCycler(),  // cycler
   buildHandCannon(),  // hand_cannon
@@ -35525,6 +36105,7 @@ const weaponModels = [
   buildAkimbo(),  // akimbo
   buildHellfire(),  // hellfire
   buildOmegaPistol(),  // omega_pistol
+  buildSwapGun(),
   buildPhaseRifle(),  // phase_rifle
   buildChronoPistol(),  // chrono_pistol
 ];
@@ -35597,6 +36178,21 @@ function buildChronoPistol() {
     hand.rotation.y = rewinding ? hand.rotation.y + dt * 40 : -Math.floor(now * 2) * (Math.PI * 2 / 60);   // forward tick, whirling back in a rewind
   };
   g.position.set(0.11, -0.10, -0.24); return g;
+}
+function buildSwapGun() {
+  const g=new THREE.Group(),body=gpFinish(0x343e49,.32,.68,'steel'),grip=GUN_MATS.grip(),dark=GUN_MATS.inner();
+  const light=new THREE.MeshBasicMaterial({color:0x70e9db});
+  gpContouredPart(g,body,[[-.164,.009],[-.137,.043],[.037,.043],[.060,.022],[.045,-.013],[-.141,-.013]],.047);
+  gpContouredPart(g,grip,[[.001,-.004],[.038,-.006],[.057,-.092],[.040,-.108],[.014,-.103],[-.006,-.022]],.029);
+  gpOpenMuzzle(g,.021,.012,.043,0,.016,-.164,body,dark);
+  for(const side of [-1,1]){
+    gpBox(g,dark,.007,.022,.094,side*.023,.014,-.057);
+    for(let i=0;i<3;i++)gpBox(g,light,.002,.007,.017,side*.027,.014,-.082+i*.023,0,0,side*.4);
+  }
+  gpPart(g,'magazine',()=>gpBox(g,body,.030,.015,.034,0,-.104,.032));
+  gpReflexSight(g,0,.069,-.035,.043);
+  const flash=makeMuzzleFlash();flash.position.set(0,.016,-.190);g.add(flash);
+  g._flash=flash;g._greebled=true;g._handDetailed=true;g.position.set(.11,-.10,-.24);return g;
 }
 function buildOmegaPistol() {
   const g=new THREE.Group(),dark=GUN_MATS.inner(),chrome=GUN_MATS.bright();
@@ -42587,6 +43183,7 @@ function projectileSpeedScale(weaponId, weapon) {
 }
 // Final muzzle speed for a projectile, before the global multiplier.
 function projectileBaseSpeed(weaponId, weapon, declaredSpeed) {
+  if (weaponId === 'harpoon_gun') return declaredSpeed || weapon?.bulletSpeed || 220;
   const kind = projectileKind(weaponId, weapon);
   const rel = BULLET_RELATIVE_KINDS[kind];
   if (rel != null) return BULLET_REF_SPEED * rel;
@@ -43218,28 +43815,27 @@ function _getGlowPuffTex() {
   return (_glowPuffTex = new THREE.CanvasTexture(c));
 }
 const _donutPuffs = [];
-const _DONUT_PUFF_COLORS = [0xff78bd, 0xff4fa8, 0xffb070, 0xff78bd, 0xffd27a, 0xff8fcf, 0xffa060];   // pink and caramel
-let _donutPuffN = 0;
 const _bulletPrevTrail = new THREE.Vector3();
+const _donutStreaks = [];
+let _donutStreakGeometry = null;
 function _emitDonutTrail(tint, r, from, to) {
-  const dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
-  const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-  if (dist < 0.001) return;
-  const step = Math.max(0.16, r * 2.4), n = Math.min(14, Math.floor(dist / step) + 1);
-  for (let i = 0; i < n; i++) {
-    const t = (i + 1) / n, sprinkle = (_donutPuffN++ % 3) === 2;
-    const col = sprinkle ? _DONUT_PUFF_COLORS[(_donutPuffN >> 1) % _DONUT_PUFF_COLORS.length] : tint;
-    const mat = new THREE.SpriteMaterial({ map: _getGlowPuffTex(), color: col, transparent: true, opacity: 0.9,
-      blending: THREE.AdditiveBlending, depthWrite: false });
-    const sp = new THREE.Sprite(mat);
-    const s0 = (sprinkle ? 0.7 : 1.5) * r * 2.6;
-    sp.position.set(from.x + dx * t, from.y + dy * t, from.z + dz * t);
-    sp.scale.setScalar(s0);
-    sp.renderOrder = 997;
-    scene.add(sp);
-    _donutPuffs.push({ sp, mat, life: 0, max: sprinkle ? 0.7 : 0.5, s0 });
-    if (_donutPuffs.length > 420) { const o = _donutPuffs.shift(); scene.remove(o.sp); o.mat.dispose(); }
-  }
+  const delta = new THREE.Vector3().subVectors(to, from), length = delta.length();
+  if (length < .001 || length > 80) return;
+  if (!_donutStreakGeometry) _donutStreakGeometry = new THREE.CylinderGeometry(.4, 1, 1, 4);
+  const mat = new THREE.MeshBasicMaterial({color:0xffce54,transparent:true,opacity:.92,depthWrite:false,toneMapped:false});
+  const streak = new THREE.Mesh(_donutStreakGeometry, mat);
+  const core = new THREE.Mesh(_donutStreakGeometry, new THREE.MeshBasicMaterial({
+    color:0xffffff,transparent:true,opacity:1,depthWrite:false,toneMapped:false}));
+  core.scale.set(.46,1,.46);
+  core.renderOrder = 1;
+  streak.add(core);
+  const width = Math.max(.0012, Math.min(.012, r * .085));
+  streak.position.copy(from).lerp(to,.5);
+  streak.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), delta.divideScalar(length));
+  streak.scale.set(width,length,width);
+  scene.add(streak);
+  _donutStreaks.push({mesh:streak,age:0,width});
+  if (_donutStreaks.length > 160) { const old=_donutStreaks.shift(); scene.remove(old.mesh); old.mesh.traverse(o=>{if(o.isMesh)o.material.dispose();}); }
 }
 function _emitBloodTrail(tint, r, from, to) {
   const dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
@@ -43261,6 +43857,14 @@ function _emitBloodTrail(tint, r, from, to) {
   }
 }
 function _updateDonutPuffs(dt) {
+  for (let i=_donutStreaks.length-1;i>=0;i--) {
+    const p=_donutStreaks[i];p.age+=dt;
+    if (p.age >= .28) {scene.remove(p.mesh);p.mesh.traverse(o=>{if(o.isMesh)o.material.dispose();});_donutStreaks.splice(i,1);continue;}
+    const fade=1-p.age/.28;
+    p.mesh.material.opacity=.92*fade;
+    p.mesh.children[0].material.opacity=fade;
+    p.mesh.scale.x=p.mesh.scale.z=p.width*(.35+.65*fade);
+  }
   for (let i = _donutPuffs.length - 1; i >= 0; i--) {
     const p = _donutPuffs[i]; p.life += dt;
     const t = p.life / p.max;
@@ -43271,9 +43875,9 @@ function _updateDonutPuffs(dt) {
 }
 
 // ── 🍩 Afterimage trails ────────────────────────────────────────────────────
-// Moving with a donut gun in your hands leaves a glowing, sprinkled trail
+// Moving with a donut gun in your hands leaves a sharp golden trail
 // behind you; swinging the Ring King draws its blade through the air. Both
-// reuse the bullet trail's world-space puffs (_emitDonutTrail), so they are
+// reuse the bullet trail's tapered world-space segments (_emitDonutTrail), so they are
 // visible from any angle and fade where they were left. Only YOUR held gear
 // can do this: other players' skins are never sent over the wire.
 const _dmPrevCam = new THREE.Vector3(), _dmDir = new THREE.Vector3(), _dmFrom = new THREE.Vector3(),
@@ -43344,13 +43948,13 @@ function _buildDonutShot(tint, r) {
   r = Math.max(r, 0.06);      // a stock bullet size makes a donut too small to see at bullet speed
   const c = tint || 0xff78bd, R = r * 1.25;
   const P = _projCache('donut|'+c+'|'+r, () => ({
-    dough: new THREE.TorusGeometry(R, r * 0.55, 8, 16),
-    doughM: new THREE.MeshPhongMaterial({ color: 0xc8844a, shininess: 40, specular: 0xffd6a0 }),
-    glaze: new THREE.TorusGeometry(R, r * 0.42, 8, 16),
+    dough: new THREE.TorusGeometry(R * .80, r * 0.14, 6, 24),
+    doughM: new THREE.MeshPhongMaterial({ color: 0xe8bc54, shininess: 180, specular: 0xffffff }),
+    glaze: new THREE.TorusGeometry(R * .80, r * 0.08, 6, 24),
     glazeM: new THREE.MeshPhongMaterial({ color: c, shininess: 120, specular: 0xffffff }),
-    spr: new THREE.BoxGeometry(r * 0.55, r * 0.14, r * 0.14),
-    sprM: [0xffd27a, 0xff9ac8, 0xffb070, 0xffffff].map(col => new THREE.MeshBasicMaterial({ color: col })),
-    wake: new THREE.CylinderGeometry(R * 0.9, r * 0.1, r * 12, 8, 1, true), wakeM: _glow(c),
+    spr: new THREE.BoxGeometry(r * 0.25, r * 0.06, r * 0.06),
+    sprM: [0xffd27a, 0xffeab0, 0xffc34a, 0xffffff].map(col => new THREE.MeshBasicMaterial({ color: col })),
+    wake: new THREE.CylinderGeometry(r * .12, 0, r * 10, 4), wakeM: _glow(0xffce54),
   }));
   const g = new THREE.Group();
   const ring = new THREE.Group(); ring.rotation.x = Math.PI / 2;      // ring axis along the flight direction
@@ -43358,7 +43962,7 @@ function _buildDonutShot(tint, r) {
   const gl = new THREE.Mesh(P.glaze, P.glazeM); gl.position.z = r * 0.28; ring.add(gl);
   for (let i = 0; i < 4; i++) {
     const a = i * Math.PI / 2 + 0.5, sp = new THREE.Mesh(P.spr, P.sprM[i]);
-    sp.position.set(Math.cos(a) * R, Math.sin(a) * R, r * 0.72); sp.rotation.z = a + 0.9; ring.add(sp);
+    sp.position.set(Math.cos(a) * R * .8, Math.sin(a) * R * .8, r * 0.16); sp.rotation.z = a + 0.9; ring.add(sp);
   }
   g.add(ring);
   const w = new THREE.Mesh(P.wake, P.wakeM); w.position.y = -r * 6.8; g.add(w);
@@ -43483,8 +44087,10 @@ const SKIN_SHAPES = (() => {
     shard:  (a, b, R) => ({ parts: [part(new THREE.OctahedronGeometry(R * 1.2), L(a), null, null, [1, 1.9, 1])], wake: b, spin: { x: 0, y: 8, z: 0 } }),
     orb:    (a, b, R) => ({ parts: [part(Sp(R * 0.8), K(a)), part(Sp(R * 1.5), new THREE.MeshBasicMaterial({ color: b, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }))] }),
     bolt:   (a, b, R) => ({ parts: [part(Cy(R * 0.22, R * 0.22, R * 4.6, 8), K(a)), part(Cy(R * 0.1, R * 0.1, R * 4.7, 6), K(0xffffff))], wake: b }),
+    bill:   (a, b, R) => ({ parts: [part(B(R * 2.6, R * 0.10, R * 1.2), L(a)), part(B(R * 2.0, R * 0.13, R * 0.8), L(b)), part(Cy(R * 0.30, R * 0.30, R * 0.16, 12), L(a))], spin: { x: 5, y: 13, z: 0 } }),
     hackbullet: (a, b, R) => ({ parts: [part(Cy(R * 0.26, R * 0.26, R * 1.3, 8), L(0x0a0a0a)), part(new THREE.ConeGeometry(R * 0.26, R * 0.7, 8), L(0x0a0a0a), [0, R * 1.0, 0]), part(Cy(R * 0.3, R * 0.3, R * 0.22, 8), K(b), [0, -R * 0.55, 0])], wake: b, wakeLen: 16 }),
     goldbullet: (a, b, R) => ({ parts: [part(Cy(R * 0.3, R * 0.3, R * 1.4, 10), K(a)), part(new THREE.ConeGeometry(R * 0.3, R * 0.8, 10), K(b), [0, R * 1.1, 0]), part(Cy(R * 0.36, R * 0.36, R * 0.2, 10), K(b), [0, -R * 0.6, 0])], wake: a, wakeLen: 12, spin: { x: 0, y: 6, z: 0 } }),
+    voidbolt: (a, b, R) => ({ parts: [part(Cy(R * 0.16, R * 0.16, R * 1.5, 8), K(b)), part(new THREE.ConeGeometry(R * 0.16, R * 0.7, 8), K(b), [0, R * 1.1, 0]), part(Sp(R * 0.5), new THREE.MeshBasicMaterial({ color: b, transparent: true, opacity: 0.30, blending: THREE.AdditiveBlending, depthWrite: false }))], wakeDark: true, wakeLen: 30 }),
     hackball: (a, b, R) => ({ parts: [part(Sp(R), L(0x0a0a0a)), part(new THREE.TorusGeometry(R * 1.08, R * 0.13, 5, 14), K(b), null, [Math.PI / 2, 0, 0])], wake: b, wakeLen: 7 }),
     carrot: (a, b, R) => ({ parts: [part(new THREE.ConeGeometry(R * 1.0, R * 4, 10), L(a), [0, R * 0.2, 0]), part(new THREE.ConeGeometry(R * 0.3, R * 1.1, 6), L(b), [R * 0.3, -R * 2.2, 0], [0, 0, 0.3]), part(new THREE.ConeGeometry(R * 0.3, R * 1.1, 6), L(b), [-R * 0.3, -R * 2.2, 0], [0, 0, -0.3])] }),
   };
@@ -43501,8 +44107,8 @@ function _skinShotMesh(spec, r) {
     if (p.scale) m.scale.set(p.scale[0], p.scale[1], p.scale[2]);
     g.add(m);
   }
-  if (P.wake) {                                                            // a soft streak behind it, along the way it came
-    const wl = P.wakeLen || 9, w = _projCache('skinshot-wake|' + P.wake + '|' + R.toFixed(3) + '|' + wl, () => ({ geo: new THREE.CylinderGeometry(R * 0.8, R * 0.08, R * wl, 8, 1, true), mat: _glow(P.wake) }));
+  if (P.wake || P.wakeDark) {                                              // a soft streak behind it, along the way it came (wakeDark: pure black, normal blending: it blots the world out instead of lighting it)
+    const wl = P.wakeLen || 9, dk = !!P.wakeDark, w = _projCache('skinshot-wake|' + (dk ? 'dark' : P.wake) + '|' + R.toFixed(3) + '|' + wl, () => ({ geo: new THREE.CylinderGeometry(R * (dk ? 1.1 : 0.8), R * 0.08, R * wl, 8, 1, true), mat: dk ? new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.95, depthWrite: false, side: THREE.DoubleSide }) : _glow(P.wake) }));
     const m = new THREE.Mesh(w.geo, w.mat); m.position.y = -R * (0.5 + wl / 2); g.add(m);
   }
   if (P.spin) g._spin = P.spin;
@@ -43566,6 +44172,11 @@ const SKIN_SHOT = {};
   G({ shape: 'disc', c: [0xffffff, 0x2a75ff] }, 'paper', ['vector_label_maker', 'vector_brick_labeler']);
   G({ shape: 'disc', c: [0xfff3e0, 0xffd27a] }, 'confetti', ['sticker_blaster_hole_punch']);
   G({ shape: 'disc', c: [0xd8c8a0, 0x8a6a3a] }, 'paper', ['machine_pistol_tape_gun']);
+  G({ shape: 'bill', c: [0xe0303a, 0xffc8c8], min: 0.07 }, 'cash', ['machine_pistol_money_gun']);
+  G({ shape: 'voidbolt', c: [0x050506, 0xf4f8ff], k: 1.8, min: 0.05 }, null, ['railgun_oblivion']);   // a white-hot point on a long trail of pure black
+  G({ shape: 'ball', c: [0xf3dfa6, 0xd9a35a] }, 'crumbs', ['sawed_off_baguette']);
+  G({ shape: 'ball', c: [0xff6a2a, 0xffd27a], min: 0.07 }, null, ['freeze_gun_lava_lamp']);
+  G({ shape: 'disc', c: [0x2a75ff, 0xffffff], min: 0.07 }, 'cyber', ['cycler_smartphone']);
   G({ shape: 'ball', c: [0xfff0a0, 0xffffff] }, 'foam', ['nail_gun_hot_glue']);
   G({ shape: 'needle', c: [0xc8d0d6, 0xff4a6a] }, 'gears', ['rpd_sewing_machine']);
   G({ shape: 'cube', c: [0x2a2a2a, 0xf2efe6] }, 'paper', ['mp40_typewriter']);
@@ -43661,6 +44272,7 @@ function skinLookById(id) {                                                 // f
 const HIT_STYLES = {
   hack:  { chars: '01',       glow: '#00ff55', fill: '#7dffa6', hit: 0xd4ffe0, miss: 0x7dffa6, screen: 'rgba(70,255,140,0.16)', num: '#39ff6a', numShadow: '0 0 8px #00ff55, 0 0 2px #003a14, -1px -1px 0 #021a0a, 1px 1px 0 #021a0a', scramble: '0123456789' },
   error: { chars: 'X!@&#?%$', glow: '#ff1030', fill: '#ff8a96', hit: 0xffd0d6, miss: 0xff6a78, screen: 'rgba(255,30,60,0.18)',  num: '#ff2a3d', numShadow: '0 0 8px #ff1030, 0 0 2px #3a0008, -1px -1px 0 #1a0004, 1px 1px 0 #1a0004', scramble: 'X!@&#?%$0123' },
+  void:  { void: true, glow: '#ffffff', fill: '#dfe8ff', hit: 0x000000, miss: 0x000000, screen: 'rgba(0,0,0,0.30)', num: '#f2f6ff', numShadow: '0 0 6px #000, 0 0 12px #000, -1px -1px 0 #000, 1px 1px 0 #000', scramble: '0123456789' },
   frost: { shards: true,       glow: '#7fd8ff', fill: '#e8fbff', hit: 0xe8fbff, miss: 0xa8e8ff, screen: 'rgba(160,230,255,0.16)', num: '#9fe8ff', numShadow: '0 0 8px #3aa8ff, 0 0 2px #04344f, -1px -1px 0 #04344f, 1px 1px 0 #04344f', scramble: null },
   gold:  { coins: true,        glow: '#ff9a00', fill: '#ffd24a', hit: 0xfff0b0, miss: 0xffd24a, screen: 'rgba(255,205,70,0.14)', num: '#ffd24a', numShadow: '0 0 8px #ff9a00, 0 0 2px #4a2a00, -1px -1px 0 #3a2200, 1px 1px 0 #3a2200', scramble: '0123456789' },
 };
@@ -43761,6 +44373,7 @@ function _frostEdge(ms = 1300) {                                                
 function _hackDigits(pos, n, spread, up, life, size, style = 'hack') {
   const S = HIT_STYLES[style] || HIT_STYLES.hack;
   if (S.coins) return _coinBurst(pos, n, spread, up, life, size);
+  if (S.void) return;
   if (S.shards) return _iceBurst(pos, n, spread, up, life, size);
   const pick = () => S.chars[Math.floor(Math.random() * S.chars.length)];
   for (let i = 0; i < n; i++) {
@@ -43780,10 +44393,34 @@ function _hackDigits(pos, n, spread, up, life, size, style = 'hack') {
   }
 }
 let _hackFxAt = 0; const _hackFxPos = new THREE.Vector3();
+// 🕳️ A hit by the Oblivion Railgun: a black ball that closes in on itself at the point of impact, a white ring that is drawn in after it, and specks pulled into the middle.
+function _voidHit(pos, onTarget) {
+  const R = onTarget ? 0.30 : 0.14, born = performance.now(), life = onTarget ? 300 : 200;
+  const ballMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.96, depthWrite: false });
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(R, 14, 10), ballMat); ball.position.copy(pos); scene.add(ball);
+  const ringMat = new THREE.MeshBasicMaterial({ color: 0xeef4ff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(R * 1.4, R * 0.07, 6, 28), ringMat); ring.position.copy(pos); ring.rotation.set(Math.random() * 3, Math.random() * 3, 0); scene.add(ring);
+  const specks = [];
+  for (let i = 0; i < (onTarget ? 9 : 4); i++) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.022, 5, 4), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, depthWrite: false }));
+    const d = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(R * (2.2 + Math.random() * 1.6));
+    m.position.copy(pos).add(d); scene.add(m); specks.push({ m, from: d });
+  }
+  const tick = () => {
+    const t = (performance.now() - born) / life;
+    if (t >= 1) { scene.remove(ball, ring); ball.geometry.dispose(); ballMat.dispose(); ring.geometry.dispose(); ringMat.dispose(); for (const k of specks) { scene.remove(k.m); k.m.geometry.dispose(); k.m.material.dispose(); } return; }
+    ball.scale.setScalar(Math.max(0.02, 1.15 - t * 1.1)); ballMat.opacity = 0.96 * (1 - t * t);
+    ring.scale.setScalar(Math.max(0.05, 1.8 - t * 1.75)); ringMat.opacity = 0.9 * (1 - t);
+    for (const k of specks) k.m.position.copy(pos).addScaledVector(k.from, 1 - t * t);
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
 function skinHitFX(kind, pos, onTarget) {
   const S = HIT_STYLES[kind];
   if (!S || !pos) return;
   if (onTarget) { const t = performance.now(); if (t - _hackFxAt < 60 && _hackFxPos.distanceToSquared(pos) < 0.25) return; _hackFxAt = t; _hackFxPos.copy(pos); }   // a hit reaches here from the round and from the damage number: one burst
+  if (S.void) { _voidHit(pos, onTarget); if (onTarget) { try { flashScreen(S.screen, 130); } catch (e) {} } return; }
   const peak = onTarget ? 0.95 : 0.55, mat = new THREE.MeshBasicMaterial({ color: onTarget ? S.hit : S.miss, transparent: true, opacity: peak, blending: THREE.AdditiveBlending, depthWrite: false });
   const flash = new THREE.Mesh(new THREE.SphereGeometry(onTarget ? 0.30 : 0.13, 10, 8), mat); flash.position.copy(pos); scene.add(flash);
   const born = performance.now(), life = onTarget ? 190 : 120;
@@ -44665,7 +45302,7 @@ function updateAimAssist(dt) {
 // ═════════════════════════════════════════════════════════════════════════════
 // 🗄️ ARCHIVED (the owner's call, kept in the code so it can come back): the emote wheel. King of the Hill is back (2026-11-02).
 const EMOTES_ARCHIVED = true;                 // no emote wheel (Q), nobody's emote is played, the server drops them
-const ARCHIVED_MODES = new Set();             // modes off the mode screen; a stale pick of one falls back to FFA 5. (Was ['koth'].)
+const ARCHIVED_MODES = new Set(['boss_hydra']); // Preserved in code, retired from the mode picker.
 const KEY_ACTIONS = [
   ['forward', 'Move forward', 'KeyW'], ['back', 'Move back', 'KeyS'],
   ['left', 'Move left', 'KeyA'], ['right', 'Move right', 'KeyD'],
@@ -45215,6 +45852,10 @@ function doJump(repeat) {
   }
 }
 document.addEventListener('keydown', e => {
+  if (liveLoadoutOpen()) return;
+  if (e.code === 'KeyL' && !e.repeat && !e.target.closest?.('input,textarea,select,[contenteditable]') && openLiveLoadout()) {
+    e.preventDefault();return;
+  }
   keys[e.code] = true;
   if (!gameStarted) return;
   // Spectator cycling while dead
@@ -45225,6 +45866,7 @@ document.addEventListener('keydown', e => {
   // 💬 V — open the custom chat box (filtered; bots never react to it)
   if (e.code === 'KeyV' && !e.repeat && !commsMenuOpen && document.activeElement?.tagName !== 'INPUT') { e.preventDefault(); openVChat(); return; }
   if (e.code==='KeyR' && !e.repeat && reloading && (activeSlot === 'primary' || activeSlot === 'secondary')) tryActiveReload();
+  if (e.code==='KeyR' && activeSlot==='primary' && currentWeapon?.id==='harpoon_gun') window.PVP_TETHER_WEAPONS?.recall();
   if (e.code==='KeyR' && (activeSlot === 'primary' || activeSlot === 'secondary') && !reloading && !currentWeapon.noReload && weaponAmmo[currentWeaponIdx].ammo < currentWeapon.mag && weaponAmmo[currentWeaponIdx].reserve > 0) startReload();
   // 🔎 T — look the gun over. Cancelled by anything that needs the weapon.
   if (e.code === 'KeyT' && !e.repeat && !isDead && document.activeElement?.tagName !== 'INPUT'
@@ -45375,6 +46017,9 @@ document.addEventListener('mousedown', e => {
   // Vehicle: LMB fires the vehicle's gun
   if (pilotedVehicle && e.button === 0) { fireVehicleGun(); return; }
   if (spectatorState && aimed && e.button === 2) { spectatorCycle(-1); return; }
+  if (e.button===2 && aimed && activeSlot==='primary' && currentWeapon?.id==='harpoon_gun') {
+    e.preventDefault();window.PVP_TETHER_WEAPONS?.recall();return;
+  }
   if(e.button===2&&aimed&&activeSlot==='primary'&&currentWeapon?.id==='hellfire'){
     e.preventDefault();fireHellfireCore();return;
   }
@@ -45515,7 +46160,7 @@ function _eqDonutPiecePos(e, p, t) {
 function _equipPieces(model) {
   const out = [];
   for (const c of model.children) {
-    if (c === model._flash || c.userData.legendFx || c.userData.eqFx) continue;
+    if (c === model._flash || c === model._aimOnlySight || c.userData.legendFx || c.userData.eqFx) continue;
     let hand = !!(c.userData && c.userData.vmHand);
     if (!hand) c.traverse(o => { if (o.userData && o.userData.vmHand) hand = true; });
     if (hand) continue;
@@ -45538,7 +46183,7 @@ function playEquipSound(name) {
   } catch (e) {}
 }
 
-var _EQ_X = new THREE.Vector3(1, 0, 0), _EQ_Z = new THREE.Vector3(0, 0, 1);
+var _EQ_X = new THREE.Vector3(1, 0, 0), _EQ_Y = new THREE.Vector3(0, 1, 0), _EQ_Z = new THREE.Vector3(0, 0, 1);
 var _EQ_FLAT = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);   // side-on, for a laid-out net
 function _eqOut(t) { return 1 - Math.pow(1 - t, 3); }
 function _eqHomeOf(c) {
@@ -46120,7 +46765,7 @@ function startSupportEquipAnim(idx, ms) {
 function _beginEquip(model, spec, melee, support = false) {
   if (spec.defaultEquip && performance.now() >= spec.deadline) return;
   if (model._calm) model._calm();     // put back anything an ambient effect has moved first
-  const type = spec.equip;
+  const type = spec.equip === 'donutbuild' ? 'donutfold' : spec.equip;
   const mech = type === 'ready' && !melee && !support ? ensureMech(model, spec.itemId) : null;
   const action = spec.profile === 'slide' ? mech && mech.slide : spec.profile === 'rack' || spec.profile === 'bolt' ? mech && mech.knob : null;
   const piecesRoot = type === 'ready' ? model : model._heldItem || model;
@@ -46130,7 +46775,7 @@ function _beginEquip(model, spec, melee, support = false) {
   // A butterfly knife also moves as a whole while its handles flip -- the
   // wrist rolls it and tips it about -- so its pivot comes along too.
   const targets = type === 'balisong' ? [...(model._bali || []), ...(model._pivot ? [model._pivot] : [])]
-                : type === 'flip'     ? (model._pivot ? [model._pivot] : [])
+                : type === 'flip'     ? (model._pivot ? [model._pivot] : model._akimbo ? model._akimbo.holders : [])   // (a pair: each hand tosses its own gun)
                 : type === 'ignite'   ? (model._blade ? [model._blade] : [])
                 : type === 'ready' ? model.children.filter(c => c !== model._flash && !c.userData.legendFx && !c.userData.eqFx)
                 : _equipPieces(piecesRoot);
@@ -46185,6 +46830,24 @@ function _beginEquip(model, spec, melee, support = false) {
   }
   const glow = (model._equipGlow || []).map(m => [m, m.emissiveIntensity]);
   const box = _eqLocalBox(piecesRoot, targets);
+  if (type === 'donutfold') {
+    // Connected sections rotate about shared hinge lines; nothing flies in from offscreen.
+    for (const p of ps) {
+      const role = p.c.userData.donutFold;
+      const front = role === 'barrel' || role === 'blade', rear = role === 'stock', grip = role === 'grip';
+      const receiver = role === 'receiverFront' || role === 'receiverRear';
+      p.hinge = p.h.p.clone();
+      p.foldAxis = front || grip ? _EQ_X : _EQ_Y;
+      p.foldAngle = front ? Math.PI*.92 : rear ? -Math.PI*.86 : grip ? -Math.PI*.62 : receiver ? Math.PI*(role==='receiverFront'?.80:-.80) : p.ring ? Math.PI*.5 : 0;
+      p.foldStart = receiver ? .02 : front ? .18 : rear ? .10 : grip ? .30 : .36;
+      p.packedPosition = p.h.p.clone().sub(ctr).multiply(new THREE.Vector3(.6,.55,.20)).add(ctr);
+      p.packedScale = p.ring ? new THREE.Vector3(.32,.32,.32)
+        : front ? new THREE.Vector3(1,1,.18) : rear || receiver ? new THREE.Vector3(.8,.8,.25)
+        : grip ? new THREE.Vector3(.8,.35,.45) : new THREE.Vector3(.65,.65,.45);
+      const bounds = _eqLocalBox(p.c, [p.c]);
+      p.trailTip = bounds.isEmpty() ? new THREE.Vector3() : new THREE.Vector3(bounds.max.x, bounds.max.y, front ? bounds.min.z : bounds.max.z);
+    }
+  }
   const temp = _eqMakeProps(piecesRoot, type, ctr, box, targets);
   // The prism entrance sends each piece along its own colour's beam: bands of
   // seven by where the piece sits, red at the back to violet at the front.
@@ -46232,6 +46895,11 @@ function finishEquip() {
   _equip = null;
   for (const p of e.ps) {
     p.c.position.copy(p.h.p); p.c.quaternion.copy(p.h.q); p.c.scale.copy(p.h.s); p.c.visible = true;
+  }
+  if(e.type==='donutfold' && e.model._hands) {
+    const H=e.model._hands;
+    H.rear.position.copy(H.rearHome);H.rear.rotation.copy(H.rearRot);
+    if(!H.single){H.front.position.copy(H.frontHome);H.front.rotation.copy(H.frontRot);if(H.hideFront)H.front.visible=false;}
   }
   if (e.action && !e.ps.some(p => p.c === e.action.g)) {
     e.action.g.position.copy(e.action.p); e.action.g.quaternion.copy(e.action.q);
@@ -46347,6 +47015,14 @@ function _equipStep(e, t) {
           // A squash on impact: swells past size and snaps back.
           c.scale.copy(h.s).multiplyScalar((0.55 + 0.45 * k) * (since >= 0 ? 1 + 0.35 * Math.exp(-since / 0.045) : 1));
         }
+        break; }
+      case 'donutfold': {
+        const k = _eqEase(_eqClamp((t - p.foldStart) / .48));
+        const rotation = new THREE.Quaternion().setFromAxisAngle(p.foldAxis, p.foldAngle * (1-k));
+        c.position.copy(p.packedPosition).lerp(h.p,k);
+        c.quaternion.copy(rotation).multiply(h.q);
+        c.scale.copy(p.packedScale).lerp(new THREE.Vector3(1,1,1),k).multiply(h.s);
+        c.visible = true;
         break; }
       case 'unfold': {
         // Folded flat, then opened out a panel at a time, back to front.
@@ -46683,6 +47359,22 @@ function _equipStep(e, t) {
         break; }
     }
   }
+  if (e.type === 'donutfold') {
+    const H=e.model._hands,grip=e.ps.find(p=>p.c===e.model._parts?.foldGrip);
+    if(H && grip) {
+      const at=H.rearHome.clone().sub(grip.h.p).applyQuaternion(grip.h.q.clone().invert()).divide(grip.h.s);
+      at.multiply(grip.c.scale).applyQuaternion(grip.c.quaternion).add(grip.c.position);
+      H.rear.position.copy(at);
+      if(!H.single && !H.hideFront)H.front.position.copy(e.ctr).add(new THREE.Vector3(-.03,-.035,0)).lerp(H.frontHome,_eqEase(_eqClamp(t/.86)));
+    }
+    e.model.updateWorldMatrix(true, true);
+    const tips = [e.ps.find(p=>p.ring), e.ps.find(p=>p.foldAngle>2), e.ps.find(p=>p.foldAngle<-2)].filter(Boolean);
+    for (const p of tips) {
+      const at=p.c.localToWorld(p.trailTip.clone());
+      if (p.trailAt && t < .90 && at.distanceTo(p.trailAt)<2) _emitDonutTrail(0xffce54,.022,p.trailAt,at);
+      p.trailAt=at;
+    }
+  }
   _eqStepProps(e, t);
   if (e.ring) {
     const r = t < 0.15 ? t / 0.15 : t > 0.75 ? Math.max(0, 1 - (t - 0.75) / 0.25) : 1;
@@ -46900,6 +47592,7 @@ function syncHeldAmmoModelForIndex(idx) {
   if (!model || !w || !pool || !parts || !parts.ammo) return;
   const kids = parts.ammo.children;
   if (!kids.length) return;
+  if(w.id==='harpoon_gun'){for(const part of kids)part.visible=pool.ammo>0;return;}
   let shown;
   if (w.id === 'throwing_knives') {
     if (_activeModelSkin[w.id]?.id === 'throwing_knives_legend') {
@@ -46934,8 +47627,8 @@ function defaultLoadoutIdx() {
 function sanitizeLoadoutSlots() {
   const d = defaultLoadoutIdx();
   const p = WEAPONS[selectedPrimaryIdx], s = WEAPONS[selectedSecondaryIdx];
-  if (selectedPrimaryIdx != null && selectedPrimaryIdx >= 0 && (!p || p.slot === 'secondary')) selectedPrimaryIdx = d.p;
-  if (selectedSecondaryIdx != null && selectedSecondaryIdx >= 0 && (!s || s.slot !== 'secondary')) selectedSecondaryIdx = d.s;
+  if (selectedPrimaryIdx != null && selectedPrimaryIdx >= 0 && (!p || p.archived || p.slot === 'secondary')) selectedPrimaryIdx = d.p;
+  if (selectedSecondaryIdx != null && selectedSecondaryIdx >= 0 && (!s || s.archived || s.slot !== 'secondary')) selectedSecondaryIdx = d.s;
   if (selectedPrimaryIdx != null && selectedPrimaryIdx >= 0 && selectedPrimaryIdx === selectedSecondaryIdx) selectedSecondaryIdx = d.s;
 }
 function loadoutReady() {
@@ -46952,6 +47645,8 @@ function holdRespawn() {
 }
 function holdMode() { return match?.type === 'dday' || match?.type === 'laststand'; }
 function resetCombatResources() {
+  if(match)match.liveKitUses=null;
+  window.PVP_TETHER_WEAPONS?.clear(true);
   fistStrike = null;
   for (const id of Object.keys(supportRechargeUntil)) delete supportRechargeUntil[id];
   window.PVP_RAGDOLL?.resetLocal();
@@ -46964,7 +47659,7 @@ function resetCombatResources() {
   window._ladderDetachUntil = 0;
   finishBatCrowdClear();
   chainsawFuel = CHAINSAW_FUEL_MAX;   // a fresh tank each life
-  finishMeleeSlam(); finishMeleeDash(); autoLunge = null; scytheDash = null; backstabGlide = null;
+  finishMeleeSlam(); finishMeleeDash(); autoLunge = null; scytheDash = null;
   clearBlinkPearls();
   cancelMedkitHeal();
   for (const b of localBullets) scene.remove(b.mesh);
@@ -46994,6 +47689,8 @@ function resetCombatResources() {
   }
   const omegaIdx=WEAPONS.findIndex(w=>w.id==='omega_pistol');
   if(omegaIdx>=0)weaponAmmo[omegaIdx]={ammo:1,reserve:0};
+  const harpoonIdx=WEAPONS.findIndex(w=>w.id==='harpoon_gun');
+  weaponAmmo[harpoonIdx]={ammo:WEAPONS[harpoonIdx].mag,reserve:0};
   supportUses[selectedSupportIdx] = isObby ? 0 : SUPPORT_ITEMS[selectedSupportIdx].uses;
   reloading = false; shooting = false; isADS = false; targetFOV = 75;
   abilityBuff = null; meleeAbilityBuff = null; pendingFanFire = null;
@@ -47184,7 +47881,7 @@ function meleeAbilityReady(item) {
 // gun back while one is running cancelled it. That is what stopped quick melee for the bat, the Battle Axe, the
 // Sledge, the Shield and the rest.
 function meleeSequenceBusy() {
-  return !!(batCrowdCharge || meleeSlam || meleeDash || scytheDash || autoLunge || _grappleRide || backstabGlide
+  return !!(batCrowdCharge || meleeSlam || meleeDash || scytheDash || autoLunge || _grappleRide
             || (typeof chainMaulSwing !== 'undefined' && chainMaulSwing));
 }
 
@@ -48493,7 +49190,7 @@ function updateGrappleRide(dt) {
 function updateMovement(dt, socialBlocked = false) {
   if (window.PVP_LOBBY_CASE?.active) return;
   if (window.PVP_RAGDOLL?.controlling) return;
-  if (SOCIAL_VIEW.mode && !socialBlocked) {
+  if ((SOCIAL_VIEW.mode || liveLoadoutOpen()) && !socialBlocked) {
     const held = { ...keys };
     for (const k of Object.keys(keys)) keys[k] = false;
     const joystick = joyDir;
@@ -48522,7 +49219,6 @@ function updateMovement(dt, socialBlocked = false) {
     return;
   }
   if (updateGrappleRide(dt)) return;
-  if (backstabGlide) return;                    // the glide moves you; the keys do not
 
   // WASD movement
   const fwd   = new THREE.Vector3(-Math.sin(euler.y), 0, -Math.cos(euler.y));
@@ -49034,60 +49730,8 @@ function isKnifeBackstabTarget(mesh) {
   toAttacker.y = 0;
   if (toAttacker.lengthSq() < 0.0001) return false;
   toAttacker.normalize();
-  const targetForward = new THREE.Vector3(-Math.sin(mesh.rotation.y), 0, -Math.cos(mesh.rotation.y)).normalize();
+  const targetForward = new THREE.Vector3(Math.sin(mesh.rotation.y), 0, Math.cos(mesh.rotation.y)).normalize();
   return targetForward.dot(toAttacker) < -0.45;
-}
-
-// ── 🗡️ BACKSTAB: glide round behind them, then stab ─────────────────────────────────────────────────────────────────────
-// The ability used to kill on the keypress and then run you in from the FRONT, which looked like a dash into someone's face.
-// Now you slide in an arc around the target to the spot behind them (following them if they move), turn to face their back,
-// the knife comes up, and the stab lands as you arrive -- a kill only if you are at their back. Nothing blocks the glide.
-let backstabGlide = null;   // { pid, item, t, dur, a0, r0, now, blocked, stabbed, epoch }
-const BACKSTAB_GAP = 0.95;  // how close behind them you end up
-function startBackstabGlide(item, pid, mesh, now) {
-  cancelInspect();
-  const dx = camera.position.x - mesh.position.x, dz = camera.position.z - mesh.position.z, r0 = Math.hypot(dx, dz);
-  backstabGlide = { pid, item, t: 0, dur: Math.min(0.5, 0.28 + 0.04 * r0), a0: Math.atan2(dx, dz), r0, now, stabbed: false, fx: 0, epoch: matchEpoch };
-  meleeSwingT = 1;
-  _fovPunch = Math.max(_fovPunch, 8);
-}
-function _backstabStrike(g) {
-  const mesh = remoteMeshes[g.pid];
-  if (!mesh || players[g.pid]?.dead) return;
-  const hp = mesh.position.clone().setY(1.0);
-  const dummy = TRAINING_DUMMIES.find(d => d.id === g.pid);
-  // It only kills from behind. Arrive and they have turned round (or you are not at their back for any reason): an ordinary stab.
-  const behind = isKnifeBackstabTarget(mesh);
-  if (dummy) handleDummyHit(dummy, mesh, { damage: behind ? 999 : g.item.damage }, hp);
-  else emitHit(g.pid, `knife_ab_${myId}_${g.now}`, behind ? 'knife_instakill' : (g.item.baseId || g.item.id), hp);
-  spawnHitParticle(hp);
-  if (behind) flashScreen('rgba(255,0,0,0.40)', 300);
-  playSoundEvent('melee_impact', { material: MELEE_SWING_SOUND[g.item.baseId || g.item.id] || 'blade', volume: 1.0, minGap: 0 });
-}
-function updateBackstabGlide(dt) {
-  const g = backstabGlide;
-  if (!g) return;
-  const mesh = remoteMeshes[g.pid];
-  if (isDead || !gameStarted || SOCIAL_VIEW.mode || g.epoch !== matchEpoch || activeSlot !== 'melee' || !mesh || players[g.pid]?.dead) { backstabGlide = null; return; }
-  g.t += dt;
-  const k = _easeK(g.t / g.dur), tx = mesh.position.x, tz = mesh.position.z;
-  let d = mesh.rotation.y - g.a0; d = Math.atan2(Math.sin(d), Math.cos(d));        // (the spot behind them is at angle rotation.y round them)
-  const th = g.a0 + d * k, r = g.r0 + (BACKSTAB_GAP - g.r0) * k;
-  const delta = new THREE.Vector3(tx + Math.sin(th) * r - camera.position.x, 0, tz + Math.cos(th) * r - camera.position.z);
-  const len = delta.length();
-  camera.position.x += delta.x; camera.position.z += delta.z;                        // no collision: nothing stops the glide (the walls are sorted out once it ends)
-  playerYVel = 0; slamState = null; _extVel.x = 0; _extVel.z = 0; window._blastCarry = false;
-  _aimToward(new THREE.Vector3(tx, mesh.position.y + 1.3, tz), 1500, dt);          // turned to face their back
-  if (isOutOfBoundsXZ(camera.position.x, camera.position.z)) { killLocalOutOfBounds(); backstabGlide = null; return; }
-  g.fx -= dt;
-  if (g.fx <= 0) { g.fx = 0.05; spawnAbilityAOEFX(camera.position.clone().setY(camera.position.y - 0.85), 0.35, 0xbfc4cc); }
-  if (!g.stabbed && g.t >= g.dur - 0.12) { g.stabbed = true; startUseAnim('melee', g.item, 'stab'); }
-  if (g.t >= g.dur) {
-    backstabGlide = null;
-    resolveWallCollisions();                                                       // do not finish inside a wall
-    if (Math.hypot(tx - camera.position.x, tz - camera.position.z) <= g.item.range + 0.6) _backstabStrike(g);
-    else meleeAbilityBuff = { type: 'instakill', usesLeft: 1 };                    // could not get there: the next swing is still the kill, from behind
-  }
 }
 
 // 🌀 A dash along the look direction, not along the ground: pointing up carries you up, pointing down drives you into
@@ -50279,6 +50923,8 @@ function activateMeleeAbility() {
   }
   else if (ab.type === 'melee_deflect') {
     meleeAbilityBuff = { type: 'deflect', endTime: now + (ab.duration || 2000), extendPer: ab.extendPerHit || 0, extendLeft: ab.maxExtend || 0 };
+    broadcastHeldWeapon();
+    socket.emit('deflectGuard', { weapon: item.id });
     meleeDeflectDir = 1;
     meleeDeflectKick = null;
     meleeDeflectPulseAt = performance.now() - 220;
@@ -50298,22 +50944,10 @@ function activateMeleeAbility() {
     flashAbilityName(ab.name);
   }
   else if (ab.type === 'melee_instakill') {
-    playSoundEvent('instakill_zip', { volume: 1.0 });
-    // Backstab: you glide round behind the nearest target in front of you, then stab. (It used to kill them the instant you
-    // pressed the key and run you in from the front.) A miss buffs your next manual swing instead.
-    const fwd2 = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
-    let target = null, bestDist = Infinity;
-    for (const [pid, mesh] of Object.entries(remoteMeshes)) {
-      if (!mesh.visible || players[pid]?.dead || friendlyFireBlocked(pid, myId)) continue;
-      const toT = mesh.position.clone().sub(camera.position); toT.y = 0;
-      const dist = toT.length();
-      if (dist > item.range * 3.5 || dist < 0.05 || dist >= bestDist) continue;
-      if (fwd2.dot(toT.normalize()) < 0.4) continue;
-      if (!hasLineOfSight(camera.position.x, camera.position.z, mesh.position.x, mesh.position.z)) continue;
-      target = { pid, mesh }; bestDist = dist;
-    }
-    if (target) startBackstabGlide(item, target.pid, target.mesh, now);
-    else {
+    if ((item.baseId || item.id) === 'knife') {
+      cancelInspect();
+      tryMelee();
+    } else {
       meleeAbilityBuff = { type: 'instakill', usesLeft: 1 };
       startUseAnim('melee', item, 'stab');
     }
@@ -50411,6 +51045,7 @@ function activateAbility() {
   if (window.PVP_RAGDOLL?.controlling) return;
   if (SOCIAL_VIEW.mode) return;
   if (!equipReady()) return;   // ⏱️ it is still coming up
+  if (activeSlot==='primary' && currentWeapon?.id==='harpoon_gun') { window.PVP_TETHER_WEAPONS?.reel();return; }
   if (activeSlot === 'support' && SUPPORT_ITEMS[selectedSupportIdx]?.id === 'satchel') {
     detonateSatchels(); return;
   }
@@ -50808,6 +51443,26 @@ function updateJavelins(dt) {
     }
   }
 }
+// ⚫ The Oblivion Railgun's shot (a skin's look.beam = 'void'): the beam is a tube of pure black, normal blending, so it blots out whatever it crosses instead of lighting it, and it
+// hangs there and thins away for a second and a half. A hair of white runs down the middle of it for the first instant: that is the only light in it.
+function _spawnVoidBeam(from, to, radius = 0.05) {
+  const dir = to.clone().sub(from), len = Math.max(0.1, dir.length()), q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
+  const mid = from.clone().add(to).multiplyScalar(0.5);
+  const darkMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.97, depthWrite: false });
+  const dark = new THREE.Mesh(new THREE.CylinderGeometry(radius * 1.6, radius * 1.6, len, 14), darkMat); dark.position.copy(mid); dark.quaternion.copy(q); scene.add(dark);
+  const coreMat = new THREE.MeshBasicMaterial({ color: 0xf4f8ff, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false });
+  const core = new THREE.Mesh(new THREE.CylinderGeometry(radius * 0.22, radius * 0.22, len, 8), coreMat); core.position.copy(mid); core.quaternion.copy(q); scene.add(core);
+  const born = performance.now(), life = 1500;
+  const tick = () => {
+    const t = (performance.now() - born) / life;
+    if (t >= 1) { scene.remove(dark, core); dark.geometry.dispose(); darkMat.dispose(); core.geometry.dispose(); coreMat.dispose(); return; }
+    const k = t < 0.25 ? 1 : 1 - (t - 0.25) / 0.75;                          // full black for a quarter of a second, then it thins and goes
+    darkMat.opacity = 0.97 * k; dark.scale.set(0.35 + 0.65 * k, 1, 0.35 + 0.65 * k);
+    coreMat.opacity = Math.max(0, 0.95 * (1 - t / 0.08)); core.visible = coreMat.opacity > 0.01;
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
 function _spawnAbilityBeam(from, to, color = 0x9fe8ff, radius = 0.04, life = 160) {
   const dir = to.clone().sub(from);
   const len = Math.max(0.1, dir.length());
@@ -50970,8 +51625,11 @@ function fireRailgunCharge() {
   const range = 90;
   const hit = _nearestAbilityRayHit(muzzleWorld, dir, range, 0.65);
   const end = hit ? hit.pos.clone() : muzzleWorld.clone().addScaledVector(dir, range);
-  _spawnAbilityBeam(muzzleWorld, end, 0x66ccff, 0.025 + t * 0.05, 160);
-  _spawnAbilityBeam(muzzleWorld, end, 0xffffff, 0.010, 130);
+  if (_modelSkinLook.railgun && _modelSkinLook.railgun.beam === 'void') _spawnVoidBeam(muzzleWorld, end, 0.025 + t * 0.05);
+  else {
+    _spawnAbilityBeam(muzzleWorld, end, 0x66ccff, 0.025 + t * 0.05, 160);
+    _spawnAbilityBeam(muzzleWorld, end, 0xffffff, 0.010, 130);
+  }
   if (hit) {
     const finalDmg = (hit.headshot && INSTAKILL_HS_WEAPONS.has('railgun')) ? 999 : chargeDmg;
     const mesh = remoteMeshes[hit.pid];
@@ -51276,6 +51934,7 @@ function updateFPSCounter(now) {
 }
 
 function spawnAbilityAOEFX(pos, radius, color) {
+  if(window.PVP_BATTLE_SIM?.lowEffects)return;
   const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.7 });
   const ring = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8), mat);
   ring.position.copy(pos); scene.add(ring);
@@ -51392,6 +52051,13 @@ function _updateAbilityHUD() {
   const descEl = document.getElementById('ability-desc');
   const keyEl  = document.getElementById('ability-key-hint');
   if (!nameEl || !fillEl) return;
+  if(activeSlot==='primary'&&currentWeapon?.id==='harpoon_gun'){
+    const ready=window.PVP_TETHER_WEAPONS?.latched;
+    nameEl.textContent='Tug Line';fillEl.style.width='100%';fillEl.style.background=ready?'#4caf50':'#555';
+    if(descEl)descEl.textContent='Hits yank enemies · Right-click or Reload recalls all bolts';
+    if(keyEl){keyEl.textContent='[E]';keyEl.style.opacity=ready?'1':'.4';}
+    return;
+  }
   if(activeSlot==='primary'&&currentWeapon?.id==='hellfire'){
     nameEl.textContent=`Hellfire Core · ${hellfireCores}/3`;fillEl.style.width=(hellfireCores/3*100)+'%';
     fillEl.style.background=hellfireCores?'#ff7527':'#555';
@@ -51507,6 +52173,7 @@ function tryShoot() {
   if(currentWeapon?.prototype && !currentUser?.isAdmin)return;
   if (SOCIAL_VIEW.mode) return;
   if ((!pointerLocked && !gameStarted) || isDead) return;
+  if (currentWeapon?.id==='harpoon_gun' && window.PVP_TETHER_WEAPONS?.full) { dryFire();return; }
   weaponReadyUntil = performance.now()+220;
   if (reloading) {
     const pool = weaponAmmo[currentWeaponIdx];
@@ -51702,6 +52369,7 @@ function tryShoot() {
   }
 
   playWeaponSound(shotWeaponId, { baseWeapon: wStats, volume: Math.min(1.55, 1.04 + shotPellets * 0.045), violence: shotViolence * 1.12 });
+  if(preShotAmmo===1&&_activeModelSkin[currentWeapon.id]?.id==='revolver_final_notice')playFinalNoticeStamp(.075);
   if (shotViolence > 1.45 && gameplaySettingMult('screenFx') > 0) {
     flashScreen('rgba(255,238,190,0.055)', Math.min(115, 52 + shotViolence * 22));
   }
@@ -51741,6 +52409,7 @@ function tryShoot() {
       }, wait);
     }
   } else {
+    if(shotWeaponId==='harpoon_gun'||shotWeaponId==='swap_gun')broadcastHeldWeapon();
     for (let p = 0; p < shotPellets; p++) {
       const spreadDir = baseDir.clone();
       if (shotSpread > 0) {
@@ -51874,6 +52543,39 @@ function updateChainMaulSwing(dt) {
   if (s.elapsed >= s.duration) finishChainMaulSwing();
 }
 
+function startFistStrike(item) {
+  const delay=Math.random()<.3?.06:0;
+  fistStrike={item,idx:selectedMeleeIdx,epoch:matchEpoch,map:activeMapName,elapsed:0,start:.085+delay,end:.18+delay};
+  const model=meleeModels[selectedMeleeIdx];if(model)model._punchDelay=delay;
+}
+function updateFistStrike(dt) {
+  const s=fistStrike;if(!s)return;
+  if(isDead || !gameStarted || countdownActive || match?.over || s.epoch!==matchEpoch || s.map!==activeMapName || activeSlot!=='melee' || s.idx!==selectedMeleeIdx || meleeCombo || meleeSlam || meleeDash){fistStrike=null;return;}
+  const previous=s.elapsed;s.elapsed+=Math.max(0,dt);
+  if(s.elapsed<s.start)return;
+  if(previous>s.end){fistStrike=null;return;}
+  const origin=camera.position.clone();origin.y-=.2;
+  const forward=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion).normalize();
+  const reach=new THREE.Line3(origin,origin.clone().addScaledVector(forward,s.item.range));
+  let best=null,bestDistance=Infinity;
+  for(const [pid,mesh]of Object.entries(remoteMeshes)) {
+    if(pid===myId || !mesh.visible || players[pid]?.dead || resolveBot(pid)?.dead || friendlyFireBlocked(pid,myId))continue;
+    const scale=mesh._bodyScale || 1;
+    const target=mesh.position.clone().add(new THREE.Vector3(0,scale,0));
+    const closest=reach.closestPointToPoint(target,true,new THREE.Vector3());
+    if(target.clone().sub(origin).dot(forward)<0 || closest.distanceTo(target)>(s.item.hitboxRadius || .65)+.3*scale)continue;
+    if(!hasLineOfSight(origin.x,origin.z,target.x,target.z,origin.y,target.y))continue;
+    const distance=origin.distanceToSquared(target);if(distance<bestDistance){best={pid,mesh,target};bestDistance=distance;}
+  }
+  if(best) {
+    fistStrike=null;
+    const dummy=TRAINING_DUMMIES.find(d=>d.id===best.pid);
+    if(dummy)handleDummyHit(dummy,best.mesh,{weaponId:'fists'},best.target);
+    else emitHit(best.pid,`fist_${myId}_${Date.now()}`,'fists',best.target);
+    playSoundEvent('melee_impact',{material:'fist',volume:.95,minGap:60});spawnHitParticle(best.target);
+    gojoOnFistHit(meleeModels[s.idx], best.target);
+  } else if(s.elapsed>=s.end)fistStrike=null;
+}
 function tryMelee() {
   if (window.PVP_RAGDOLL?.controlling) return;
   if (window.PVP_BACKROOMS?.active && window.PVP_BACKROOMS.paused) return;
@@ -51884,6 +52586,7 @@ function tryMelee() {
   if (countdownActive) return;
   const item = equippedMeleeItem();
   if (!item) return;
+  if ((item.baseId || item.id)==='fists' && meleeCombo) return;
   if (spearSpent(item)) return;                 // all five thrown: there is no spear to swing
   const now = Date.now();
   // An auto-swing buff (Slash Combo, Butcher...) used to swing every 15 ms -- one frame -- which restarted the swing
@@ -51931,6 +52634,7 @@ function tryMelee() {
                 : meleeSwingType === 'spin'   ? Math.min(cd * 0.85, 500)   // full rotation needs more time
                 : Math.min(cd * 0.65, 440);                                // slash default
   meleeSwingT = 0;
+  if (soundId === 'fists') meleeSwingDur = item.cooldown * .95;
   if (revving && item.ability?.lunge) startAutoLunge(item.ability.lunge);   // swing forward, and go with it
   // Which side/direction this swing uses — decided ONCE here, at swing
   // start, not per-frame in updateMeleeSwing(). It used to toggle
@@ -51953,6 +52657,7 @@ function tryMelee() {
   if (soundId === 'chain_hammer') { startChainMaulSwing(item); return; }
   const forward = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion).normalize();
   if (window.PVP_BACKROOMS?.active) { window.PVP_BACKROOMS.melee(item, forward); return; }
+  if (soundId === 'fists') { startFistStrike(item); return; }
   if (item.windupMs) {
     // 🍳 A blow that lands later: the swing starts now (sound, animation, cooldown), the hit is looked for from windupMs on and
     // keeps being looked for for lingerMs, so the strike comes down where you are looking WHEN it lands, and a target that
@@ -51976,17 +52681,20 @@ function meleeStrikeScan(item, soundId, sawDry, now) {
     if (dist > item.range + ((mesh._bodyScale || 1) - 1) * 0.7 * (mesh._hitMul || 1) || dist < 0.05) continue;
     const dir = toTarget.normalize();
     if (forward.dot(dir) < 0.55) continue;
+    if (soundId === 'knife' && !hasLineOfSight(camera.position.x,camera.position.z,mesh.position.x,mesh.position.z,camera.position.y-.4,mesh.position.y+1)) continue;
     hitPos = mesh.position.clone(); hitPos.y += 1.0 * (mesh._bodyScale || 1);
     if (soundId !== 'chainsaw' || sawDry) {
       playSoundEvent('melee_impact', { material: MELEE_SWING_SOUND[soundId], volume: 0.95, minGap: 60 });
     }
 
     // Determine effective weapon ID and handle buffs
-    let effectiveWeaponId = item.id;
-    if (meleeAbilityBuff?.type === 'instakill' && meleeAbilityBuff.usesLeft > 0 && isKnifeBackstabTarget(mesh)) {
+    let effectiveWeaponId = soundId === 'knife' ? 'knife' : item.id;
+    if ((soundId === 'knife' || meleeAbilityBuff?.type === 'instakill' && meleeAbilityBuff.usesLeft > 0) && isKnifeBackstabTarget(mesh)) {
       effectiveWeaponId = 'knife_instakill';
-      meleeAbilityBuff.usesLeft--;
-      if (meleeAbilityBuff.usesLeft <= 0) meleeAbilityBuff = null;
+      if (soundId !== 'knife') {
+        meleeAbilityBuff.usesLeft--;
+        if (meleeAbilityBuff.usesLeft <= 0) meleeAbilityBuff = null;
+      }
       flashScreen('rgba(255,0,0,0.35)', 250);
     } else if (meleeAbilityBuff?.type === 'heavy' && meleeAbilityBuff.usesLeft > 0) {
       // Double damage: emit hit twice
@@ -52987,7 +53695,7 @@ function _endReload(st, fill) {
   if (_reloadSt === st) _reloadSt = null;
   const flash = document.getElementById('reload-flash');
   if (flash) flash.style.display = 'none';
-  if (st.model) { st.model._reloadStart = 0; }
+  if (st.model) { resetDonutCoreReload(st.model); st.model._reloadStart = 0; }
   // Only touch the HUD globals if that gun is still the one in your hands.
   if (currentWeaponIdx === st.idx) { ammo = st.pool.ammo; reserve = st.pool.reserve; }
   syncHeldAmmoModelForIndex(st.idx);
@@ -53119,6 +53827,10 @@ function _skinShellPlan(r, id, mag, n) {
 // The plan for the gun that is actually in your hands: its skin's own routine if
 // it has one, otherwise the gun's.
 function _shellPlanFor(weapon, n) {
+  if (_activeModelSkin[weapon.id]?.rarity === 'donut') {
+    const plan = _shellReloadPlan(weapon.id,weapon.mag,n);
+    return {...plan,loadAt:Array(n).fill(.74)};
+  }
   const fx = _skinFxFor(weapon.id);
   return (fx && fx.reload && _skinShellPlan(fx.reload, weapon.id, weapon.mag, n))
       || _shellReloadPlan(weapon.id, weapon.mag, n);
@@ -53132,7 +53844,7 @@ function cancelReload() {
   const flash = document.getElementById('reload-flash');
   if (flash) flash.style.display = 'none';
   const m = weaponModels[currentWeaponIdx];
-  if (m) m._reloadStart = 0;
+  if (m) {resetDonutCoreReload(m);m._reloadStart = 0;}
 }
 
 function startReload() {
@@ -53590,7 +54302,9 @@ function _buildMech(model, id, evs) {
   // ── pistol slide / rifle charging handle
   const evsKinds = evs.map(e => e.k);
   const fullB = new THREE.Box3(); P.forEach(p => fullB.union(p.box));
-  if (w.slot === 'secondary' && evsKinds.includes('mag') && /Secondary|Pistol|Hand Cannon|Armor Piercer/.test(w.type)) {
+  if (model._parts?.slide) {
+    const g=model._parts.slide;M.slide={g,z0:g.position.z,n:g.children.length};
+  } else if (w.slot === 'secondary' && evsKinds.includes('mag') && /Secondary|Pistol|Hand Cannon|Armor Piercer/.test(w.type)) {
     // the slide: the highest long box, plus the small fittings sitting on it
     const top = P.filter(p => { const sz = p.box.getSize(new THREE.Vector3()), c = p.box.getCenter(new THREE.Vector3()); return p.obj.geometry.type === 'BoxGeometry' && sz.z >= 0.09 && sz.y >= 0.022 && Math.abs(c.x) < 0.02 && c.y > A.mag.y + 0.03; })
                   .sort((a, b) => b.box.max.y - a.box.max.y)[0];
@@ -53637,6 +54351,10 @@ function _buildMech(model, id, evs) {
     model.add(r); M.loaded = { objs: [r], n: 1 };
   }
   M.loadedKind = evs.filter(e => e.m === 'arrive' && e.k !== 'mag').map(e => e.t);
+  if (M.mag) {
+    M.mag.rotation = M.mag.g.quaternion.clone();
+    M.mag.withdraw = new THREE.Vector3(-.025, M.mag.g.userData.topMagazine ? .14 : -.14, .035);
+  }
   return (M.mag || M.knob || M.slide || M.loaded) ? M : null;
 }
 // Skins that ARE guns get working parts. The everyday-object skins (a hair dryer
@@ -53671,18 +54389,31 @@ function updateGunMech(model, id, tR, evs, durMs) {
   const beat = (kind, mode) => (evs || []).filter(e => e.k === kind && e.m === mode);
   // magazine
   if (M.mag) {
-    let vis = true, k = 1;
+    let vis = true, pull = 0, pouch = 0;
     if (tR != null) {
       const out = beat('mag', 'eject')[0], inn = beat('mag', 'arrive')[0];
-      if (out && tR >= out.t) {
-        vis = false;
-        if (inn && tR >= inn.t - 0.02) { k = _eqSm((tR - (inn.t - 0.02)) * durMs / 300); vis = true; }
+      if (out) {
+        const release = Math.max(0, out.t - .13);
+        pull = _eqSm((tR - release) / Math.max(.001, out.t - release));
+        if (tR >= out.t) {
+          vis = false;
+          if (inn && tR < inn.t) {
+            const k = _eqSm((tR - out.t) / Math.max(.001, inn.t - out.t));
+            pouch = Math.sin(k * Math.PI) * .25;
+            vis = k >= .5;
+          }
+        }
+        if (inn && tR >= inn.t) {
+          pull = 1 - _eqSm((tR - inn.t) * durMs / 300); vis = true;
+        }
       }
     }
     const g = M.mag.g;
     g.visible = vis;
-    g.position.set(M.mag.home.x, M.mag.home.y - 0.14 * (1 - k), M.mag.home.z + 0.035 * (1 - k));
-    g.rotation.set(0.45 * (1 - k), 0, 0);
+    g.position.copy(M.mag.home).addScaledVector(M.mag.withdraw, pull);
+    g.position.y -= pouch;
+    g.quaternion.copy(M.mag.rotation);
+    g.rotateX(.32 * pull);
   }
   // charging handle
   if (M.knob) {
@@ -53753,6 +54484,8 @@ function addViewArms(root) {
     if (fist && fist.isMesh) fist.material = M.hand;
     // the way the arm runs, in the weapon's own frame (-z is the muzzle), taken into the hand's: it is turned to sit on the gun
     const d = new THREE.Vector3(dir[0], dir[1], dir[2]).normalize().applyQuaternion(hand.quaternion.clone().invert());
+    // Mirrored dual-wield hands also reflect the sleeve's local direction.
+    d.divide(hand.scale).normalize();
     const pivot = new THREE.Group();
     pivot.userData.vmHand = true;
     pivot.position.set(0, 0, 0.034);        // the back face of the fist: the wrist
@@ -54216,11 +54949,11 @@ const MODEL_SKINS = [
     sw: ['#14161a', '#8a7256'], build: buildSpyPistol,
     blurb: 'Slim slide, oversized can, walnut grip. The quiet one.' },
   { id: 'pistol_fart_gun', weapon: 'pistol', name: 'Fart Gun', rarity: 'basic',
-    sw: ['#4f7f24', '#9ad84a'], build: buildFartGun, look: { projectile: 'fart_cloud', bulletColor: 0x9ad84a },
-    blurb: 'The pistol, regrettably, has gas operation now.' },
+    sw: ['#39c24a', '#cfd6dc'], build: buildFartGun, look: { projectile: 'fart_cloud', bulletColor: 0x9ad84a },
+    blurb: 'A pressurised gadget: a tank of green gas with bubbles in it, a gauge that cannot make up its mind, a bellows for a pump. The pistol, regrettably, has gas operation now.' },
   { id: 'pistol_blaster', weapon: 'pistol', name: 'Blaster', rarity: 'good',
-    sw: ['#d82a3a', '#2a75ff'], build: buildBlaster, look: { projectile: 'beam', bulletColor: 0xff3344 },
-    blurb: 'Toy space pistol shell, real pew-pew voice.' },
+    sw: ['#2b2f35', '#ff2a3a'], build: buildBlaster, look: { projectile: 'beam', bulletColor: 0xff3344 },
+    blurb: 'A matte black sci-fi sidearm. The red is the power cell and the emitter, and it never goes off.' },
   { id: 'sg8_leaf_blower', weapon: 'sg8', name: 'Leaf Blower', rarity: 'good',
     sw: ['#e8631c', '#24262a'], build: buildLeafBlower,
     blurb: 'Corrugated tube, pull cord, a warning sticker nobody reads.' },
@@ -54284,7 +55017,10 @@ const MODEL_SKINS = [
   { id: 'rpg_water_balloon', weapon: 'rpg', name: 'Water Balloon Launcher', rarity: 'good',
     sw: ['#2a9fd8', '#55bbff'], build: buildRPGWaterBalloonLauncher, look: { projectile: 'water_balloon', bulletColor: 0x55bbff },
     blurb: 'A shoulder launcher with one very doomed water balloon loaded.' },
-  { id: 'bazooka_tuba', weapon: 'bazooka', name: 'Tuba', rarity: 'rare',
+  { id: 'rpg_bazooka', weapon: 'rpg', name: 'Bazooka', rarity: 'basic',
+    sw: ['#4c5730', '#515860', '#593823'], build: buildBazooka,
+    blurb: 'The original olive Bazooka tube and blast shield. Uses RPG-7 rockets and Triple Warhead.' },
+  { id: 'bazooka_tuba', weapon: 'rpg', name: 'Tuba', rarity: 'rare',
     sw: ['#d8aa3a', '#9a7420'], build: buildTuba,
     blurb: 'The bazooka was named after a comedian\'s horn. This is it going home.' },
   { id: 'barrett_pressure_washer', weapon: 'barrett', name: 'Pressure Washer', rarity: 'rare',
@@ -54320,6 +55056,9 @@ const MODEL_SKINS = [
   { id: 'foam_cannon_extinguisher', weapon: 'foam_cannon', name: 'Fire Extinguisher', rarity: 'good',
     sw: ['#d01c1c', '#c8a040'], build: buildFireExtinguisher,
     blurb: 'It already sprayed foam. Now it has a gauge and a lever.' },
+  { id: 'paintball_blackout', weapon: 'paintball', name: 'Blackout', rarity: 'good',
+    sw: ['#191c20', '#30353b'], build: buildBlackoutPaintball,
+    blurb: 'Polished black metal with a low-profile hopper, vented fore-end, and air-tank stock.' },
   { id: 'paintball_gumball', weapon: 'paintball', name: 'Gumball Machine', rarity: 'rare',
     sw: ['#d02a2a', '#44cc66'], build: buildGumballMachine,
     blurb: 'The globe is the hopper. Insert coin. Receive welt.' },
@@ -54350,6 +55089,21 @@ const MODEL_SKINS = [
   { id: 'machine_pistol_tape_gun', weapon: 'machine_pistol', name: 'Packing Tape Gun', rarity: 'good',
     sw: ['#d02a2a', '#c89a52'], build: buildTapeGun,
     blurb: 'It was always gun-shaped. That noise is the whole point.' },
+  { id: 'railgun_oblivion', weapon: 'railgun', name: 'Oblivion', rarity: 'legendary', look: { hit: 'void', beam: 'void' },
+    sw: ['#23262b', '#f2f6ff'], build: buildOblivionRail,
+    blurb: 'A black rod ringed with hard white silver. The shot leaves a trail of pure black that hangs in the air; a hit closes on itself like a tiny hole, the damage numbers are white on black, and whoever it kills is drawn into a black hole and fades.' },
+  { id: 'sawed_off_baguette', weapon: 'sawed_off', name: 'Double Baguette', rarity: 'good',
+    sw: ['#d9a35a', '#c8342a'], build: buildBaguetteShotgun,
+    blurb: 'Two baguettes and three rubber bands. Both barrels are the soft end.' },
+  { id: 'freeze_gun_lava_lamp', weapon: 'freeze_gun', name: 'Lava Lamp', rarity: 'good',
+    sw: ['#9a3aa8', '#ff6a2a'], build: buildLavaLamp,
+    blurb: 'Purple fluid, wax that glows orange and a gold base. It was always on.' },
+  { id: 'cycler_smartphone', weapon: 'cycler', name: 'Smartphone', rarity: 'good',
+    sw: ['#2a2d34', '#9fd8ff'], build: buildSmartphone,
+    blurb: 'A screen full of app icons and one red badge. The camera is the muzzle.' },
+  { id: 'machine_pistol_money_gun', weapon: 'machine_pistol', name: 'Money Gun', rarity: 'good',
+    sw: ['#c8202a', '#d8b02a'], build: buildMoneyGun, look: { bulletColor: 0xe0303a },
+    blurb: 'Make it rain. Red flashes, red bills. To reload, lift the lid, put the cash in, shut it.' },
   { id: 'mk44_keytar', weapon: 'mk44', name: 'Keytar', rarity: 'rare',
     sw: ['#e8e8ec', '#ff3ac8'], build: buildKeytar,
     blurb: 'Suppressive fire, in C major.' },
@@ -54459,6 +55213,15 @@ const MODEL_SKINS = [
   { id: 'revolver_python', weapon: 'revolver', name: 'Colt Python', rarity: 'rare',
     sw: ['#454b53', '#6b4a2c'], build: buildColtPython,
     blurb: 'Full-lug vented barrel, wood target grips, fluted six-shot cylinder.' },
+  { id: 'revolver_sheriff', weapon: 'revolver', name: 'Sheriff', rarity: 'rare',
+    sw: ['#343c46', '#c99b47', '#62301d'], build: buildSheriffRevolver,
+    blurb: 'Octagonal barrel, engraved nickel frame, walnut birds-head grip and a sharper frontier crack.' },
+  { id:'revolver_final_notice', weapon:'revolver', name:'Final Notice', rarity:'rare',
+    sw:['#24272b','#c19a56','#332322'], build:buildFinalNoticeRevolver,
+    blurb:'Blackened steel, a brass stamp grip, and a last round that closes the account.' },
+  { id:'vector_crimson', weapon:'vector', name:'Crimson Vector', rarity:'rare',
+    sw:['#a71b24','#18191b'], build:buildCrimsonVector,
+    blurb:'Red chassis, deep black lower housing, straight magazine and a skeletal stock.' },
   { id: 'grenade_launcher_mgl', weapon: 'grenade_launcher', name: 'Milkor MGL', rarity: 'rare',
     sw: ['#3a4028', '#8d959d'], build: buildMilkorMGL,
     blurb: 'Six 40mm chambers in a revolving drum. Spring-fed, quadrant-sighted.' },
@@ -54759,6 +55522,9 @@ const MODEL_SKINS = [
   { id: 'akimbo_staplers', weapon: 'akimbo', name: 'Staplers', rarity: 'basic', noMech: true,
     sw: ['#d7261e', '#23262b'], build: buildAkimboStaplerPair,
     blurb: 'Two office staplers with pistol grips, because staplers do not have any. The red arm is the slide.' },
+  { id: 'akimbo_apex', weapon: 'akimbo', name: 'Apex Pistols', rarity: 'rare', noMech: true,
+    sw: ['#25282d', '#ff2a3a'], build: buildAkimboApexPair, look: { projectile: 'beam', bulletColor: 0xff2a3a },
+    blurb: 'Two black sidearms lit red. They are tossed end over end when you draw them, and what they fire is a red bolt.' },
   { id: 'akimbo_bananas', weapon: 'akimbo', name: 'Bananas', rarity: 'good', noMech: true,
     sw: ['#f6d02a', '#4a3418'], build: buildAkimboBananaPair,
     blurb: 'A banana in each hand, held by the peel. The brown tip is the muzzle. Potassium rounds.' },
@@ -54826,6 +55592,7 @@ const DONUT_SKIN_IDS = [
 // Mirrors GEN2_SKIN_IDS in server.js (gotcha #4): the server owns the roll and
 // the ownership record, this list only decides what the picker locks.
 const GEN2_MODEL_SKIN_IDS = new Set([
+  'revolver_final_notice','vector_crimson',
   'revolver_donut', 'ak20_donut', 'rpg_donut', 'machine_pistol_donut', 'pistol_donut',
   'sg8_donut', 'srx_donut', 'vector_donut', 'grenade_launcher_donut', 'minigun_donut',
   'mp40_donut', 'deagle_donut', 'shorty_donut',
@@ -54839,12 +55606,13 @@ const GEN2_MODEL_SKIN_IDS = new Set([
   'shorty_buzzdraw', 'srx_8bit', 'ak20_8bit', 'sg8_8bit', 'revolver_8bit', 'vector_8bit',
   'shorty_8bit',
   'ak20_cyberpunk', 'srx_cyberpunk', 'sg8_cyberpunk', 'vector_cyberpunk', 'pistol_cyberpunk', 'mp40_cyberpunk', 'revolver_cyberpunk',
+  'akimbo_apex', 'railgun_oblivion', 'machine_pistol_money_gun', 'sawed_off_baguette', 'freeze_gun_lava_lamp', 'cycler_smartphone',   // (no skin is free: server.js GEN2_RARE / LEGENDARY / GOOD_SKIN_IDS)
 ]);
 const GEN2_MELEE_MODEL_SKIN_IDS = new Set([
   'katana_donut', 'knife_hyperspace', 'knife_butterfly', 'knife_singularity', 'lightsabre_singularity',
   'katana_laser', 'katana_sakura', 'katana_thunder', 'combat_axe_frost', 'shock_baton_thunder',
   'spear_thunder', 'knife_balloon', 'bat_inflatable', 'frying_pan_pizza_cutter',
-  'sabre_balloon', 'katana_tidal_fang', 'knife_twin',
+  'sabre_balloon', 'katana_tidal_fang', 'knife_twin', 'katana_tape_measure',
 ]);
 // 🎬 Utility skins that make an entrance come out of Gen 2 too (no skin is free).
 const GEN2_SUPPORT_MODEL_SKIN_IDS = new Set(['frag_stopwatch']);
@@ -54864,6 +55632,11 @@ let equippedModelSkins = (() => {
   try {
     const eq = JSON.parse(localStorage.getItem('pvp_model_skins')) || {};
     for (const w of Object.keys(eq)) if (SKIN_SWAPS[eq[w]]) eq[w] = SKIN_SWAPS[eq[w]];
+    if (eq.bazooka === 'bazooka_tuba') {
+      eq.rpg ||= eq.bazooka;
+      delete eq.bazooka;
+      localStorage.setItem('pvp_model_skins', JSON.stringify(eq));
+    }
     return eq;
   } catch (e) { return {}; }
 })();
@@ -54910,6 +55683,7 @@ function applyModelSkin(weaponId) {
   else delete _activeModelSkin[weaponId];
   const cur = weaponModels[idx];
   if (next === cur) return;
+  resetDonutCoreReload(cur);
   clearSecretInspect(cur);
   if (cur._inspectMode) { cur._inspectMode = false; cur._reloadStart = 0; }
   const wasVisible = cur.visible;
@@ -56728,7 +57502,63 @@ function buildBalloonSword() {
   g.position.set(0.10, -0.12, -0.20); return g;
 }
 
+let _measuringTapeTexture;
+function buildTapeMeasureKatana() {
+  const g=new THREE.Group();
+  const shell=new THREE.MeshLambertMaterial({color:0xe8a61c}), rubber=GUN_MATS.grip(), steel=GUN_MATS.steel();
+  gpPlate(g,shell,[[.039,-.019],[.048,-.039],[.090,-.052],[.144,-.043],[.174,-.015],[.171,.033],[.148,.057],[.097,.063],[.058,.045],[.038,.021]],.045);
+  gpPlate(g,rubber,[[.047,-.020],[.070,-.045],[.119,-.046],[.161,-.022],[.154,-.011],[.111,-.026],[.073,-.025]],.048);
+  gpBox(g,rubber,.027,.011,.035,0,.061,.097);
+  gpBox(g,steel,.037,.009,.008,0,.004,.037);
+  for(const side of [-1,1]){
+    gpCyl(g,rubber,.024,.024,.003,24,side*.023,.011,.103,0,Math.PI/2);
+    gpCyl(g,shell,.015,.015,.004,20,side*.025,.011,.103,0,Math.PI/2);
+  }
+  if(!_measuringTapeTexture){
+    const canvas=document.createElement('canvas');canvas.width=1024;canvas.height=64;
+    const c=canvas.getContext('2d');
+    c.fillStyle='#ffdb38';c.fillRect(0,0,1024,64);c.fillStyle='#22221d';
+    c.font='bold 19px sans-serif';c.textAlign='center';
+    for(let i=0;i<41;i++){
+      const x=i*25.6,h=i%5===0?23:i%2===0?14:8;
+      c.fillRect(x,0,2,h);c.fillRect(x,64-h,2,h);
+      if(i%5===0&&i>0&&i<40)c.fillText(String(i*2),x,40);
+    }
+    _measuringTapeTexture=new THREE.CanvasTexture(canvas);_measuringTapeTexture.colorSpace=THREE.SRGBColorSpace;
+  }
+  const tape=new THREE.Mesh(new THREE.PlaneGeometry(.40,.028,24,4),new THREE.MeshLambertMaterial({map:_measuringTapeTexture,side:THREE.DoubleSide}));
+  tape.rotation.y=Math.PI/2;tape.position.set(0,.004,-.161);g.add(tape);
+  const tip=new THREE.Group();g.add(tip);
+  gpBox(tip,steel,.016,.030,.004,0,0,0);
+  gpBox(tip,steel,.018,.004,.013,0,-.014,.004);
+  const vertices=tape.geometry.attributes.position;
+  function bend(center,amount){
+    for(let i=0;i<vertices.count;i++){
+      const u=vertices.getX(i),across=vertices.getY(i)/.014;
+      vertices.setZ(i,.003*(1-across*across)+amount*Math.exp(-((u-center)**2)/.003)*Math.min(1,(u+.2)*18));
+    }
+    vertices.needsUpdate=true;tape.geometry.computeVertexNormals();
+    tip.position.set(.003+amount*Math.exp(-((.2-center)**2)/.003),.004,-.361);
+  }
+  bend(0,0);
+  let pulse=0;
+  g._tapeDeflect=at=>{
+    const local=g.worldToLocal(at.clone()),center=THREE.MathUtils.clamp(-local.z-.161,-.13,.18);
+    const born=performance.now(),id=++pulse,epoch=matchEpoch;
+    const tick=()=>{
+      if(id!==pulse)return;
+      const t=Math.min(1,(performance.now()-born)/245);
+      bend(center,t<1&&epoch===matchEpoch?.052*Math.sin(t*13+.8)*(1-t)**2:0);
+      if(t<1&&epoch===matchEpoch)requestAnimationFrame(tick);
+    };
+    tick();
+  };
+  g.position.set(.10,-.12,-.20);return g;
+}
 const MELEE_MODEL_SKINS = [
+  {id:'katana_tape_measure',melee:'katana',name:'Tape Measure',rarity:'good',raw:true,
+    sw:['#ffdb38','#24231e','#b6bdc2'],build:buildTapeMeasureKatana,
+    blurb:'A rubberized tape measure with a numbered yellow blade that snaps back on a deflect.'},
   { id: 'knife_floss', melee: 'knife', name: 'Dental Floss', rarity: 'good',
     sw: ['#f2f4f6', '#3ab2c8'], build: buildDentalFloss,
     blurb: 'I hate dentists... the cutter is the sharp part.' },
@@ -58058,7 +58888,9 @@ function inspectOpenPose(id) {
 }
 
 const SECRET_INSPECTS = {
-  pistol_blaster: { every: 4, kind: 'ufo', color: 0x55eeff },
+  revolver_final_notice: { every: 4, kind: 'paid', duration: 2400 },
+  lever_trombone: { every: 3, kind: 'anthem', color: 0xffce65, duration: 12000 },
+  pistol_blaster: { every: 4, kind: 'ufo', color: 0xff3344 },
   sg8_singularity: { every: 5, kind: 'void', color: 0xc087ff },
   vector_bubble_blaster: { every: 4, kind: 'bubble', color: 0x79efff },
   revolver_donut: { every: 6, kind: 'donut', color: 0xff83ba },
@@ -58071,6 +58903,8 @@ const SECRET_INSPECTS = {
 };
 const _secretInspectCounts = new Map();
 const SECRET_INSPECT_TRACKS = {
+  paid: [K(.22,{px:-.025,py:.044,ry:-1.05,rz:-.12,ax:.025}),K(.48,{px:-.025,py:.044,ry:-1.05,rz:-.12,ax:.028,hx:.07,hy:.02}),K(.56,{px:-.025,py:.039,ry:-1.05,rz:-.12,ax:.028,hx:.038,hy:.01}),K(.81,{px:-.025,py:.044,ry:-1.05,rz:-.12,ax:.028,hx:.075,hy:.025}),K(1,{})],
+  anthem: [K(.12,{px:-.055,py:.055,pz:.035,rx:-.14,ry:-.12,rz:-.08}), K(.88,{px:-.055,py:.055,pz:.035,rx:-.14,ry:-.12,rz:-.08}), K(1,{})],
   donut: [K(.18,{px:-.03,py:.035,rz:-.28,hx:-.03,hy:.04,hz:.05}), K(.32,{px:.02,py:.02,rz:-.3,ax:-.09,ay:.035,az:.10,hx:-.08,hy:.04,hz:.11}), K(.68,{px:.02,py:.02,rz:-.3,ax:-.09,ay:.035,az:.10,arz:Math.PI*8,hx:-.08,hy:.04,hz:.11,hr:.3}), K(.84,{px:-.01,py:.025,rz:-.2,arz:Math.PI*8,hx:-.02,hy:.015,hz:.035}), K(1,{})],
   ufo: [K(.18,{py:.055,rx:-.32,ry:-.35,rz:-.3,hx:.02,hy:.04,hz:-.04}), K(.34,{py:.05,rx:-.28,ry:-.35,rz:-.3,hx:.015,hy:.055,hz:-.07,hr:-.6}), K(.55,{py:.02,rx:.18,ry:.28,rz:.12,hx:-.045,hy:.04,hz:-.04,hr:.3}), K(.78,{py:.04,rx:-.12,ry:-.25,rz:-.2,hx:.01,hy:.03,hz:-.05}), K(1,{})],
   void: [K(.2,{py:.04,rx:.2,rz:-.4,hx:.02,hy:.07,hz:-.055}), K(.4,{py:.04,rx:.2,rz:-.4,hx:.035,hy:.10,hz:-.08,hr:-.65}), K(.62,{py:-.01,rx:.45,rz:-.18,hx:-.12,hy:.035,hz:.10,hr:.55}), K(.8,{py:.02,rx:.22,rz:-.3,hx:-.04,hy:.045,hz:.01}), K(1,{})],
@@ -58089,9 +58923,44 @@ function secretInspectFor(weaponId) {
   const key = `${weaponId}:${skin.id}`;
   return { ...def, key, triggered: ((_secretInspectCounts.get(key) || 0) + 1) % def.every === 0 };
 }
+// A short instrumental opening, synthesized locally rather than streaming a recording.
+const TROMBONE_ANTHEM_NOTES = [
+  [55,.5],[60,1.5],[55,.75],[57,.25],[59,1.5],[52,.75],[52,.25],
+  [57,1.5],[55,.75],[53,.25],[55,1.5],[48,.75],[48,.25],
+  [50,1],[50,.5],[52,.5],[53,1],[53,.5],[55,.5],[57,1],[59,.5],[60,.5],[62,2],
+];
+function playTromboneInspectAnthem(run) {
+  const ctx=getAudioCtx();
+  if(!ctx)return;
+  const bus=ctx.createGain();bus.gain.value=.22;bus.connect(ctx.destination);
+  run.audio={ctx,bus,nodes:[]};
+  let beat=0;
+  for(const [midi,length] of TROMBONE_ANTHEM_NOTES){
+    const start=ctx.currentTime+.015+beat*.40,duration=length*.40;
+    const osc=ctx.createOscillator(),filter=ctx.createBiquadFilter(),amp=ctx.createGain();
+    osc.type='sawtooth';osc.frequency.value=440*Math.pow(2,(midi-69)/12);
+    filter.type='lowpass';filter.Q.value=.65;
+    filter.frequency.setValueAtTime(700,start);
+    filter.frequency.linearRampToValueAtTime(2200,start+.045);
+    filter.frequency.exponentialRampToValueAtTime(900,start+duration);
+    amp.gain.setValueAtTime(0,start);amp.gain.linearRampToValueAtTime(.55,start+.025);
+    amp.gain.setValueAtTime(.42,start+Math.max(.03,duration-.055));
+    amp.gain.linearRampToValueAtTime(0,start+duration);
+    osc.connect(filter).connect(amp).connect(bus);
+    const voice={osc,filter,amp};run.audio.nodes.push(voice);
+    osc.onended=()=>{osc.disconnect();filter.disconnect();amp.disconnect();};
+    osc.start(start);osc.stop(start+duration+.01);beat+=length;
+  }
+}
 function clearSecretInspect(model, completed = false) {
   const run = model?._secretInspect;
   if (!run) return;
+  if(run.audio){
+    const {ctx,bus,nodes}=run.audio;
+    bus.gain.cancelScheduledValues(ctx.currentTime);bus.gain.setValueAtTime(0,ctx.currentTime);
+    for(const {osc} of nodes){try{osc.stop();}catch(e){}}
+    bus.disconnect();run.audio=null;
+  }
   if (completed) _secretInspectCounts.set(run.key, (_secretInspectCounts.get(run.key) || 0) + 1);
   if (run.group) {
     model.remove(run.group);
@@ -58116,9 +58985,58 @@ function clearSecretInspect(model, completed = false) {
   if (run.triggered && model._homePos) { model.position.copy(model._homePos); model.rotation.set(0, 0, 0); }
   model._secretInspect = null;
 }
+function playFinalNoticeStamp(delay=0) {
+  const ctx=getAudioCtx();if(!ctx)return;
+  const at=ctx.currentTime+delay;
+  playFilteredNoise(ctx,at,.035,ctx.destination,.22,'bandpass',1900,.8,.001,0);
+  playTone(ctx,at,.08,ctx.destination,184,78,.26,'triangle');
+  playTone(ctx,at+.028,.047,ctx.destination,840,460,.09,'square');
+}
+let _paidStampTexture;
+function updateFinalNoticeInspect(model,run,t,pose) {
+  if(!run.group){
+    run.group=new THREE.Group();model.add(run.group);
+    run.stamp=new THREE.Group();run.group.add(run.stamp);
+    const brass=new THREE.MeshStandardMaterial({color:0xc19a56,metalness:.66,roughness:.34});
+    gpBox(run.stamp,brass,.014,.018,.045,0,0,0);
+    gpCyl(run.stamp,brass,.007,.007,.020,12,.013,0,0,0,Math.PI/2);
+    if(!_paidStampTexture){
+      const canvas=document.createElement('canvas');canvas.width=256;canvas.height=128;
+      const c=canvas.getContext('2d');c.strokeStyle=c.fillStyle='#ffcf78';c.lineWidth=7;
+      c.strokeRect(9,9,238,110);c.font='bold 79px sans-serif';c.textAlign='center';c.textBaseline='middle';c.fillText('PAID',128,66);
+      _paidStampTexture=new THREE.CanvasTexture(canvas);_paidStampTexture.colorSpace=THREE.SRGBColorSpace;
+    }
+    run.mark=new THREE.Mesh(new THREE.PlaneGeometry(.043,.022),new THREE.MeshBasicMaterial({map:_paidStampTexture,transparent:true,depthWrite:false}));
+    run.mark.rotation.y=Math.PI/2;run.group.add(run.mark);
+  }
+  const x=(model._parts.main._home?.x||0)+pose.ax+.021;
+  run.stamp.visible=t>=.29&&t<.74;
+  run.stamp.position.set(x+.008+Math.min(1,Math.abs(t-.55)*6)*.069,.012+pose.ay,-.010+pose.az);
+  run.mark.position.set(x,.012+pose.ay,-.010+pose.az);
+  run.mark.visible=t>=.55&&t<.96;
+  run.mark.material.opacity=Math.min(1,(.96-t)*9);
+  if(t>=.55&&!run.sounded){run.sounded=true;playFinalNoticeStamp();}
+}
 function updateSecretInspect(model, t, pose) {
   const run = model._secretInspect;
   if (!run?.triggered) return;
+  if(run.kind==='paid'){updateFinalNoticeInspect(model,run,t,pose);return;}
+  if(run.kind==='anthem'){
+    if(!run.group){run.group=new THREE.Group();model.add(run.group);}
+    if(t>=.14&&!run.sounded){run.sounded=true;playTromboneInspectAnthem(run);}
+    const elapsed=Math.max(0,t*run.duration/1000-run.duration*.14/1000);
+    let beat=0,note=null;
+    for(const entry of TROMBONE_ANTHEM_NOTES){if(elapsed>=beat*.40&&elapsed<(beat+entry[1])*.40){note=entry;break;}beat+=entry[1];}
+    const main=model._parts?.main;
+    if(main){
+      const reach=Math.min(1,t/.12,(1-t)/.12);
+      const extension=note?(.014+(note[0]%7)*.012):0;
+      const target=-extension*Math.max(0,reach);
+      run.slideExtension=(run.slideExtension||0)+(target-(run.slideExtension||0))*.35;
+      pose.az+=run.slideExtension;
+    }
+    return;
+  }
   if (!run.group) {
     const group = new THREE.Group(); run.group = group; model.add(group);
     const part = (geo, color, opacity = 1) => {
@@ -58239,6 +59157,15 @@ function updateSecretInspect(model, t, pose) {
 function finishSecretInspectPose(model, t, pose) {
   const run = model._secretInspect, H = model._hands;
   if (!run?.triggered || !run.group || !H) return;
+  if(run.kind==='anthem'){
+    const main=model._parts?.main;
+    if(main&&!H.single){
+      H.front.visible=true;H.front.position.copy(H.frontHome);
+      H.front.position.z+=main.position.z-(main._home?.z||0);
+      H.front.rotation.copy(H.frontRot);
+    }
+    return;
+  }
   let hand = H.front;
   let home = H.frontHome, rot = H.frontRot;
   if (H.single) {
@@ -58297,7 +59224,7 @@ function startInspect() {
   model._secretInspect = secretInspectFor(id);
   model._inspectMode = true;
   model._reloadStart = Date.now();
-  model._reloadDur = model._secretInspect?.triggered ? 3400 : INSPECT_MS;
+  model._reloadDur = model._secretInspect?.triggered ? (model._secretInspect.duration || 3400) : INSPECT_MS;
   const ctx = getAudioCtx();
   if (ctx) {
     const t0 = ctx.currentTime + 0.002;
@@ -58438,6 +59365,10 @@ function _makeObjectProp(kind, M, g) {
       add('p', C(0.002, 0.002, 0.030, 6), M(0xc8ced6, 180), 0, -0.020, 0); return true;
     case 'coin':
       add('c', C(0.012, 0.012, 0.003, 16), M(0xd8a820, 200), 0, 0, 0, 0, 0, X); return true;
+    case 'cash':        // a wad of bills in a paper strap
+      add('s', B(0.036, 0.014, 0.074), M(0xd6303a, 30));
+      add('t', B(0.034, 0.003, 0.070), M(0xf08a92, 30), 0, 0.0085, 0);
+      add('b', B(0.038, 0.016, 0.012), M(0xe6d27a, 20)); return true;
     case 'gumball':
       add('g', S(0.011), M(pick([0xff4466, 0x44cc66, 0x4488ff, 0xffdd33, 0xff8833, 0xffffff]), 120)); return true;
     case 'comb':
@@ -58635,7 +59566,21 @@ function _propAnchor(model, where) {
 function spawnReloadProp(model, kind, mode, where, opts) {
   if (!camera) return;
   const o = opts || {};
-  const mesh = _makeReloadProp(kind);
+  const source = kind === 'mag' && mode === 'eject' && !o.tint && model._mech?.mag?.g;
+  const mesh = source ? source.clone(true) : _makeReloadProp(kind);
+  let magazinePose = null;
+  if (source) {
+    // Clone the finished geometry and wrapped materials, never a gray stand-in.
+    model.updateWorldMatrix(true, true); camera.updateWorldMatrix(true, false);
+    magazinePose = new THREE.Matrix4().copy(camera.matrixWorld).invert().multiply(source.matrixWorld);
+    mesh.visible = true;
+    mesh.traverse(part => {
+      if (!part.isMesh) return;
+      const copy = material => { const m = material.clone(); m.transparent = true; return m; };
+      part.material = Array.isArray(part.material) ? part.material.map(copy) : copy(part.material);
+    });
+    mesh.userData.reloadMagazineCopy = true;
+  }
   const at = _propAnchor(model, where);
   const R = (a) => (Math.random() - 0.5) * a;
   if (mode === 'float' || mode === 'swirl' || mode === 'orbit') {
@@ -58670,6 +59615,14 @@ function spawnReloadProp(model, kind, mode, where, opts) {
       spin: new THREE.Vector3(R(o.eject ? 22 : 9), R(o.eject ? 22 : 9), R(o.eject ? 22 : 9)) });
   }
   camera.add(mesh);
+  if (magazinePose) magazinePose.decompose(mesh.position, mesh.quaternion, mesh.scale);
+}
+
+function removeReloadProp(mesh) {
+  camera.remove(mesh);
+  if (mesh.userData.reloadMagazineCopy) mesh.traverse(part => {
+    if (part.isMesh) (Array.isArray(part.material) ? part.material : [part.material]).forEach(m => m.dispose());
+  });
 }
 
 function updateReloadProps(dt) {
@@ -58708,13 +59661,13 @@ function updateReloadProps(dt) {
       p.mesh.traverse(o => { if (o.isMesh) o.material.opacity = fade; });
     }
     if (p.t >= p.life) {
-      camera.remove(p.mesh);
+      removeReloadProp(p.mesh);
       p.mesh.traverse(o => { if (o.isMesh && o.material.transparent) o.material.opacity = 1; });
       _rProps.splice(i, 1);
     }
   }
 }
-function clearReloadProps() { while (_rProps.length) { camera.remove(_rProps.pop().mesh); } }
+function clearReloadProps() { while (_rProps.length) { removeReloadProp(_rProps.pop().mesh); } }
 
 // What each weapon throws away, feeds in, or spits out — and when. Times line
 // up with that weapon's own keyframe track, so the part moves on the beat the
@@ -58778,7 +59731,7 @@ const RELOAD_PROPS = {
   boomstick:[RP(.37,'shell',null,2,'breech'),RP(.58,'shell','arrive',1,'breech'),RP(.79,'shell','arrive',1,'breech')],
   signal_pistol:[RP(.46,'shell',null,1,'breech'),RP(.70,'shell','arrive',1,'breech')],
   flare:[RP(.50,'case'),RP(.62,'round','arrive',1,'breech')],
-  taser:[RP(.38,'case'),RP(.65,'mag','arrive',1,'breech')],
+  taser:[RP(.38,'mag'),RP(.65,'mag','arrive')],
   duelist_pistol:[RP(.31,'ball','arrive',1,'muzzle'),RP(.53,'ball','arrive',1,'muzzle'),RP(.83,'case',null,1,'breech')],
   // ── Revolvers: cases punched out together, fresh rounds thumbed in ───────
   revolver:[RP(.38,'case',null,6,'breech'),RP(.62,'round','arrive',6,'breech')],
@@ -58861,7 +59814,7 @@ const RELOAD_MAGIC_TINTS = [0x7ad8ff, 0xff7ad8, 0xb68cff, 0x7affc8, 0xffd27a, 0x
 const RELOAD_MAGIC_FROSTING = [0xff7ad8, 0xffb070, 0xff9ac8, 0xffd27a, 0xff8a5a];   // pink and caramel, nothing cold
 const RELOAD_MAGIC_SFX = { 'eq:assemble': ['whoosh', 'chime'], 'eq:vortex': ['warp', 'chime'], 'eq:build': ['whoosh', 'click'],
   'eq:warp': ['warp', 'beep'], 'eq:unfold': ['fold', 'click'], 'eq:meteor': ['starfall', 'chime'], 'eq:blackhole': ['singularity', 'chime'],
-  'eq:spin': ['whoosh', 'click'], 'eq:constellation': ['starfall', 'chime'], 'eq:pixelate': ['blip', null], 'eq:windup': ['click', 'click'],
+  'eq:spin': ['whoosh', 'click'], 'eq:constellation': ['starfall', 'chime'], 'eq:pixelate': ['bleep', null], 'eq:windup': ['click', 'click'],
   'eq:glitch': ['beep', 'click'], 'eq:haunt': ['boo', null], 'eq:donutbuild': ['whoosh', 'chime'] };
 // Does this model skin get a magic reload? Not if it has one of its own, and not if it is a real gun.
 function _skinWantsMagic(sk) {
@@ -59336,6 +60289,8 @@ const SKIN_FX = {
   ak20_swarm_rifle:     { sound: _fxS('energy', .26, .10, 1400, 600) },
   pistol_spy:           { sound: _fxS('pfft', .26, .06, 900, 300) },
   pistol_fart_gun:      { sound: _fxS('fart', .46, .28, 96, 58) },
+  // thrown up out of both hands, two turns end over end, and caught (the pair's holders are what spin; see _beginEquip)
+  akimbo_apex:           { sound: _fxS('laser', .22, .07, 2900, 560), equip: 'flip', equipMs: 950, equipSfx: ['whoosh', 'clink'] },
   pistol_blaster:        { sound: _fxS('laser', .24, .08, 2600, 520),
     reload: _fxR(_RK.under(), [RP(.30,'cell'), RP(.58,'cell','arrive')], [[.45,'beep']], 'beep'),
     equip: 'neon', equipMs: 750, equipSfx: ['beep', 'hum'] },
@@ -59352,6 +60307,7 @@ const SKIN_FX = {
   sg8_remington870:     { sound: _fxS('boom', .60, .22, 0, 0, { action:'shotgun', tail:.70 }) },
   srx_dragunov:         { sound: _fxS('crack', .62, .18, 0, 0, { action:'rifle', tail:1.10 }) },
   revolver_python:      { sound: _fxS('heavy', .44, .14, 0, 0, { action:'revolver', tail:.50 }) },
+  revolver_sheriff:     { sound: _fxS('crack', .44, .11, 0, 0, { action:'revolver', tail:.32 }) },
   grenade_launcher_mgl: { sound: _fxS('thump', .40, .24, 140, 55, { action:'single' }) },
   flamethrower_m2:      { sound: _fxS('flamethrower', .28, .22, 80, 50) },
   // the five that joined Gen 1 in 214c7aa came in with the gun's own voice, the only real guns in their case without one
@@ -59460,15 +60416,17 @@ const SKIN_FX = {
     reload: _fxR(_RK.front(), [RP(.30,'comb','eject',1,'muzzle'), RP(.54,'comb','arrive',1,'muzzle')], null, 'buzz') },
   machine_pistol_tape_gun: { sound: _fxS('rip', .24, .08, 2200, 5200),
     reload: _fxR(_RK.top(), [RP(.30,'tape','eject',1,'breech'), RP(.56,'tape','arrive',1,'breech')], null, 'rip') },
-  sawed_off_baguette: { sound: _fxS('crunch', .36, .10, 900, 1500),
+  railgun_oblivion: { sound: _fxS('cosmic', .50, .22, 150, 40), equip: 'blackhole', equipMs: 1100, equipSfx: ['singularity', 'chime'],
+    reload: _fxR(_RK.under(), [RP(.30,'cell','eject',1,'breech'), RP(.58,'cell','arrive',1,'breech')], [[.28,'slideout'],[.60,'snapin']], 'chime') },
+  sawed_off_baguette: { sound: _fxS('crunch', .36, .10, 900, 1500), equip: 'inflate', equipMs: 1000, equipSfx: ['inflate', null],
     reload: _fxR(_RK.front(), [RP(.30,'crisp','eject',2,'breech'), RP(.56,'crisp','arrive',2,'breech')], [[.40,'rustle']], 'tap') },
-  plasma_carbine_lava_lamp: { sound: _fxS('squirt', .30, .09, 380, 140),
+  freeze_gun_lava_lamp: { sound: _fxS('squirt', .30, .09, 380, 140), equip: 'fill', equipMs: 900, equipSfx: ['pour', 'bloop'],
     reload: _fxR(_RK.under(), [RP(.30,'bubble','eject',3,'muzzle'), RP(.56,'refill','arrive')], [[.34,'glug'],[.62,'bloop']], 'bloop') },
-  smart_smg_smartphone: { sound: _fxS('beep', .22, .06, 1568, 2093),
+  cycler_smartphone: { sound: _fxS('beep', .22, .06, 1568, 2093), equip: 'pixelate', equipMs: 800, equipSfx: ['bleep', null],
     reload: _fxR(_RK.under(), [RP(.30,'battery'), RP(.58,'battery','arrive')], [[.45,'beep']], 'ding') },
   // the lid flips up (arx), the stack is tipped out (av drains), the off hand goes
   // to a pocket and comes back with a fresh wad that goes in (av fills), the lid shuts
-  machine_pistol_money_gun: { sound: _fxS('flick', .26, .07, 2600, 2400),
+  machine_pistol_money_gun: { sound: _fxS('flick', .26, .07, 2600, 2400), equip: 'slam', equipMs: 900, equipSfx: ['whoosh', null], equipBeats: [[.55, 'ding']],
     reload: _fxR([K(.08,{py:.05,rx:.20,rz:-.30,hy:.02}),
       K(.20,{py:.06,rx:.24,rz:-.62,hx:.02,hy:.10,hz:-.02,hr:-.4}),
       K(.30,{py:.06,rx:.26,rz:-.70,hy:.14,hz:-.03,arx:1.35,av:.9}),
@@ -59532,22 +60490,22 @@ const SKIN_FX = {
     reload: _fxR(RELOAD_KEYS.xm7, [RP(.31,'brick'), RP(.58,'brick','arrive')], null, 'snapin'),
     equip: 'build', equipMs: 900, equipSfx: ['brick', 'snapin'] },
   srx_8bit: { sound: _fxS('chip', .28, .14, 1400, 110),
-    reload: _fxR(RELOAD_KEYS.srx, [RP(.30,'pixel','eject',3), RP(.56,'pixel','arrive',3)], null, 'blip'),
-    equip: 'pixelate', equipMs: 800, equipSfx: ['blip', null] },
+    reload: _fxR(RELOAD_KEYS.srx, [RP(.30,'pixel','eject',3), RP(.56,'pixel','arrive',3)], null, 'bleep'),
+    equip: 'pixelate', equipMs: 800, equipSfx: ['bleep', null] },
   // ── The rest of the 8-bit family: same chip voice, same pixel reload and
   //    pixelate equip as the SR-X's, tuned per weapon ──
   ak20_8bit: { sound: _fxS('chip', .24, .09, 900, 90),
-    reload: _fxR(RELOAD_KEYS.ak20, [RP(.30,'pixel','eject',3), RP(.56,'pixel','arrive',3)], null, 'blip'),
-    equip: 'pixelate', equipMs: 800, equipSfx: ['blip', null] },
+    reload: _fxR(RELOAD_KEYS.ak20, [RP(.30,'pixel','eject',3), RP(.56,'pixel','arrive',3)], null, 'bleep'),
+    equip: 'pixelate', equipMs: 800, equipSfx: ['bleep', null] },
   sg8_8bit: { sound: _fxS('chip', .40, .22, 300, 60),
-    reload: _fxR(RELOAD_KEYS.sg8, [RP(.30,'pixel','eject',2), RP(.56,'pixel','arrive',2)], null, 'blip'),
-    equip: 'pixelate', equipMs: 800, equipSfx: ['blip', null] },
+    reload: _fxR(RELOAD_KEYS.sg8, [RP(.30,'pixel','eject',2), RP(.56,'pixel','arrive',2)], null, 'bleep'),
+    equip: 'pixelate', equipMs: 800, equipSfx: ['bleep', null] },
   revolver_8bit: { sound: _fxS('chip', .22, .10, 1100, 140),
-    reload: _fxR(RELOAD_KEYS.revolver, [RP(.30,'pixel','eject',3), RP(.56,'pixel','arrive',3)], null, 'blip'),
-    equip: 'pixelate', equipMs: 800, equipSfx: ['blip', null] },
+    reload: _fxR(RELOAD_KEYS.revolver, [RP(.30,'pixel','eject',3), RP(.56,'pixel','arrive',3)], null, 'bleep'),
+    equip: 'pixelate', equipMs: 800, equipSfx: ['bleep', null] },
   vector_8bit: { sound: _fxS('chip', .16, .06, 1800, 180),
-    reload: _fxR(RELOAD_KEYS.vector, [RP(.30,'pixel','eject',3), RP(.56,'pixel','arrive',3)], null, 'blip'),
-    equip: 'pixelate', equipMs: 800, equipSfx: ['blip', null] },
+    reload: _fxR(RELOAD_KEYS.vector, [RP(.30,'pixel','eject',3), RP(.56,'pixel','arrive',3)], null, 'bleep'),
+    equip: 'pixelate', equipMs: 800, equipSfx: ['bleep', null] },
   sg8_portal: { sound: _fxS('warp', .34, .20, 160, 900),
     equip: 'warp', equipMs: 900, equipSfx: ['warp', 'chime'] },
   p90_quantum_scanner: { sound: _fxS('beep', .24, .07, 2600, 1800),
@@ -59649,7 +60607,7 @@ const SKIN_FX = {
       K(.65,{py:.06,rx:.20,rz:-.25,hx:.04,hy:.05,hz:-.08,ary:4.7124}),
       K(.69,{py:.06,rx:.20,rz:-.25,hx:.03,hy:.06,hz:-.08,ary:6.2832}),
       K(.82,{py:.04,rx:.10,rz:-.10,ary:6.2832}), K(.9995,{py:.0,ary:6.2832})],
-      null, [[.32,'click'],[.44,'click'],[.56,'click'],[.68,'click']], 'ding') },
+      null, [[.33,'click'],[.45,'click'],[.57,'click'],[.69,'click']], 'ding') },
   railgun_tuning_fork: { sound: _fxS('ring', .32, .90, 1046, 1046),
     equip: 'spin', equipMs: 900, equipSfx: ['whoosh', 'ding'],
     // struck on the palm and held to the ear, where a silver coin flips into the V
@@ -59816,8 +60774,8 @@ const SKIN_FX = {
     equip: 'fill', equipMs: 1100, equipSfx: ['pour', 'bloop'],
     reload: _fxR(_RK.top(), [.30,.38,.46,.54].map(t => RP(t,'drop','arrive',1,'breech')), [[.28,'glug']], 'bloop') },
   shorty_8bit: { sound: _fxS('chip', .40, .22, 300, 60),
-    reload: _fxR(RELOAD_KEYS.shorty || RELOAD_KEYS.sg8, [RP(.30,'pixel','eject',2), RP(.56,'pixel','arrive',2)], null, 'blip'),
-    equip: 'pixelate', equipMs: 800, equipSfx: ['blip', null] },
+    reload: _fxR(RELOAD_KEYS.shorty || RELOAD_KEYS.sg8, [RP(.30,'pixel','eject',2), RP(.56,'pixel','arrive',2)], null, 'bleep'),
+    equip: 'pixelate', equipMs: 800, equipSfx: ['bleep', null] },
   vector_portal: { sound: _fxS('warp', .30, .18, 180, 1100),
     equip: 'warp', equipMs: 900, equipSfx: ['warp', 'chime'] },
   ak20_rainbow: { sound: _fxS('rainbow', .27, .10, 1047, 0),
@@ -59886,14 +60844,102 @@ function _reloadPose(track, t) {
            av:L('av') };
 }
 
+function resetDonutCoreReload(model) {
+  const rig = model?._donutCoreRig;
+  if (!rig?.active) return;
+  for (const p of rig.parts) {
+    p.object.position.copy(p.position); p.object.quaternion.copy(p.rotation);
+    p.object.visible = p.visible;
+  }
+  rig.group.visible = false; rig.active = false;
+  if(model._homePos)model.position.copy(model._homePos);
+  model.rotation.set(0,0,0);
+  const H=model._hands;
+  if(H && !H.single) {
+    H.front.position.copy(H.frontHome);H.front.rotation.copy(H.frontRot);
+    if(H.hideFront)H.front.visible=false;
+  }
+}
+
+function updateDonutCoreReload(model, t) {
+  let rig = model._donutCoreRig;
+  if (!rig) {
+    const group = new THREE.Group(); group.userData.eqFx = true;
+    const makeCore = () => {
+      const core = new THREE.Group();
+      const white = new THREE.MeshBasicMaterial({color:0xffffff,toneMapped:false});
+      const gold = new THREE.MeshPhongMaterial({color:0xf5cb62,shininess:220,specular:0xffffff});
+      const center = new THREE.Mesh(new THREE.CylinderGeometry(.010,.010,.052,12),white); core.add(center);
+      for (const y of [-.03,0,.03]) {
+        const collar = new THREE.Mesh(new THREE.TorusGeometry(.014,.0022,6,20),gold);
+        collar.rotation.x = Math.PI/2; collar.position.y = y; core.add(collar);
+      }
+      for (let i=0;i<4;i++) {
+        const a=i*Math.PI/2;
+        const rail=new THREE.Mesh(new THREE.CylinderGeometry(.0018,.0018,.064,6),gold);
+        rail.position.set(Math.cos(a)*.014,0,Math.sin(a)*.014);core.add(rail);
+      }
+      core.scale.setScalar(coreScale);
+      group.add(core); return core;
+    };
+    const parts = _equipPieces(model).map(object => ({object,position:object.position.clone(),rotation:object.quaternion.clone(),visible:object.visible}));
+    const magazine = model._mech?.mag;
+    const chamberWidth = magazine ? _eqLocalBox(magazine.g,[magazine.g]).getSize(new THREE.Vector3()).x : (model.userData.donutReceiverWidth || .028);
+    const coreScale = Math.min(.62,chamberWidth*.58/.0324);
+    const seat = magazine ? magazine.home.clone().add(new THREE.Vector3(0,-.04,0)) : new THREE.Vector3(0,.008,-.035);
+    const socket = new THREE.Group(); socket.position.copy(seat);socket.scale.setScalar(coreScale);group.add(socket);
+    const socketMat = new THREE.MeshPhongMaterial({color:0x313946,shininess:150,specular:0xd5deec});
+    for(const y of [-.036,.036])gpBox(socket,socketMat,.042,.006,.032,0,y,0);
+    for(const x of [-.019,.019])gpBox(socket,socketMat,.003,.072,.028,x,0,0);
+    rig = model._donutCoreRig = {group,old:makeCore(),fresh:makeCore(),parts,seat,chamberWidth,coreWidth:.0324*coreScale,active:false,run:0,beats:0};
+    group.traverse(o=>{if(o.isMesh){o.userData.wrapLock=true;o.castShadow=false;}});
+    model.add(group);
+  }
+  if (rig.run !== model._reloadStart) {rig.run=model._reloadStart;rig.beats=0;}
+  rig.active=true;rig.group.visible=true;
+  const open=_eqSm((t-.05)/.19)*(1-_eqSm((t-.80)/.16));
+  for (const p of rig.parts) {
+    const door = p.object === model._mech?.mag?.g || p.object.userData.donutMain;
+    p.object.position.copy(p.position);
+    // Keep the receiver's trim, barrel and stock together; only the chamber cover opens away from them.
+    p.object.position.x+=(door ? -.045 : .028)*open;
+    p.object.position.y-=(door ? .018 : 0)*open;
+    p.object.quaternion.copy(p.rotation);
+    if(door)p.object.rotateZ(-.16*open);
+  }
+  const pull=_eqSm((t-.28)/.15), discard=_eqSm((t-.43)/.09), insert=_eqSm((t-.54)/.20);
+  rig.old.position.copy(rig.seat).add(new THREE.Vector3(-.10*pull,-.06*pull-.20*discard,.02*pull));
+  rig.old.rotation.z=.35*pull;
+  rig.old.visible=t<.52;
+  rig.fresh.position.copy(rig.seat).add(new THREE.Vector3(-.10*(1-insert),-.14*(1-insert),.02*(1-insert)));
+  rig.fresh.rotation.z=.35*(1-insert);rig.fresh.visible=t>=.54;
+  const H=model._hands;
+  if (H && !H.single) {
+    const held=t<.52 ? rig.old : rig.fresh;
+    const grip=held.position.clone().add(new THREE.Vector3(-.040,-.024,-.020));
+    const weight=_eqSm((t-.14)/.12)*(1-_eqSm((t-.76)/.16));
+    H.front.visible=true;H.front.position.copy(H.frontHome).lerp(grip,weight);
+    H.front.quaternion.copy(H.frontRot ? new THREE.Quaternion().setFromEuler(H.frontRot) : new THREE.Quaternion())
+      .slerp(new THREE.Quaternion().setFromEuler(new THREE.Euler(.2,.15,-.3)),weight);
+  }
+  const home=model._homePos || model._hipPosition;
+  if(home)model.position.copy(home).add(new THREE.Vector3(-.012*open,.025*open,-.015*open));
+  model.rotation.set(.12*open,-.28*open,-.12*open);
+  for (const [i,beat] of [[.12,'click'],[.30,'clink'],[.73,'snapin'],[.94,'cling']].entries()) {
+    if(t>=beat[0] && !(rig.beats & (1<<i))) {rig.beats|=1<<i;playEquipSound(beat[1]);}
+  }
+}
+
 function updateReloadAnim() {
   const model = weaponModels[currentWeaponIdx];
   updateActiveReloadHUD();
   if (!model) return;
+  const donutReload = _activeModelSkin[WEAPONS[currentWeaponIdx]?.id]?.rarity === 'donut' && !model._inspectMode && model._reloadStart && model._reloadDur;
+  if (!donutReload || Date.now()-model._reloadStart>=model._reloadDur) resetDonutCoreReload(model);
   if (model._mech) {
     const wid = WEAPONS[currentWeaponIdx]?.id || '';
     const fx0 = _skinFxFor(wid), evs0 = (model._reloadPlan && model._reloadPlan.skin && model._reloadPlan.props) || (fx0 && fx0.reload && fx0.reload.props) || (model._reloadPlan && model._reloadPlan.props) || RELOAD_PROPS[wid];
-    const on = model._reloadStart && model._reloadDur && !model._inspectMode;
+    const on = model._reloadStart && model._reloadDur && !model._inspectMode && !donutReload;
     updateGunMech(model, wid, on ? Math.min(1, (Date.now() - model._reloadStart) / model._reloadDur) : null, evs0, model._reloadDur || 1000);
   }
   const H = model._hands;
@@ -59929,6 +60975,8 @@ function updateReloadAnim() {
     if (model._inspectMode) { clearSecretInspect(model, true); model._reloadStart = 0; }
     model._inspectMode = false; rest(); return;
   }
+
+  if (donutReload) { updateDonutCoreReload(model,t); return; }
 
   const id = WEAPONS[currentWeaponIdx]?.id || '';
   const inspecting = !!model._inspectMode;
@@ -60035,12 +61083,36 @@ function updateReloadAnim() {
                         H.rearHome.z + P.hz * 0.4);
     H.rear.rotation.set(H.rearRot.x + P.hr * 0.5, H.rearRot.y, H.rearRot.z);
   }
+  if (!inspecting && !magic && model._mech?.mag && H && !H.single) {
+    const out = evs?.find(e => e.k === 'mag' && e.m === 'eject');
+    const inn = evs?.find(e => e.k === 'mag' && e.m === 'arrive');
+    if (out && inn) {
+      const mag = model._mech.mag;
+      const grab = Math.max(0, out.t - .23), pull = Math.max(0, out.t - .13);
+      const seated = Math.min(.98, inn.t + 300 / model._reloadDur);
+      const palm = mag.g.position.clone();
+      palm.x -= .035; palm.y -= .035;
+      let weight = 0;
+      if (t < out.t) weight = _eqSm((t - grab) / Math.max(.001, pull - grab));
+      else if (t < inn.t) {
+        // Release the old mag, reach down to the pouch, then bring up its replacement.
+        const k = _eqSm((t - out.t) / Math.max(.001, inn.t - out.t));
+        palm.copy(mag.home).add(mag.withdraw);
+        palm.x -= .035; palm.y -= .035 + Math.sin(k * Math.PI) * .25;
+        weight = 1;
+      } else weight = 1 - _eqSm((t - seated) / .12);
+      H.front.position.lerp(palm, weight);
+      const gripRotation = new THREE.Quaternion().setFromEuler(new THREE.Euler(.15, .1, -.15));
+      H.front.quaternion.slerp(gripRotation, weight);
+    }
+  }
   if (secretTrack) finishSecretInspectPose(model, t, P);
 }
 
 
 
 function spawnLocalBullet(origin, dir, id, isOwn, speed, color, size, weaponId, opts = {}) {
+  if(!isOwn&&window.PVP_BATTLE_SIM?.lowEffects)return;
   // The skin's look: yours from what you wear, somebody else's from the skin id their shot carried (opts.skinId, see the bulletFired handler).
   const skinLook = isOwn ? ((typeof _modelSkinLook !== 'undefined' && _modelSkinLook[weaponId]) || null) : (opts.skinId ? skinLookById(opts.skinId) : null);
   const mesh = makeBulletMesh(color, size, weaponId, isOwn, skinLook);
@@ -60061,6 +61133,7 @@ function spawnLocalBullet(origin, dir, id, isOwn, speed, color, size, weaponId, 
   localBullets.push({ mesh, dir: flightDir, createdAt: Date.now(), id, isOwn, skinLook, ownerId: isOwn ? myId : opts.botId,
     speed: projectileBaseSpeed(weaponId, wSpec, speed) * BULLET_SPEED_MULTIPLIER * (wSpec?.bulletSpeedMult || 1), weaponId, size,
     spawnX: origin.x, spawnY: origin.y, spawnZ: origin.z, maxRange, ...opts });
+  if (isOwn && weaponId==='harpoon_gun') window.PVP_TETHER_WEAPONS?.fired(localBullets.at(-1));
 }
 
 // ── Floating damage numbers ────────────────────────────────────────────────
@@ -60350,10 +61423,13 @@ function syncBotMesh(bot, opts = {}) {
     // Left set, animateCharacters reads it again next frame and the fresh body
     // stands up still groping for a magazine.
     bot.reloadUntil = 0; bot.reloadFrom = 0;
+    bot._gunAbilityBuff=null;bot._gunAbilityPower=null;bot._gunAbilityVolley=null;bot._regularMelee=null;
+    bot._meleeCombo=0;bot._meleeAbilityAt=Date.now()+1500;bot._deflectUntil=0;
     bot.y = (typeof botGroundYAt === 'function') ? botGroundYAt(bot.x || 0, bot.z || 0, 0, 1.05, 2.2) : 0;
   }
   const mesh = remoteMeshes[bot.id];
   if (!mesh) return null;
+  if(opts.resetPose)armRemoteMesh(mesh,bot.weaponId);
   const y = Number.isFinite(bot.y) ? bot.y : 0;
   mesh.position.set(bot.x || 0, y, bot.z || 0);
   mesh.rotation.y = (bot.rotY || 0) + Math.PI;
@@ -60843,6 +61919,63 @@ function playGoldFinisher(targetId) {
   pushFeedLine('GILDED', players[targetId]?.name || 'Enemy', '#ffd24a');
   return true;
 }
+// ⚫ Oblivion: the body is drawn into the middle of itself. It goes black, spins up, is stretched thin and pulled to a point at the chest while a black hole opens there (a
+// black ball with a white ring round it, specks falling in), and then the hole itself shrinks and fades. No ragdoll.
+FINISHER_MOVES.void = function (mesh, id) {
+  const body = _finisherMat('void', 0x000000); body.color.setHex(0x000000);
+  _finisherSwap(mesh, body);
+  playSoundEvent('blackhole_collapse', { position: mesh.position, volume: 0.9, minGap: 80 });
+  const centre = mesh.position.clone(); centre.y += 1.0;
+  const holeMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 1, depthWrite: false });
+  const hole = new THREE.Mesh(new THREE.SphereGeometry(0.5, 20, 14), holeMat); hole.position.copy(centre); hole.scale.setScalar(0.01); scene.add(hole);
+  const ringMat = new THREE.MeshBasicMaterial({ color: 0xeef4ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.66, 0.035, 8, 48), ringMat); ring.position.copy(centre); ring.rotation.x = 1.15; scene.add(ring);
+  const ring2Mat = new THREE.MeshBasicMaterial({ color: 0xbfd0ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+  const ring2 = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.014, 6, 48), ring2Mat); ring2.position.copy(centre); ring2.rotation.set(1.15, 0, 0.5); scene.add(ring2);
+  const specks = []; let nextSpeck = 0, gone = false;
+  const cleanup = () => {
+    if (gone) return; gone = true;
+    scene.remove(hole, ring, ring2); hole.geometry.dispose(); holeMat.dispose(); ring.geometry.dispose(); ringMat.dispose(); ring2.geometry.dispose(); ring2Mat.dispose();
+    for (const k of specks) { scene.remove(k.m); k.m.geometry.dispose(); k.m.material.dispose(); }
+  };
+  setTimeout(cleanup, 1900);                                              // the body can be given back early (it respawned): the hole must not outlive it
+  _finisherDrive(mesh, id, 1500, (t, dt, st) => {
+    const now = performance.now();
+    const pull = _ease(Math.min(1, t / 0.6));                              // 0..1: how far into the hole the body has gone
+    const s = Math.max(0.02, 1 - pull);
+    const stretch = 1 + 0.9 * Math.sin(Math.PI * Math.min(1, pull));       // pulled long on the way in, then to a point
+    const sy = Math.max(0.02, st.s.y * s * stretch);
+    mesh.scale.set(Math.max(0.02, st.s.x * Math.pow(s, 1.35)), sy, Math.max(0.02, st.s.z * Math.pow(s, 1.35)));
+    mesh.position.set(st.p.x, st.p.y + Math.max(0, 1.0 * st.s.y - 1.0 * sy) * 0.9, st.p.z);   // the chest holds still: it is what everything falls toward
+    mesh.rotation.y = st.r.y + pull * pull * 11;
+    mesh.rotation.z = st.r.z + Math.sin(pull * 6) * 0.25 * (1 - pull);
+    const open = _ease(Math.min(1, t / 0.4)), close = t > 0.7 ? Math.max(0, 1 - (t - 0.7) / 0.3) : 1;   // it opens fast, holds, then closes and fades
+    hole.scale.setScalar(Math.max(0.01, 0.95 * open * close)); holeMat.opacity = t > 0.82 ? Math.max(0, 1 - (t - 0.82) / 0.18) : 1;
+    ring.rotation.z += 8 * dt; ring2.rotation.z -= 5 * dt;
+    ring.scale.setScalar(Math.max(0.01, (0.8 + 0.5 * open) * close)); ringMat.opacity = 0.9 * open * close;
+    ring2.scale.setScalar(Math.max(0.01, (0.6 + 0.9 * open) * close)); ring2Mat.opacity = 0.5 * open * close;
+    if (now >= nextSpeck && t < 0.75 && specks.length < 40) {              // white specks fall into the middle
+      nextSpeck = now + 28;
+      const m = new THREE.Mesh(new THREE.SphereGeometry(0.03, 5, 4), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, depthWrite: false }));
+      const d = new THREE.Vector3(Math.random() - 0.5, (Math.random() - 0.5) * 0.8, Math.random() - 0.5).normalize().multiplyScalar(1.2 + Math.random() * 0.9);
+      m.position.copy(centre).add(d); scene.add(m); specks.push({ m, from: d, born: now, life: 360 + Math.random() * 160 });
+    }
+    for (let i = specks.length - 1; i >= 0; i--) {
+      const k = specks[i], u = (now - k.born) / k.life;
+      if (u >= 1) { scene.remove(k.m); k.m.geometry.dispose(); k.m.material.dispose(); specks.splice(i, 1); continue; }
+      k.m.position.copy(centre).addScaledVector(k.from, 1 - u * u); k.m.material.opacity = 0.95 * (1 - u * 0.5);
+    }
+  }, st => { cleanup(); _spawnFinisherRing(st.p.clone(), 0xeef4ff, 1.5); });
+};
+function playVoidFinisher(targetId) {
+  const mesh = remoteMeshes[targetId];
+  if (!mesh || !mesh.visible) return false;
+  if (mesh._finisher && performance.now() < mesh._finisher.until) return true;
+  mesh._finisher = { id: 'void', until: performance.now() + 4200 };
+  FINISHER_MOVES.void(mesh, targetId);
+  pushFeedLine('ERASED', players[targetId]?.name || 'Enemy', '#e8f0ff');
+  return true;
+}
 // ❄️ Frost: the body freezes where it stands, glassy and pale, shivering harder as the frost takes it, and shatters like glass: chunks of ice fly out and turn, a spray of shards, a ring.
 function _iceChunks(pos, n) {
   for (let i = 0; i < n; i++) {
@@ -60895,6 +62028,7 @@ function _playSkinFinisher(kind, targetId) {
   if (kind === 'hack') return playGlitchFinisher(targetId);
   if (kind === 'error') return playGlitchFinisher(targetId, 'error');
   if (kind === 'gold') return playGoldFinisher(targetId);
+  if (kind === 'void') return playVoidFinisher(targetId);
   if (kind === 'frost') return playGlassFinisher(targetId);
   return false;
 }
@@ -60950,13 +62084,13 @@ function updateAmmoHint() {
       && currentWeapon && !currentWeapon.ammoRegen) {
     const pool = weaponAmmo[currentWeaponIdx];
     if (pool && pool.ammo < 900000) {                      // lobby / range: bottomless, nothing to say
-      if (pool.ammo <= 0) state = pool.reserve > 0 ? 'empty' : 'out';
-      else if (pool.ammo <= Math.max(1, Math.ceil((currentWeapon.mag || 30) * 0.25))) state = 'low';
+      if (pool.ammo <= 0) state = currentWeapon.id==='harpoon_gun' ? 'empty' : pool.reserve > 0 ? 'empty' : 'out';
+      else if (currentWeapon.id!=='harpoon_gun' && pool.ammo <= Math.max(1, Math.ceil((currentWeapon.mag || 30) * 0.25))) state = 'low';
     }
   }
   hint.className = state;
   hint.textContent = state === 'low' ? 'LOW AMMO'
-    : state === 'empty' ? (isTouchUI() ? 'TAP ↻ TO RELOAD' : 'PRESS R TO RELOAD')
+    : state === 'empty' ? (currentWeapon.id==='harpoon_gun' ? (isTouchUI() ? 'TAP ↻ TO RECALL' : 'RIGHT-CLICK TO RECALL') : isTouchUI() ? 'TAP ↻ TO RELOAD' : 'PRESS R TO RELOAD')
     : state === 'out' ? 'OUT OF AMMO · SWITCH WEAPON' : '';
   if (box) { box.classList.toggle('low', state === 'low'); box.classList.toggle('empty', state === 'empty'); box.classList.toggle('out', state === 'out'); }
   const rb = document.getElementById('btn-reload-mobile');
@@ -61177,7 +62311,7 @@ function gimmickOnHit(weaponId, pid, hitPos, dmg, opts) {
   }
 }
 function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = {}) {
-  if (match && match.boss && pid === match.boss.bot.id) bossOnHit(hitWorldPos, weaponId);   // 🛡️ a deflecting boss sends some of it back
+  if (weaponId==='swap_gun') return;
   // 🛋️ Lobby 13 is a no-combat chill zone — the cast is neutral and can't be hurt. The hit still
   // shows (grey), and the first one says why nothing happened: a gun that seems to do nothing reads
   // as broken (#35).
@@ -61201,6 +62335,14 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
   const plasmaGrow = WEAPONS.find(w => w.id === weaponId)?.plasmaGrows && hitDist != null ? 1 + 0.8 * Math.min(1, hitDist / 45) : 1;
   const dmg = Number.isFinite(opts.damageOverride) ? Math.max(0, Math.min(999, Math.round(opts.damageOverride))) : (headshot && instakill) ? 999 : Math.round(
     (headshot ? baseDmg * headshotMultFor(weaponId) : baseDmg) * synergy * falloff * plasmaGrow * (opts.wallPenetrated && gatecrasherPiercesWalls(weaponId) ? .5 : 1));
+  if (!opts.reflectedDamage) {
+    if (match?.boss && pid === match.boss.bot.id && bossOnHit(hitWorldPos, weaponId, {...opts,damageOverride:dmg})) return;
+    const guardingBot = resolveBot(pid);
+    if (!window.PVP_BATTLE_SIM?.active && guardingBot && !guardingBot.dead && (guardingBot._deflectUntil > Date.now()) && !opts.periodic && projectileWeaponSpec(weaponId) && !EXPLOSIVE_KINDS.has(projectileKind(weaponId))) {
+      reflectBotShotAtPlayer(pid,weaponId,hitWorldPos||new THREE.Vector3(guardingBot.x,1,guardingBot.z),dmg);
+      return;
+    }
+  }
   // With other real players in the match, a bot this hit kills on our screen is dead on
   // everyone's (#48): the server takes `fatal` as the kill. (Guests know a bot's HP from
   // the server's playerHit; the host from its own simulation.)
@@ -61210,7 +62352,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
     [isBot ? 'botId' : 'targetId']: pid,
     bulletId, weapon: weaponId, skin: _skinHitId(weaponId) || undefined,
     headshot, instakill, fatal, tags: killTags, wallPenetrated: !!opts.wallPenetrated,
-    damageOverride: dmg,
+    damageOverride: dmg, reflectedDamage: !!opts.reflectedDamage,
   });
   showHitmarker(headshot ? 'head' : 'hit');   // a kill below turns it red
   // Briefly tint the damage number / spawn a synergy spark for player discovery
@@ -61255,7 +62397,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
   }
   if (weaponId === 'storm_bloom_ball') _applyRootToTarget(pid, 3000, 0x9fe8ff);
   else if (weaponId === 'storm_bloom_aura') _applyRootToTarget(pid, 1000, 0x9fe8ff);
-  if (isBot) gimmickOnHit(weaponId, pid, hitWorldPos, dmg, opts);   // 🎲 the retired guns' specials
+  if (isBot && !opts.periodic) gimmickOnHit(weaponId, pid, hitWorldPos, dmg, opts);   // burn ticks cannot create another pool
   // ⚡ Only explicit stun weapons should interrupt bot AI. Cycler and Laser
   // Pointer are also "energy" visuals and fire rapidly; treating every energy
   // hit as a stun chain-locked bots forever and skipped their gravity updates.
@@ -61622,7 +62764,8 @@ function rocketExplode(pos, weaponId, excludePid, opts = {}) {
     }
   }
   if (damagePlayer && camera.position.distanceTo(pos.clone().setY(camera.position.y)) <= radius) {
-    applyBotDamageToPlayer(splashId, null);
+    if(opts.bossOwner)botHitsMe(opts.bossOwner,splashId,false);
+    else applyBotDamageToPlayer(splashId, null);
   }
 }
 // Relative-motion CCD catches two fast projectiles crossing between frames.
@@ -61824,22 +62967,26 @@ function updateBullets(dt) {
             // Shields and parry are judged HERE, when the round actually
             // arrives, so raising one mid-flight genuinely saves you.
             const piercesDefense = weaponPiercesDefenses(b.weaponId);
-            if (!isShielded() && (piercesDefense || !isRiotShieldBlocking())) {
+            if ((!isShielded() || holdingReflectKatana()) && (piercesDefense || !isRiotShieldBlocking())) {
               const _mp = meleeAbilityBuff?.type;
-              if (!piercesDefense && _mp === 'deflect') {
+              if ((holdingReflectKatana() || !piercesDefense && _mp === 'deflect') && !EXPLOSIVE_KINDS.has(projectileKind(b.weaponId))) {
                 flashHitIndicator('guard');
                 triggerDeflectImpact(at);
-                const dp = remoteMeshes[b.botId] ? remoteMeshes[b.botId].position.clone().setY(1.0)
-                                                 : camera.position.clone().setY(1.0);
-                emitHit(b.botId, `deflect_${myId}_${Date.now()}`, 'katana', dp);
+                const damage = Math.round(getClientWeaponDamage(b.weaponId) * (b.preciseHeadshot && wasHead ? headshotMultFor(b.weaponId) : 1) * projectileWallDamageScale(b,bestT));
+                reflectDamageToShooter(b.botId, b.weaponId, b.id, damage);
               } else if (piercesDefense || _mp !== 'parry') {
                 applyDotToPlayer(b.weaponId);
                 // wasHead is known here, but bot damage is not scaled by
                 // location yet, so it is deliberately not passed as if it were.
-                botHitsMe(b.botId, b.weaponId, false, projectileWallDamageScale(b, bestT) < 1);
+                botHitsMe(b.botId, b.weaponId, !!b.preciseHeadshot && wasHead, projectileWallDamageScale(b, bestT) < 1);
               } else flashHitIndicator('guard');
             } else if (!isShielded() && !piercesDefense && isRiotShieldBlocking()) {
               depleteRiotShield(CLIENT_WEAPON_DAMAGE[b.weaponId] || 25);
+            }
+            if (b.bossOwner && EXPLOSIVE_KINDS.has(projectileKind(b.weaponId))) {
+              // The direct hit already dealt damage; keep the real explosion
+              // without charging the same player for a second splash hit.
+              rocketExplode(at, b.weaponId, null, { damageRemotes: false, damagePlayer: false });
             }
             removeBullet();
             continue;
@@ -61852,7 +62999,7 @@ function updateBullets(dt) {
           if (b.skinLook && b.skinLook.hit && wallHitPt.distanceToSquared(camera.position) < 3600) skinHitFX(b.skinLook.hit, wallHitPt.clone(), false);   // their Hacker rounds puff on the wall too (close enough to see)
           spawnHitParticle(wallHitPt);
           if (EXPLOSIVE_KINDS.has(projectileKind(b.weaponId, WEAPONS.find(w => w.id === b.weaponId)))) {
-            rocketExplode(wallHitPt, b.weaponId, null, { damageRemotes: false, damagePlayer: true, skinLook: b.skinLook });
+            rocketExplode(wallHitPt, b.weaponId, null, { damageRemotes: false, damagePlayer: true, skinLook: b.skinLook, bossOwner:b.bossOwner });
           } else {
             spawnImpactMark(wallHitPt, wallHitNormal, b.weaponId);
           }
@@ -61931,8 +63078,9 @@ function updateBullets(dt) {
             t = Math.max(0, Math.min(1, (dox*sx + doy*sy + doz*sz) / segLenSq));
             cx = px0+t*sx - bx; cy = py0+t*sy - (mesh.position.y+bodyOff); cz = pz0+t*sz - bz;
             if (cx*cx + cy*cy + cz*cz < bodyR*bodyR) {
-              isBodyHit = true; hitX = px0+t*sx; hitY = py0+t*sy; hitZ = pz0+t*sz;
-              hitT = t;
+              const te = Math.max(0, t - Math.sqrt(bodyR*bodyR - (cx*cx + cy*cy + cz*cz)) / Math.sqrt(segLenSq));
+              isBodyHit = true; hitX = px0+te*sx; hitY = py0+te*sy; hitZ = pz0+te*sz;
+              hitT = te;
             }
           }
         } else {
@@ -61951,7 +63099,9 @@ function updateBullets(dt) {
       }
 
       if (wallHitPt && (!bestHit || wallHitT <= bestHit.t)) {
+        if (b.weaponId==='harpoon_gun') window.PVP_TETHER_WEAPONS?.latch(b,wallHitPt);
         spawnHitParticle(wallHitPt);
+        if(b.weaponId==='swap_gun'){if(b.isOwn)window.PVP_SWAP_PORTALS?.place(wallHitPt,wallHitNormal,b.dir);removeBullet();continue;}   // a wall: it opens a portal there
         if (!EXPLOSIVE_KINDS.has(projectileKind(b.weaponId, WEAPONS.find(w => w.id === b.weaponId))))
           spawnImpactMark(wallHitPt, wallHitNormal, b.weaponId);
         if (b.skinLook && b.skinLook.hit) skinHitFX(b.skinLook.hit, wallHitPt.clone(), false);
@@ -61985,7 +63135,7 @@ function updateBullets(dt) {
         // Flare / Signal Pistol: a burn zone where it lands (it was a glowing blob with its own point light and smoke puffs,
         // which made the screen lag: a light added to the scene recompiles every material, and each puff was another draw)
         if (b.weaponId === 'flare' || b.weaponId === 'signal_pistol') {
-          spawnBurnZone(wallHitPt, 2.4, 5, 10000, { color: WEAPONS.find(w => w.id === b.weaponId)?.bulletColor || 0xff5500 });
+          spawnBurnZone(wallHitPt, 2.4, 5, 10000, { color: WEAPONS.find(w => w.id === b.weaponId)?.bulletColor || 0xff5500, tickWeapon:b.weaponId });
         }
         // 🚀💣 Rockets AND grenades detonate on terrain impact. Keyed off the
         // projectile kind rather than two hardcoded ids, so every launcher in
@@ -62046,6 +63196,8 @@ function updateBullets(dt) {
 
       if (bestHit) {
         _bpos.copy(bestHit.pos); // use actual contact point
+        if (b.weaponId==='swap_gun') { window.PVP_TETHER_WEAPONS?.swap(b,bestHit);removeBullet();continue; }
+        if (b.weaponId==='harpoon_gun') window.PVP_TETHER_WEAPONS?.latch(b,bestHit.pos,bestHit.pid);
         const dummy = TRAINING_DUMMIES.find(d => d.id === bestHit.pid);
         if (dummy) {
           if (b.isPaintBomb) triggerPaintExplosion(_bpos.clone(), b);
@@ -63569,7 +64721,7 @@ function updateBurnZones(dt) {
   let playerInMolotov = false;
   for (let i = burnZones.length - 1; i >= 0; i--) {
     const z = burnZones[i];
-    if (now >= z.until) { scene.remove(z.mesh); if(z.hellfire)_disposeFinisherObject(z.mesh); burnZones.splice(i, 1); continue; }
+    if (now >= z.until) { scene.remove(z.mesh); if(z.hellfire)_disposeFinisherObject(z.mesh);else {z.mesh.geometry.dispose();z.mesh.material.dispose();} burnZones.splice(i, 1); continue; }
     z.mesh.material.opacity = 0.35 + 0.2 * Math.sin(now * 0.008);
     if(z.hellfire){
       z.mesh.children.forEach((flame,i)=>{flame.scale.y=.75+Math.sin(now*.018+i*2.1)*.25;});
@@ -63607,16 +64759,16 @@ function updateBurnZones(dt) {
       const botTickWeapon = z.tickWeapon || (z.molotov ? 'molotov_burn' : 'firework_launcher');
       if (pInside) {
         const wet = now < playerWetUntil && !z.acid;             // wet: a third of the heat, and nothing to catch
-        damagePlayerDOT(wet ? z.dps / 3 : z.dps, 'firework_launcher');
+        damagePlayerDOT(wet ? z.dps / 3 : z.dps, botTickWeapon);
         if (z.molotov && !wet) playerFireUntil = now + (z.igniteDur || 10000); // catch fire
       }
       for (const bot of gameBots) {
-        if (bot.dead) continue;
+        if (bot.dead || z.ownerId === bot.id) continue;
         const bdx = bot.x - z.x, bdz = bot.z - z.z;
         if (bdx*bdx + bdz*bdz < z.radius * z.radius) {
           const mesh = remoteMeshes[bot.id];
           const hitPos = mesh ? mesh.position.clone().setY(1.0) : new THREE.Vector3(bot.x, 1, bot.z);
-          emitHit(bot.id, `burn_${myId}_${now}_${bot.id}`, botTickWeapon, hitPos);
+          emitHit(bot.id, `burn_${myId}_${now}_${bot.id}`, botTickWeapon, hitPos, false, {damageOverride:z.dps,periodic:true});
           if (z.molotov) bot._fireUntil = now + (z.igniteDur || 10000);
         }
       }
@@ -63702,6 +64854,7 @@ function triggerPaintExplosion(pos, b) {
 }
 
 function spawnHitParticle(pos) {
+  if(window.PVP_BATTLE_SIM?.lowEffects)return;
   const core = new THREE.Mesh(new THREE.SphereGeometry(0.11,5,4), new THREE.MeshBasicMaterial({ color: 0xfff0aa, transparent: true, opacity: 0.95 }));
   core.position.copy(pos); scene.add(core);
   const shards = [];
@@ -63749,6 +64902,29 @@ function _bulletWorldPosById(bulletId) {
   if (!bulletId) return null;
   const b = localBullets.find(x => x.id === bulletId);
   return b ? b.mesh.position.clone() : null;
+}
+
+// The katana returns fire ONLY while its Deflect ability is on (E: a 1 s window, +0.1 s for every block, then 4 s to wait). Held and idle it is a blade and nothing more: a shot that finds you
+// then is an ordinary hit. (It used to return everything the whole time it was in your hand.) While it IS on, the katana's return is the blunt one it always was: it sends back everything that is not an explosion, even a round that ignores defences.
+function holdingReflectKatana() { return activeSlot === 'melee' && equippedMeleeItem()?.id === 'katana' && meleeAbilityBuff?.type === 'deflect' && Date.now() < meleeAbilityBuff.endTime; }
+function reflectDamageToShooter(shooterId, weaponId, bulletId, damage) {
+  const shooter = players[shooterId];
+  if (!shooter || shooterId === myId || shooter.dead || friendlyFireBlocked(shooterId) || EXPLOSIVE_KINDS.has(projectileKind(weaponId))) return false;
+  const mesh = remoteMeshes[shooterId];
+  const point = mesh ? mesh.position.clone().add(new THREE.Vector3(0, (mesh._bodyScale || 1), 0))
+    : new THREE.Vector3(shooter.x, (shooter.y || 1.65) - .48, shooter.z);
+  emitHit(shooterId, `deflect_${myId}_${bulletId || Date.now()}`, weaponId, point, false, {damageOverride:damage??getClientWeaponDamage(weaponId),reflectedDamage:true,periodic:true});
+  spawnHitParticle(point);
+  return true;
+}
+function reflectBotShotAtPlayer(botId, weaponId, origin, damage) {
+  const w = projectileWeaponSpec(weaponId);
+  if (!w || isDead || inLobby || friendlyFireBlocked(myId, botId)) return;
+  const direction = camera.position.clone().add(new THREE.Vector3(0,-.48,0)).sub(origin).normalize();
+  // The return damage is resolved once, like PvP deflection. The native round
+  // shows the ricochet; it must not deliver a second collision hit afterward.
+  spawnLocalBullet(origin,direction,`deflect_${botId}_${Date.now()}`,false,w.bulletSpeed,w.bulletColor,w.bulletSize,w.id,{visualOnly:true,_arc:0,botId,botTeam:'enemy',bossOwner:botId});
+  botHitsMe(botId,weaponId,false,false,damage??getClientWeaponDamage(weaponId));
 }
 
 // Every deflected hit buys the window a little more time (the katana: +0.1 s, up to +2 s), and a shotgun's pellets count once.
@@ -63821,7 +64997,15 @@ function triggerDeflectImpact(pos, opts = {}) {
   }
   playSoundEvent(opts.shield ? 'parry_deflect' : 'deflect_ping', { volume: opts.shield ? 0.85 : 1.05, minGap: 18 });
   spawnHitParticle(at);
-  if (katana) _katanaDeflectFx(at, sector);
+  if (katana) {
+    _katanaDeflectFx(at, sector);
+    const tape=meleeModels[selectedMeleeIdx];
+    if(tape?._tapeDeflect){
+      tape._tapeDeflect(at);
+      const ctx=getAudioCtx();
+      if(ctx)playTone(ctx,ctx.currentTime,.14,ctx.destination,1160,315,.12,'triangle');
+    }
+  }
 
   const ringMat = new THREE.MeshBasicMaterial({
     color: opts.shield ? 0xaaccff : 0xf5fbff,
@@ -64114,7 +65298,7 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ['acid', 6],
   ['explosive_barrel', 100],
   // The classic
-  ['fists', 24],
+  ['fists', 50],
   // 👑 BR vehicle guns
   ['jeep_gun', 22],
   // 🪖 ADMIN weapons + ability shots
@@ -64217,11 +65401,12 @@ function resolveBotHitsInFlight() {
 // A bot's hit on the local player. The server subtracts HP on botHitMe knowing nothing of the spawn
 // shield, a riot shield, a parry, Lobby 13 or the range, so it only hears of hits that land here —
 // it used to hear of every one, and killed shielded players showing full health (#22).
-function botHitsMe(botId, weaponId, head, wallPenetrated = false) {
+function botHitsMe(botId, weaponId, head, wallPenetrated = false, reflectedDamage) {
   _botHitHead = !!head;
-  const landed = applyBotDamageToPlayer(weaponId, botId, wallPenetrated && gatecrasherPiercesWalls(weaponId) ? Math.round(getClientWeaponDamage(weaponId) * .5) : undefined);
+  const damage = Math.round(getClientWeaponDamage(weaponId) * (head ? headshotMultFor(weaponId) : 1) * (wallPenetrated && gatecrasherPiercesWalls(weaponId) ? .5 : 1));
+  const landed = applyBotDamageToPlayer(weaponId, botId, reflectedDamage??damage, Number.isFinite(reflectedDamage));
   _botHitHead = false;
-  if (landed) socket.emit('botHitMe', { botId, weapon: weaponId, headshot: !!head, wallPenetrated });
+  if (landed) socket.emit('botHitMe', { botId, weapon: weaponId, headshot: !!head, wallPenetrated,reflectedDamage });
 }
 // A death played out here — a bot's bullet, a hazard — told to the server when other real
 // players are in the match (#48): its own sums can still say we're alive, and then nobody
@@ -64267,8 +65452,8 @@ function scheduleLocalOutOfBoundsRecovery() {
       if (me) { me.hp = matchMaxHp(); me.dead = false; }
       updateHealthHUD(matchMaxHp());
       resetCombatResources();
-      camera.position.set(DDAY_BUNKER_XS[0], 1.65, DDAY_BUNKER_Z);
-      faceToward(DDAY_BUNKER_XS[0], 0);
+      camera.position.set(H.x, 1.65, H.z);
+      faceToward(H.fx, H.fz);
       socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z, mode: currentModeId() });
       grantSpawnShield(3000);
       requestPointerLockSafe();
@@ -64379,16 +65564,20 @@ function scheduleAutoRespawnLocal() {
     requestPointerLockSafe();
   });
 }
-function applyBotDamageToPlayer(weaponId, botId, damageOverride) {
+function applyBotDamageToPlayer(weaponId, botId, damageOverride, reflectedDamage = false) {
   // While you are protected nothing lands: no damage, and none of the slow, root or fire that rides on it.
-  if (!isDead && isShielded()) return;
+  if (!isDead && isShielded() && !reflectedDamage && !holdingReflectKatana()) return;
   if (!botId && KILLFEED_HAZARDS[weaponId]) noteKillInfo(myId, null, null, false, { cause: 'hazard', label: KILLFEED_HAZARDS[weaponId] });
   else noteKillInfo(myId, botId, weaponId, _botHitHead);   // for the kill feed, should this be the one that kills
   // 🛋️ Lobby 13 is a no-combat chill zone — nobody takes damage.
   if (inLobby) return;
   if (botId && friendlyFireBlocked(myId, botId)) return;
+  if (!isDead && !reflectedDamage && holdingReflectKatana() && botId && projectileWeaponSpec(weaponId) && !EXPLOSIVE_KINDS.has(projectileKind(weaponId))) {
+    const damage=damageOverride??Math.round(getClientWeaponDamage(weaponId)*(_botHitHead?headshotMultFor(weaponId):1));
+    triggerDeflectImpact(_fallbackDeflectWorldPos());reflectDamageToShooter(botId,weaponId,null,damage);return;
+  }
   // ⚡ Admin god mode: no damage taken
-  if (adminCheats.godMode && currentUser?.isAdmin) { flashHitIndicator(); return; }
+  if (!reflectedDamage && adminCheats.godMode && currentUser?.isAdmin) { flashHitIndicator(); return; }
   // ❄️⚡ The same effects, pointed at us. Ice bleeds our speed on top of its
   // damage; energy whites out the screen for a moment. Both fall through to the
   // normal damage path below — only the Frost Blaster above deals no HP.
@@ -64430,18 +65619,22 @@ function applyBotDamageToPlayer(weaponId, botId, damageOverride) {
     return true;
   }
   const piercesDefense = weaponPiercesDefenses(weaponId);
-  if (!isDead && !isShielded() && !piercesDefense && isRiotShieldBlocking()) {
+  if (!reflectedDamage && !isDead && !isShielded() && !piercesDefense && isRiotShieldBlocking()) {
     depleteRiotShield(CLIENT_WEAPON_DAMAGE[weaponId] || 25);
     return; // The shot that breaks the shield was still absorbed by it.
   }
-  if (isDead || isShielded()) return;
-  if (!piercesDefense && (meleeAbilityBuff?.type === 'parry' || meleeAbilityBuff?.type === 'deflect')) {
+  if (isDead || !reflectedDamage && isShielded()) return;
+  if (!reflectedDamage && !piercesDefense && (meleeAbilityBuff?.type === 'parry' || meleeAbilityBuff?.type === 'deflect')) {
     flashHitIndicator('guard');
-    if (meleeAbilityBuff?.type === 'deflect') triggerDeflectImpact(_fallbackDeflectWorldPos());   // the blade takes it: the window grows, the flash and the guard follow
+    if (meleeAbilityBuff?.type === 'deflect') {
+      triggerDeflectImpact(_fallbackDeflectWorldPos());
+      reflectDamageToShooter(botId, weaponId, null, damageOverride);
+    }
     return;
   }
   if (match?.type === 'range') return;
-  const dmg = Number.isFinite(damageOverride) ? Math.max(0, Math.min(CLIENT_WEAPON_DAMAGE[weaponId] || 25, Math.round(damageOverride))) : CLIENT_WEAPON_DAMAGE[weaponId] || 25;
+  const damageCap = reflectedDamage ? 9999 : (CLIENT_WEAPON_DAMAGE[weaponId] || 25) * (_botHitHead ? headshotMultFor(weaponId) : 1);
+  const dmg = Number.isFinite(damageOverride) ? Math.max(0, Math.min(damageCap, Math.round(damageOverride))) : CLIENT_WEAPON_DAMAGE[weaponId] || 25;
   const me = players[myId];
   if (!me || !dmg) { console.warn('[damage] no me or dmg', me, dmg); return; }
   const oldHp = me.hp;
@@ -64945,6 +66138,23 @@ socket.on('sessionReplaced', async () => {
 });
 socket.on('nameRefused', () => console.warn('[auth] the server refused this name — sign in again'));
 
+socket.on('projectileDeflected', data => {
+  for (const b of localBullets) if (b.id === data.bulletId) { b._cull = true; b.mesh.visible = false; }
+  const defender = players[data.defenderId], shooter = players[data.shooterId];
+  if (!defender || !shooter) return;
+  const start = data.defenderId === myId ? camera.position.clone().add(new THREE.Vector3(0,-.35,0))
+    : (remoteMeshes[data.defenderId]?.position.clone().add(new THREE.Vector3(0,1.15,0)) || new THREE.Vector3(defender.x,defender.y-.35,defender.z));
+  const end = data.shooterId === myId ? camera.position.clone().add(new THREE.Vector3(0,-.35,0))
+    : (remoteMeshes[data.shooterId]?.position.clone().add(new THREE.Vector3(0,1.15,0)) || new THREE.Vector3(shooter.x,shooter.y-.35,shooter.z));
+  if (data.defenderId === myId) {
+    flashHitIndicator('guard');triggerDeflectImpact(start);
+    if (meleeAbilityBuff?.type === 'deflect' && Number.isFinite(data.remainingMs)) {
+      meleeAbilityBuff.endTime=Date.now()+data.remainingMs;meleeAbilityBuff.extendLeft=data.extendLeft;
+    }
+  } else { spawnHitParticle(start);playSoundEvent('deflect_ping',{position:start,remote:true,minGap:18}); }
+  const w = projectileWeaponSpec(data.weapon);
+  if (w) spawnLocalBullet(start,end.sub(start).normalize(),`reflected_${data.bulletId}`,false,w.bulletSpeed,w.bulletColor,w.bulletSize,w.id,{visualOnly:true,_arc:0});
+});
 socket.on('playerHit', data => {
   const healthOnly = data.healthEvent === 'environment' || data.healthEvent === 'heal';
   if (data.shooterId && data.weapon) noteKillInfo(data.targetId, data.shooterId, data.weapon, data.headshot, { tags: data.tags });   // for the kill feed
@@ -64956,7 +66166,7 @@ socket.on('playerHit', data => {
     return;
   }
   // If it's us and we have spawn shield, absorb the hit visually but ignore HP change
-  if (data.targetId === myId && !healthOnly && isShielded()) {
+  if (data.targetId === myId && !healthOnly && !data.reflected && !holdingReflectKatana() && isShielded()) {
     const lost = Math.max(0, (players[myId]?.hp ?? data.hp) - data.hp);
     if (lost > 0) socket.emit('healSelf', { amount: lost });   // give it back: the server took it before the shield could say no
     flashHitIndicator('guard'); // shield absorbed it; no health-damage flash
@@ -64967,7 +66177,7 @@ socket.on('playerHit', data => {
     }
     return; // don't apply HP loss
   }
-  const incomingPiercesDefense = data.targetId === myId && weaponPiercesDefenses(data.weapon);
+  const incomingPiercesDefense = data.targetId === myId && (weaponPiercesDefenses(data.weapon) || !!data.reflected);
   if (data.targetId === myId && !isDead) {
     if (data.weapon === 'storm_bloom_ball') playerRootedUntil = Math.max(playerRootedUntil, Date.now() + 3000);
     else if (data.weapon === 'storm_bloom_aura') playerRootedUntil = Math.max(playerRootedUntil, Date.now() + 1000);
@@ -64994,25 +66204,13 @@ socket.on('playerHit', data => {
     return;
   }
   // Katana deflect: absorb AND reflect damage back to nearest enemy
-  if (data.targetId === myId && !healthOnly && !incomingPiercesDefense && meleeAbilityBuff?.type === 'deflect') {
+  if (data.targetId === myId && !healthOnly && !data.reflected && (holdingReflectKatana() || !incomingPiercesDefense && meleeAbilityBuff?.type === 'deflect')) {
     const oldHp = players[myId]?.hp ?? data.hp;
     const dmgAbsorbed = Math.max(0, oldHp - data.hp);
     flashHitIndicator('guard');
     triggerDeflectImpact(_bulletWorldPosById(data.bulletId) || _fallbackDeflectWorldPos());
     if (dmgAbsorbed > 0) socket.emit('healSelf', { amount: dmgAbsorbed });
-    // Reflect: hit nearest enemy bot
-    let nearest = null, nearDist = Infinity;
-    for (const bot of gameBots) {
-      if (bot.dead || bot.team !== 'enemy') continue;
-      const d = Math.hypot(bot.x - camera.position.x, bot.z - camera.position.z);
-      if (d < nearDist) { nearDist = d; nearest = bot; }
-    }
-    if (nearest && nearDist < 30) {
-      const mesh = remoteMeshes[nearest.id];
-      const hitPos = mesh ? mesh.position.clone().setY(1.0) : camera.position.clone();
-      emitHit(nearest.id, `deflect_${myId}_${Date.now()}`, 'katana', hitPos);
-      spawnHitParticle(hitPos);
-    }
+    reflectDamageToShooter(data.shooterId, data.weapon, data.bulletId, data.damage??dmgAbsorbed);
     if (data.bulletId) {
       for (let i=localBullets.length-1; i>=0; i--) {
         if (localBullets[i].id===data.bulletId) { scene.remove(localBullets[i].mesh); localBullets.splice(i,1); break; }
@@ -65124,7 +66322,7 @@ socket.on('grapplePulled', data => {
     const bot = resolveBot(data.botId);
     if (!bot || bot.dead) return;
     const direction = new THREE.Vector3(Number(data.x) || 0, 0, Number(data.z) || 0).normalize();
-    const force = Math.max(0, Math.min(26, Number(data.force) || 0));
+    const force = Math.max(0, Math.min(data.harpoon ? 34 : 26, Number(data.force) || 0));
     bot.kbVX = direction.x * force; bot.kbVZ = direction.z * force;
     bot.yVel = Math.max(bot.yVel || 0, 2);
     return;
@@ -65132,7 +66330,7 @@ socket.on('grapplePulled', data => {
   if (isDead || match?.type === 'range') return;
   const dx = Number(data?.x) || 0;
   const dz = Number(data?.z) || 0;
-  const force = Math.max(0, Math.min(26, Number(data?.force) || 0));
+  const force = Math.max(0, Math.min(data?.harpoon ? 34 : 26, Number(data?.force) || 0));
   const len = Math.hypot(dx, dz) || 1;
   _extVel.x += (dx / len) * force;
   _extVel.z += (dz / len) * force;
@@ -65586,7 +66784,7 @@ function syncAbilityButton() {
   if (!btn) return;
   const c4Ready = placedC4s.length > 0 && activeSlot === 'support' && SUPPORT_ITEMS[selectedSupportIdx]?.id === 'c4';
   const held = heldItem();
-  const on = isTouchUI() && gameStarted && !isDead && (c4Ready || hasAbility(held));
+  const on = isTouchUI() && gameStarted && !isDead && (c4Ready || hasAbility(held) || held?.id==='harpoon_gun'&&window.PVP_TETHER_WEAPONS?.latched);
   btn.classList.toggle('ready', !!on);
   if (!on) return;
   let pct = 1;
@@ -65715,11 +66913,33 @@ function moveGrenadeWithCollision(g, dt) {
   }
   return false;
 }
+function moonMineEnemyNearby(g, previousPosition) {
+  if (!g.isOwn || g.itemRef?.id !== 'moon_mine' || inLobby) return null;
+  const owner = g.ownerId || myId, radius = g.itemRef.proximityRadius || 4;
+  // Sense along the entire frame's flight, not just its endpoint.
+  const path = new THREE.Line3(previousPosition, g.mesh.position), nearest = new THREE.Vector3();
+  for (const [id, mesh] of Object.entries(remoteMeshes)) {
+    const player = players[id];
+    if (id === owner || !player || player.dead || player.isDummy || player.hp <= 0 || !mesh.visible || friendlyFireBlocked(id, owner)) continue;
+    const target = mesh.position.clone();target.y += (mesh._rig?.hitBodyOff ?? 1) * (mesh._bodyScale || 1);
+    if (previousPosition.distanceToSquared(g.mesh.position) < 1e-10) nearest.copy(g.mesh.position);
+    else path.closestPointToPoint(target, true, nearest);
+    const distanceSq = nearest.distanceToSquared(target);
+    if (distanceSq > radius * radius) continue;
+    if (distanceSq > 1e-10) {
+      const ray = new THREE.Ray(nearest, target.clone().sub(nearest).normalize()), hit = new THREE.Vector3();
+      if (wallColliders.some(box => ray.intersectBox(box, hit) && nearest.distanceToSquared(hit) < distanceSq)) continue;
+    }
+    return nearest.clone();
+  }
+  return null;
+}
 function updateGrenades(dt) {
   dt=Math.min(dt,.1);
   const now = Date.now();
   for (let i = activeGrenades.length - 1; i >= 0; i--) {
     const g = activeGrenades[i];
+    const previousPosition = g.itemRef?.id === 'moon_mine' ? g.mesh.position.clone() : null;
     const grav = GRENADE_GRAVITY * (g.gravMult ?? 1);
     // Gravity
     g.velY -= grav * dt;
@@ -65727,6 +66947,11 @@ function updateGrenades(dt) {
       explodeSupport(g);scene.remove(g.mesh);activeGrenades.splice(i,1);continue;
     }
     if(g.mesh.position.y < -100){scene.remove(g.mesh);activeGrenades.splice(i,1);continue;}
+    const proximityHit = previousPosition && moonMineEnemyNearby(g, previousPosition);
+    if (proximityHit) {
+      g.mesh.position.copy(proximityHit);
+      explodeSupport(g);scene.remove(g.mesh);activeGrenades.splice(i,1);continue;
+    }
 
     if (g.hack) {                                                           // the Hacker Grenade: a trail of 1s and 0s, and a lamp that blinks
       if (now - (g._trailAt || 0) > 45) { g._trailAt = now; _hackDigits(g.mesh.position, 1, 0.5, 0.2, 520, 0.15); }
@@ -65826,7 +67051,7 @@ function explodeSupport(g) {
     if (item.id === 'molotov') {
       spawnExplosion(pos); playSoundEvent('fire_sizzle', { position: pos, volume: 1.0 });
       // Inside the flames: 10 dmg every 0.2s. Touch them → "on fire" 5/sec for 10s after leaving.
-      spawnBurnZone(pos, item.burnRadius || 3.2, 10, item.burnDur || 5000, { tickMs: 200, molotov: true, igniteDur: 10000 });
+      spawnBurnZone(pos, item.burnRadius || 3.2, 10, item.burnDur || 5000, { tickMs: 200, molotov: true, igniteDur: 10000, ownerId: g.ownerId });
     } else {
       spawnBurnZone(pos, item.burnRadius || 3.5, item.burnDps || 8, item.burnDur || 12000);
     }
@@ -67044,8 +68269,11 @@ function updateMeleeSwing(dt) {
       py = lerp(-0.07, -0.12, e);
       pz = lerp(-0.10, -0.44, e);
       rx = lerp(0.10, -0.05, e); rz = 0;
+    } else if ((MELEE_ITEMS[selectedMeleeIdx]?.baseId || MELEE_ITEMS[selectedMeleeIdx]?.id)==='fists' && t < .56 + (model._punchDelay || 0)*2) {
+      px=side*.09;py=-.12;pz=-.44;rx=-.05;rz=0;
     } else {
-      const s = (t - 0.40) / 0.60, e = s * (2 - s);
+      const recovery=(MELEE_ITEMS[selectedMeleeIdx]?.baseId || MELEE_ITEMS[selectedMeleeIdx]?.id)==='fists' ? .56+(model._punchDelay || 0)*2 : .40;
+      const s = Math.max(0,(t - recovery) / (1-recovery)), e = s * (2 - s);
       px = lerp(side * 0.09, side * 0.115, e);
       py = lerp(-0.12, -0.11, e);
       pz = lerp(-0.44, -0.235, e);
@@ -67486,7 +68714,7 @@ const DICE_POOL = {
        'm:scythe', 'm:sledge', 'm:combat_axe', 'm:vampire_blade', 'm:phase_blade', 'm:fire_axe', 'm:sabre', 'm:chain_hammer',
        'u:frag', 'u:dynamite', 'u:sticky_charge', 'u:bee_jar', 'u:land_mine', 'u:glitch_cube', 'u:moon_mine'],
   C:  ['machine_revolver', 'cycler', 'boombow', 'traffic_cone', 'duelist_pistol', 'cyroclasm', 'rpg', 'mortar_rifle',
-       'railgun', 'bazooka', 'sg8', 'flare',
+       'railgun', 'sg8', 'flare',
        'gravity_launcher', 'harpoon_gun', 'firework_launcher', 'shockwave_launcher', 'prism_launcher', 'airburst_projector',
        'throwing_axes', 'pulse_needle', 'lancer',
        'm:spear', 'm:knife', 'm:riot_shield', 'm:nunchucks', 'm:volt_whip', 'm:bat', 'm:shock_baton',
@@ -67992,6 +69220,22 @@ function isLoadoutOpen() {
   return el && el.style.display !== 'none' && el.style.display !== '';
 }
 
+function liveLoadoutOpen() { return loadoutMode==='live' && isLoadoutOpen(); }
+function liveLoadoutAllowed() {
+  return inLiveMatch() && !fixedKitModeActive() && ['elim','ffa','race'].includes(match.type);
+}
+function openLiveLoadout() {
+  if(!liveLoadoutAllowed()||isDead||isLoadoutOpen()||anyDialogOpen()||commsMenuOpen||KILLCAM.active||THEATER.active||pilotedVehicle||pilotedMortar)return false;
+  for(const k of Object.keys(keys))keys[k]=false;
+  shooting=false;_touchFireDown=false;
+  showLoadoutScreen('live');
+  return true;
+}
+function syncLiveLoadoutButton() {
+  const button=document.getElementById('match-loadout-btn');
+  button.hidden=!liveLoadoutAllowed()||isDead||isLoadoutOpen()||(!countdownActive&&!isTouchUI());
+}
+
 let countdownActive = false; // gates firing/abilities during pre-round countdown
 let countdownGeneration = 0;
 function runCountdown(seconds, onDone) {
@@ -68007,7 +69251,7 @@ function runCountdown(seconds, onDone) {
       overlay.style.display='none';countdownActive=false;return;
     }
     // PAUSE: if the loadout screen is open, hide countdown + re-check every 0.5s without ticking down
-    if (isLoadoutOpen()) {
+    if (isLoadoutOpen() && !liveLoadoutOpen()) {
       overlay.style.display = 'none';
       setTimeout(tick, 500);
       return;
@@ -68015,6 +69259,8 @@ function runCountdown(seconds, onDone) {
     if (remaining <= 0) {
       overlay.style.display = 'none';
       countdownActive = false;
+      syncLiveLoadoutButton();
+      document.getElementById('live-loadout-status').textContent='ROUND LIVE';
       onDone();
       return;
     }
@@ -68029,6 +69275,8 @@ function runCountdown(seconds, onDone) {
     parent.replaceChild(newNum, oldNum);
 
     lblEl.textContent = remaining === 1 ? 'GO!' : 'GET READY';
+    syncLiveLoadoutButton();
+    document.getElementById('live-loadout-status').textContent='ROUND STARTS IN '+remaining;
     remaining--;
     setTimeout(tick, 1000);
   }
@@ -68043,7 +69291,7 @@ function startMatchRound() {
   const doStart = () => {
     if (!match || match.over || match!==owner || matchEpoch!==epoch) return;
     // Hard guard: if loadout opened between countdown end and now, wait for confirm
-    if (isLoadoutOpen()) { setTimeout(doStart, 400); return; }
+    if (isLoadoutOpen() && !liveLoadoutOpen()) { setTimeout(doStart, 400); return; }
     // A new round starts clean for everyone: no fire, slow, root or stun carried over from the last one.
     clearPlayerStatusEffects();
     for (const b of gameBots) clearBotStatusEffects(b);
@@ -68055,7 +69303,7 @@ function startMatchRound() {
       isDead = false;
       placePlayerAtTeamSpawn(localPlayerTeam(), 24, 38);
       socket.emit('readyRespawn', { x: camera.position.x, z: camera.position.z, mode: currentModeId() });
-      requestPointerLockSafe();
+      if(!liveLoadoutOpen())requestPointerLockSafe();
     }
     socket.emit('mapStructureSync',{mapName:activeMapName,round:match.round || 1});
     match.roundActive = true;
@@ -68122,7 +69370,7 @@ function startMatchRound() {
     // where nobody has time to read it. It now shows on the screens where you are
     // waiting anyway — loadout, waiting, end (#29, showFunFact).
   };
-  runCountdown(5, doStart);
+  runCountdown(liveLoadoutAllowed()?3:5, doStart);
 }
 
 // The handful of announcements that still flash over the world. Everything else —
@@ -68188,6 +69436,7 @@ function clearFeed() {
 }
 
 function updateMatchHUD() {
+  syncLiveLoadoutButton();
   if (!match) return;
   if (match.type === 'campaign' || match.type === 'backrooms') { document.getElementById('match-hud').style.display = 'none'; return; }
   const hud = document.getElementById('match-hud');
@@ -69242,19 +70491,19 @@ function buildWarden() {
   const redGlow = new THREE.MeshBasicMaterial({ color: 0xff2a2a });
   const box = (w, h, d, x, y, z, m, par) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); (par || g).add(o); return o; };
   const cyl = (r0, r1, h, x, y, z, m, par, rx = 0, rz = 0, seg = 14) => { const o = new THREE.Mesh(new THREE.CylinderGeometry(r0, r1, h, seg), m); o.position.set(x, y, z); o.rotation.set(rx, 0, rz); (par || g).add(o); return o; };
-  cyl(1.2, 1.3, 0.35, 0, 0.175, 0, dark);                                                           // the pedestal it is bolted to
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(1.15, 0.05, 6, 32), orange); ring.rotation.x = Math.PI / 2; ring.position.y = 0.37; g.add(ring);
-  for (const sx of [-1, 1]) { box(0.6, 0.95, 0.7, sx * 0.55, 0.82, 0, steel); box(0.66, 0.16, 0.76, sx * 0.55, 1.12, 0, orange); }   // legs, with knee guards
-  box(1.55, 0.4, 1.05, 0, 1.45, 0, dark);                                                           // pelvis
-  const T = new THREE.Group(); T.position.y = 1.65; g.add(T);                                       // the torso: the part that turns
+  cyl(1.2, 1.3, 0.14, 0, 0.07, 0, dark);                                                           // the pedestal it is bolted to
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(1.15, 0.05, 6, 32), orange); ring.rotation.x = Math.PI / 2; ring.position.y = 0.15; g.add(ring);
+  for (const sx of [-1, 1]) { box(0.62, 0.22, 0.72, sx * 0.55, 0.25, 0, steel); box(0.66, 0.08, 0.76, sx * 0.55, 0.37, 0, orange); }   // stubby legs, with guards
+  box(1.55, 0.22, 1.05, 0, 0.44, 0, dark);                                                          // pelvis
+  const T = new THREE.Group(); T.position.y = 0.52; g.add(T);                                       // the torso: the part that turns (its middle is at 1.0, where the hit sphere is)
   box(1.5, 1.05, 1.0, 0, 0.5, 0, steel, T);
   box(1.2, 0.7, 0.06, 0, 0.5, 0.52, dark, T);
   for (let i = 0; i < 4; i++) box(0.9, 0.05, 0.04, 0, 0.25 + i * 0.14, 0.56, orange, T);          // chest vents
   const lens = new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 12), redGlow); lens.position.set(0, 0.62, 0.58); T.add(lens);   // the laser
   const lensRing = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.04, 8, 24), dark); lensRing.position.set(0, 0.62, 0.55); T.add(lensRing);
-  box(0.58, 0.42, 0.5, 0, 1.3, 0.04, dark, T);                                                      // the head
-  const eye = box(0.5, 0.1, 0.05, 0, 1.33, 0.3, redGlow, T);
-  cyl(0.02, 0.02, 0.5, 0.2, 1.7, 0, steel, T); cyl(0.02, 0.02, 0.35, -0.2, 1.65, 0, steel, T);       // antennae
+  box(0.58, 0.42, 0.5, 0, 1.15, 0.04, dark, T);                                                     // the head (its middle at 1.67)
+  const eye = box(0.5, 0.1, 0.05, 0, 1.18, 0.3, redGlow, T);
+  cyl(0.02, 0.02, 0.5, 0.2, 1.5, 0, steel, T); cyl(0.02, 0.02, 0.35, -0.2, 1.45, 0, steel, T);       // antennae
   for (const sx of [-1, 1]) { const sh = new THREE.Mesh(new THREE.SphereGeometry(0.34, 14, 10), orange); sh.position.set(sx * 0.98, 0.88, 0); T.add(sh); }
   // left arm: the minigun
   box(0.32, 0.6, 0.32, -1.0, 0.45, 0.05, steel, T);
@@ -69352,6 +70601,7 @@ function startBossFight() {
 }
 function bossCleanup() {
   const B = match && match.boss; if (!B) return;
+  B.def.cleanup?.(B);
   for (const q of B.proj) scene.remove(q.mesh);
   for (const m of B.marks) scene.remove(m.mesh);
   for (const w of B.waves) scene.remove(w.mesh);
@@ -69669,13 +70919,16 @@ BOSS_DEFS.hydra = { id: 'hydra', name: 'THE HYDRA', icon: '🐍', color: '#66ff6
 const BOSS_SHIELD = { 1: { gap: [9000, 12000], ms: 2200 }, 2: { gap: [15000, 19000], ms: 1500 }, 3: { gap: [4500, 6500], ms: 3200 } };
 function bossShieldOn(B, now) {
   const S = BOSS_SHIELD[B.phase] || BOSS_SHIELD[3];
-  B.shield = true; B.shieldUntil = now + S.ms;
-  try { socket.emit('bossShield', { id: B.bot.id, ms: S.ms + 150 }); } catch (e) {}
-  if (!B.shieldMesh) {
+  const ms = B.def.shieldMs || S.ms;
+  B.shield = true; B.shieldUntil = now + ms;
+  // Reactive katana hits are rejected before emitHit sends damage. Do not
+  // also suppress explosions/burn damage with the old all-purpose shield.
+  if (!B.def.reactiveShield) try { socket.emit('bossShield', { id: B.bot.id, ms: ms + 150 }); } catch (e) {}
+  if (!B.def.reactiveShield && !B.shieldMesh) {
     B.shieldMesh = new THREE.Mesh(new THREE.SphereGeometry(2.0, 24, 18), new THREE.MeshBasicMaterial({ color: 0x9ad8ff, transparent: true, opacity: 0.3, depthWrite: false, blending: THREE.AdditiveBlending }));
     B.shieldMesh.position.y = 1.0; B.mesh.add(B.shieldMesh);
   }
-  B.shieldMesh.visible = true;
+  if (B.shieldMesh) B.shieldMesh.visible = true;
   showAnnouncement('DEFLECT', 'Shots bounce back: wait it out', '#9ad8ff', 1100);
   try { playSoundEvent('katana_deflect', { volume: 1.0, minGap: 0 }); } catch (e) {}
 }
@@ -69684,8 +70937,9 @@ function bossShieldOff(B, now) {
   const S = BOSS_SHIELD[B.phase] || BOSS_SHIELD[3];
   B.nextShield = now + S.gap[0] + Math.random() * (S.gap[1] - S.gap[0]);
 }
-function bossOnHit(pos, weaponId) {                                                                  // called for every hit you land on the boss (see emitHit)
+function bossOnHit(pos, weaponId, opts = {}) {                                                        // called for every hit you land on the boss (see emitHit)
   const B = match && match.boss; if (!B || !B.shield || !pos) return;
+  if (B.def.blockHit) return B.def.blockHit(B, pos, weaponId, opts);
   const now = performance.now(); if (now - B.lastReflect < 140) return; B.lastReflect = now;
   const o = pos.clone(), dir = camera.position.clone(); dir.y -= 0.5; dir.sub(o).normalize();
   bossShoot('bullet', o, dir.multiplyScalar(70), { life: 2, color: 0x9ad8ff, size: 0.2, weapon: 'boss_uzi' });   // a little of it is sent back
@@ -69702,8 +70956,13 @@ function bossPhaseUp(B, phase) {
   showAnnouncement(`PHASE ${phase}`, B.def.phaseText[phase] || '', B.def.color, 2600);
   flashScreen('rgba(255,120,40,0.4)', 500); try { viewKick(0, 0.05, 500); } catch (e) {}
   try { B.def.onPhase(B, phase); } catch (e) {}
-  const me = players[myId];                                                                   // a breath: full ammo, and some health back
-  if (me && !isDead) { const to = Math.min(matchMaxHp(), me.hp + 100); socket.emit('healSelf', { amount: to - me.hp }); me.hp = to; updateHealthHUD(to); try { resetCombatResources(); } catch (e) {} }
+  const me = players[myId];
+  if (me && !isDead) {
+    if (B.def.healOnPhase !== false) {
+      const to = Math.min(matchMaxHp(), me.hp + 100); socket.emit('healSelf', { amount: to - me.hp }); me.hp = to; updateHealthHUD(to);
+    }
+    try { if (B.def.refillAmmo) B.def.refillAmmo(); else resetCombatResources(); } catch (e) {}
+  }
   B.nextAt = Date.now() + 2200; B.atk = null; B.nextShield = Date.now() + 3500;
 }
 function updateBoss(dt) {
@@ -69728,11 +70987,13 @@ function updateBoss(dt) {
   if (bot.dead) return;
   const frac = bot.hp / bot.maxHp, ph = frac > 0.66 ? 1 : frac > 0.33 ? 2 : 3;
   if (ph > B.phase) bossPhaseUp(B, ph);
-  B.rate = 1 + 2.2 * (1 - frac);                                                                  // the more you hurt it, the faster its guns fire (up to three times as fast)
-  if (!B.shield && now >= B.nextShield && !isDead) bossShieldOn(B, now);
+  B.rate = B.def.nativeWeapons ? 1 : 1 + 2.2 * (1 - frac);
+  if (B.def.updateDefense) B.def.updateDefense(B, now);
+  else if (!B.shield && now >= B.nextShield && !isDead) bossShieldOn(B, now);
   else if (B.shield) { if (now >= B.shieldUntil) bossShieldOff(B, now); else if (B.shieldMesh) B.shieldMesh.material.opacity = 0.22 + 0.12 * Math.sin(now / 90); }
   B.def.anim(B, dt, now);
-  if (B.atk) {
+  if (B.def.updateWeapons) { if (!isDead) B.def.updateWeapons(B,dt); }
+  else if (B.atk) {
     const calm = B.atk.name === 'laser' || B.atk.name === 'rail' || B.atk.name === 'spokes' || B.atk.name === 'shock';   // (a warning line or a ring does not get faster: it must stay readable)
     if (B.atk.tick(dt * (calm ? Math.min(1.5, B.rate) : B.rate))) { B.last = B.atk.name; B.atk = null; B.nextAt = now + (B.phase === 1 ? 1700 : B.phase === 2 ? 1200 : 700) / B.rate; }
   }
@@ -69743,12 +71004,14 @@ function updateBoss(dt) {
 function onBossKill(killerId, targetId) {
   const B = match && match.boss; if (!B) return;
   if (targetId === myId) {                                                                     // you fell: it wins
+    B.def.cleanup?.(B);
     B.done = true; const m = match;
     showAnnouncement('DEFEAT', `${B.def.name} stands`, '#ff4444', 2600);
     setTimeout(() => { if (match === m && !m.over) endMatch('enemy', `${B.def.icon} ${B.def.name} stands · it was down to ${Math.max(0, Math.round(B.bot.hp / B.bot.maxHp * 100))}%`); }, 1800);
     return;
   }
   if (targetId === B.bot.id) {                                                                 // it falls
+    B.def.cleanup?.(B);
     B.done = true; const m = match, at = _bossWorld(B.mesh);
     for (const q of B.proj) scene.remove(q.mesh); B.proj.length = 0;
     for (const k of B.marks) scene.remove(k.mesh); B.marks.length = 0;
@@ -70232,6 +71495,8 @@ function endMatch(winner, reason) {
   if (!match || match.over) return;
   match.over   = true;
   match.active = false;
+  discardLiveLoadout();
+  syncLiveLoadoutButton();
   contractsOnMatchEnd(winner);          // a win streak, and the contracts that were waiting on this match
   // The host's result is everyone's (#48). Not when players leaving ended it — they say so themselves.
   if (mpHost() && mpTeamMatch() && !match.forfeit) mpSend({ t: 'end', winner: winner ? absTeam(winner) : null, reason: reason || '',
@@ -71962,6 +73227,7 @@ function remoteHumanTargets() {
   return out;
 }
 function getBotTarget(bot) {
+  if (window.PVP_BATTLE_SIM?.active) return window.PVP_BATTLE_SIM.target(bot);
   // 🛋️ Lobby 13: nobody fights. The team-agnostic fallback below would otherwise
   // make the all-ally cast target (and shoot) each other — so bail out entirely.
   if (inLobby) return null;
@@ -72624,7 +73890,67 @@ function botStrategy(bot, target, dt, now) {
   return { x: dx / l * spd, z: dz / l * spd };
 }
 
-function updateBotAI(dt) {
+function botAbilityDecision(bot,w,target,dist,now,ready) {
+  const ab=w?.ability;
+  if(!ready||!ab||bot.dead||bot.difficulty==='easy'||now<(bot.nextAbilityAt||0)||bot.reloadUntil>now||bot._regularMelee)return null;
+  if(target.isPlayer&&(isShielded()||['parry','deflect'].includes(meleeAbilityBuff?.type)))return null;
+  if(dist>Math.min(36,w.auto?34:42))return null;
+  if(ab.type==='buff')return {kind:'buff',ab};
+  if(ab.type==='powershot')return {kind:'power',ab};
+  if(/^(fanfire|fanfire_all|multishot|bulletwave)$/.test(ab.type)&&bot.botAmmo>0)return {kind:'volley',ab};
+  return null;
+}
+function tickBotMeleeAbility(bot,target,dt,now,live) {
+  if(window.PVP_BATTLE_SIM?.active||inLobby||!live||bot.dead)return false;
+  let a=bot._regularMelee;
+  if(a&&now-a.start>=a.duration){
+    bot._regularMelee=null;armRemoteMesh(remoteMeshes[bot.id],bot.weaponId);a=null;
+  }
+  if(!a&&target&&bot.difficulty!=='easy'&&now>=(bot._meleeAbilityAt||0)){
+    const item=MELEE_ITEMS.find(m=>m.id===bot.meleeId&&!m.archived),ab=item?.ability;
+    const dist=Math.hypot(target.x-bot.x,target.z-bot.z);
+    const guarded=target.isPlayer&&(isShielded()||['parry','deflect'].includes(meleeAbilityBuff?.type));
+    if(item&&ab&&!guarded&&hasLineOfSight(bot.x,bot.z,target.x,target.z)){
+      const maxHp=bot.maxHp||300;
+      if(ab.type==='melee_deflect'&&now-(bot._lastHitAt||0)<1500){
+        bot._deflectUntil=now+(ab.duration||1000);bot._meleeAbilityAt=now+(ab.cd||4000);
+        a=bot._regularMelee={guard:true,item:item.id,start:now,duration:ab.duration||1000,delay:Infinity};
+        armRemoteMesh(remoteMeshes[bot.id],item.id);
+        playSoundEvent('katana_deflect',{position:new THREE.Vector3(bot.x,(bot.y||0)+1,bot.z),remote:true,minGap:50});
+      }
+      else if(ab.heal&&bot.hp<maxHp*.55){bot.hp=Math.min(maxHp,bot.hp+ab.heal);bot._meleeAbilityAt=now+Math.max(1500,ab.cd||8000);}
+      else if(dist<Math.min(8,(ab.distance||0)+(ab.reach||item.range||2.5))&&/spinslash|combo|charge|lunge|pulse|slam/.test(ab.type)){
+        const combo=ab.combo,index=bot._meleeCombo||0,spec=combo?.[index]||ab,aoe=spec.aoe||spec;
+        const dx=target.x-bot.x,dz=target.z-bot.z,len=Math.hypot(dx,dz)||1;
+        a=bot._regularMelee={item:item.id,id:aoe.id||spec.id||(spec.type==='melee_charge'?'shield_charge':item.id),start:now,
+          duration:spec.ms||spec.lock||(spec.dashTime?spec.dashTime*1000:500),delay:spec.delay??120,
+          radius:aoe.radius||spec.reach||item.range||2.5,dx:dx/len,dz:dz/len,dash:spec.distance||0,
+          spin:['whirl','spin'].includes(spec.kind)||spec.type==='melee_spinslash',spins:spec.spins||1,hits:new Set()};
+        bot._meleeCombo=combo?(index+1)%combo.length:0;
+        bot._meleeAbilityAt=now+(bot._meleeCombo?Math.max(400,spec.lock||500):Math.max(1500,ab.comboCd||ab.cd||8000));
+        armRemoteMesh(remoteMeshes[bot.id],item.id);
+        if(spec.hop||spec.leap)bot.yVel=Math.min(15,spec.hop||spec.leap);
+        playSoundEvent(a.spin?'melee_whirlwind':'melee_heavy',{volume:.65,minGap:100});
+        if(a.spin)spawnAbilityAOEFX(new THREE.Vector3(bot.x,(bot.y||0)+.6,bot.z),a.radius,0xeefaff);
+      }
+    }
+  }
+  if(!a)return false;
+  if(now-a.start<a.delay)return true;
+  const candidates=gameBots.filter(b=>!b.dead&&b.id!==bot.id&&b.team!==bot.team).map(b=>({id:b.id,x:b.x,y:b.y||0,z:b.z,bot:b}));
+  if(bot.team==='enemy'&&!isDead)candidates.push({id:myId,x:camera.position.x,y:camera.position.y-(window._crouchEye||1.65),z:camera.position.z,player:true});
+  for(const victim of candidates){
+    if(a.hits.has(victim.id)||Math.hypot(victim.x-bot.x,victim.z-bot.z)>a.radius||Math.abs(victim.y-(bot.y||0))>2.5||!hasLineOfSight(bot.x,bot.z,victim.x,victim.z))continue;
+    a.hits.add(victim.id);
+    if(victim.player)botHitsMe(bot.id,a.id,false);
+    else{
+      victim.bot.hp=Math.max(0,victim.bot.hp-getClientWeaponDamage(a.id));
+      if(victim.bot.hp<=0&&!victim.bot.dead){victim.bot.dead=true;noteKillInfo(victim.id,bot.id,a.id,false);socket.emit('hitBot',{botId:victim.id,weapon:a.id,killerId:bot.id,bulletId:'botmelee_'+bot.id+'_'+a.start,instakill:true});}
+    }
+  }
+  return true;
+}
+function updateBotAI(dt,simulation=null) {
   resolveBotHitsInFlight();   // land any bot bullets whose tracer has arrived
   if (!gameBots.length) return;
   if (M4_TOWER_MAP_NAMES.has(activeMapName)) {   // the Towers are closed rooms: a bot is never outside the wall, whatever the frame rate
@@ -72635,7 +73961,7 @@ function updateBotAI(dt) {
   // ⚡ Admin freeze: stop all bot AI entirely
   if (adminCheats.freezeBots && currentUser?.isAdmin) return;
   // Stun grenade: per-bot AI freeze
-  const __nowS = Date.now();
+  const __nowS = simulation?.now??Date.now();
   for (const b of gameBots) { if (b._stunUntil && __nowS < b._stunUntil) b._stunActive = true; else b._stunActive = false; }
   // Sweep for bodies with no owning entity roughly once a second.
   if (!window._botReconcileAt || __nowS > window._botReconcileAt) {
@@ -72643,7 +73969,7 @@ function updateBotAI(dt) {
     reconcileBotEntities();
   }
   const roundLive = !match || match.roundActive; // false only during countdown
-  const now = Date.now();
+  const now = simulation?.now??Date.now();
   const playerHp = players[myId]?.hp ?? 300; // used for melee-charge trigger
   for (const bot of gameBots) {
     // One bot must never be able to freeze the other nineteen. The loop body
@@ -72816,6 +74142,7 @@ function updateBotAI(dt) {
 
     const target = getBotTarget(bot);
     let moveX = 0, moveZ = 0;
+    tickBotMeleeAbility(bot,target,dt,now,roundLive);
 
     // ── Detect HP drop (bot was just hit) ─────────────────────────────────
     const wasHit = (bot.prevHp !== undefined && bot.hp < bot.prevHp);
@@ -73221,7 +74548,9 @@ function updateBotAI(dt) {
         bot.strafeFlipTimer = 1.2 + Math.random() * 1.8;
       }
 
-      const _strat = botStrategy(bot, target, dt, now);   // 🧠 a plan that lasts: high ground, a flank (see BOT STRATEGY)
+      const simMelee=window.PVP_BATTLE_SIM?.active && bot._simUnit!=null && MELEE_ITEMS.some(m=>m.id===bot.weaponId);
+      if(simMelee)bot.state='chase';
+      const _strat = simMelee && dist<6 ? null : simulation ? window.PVP_BATTLE_SIM.plannedMove(bot,target,dt,now,()=>botStrategy(bot,target,dt,now)) : botStrategy(bot,target,dt,now);
       // ── Movement by state ───────────────────────────────────────────────
       if (bot.state === 'melee_charge') {
         // Sprint straight at player, ignoring walls; swing when close
@@ -73347,10 +74676,10 @@ function updateBotAI(dt) {
           bot.stuckTimer -= dt;
           moveX = Math.sin(bot.wanderAngle) * 7 * dt;
           moveZ = Math.cos(bot.wanderAngle) * 7 * dt;
-        } else if (dist > 4) {
+        } else if (dist > (simMelee ? Math.max(.8,(MELEE_ITEMS.find(m=>m.id===bot.weaponId)?.range||2)*.75) : 4)) {
           const spd = 9 * dt;
           // Round the wall, not along it: with no line to the target, go to the next point of the route.
-          const wp = botNavPoint(bot, target);
+          const wp = simulation ? window.PVP_BATTLE_SIM.navigationPoint(bot,target,()=>botNavPoint(bot,target)) : botNavPoint(bot,target);
           if (wp) {
             const wx = wp.x - bot.x, wz = wp.z - bot.z, wl = Math.hypot(wx, wz) || 1;
             moveX = (wx / wl) * spd; moveZ = (wz / wl) * spd;
@@ -73363,13 +74692,14 @@ function updateBotAI(dt) {
       }
 
       // ── Shooting (all states except melee_charge which uses swings) ─────
-      if (bot.state !== 'melee_charge') {
+      if (bot.state !== 'melee_charge' && !simMelee && (!window.PVP_BATTLE_SIM?.active || window.PVP_BATTLE_SIM.canFire(bot))) {
         const w = WEAPONS.find(w => w.id === bot.weaponId) || WEAPONS[0];
         const tune = bot.tune || botTuning(bot.difficulty);
         const isDDayAttacker = bot.state === 'dday_attacker';
         // MEDIUM/HARD: bot is currently reloading? skip
         const isReloading = bot.reloadUntil && now < bot.reloadUntil;
-        const canShoot = !isReloading && !bot.diceHold;   // 🎲 a Dice Duel bot holds fire until it has rolled
+        const guardingTarget=target.isPlayer&&!weaponPiercesDefenses(w.id)&&['parry','deflect'].includes(meleeAbilityBuff?.type);
+        const canShoot = !isReloading && !bot.diceHold && !bot._regularMelee && !guardingTarget;
         // 🔫 Burst-aware fire interval. Auto weapons fire a rapid burst at
         // their REAL fireRate, then pause between bursts. Semi weapons keep
         // the old one-shot-per-interval pacing.
@@ -73413,34 +74743,30 @@ function updateBotAI(dt) {
         const aimReady = !target.isPlayer || (aimCross && aimCross.settled);
         if (hasLOS && aimCross) bot.rotY = Math.atan2(-(aimCross.x - bot.x), -(aimCross.z - bot.z));
 
-        // HARD/EXPERT: weapon ability — fire a high-damage powershot on cooldown
-        const useAbilities = bot.difficulty === 'hard' || bot.difficulty === 'expert';
-        // EXPERT: shorter ability CD + always fires opportunistically while player is reloading
-        const expertAbilityReady = bot.difficulty === 'expert' && (typeof reloading !== 'undefined' && reloading)
-                                  && now >= (bot.nextAbilityAt || 0) - 6000;
-        if (useAbilities && hasLOS && reactionDone && aimReady && roundLive && dist < 28
-            && (now >= (bot.nextAbilityAt || 0) || expertAbilityReady)
-            && !isReloading && target.isPlayer && bot.team === 'enemy'
-            && !isShielded() && !isRiotShieldBlocking()) {
-          bot.nextAbilityAt = now + (bot.difficulty === 'expert' ? 7000 : 12000) + Math.random() * 6000;
-          // Pick a high-dmg "ability" projectile based on weapon class
-          const abId = w.id === 'srx' ? 'srx' : w.id === 'lever' ? 'lever_ab'
-                     : w.id === 'railgun' ? 'railgun_ab' : w.id === 'boombow' ? 'boombow_ab'
-                     : w.id === 'hand_cannon' ? 'hand_cannon_ab' : null;
-          if (abId) {
-            applyBotDamageToPlayer(abId, bot.id);
-            const origin = new THREE.Vector3(bot.x, 1.5, bot.z);
-            const dir = new THREE.Vector3((tx - bot.x), 0, (tz - bot.z)).normalize();
-            playWeaponSound(abId, { baseWeapon: w, remote: true, position: origin, volume: 1.05 });
-            spawnLocalBullet(origin, dir, `botab_${bot.id}_${now}`, false, (w.bulletSpeed||120)*1.5, 0xffaa00, 0.10, abId);
+        if(!window.PVP_BATTLE_SIM?.active&&!inLobby){
+          const decision=botAbilityDecision(bot,w,target,dist,now,hasLOS&&reactionDone&&aimReady&&roundLive&&canShoot);
+          if(decision){
+            const ab=decision.ab;
+            bot.nextAbilityAt=now+Math.max(1000,ab.cd||8000)*(bot.difficulty==='medium'?1.2:1);
+            if(decision.kind==='buff')bot._gunAbilityBuff={weapon:w.id,until:now+(ab.duration||3000),rate:ab.rateMult||1,spread:ab.spreadMult??1,speed:ab.speedMult||1};
+            if(decision.kind==='power')bot._gunAbilityPower={weapon:w.id,id:ab.weaponAbId||w.id,speed:ab.speedMult||1,spread:ab.spreadMult??1};
+            if(decision.kind==='volley')bot._gunAbilityVolley={weapon:w.id,left:Math.min(bot.botAmmo,ab.count||w.mag||6),delay:Math.max(30,ab.delay||w.fireRate||80),id:ab.weaponAbId||w.id};
           }
         }
+        const abilityBuff=bot._gunAbilityBuff?.weapon===w.id&&now<bot._gunAbilityBuff.until?bot._gunAbilityBuff:null;
+        const abilityPower=bot._gunAbilityPower?.weapon===w.id?bot._gunAbilityPower:null;
+        const abilityVolley=bot._gunAbilityVolley?.weapon===w.id?bot._gunAbilityVolley:null;
+        const shotWeaponId=abilityPower?.id||abilityVolley?.id||w.id;
+        const shotSpeed=(w.bulletSpeed||120)*(abilityPower?.speed||abilityBuff?.speed||1);
         // While kiting (retreating from scary close weapon), reduce fire interval so they shoot while running
         const kiteFireInterval = bot._kiting ? Math.max(w.fireRate, Math.min(520, tune.fireMin)) + Math.random() * Math.min(260, tune.fireRand) : fireInterval;
         const shootRange = bot.difficulty === 'expert' ? 46 : bot.difficulty === 'hard' ? 40 : 35;
-        if (canShoot && reactionDone && aimReady && roundLive && dist < shootRange && now - bot.lastShot > kiteFireInterval) {
+        const abilityInterval=abilityVolley?abilityVolley.delay:kiteFireInterval*(abilityBuff?.rate||1);
+        if (canShoot && reactionDone && aimReady && roundLive && dist < shootRange && now - bot.lastShot > abilityInterval) {
           if (hasLOS) {
             bot.lastShot = now;
+            if(abilityPower)bot._gunAbilityPower=null;
+            if(abilityVolley&&--abilityVolley.left<=0)bot._gunAbilityVolley=null;
             // 🔫 Burst bookkeeping: start a new 4-8 round burst when empty
             if (w.auto) {
               if ((bot.burstLeft || 0) <= 0) bot.burstLeft = 8 + Math.floor(Math.random() * 9);
@@ -73463,15 +74789,19 @@ function updateBotAI(dt) {
                 bot.reloadFrom = now;      // so the third-person reload action can read its progress (#53)
                 bot.botAmmo = bot.botMag;
                 bot.burstLeft = 0; // reload interrupts the burst
+                bot._gunAbilityVolley=null;
+                if(w.ability?.shotsFromMag)bot._gunAbilityBuff=null;
               }
             }
             if (target.isPlayer) {
               /* damage happens when the bullet arrives — see updateBullets */
             } else if (target.botRef && !friendlyFireBlocked(target.botRef.id, bot.id)) {
-              target.botRef.hp = Math.max(0, target.botRef.hp - (w.damage || 25));
+              if(window.PVP_BATTLE_SIM?.active)window.PVP_BATTLE_SIM.damage(target.botRef,bot,window.PVP_BATTLE_SIM.shotDamage(bot,w,(w.damage||25)*falloffMultiplier(w.id,dist)),w.id);
+              else target.botRef.hp = Math.max(0, target.botRef.hp - getClientWeaponDamage(shotWeaponId)*falloffMultiplier(w.id,dist));
               if (target.botRef.hp <= 0 && !target.botRef.dead) {
                 target.botRef.dead = true;
-                socket.emit('hitBot', { botId: target.botRef.id, weapon: bot.weaponId,
+                if(window.PVP_BATTLE_SIM?.active)target.botRef._simKillingWeapon=bot.weaponId;
+                else socket.emit('hitBot', { botId: target.botRef.id, weapon: shotWeaponId,
                                         bulletId: `bb_${now}`, killerId: bot.id, headshot: true, instakill: true });
               }
             }
@@ -73490,7 +74820,7 @@ function updateBotAI(dt) {
             const movementSpread = botMoving ? 0.018 : 0;
             const jumpSpread = (bot.y || 0) > 0.08 ? 0.060 : 0;
             const slideSpread = now < (bot._slideUntil || 0) ? 0.035 : 0;
-            const spread = (spreadBase + movementSpread + jumpSpread + slideSpread + Math.max(0, dist - 28) / 1200) / Math.max(0.55, skill);
+            const spread = (spreadBase + movementSpread + jumpSpread + slideSpread + Math.max(0, dist - 28) / 1200) / Math.max(0.55, skill)*Math.max(.15,abilityPower?.spread??abilityBuff?.spread??1);
             // MEDIUM/HARD: bullet leading for player targets
             let aimX = target.isPlayer && aimCross ? aimCross.x : tx;
             let aimZ = target.isPlayer && aimCross ? aimCross.z : tz;
@@ -73533,15 +74863,26 @@ function updateBotAI(dt) {
             ).normalize();
             playWeaponSound(w.id, { baseWeapon: w, remote: true, position: origin, source: bot.id });
             kickCharacter(remoteMeshes[bot.id]);
-            spawnLocalBullet(origin, dir, `bot_${bot.id}_${now}`, false, w.bulletSpeed || 120,
-                             w.bulletColor, w.bulletSize, w.id, { botId: bot.id, botTeam: bot.team });
+            spawnLocalBullet(origin, dir, `bot_${bot.id}_${now}`, false, shotSpeed,
+                             w.bulletColor, w.bulletSize, shotWeaponId, { botId: bot.id, botTeam: bot.team });
             if (mpHost() && mpTeamMatch()) _botShotsOut.push({ id: bot.id, o: [origin.x, origin.y, origin.z].map(v => +v.toFixed(2)),
-                                              d: [dir.x, dir.y, dir.z].map(v => +v.toFixed(4)), w: w.id, s: w.bulletSpeed || 120 });
+                                              d: [dir.x, dir.y, dir.z].map(v => +v.toFixed(4)), w: shotWeaponId, s: shotSpeed });
           }
         }
       }
     }
 
+    if(!window.PVP_BATTLE_SIM?.active&&bot._regularMelee){
+      const a=bot._regularMelee;
+      if(a.dash){moveX=a.dx*a.dash/(a.duration/1000)*dt;moveZ=a.dz*a.dash/(a.duration/1000)*dt;}
+    }else if(target&&bot.difficulty!=='easy'){
+      const threat=target.botRef?._regularMelee;
+      const playerSwing=target.isPlayer&&(meleeDash||meleeSlam||meleeSwingT<1&&meleeAbilityBuff);
+      if(threat||playerSwing){
+        const dx=bot.x-target.x,dz=bot.z-target.z,d=Math.hypot(dx,dz);
+        if(d>0&&d<(threat?.radius||4)+2){moveX=dx/d*10*dt;moveZ=dz/d*10*dt;bot.state='flank';}
+      }
+    }
     // ☣️ Hazard avoidance — steer around damage zones (lava, acid, toxic, fire).
     // Easy bots are oblivious; medium/hard/expert dodge with rising urgency.
     if (bot.difficulty && bot.difficulty !== 'easy') {
@@ -73637,7 +74978,7 @@ function updateBotAI(dt) {
     // 🦘🛹 Bots use JUMP + SLIDE like players, flavored by personality. Only when
     // alive, grounded, and actively engaging — aggressors juke constantly, snipers/
     // campers almost never (they'd lose their aim).
-    {
+    if(!window.PVP_BATTLE_SIM?.grounded) {
       // NOTE: `dist` from the target-exists branch is out of scope here (that block
       // already closed), so recompute it locally. Referencing the old `dist` threw a
       // ReferenceError that the per-bot try/catch swallowed → bots froze like statues.
@@ -73839,7 +75180,7 @@ function updateBotAI(dt) {
   if (botMoveTimer >= BOT_MOVE_INTERVAL) {
     botMoveTimer = 0;
     const moves = gameBots.filter(b => !b.dead).map(b => ({ id: b.id, x: b.x, y: (b.y || 0) + 1.65, z: b.z, rotY: b.rotY }));
-    if (moves.length && !inLobby) socket.emit('botMove', moves);   // the lobby cast is local-only (#46)
+    if (moves.length && !inLobby && !window.PVP_BATTLE_SIM?.active) socket.emit('botMove', moves);   // local sandboxes never broadcast fighters
   }
   // This frame's bot shots, for the other real players' hitbox tests (#48)
   if (_botShotsOut.length) {
@@ -73879,7 +75220,7 @@ function animateCharacters(dt) {
         jumpTarget = eyeAboveGround > 1.82 ? Math.max(0, Math.min(1, (eyeAboveGround - 1.82) / 0.55)) : 0;
       }
     } else {
-      const now = Date.now();
+      const now = window.PVP_BATTLE_SIM?.active?window.PVP_BATTLE_SIM.now:Date.now();
       const groundY = (typeof botGroundYAt === 'function') ? botGroundYAt(b.x || 0, b.z || 0, b.y || 0, 0.9, 2.4) : 0;
       if (b._slideUntil && now < b._slideUntil) {
         crouchTarget = 1; // 🛹 bot is sliding → low profile
@@ -73904,6 +75245,12 @@ function animateCharacters(dt) {
     }
     restoreEmotePose(mesh);
     animateCharacterMesh(mesh, dt, crouchTarget, slideTarget, jumpTarget, aimPitch, reloadT);
+    if(b?._regularMelee){
+      const a=b._regularMelee,t=Math.min(1,(Date.now()-a.start)/a.duration),swing=Math.sin(t*Math.PI);
+      if(a.spin)mesh.rotation.y=(b.rotY||0)+Math.PI+t*Math.PI*2*a.spins;
+      if(mesh._rig?.armR)mesh._rig.armR.rotation.x-=a.guard?.8:swing*1.8;
+      if(mesh._gun)mesh._gun.rotation.x=a.guard?-.7:-swing*1.2;
+    }
     const p = players[id];
     const emote = EMOTES.find(e => e.id === p?.emote);
     if (!b && emote && Date.now() - p._emoteStarted < emote.duration) poseEmote(mesh, emote.id, (Date.now() - p._emoteStarted) / 1000);
@@ -73966,6 +75313,7 @@ function loop() {
   safeLoopStep('smoke-blind', () => updateSmokeBlind(Math.min((now - lastTime) / 1000, 0.05)));   // ahead of the early returns below, so entering a finale or dying clears it
   const dt = Math.min((now-lastTime)/1000, 0.05);
   lastTime = now;
+  if (window.PVP_BATTLE_SIM?.active) { safeLoopStep('battle-simulator', () => window.PVP_BATTLE_SIM.frame(dt)); return; }
   safeLoopStep('ragdoll', () => window.PVP_RAGDOLL?.tick(dt));
   if (window.PVP_BACKROOMS?.active) { safeLoopStep('backrooms', () => window.PVP_BACKROOMS.tick(dt)); return; }
   if (window.PVP_UNDERWORLD?.paused) return;
@@ -73992,6 +75340,7 @@ function loop() {
   // frame here is just removing an artificial second ceiling underneath it.
   safeLoopStep('auto-fire', () => {
     if (shooting && (activeSlot === 'primary' || activeSlot === 'secondary') && currentWeapon.auto) tryShoot();
+    else if (shooting && activeSlot === 'melee' && (equippedMeleeItem()?.baseId || equippedMeleeItem()?.id)==='fists') tryMelee();
   });
   safeLoopStep('recoil', () => updateRecoil(dt));   // the muzzle settles back between shots
   safeLoopStep('fire-shake', () => updateFireShake(dt)); // camera punch on every shot, snaps back fast
@@ -74004,6 +75353,8 @@ function loop() {
   safeLoopStep('wrap-sync', () => emitMyWrap());   // a changed wrap reaches the other players
   safeLoopStep('dots', () => updateDots());       // anything set alight keeps taking damage
   safeLoopStep('bullets', () => updateBullets(dt));
+  safeLoopStep('tether weapons', () => window.PVP_TETHER_WEAPONS?.step(dt));
+  safeLoopStep('swap portals', () => window.PVP_SWAP_PORTALS?.step(dt));
   safeLoopStep('donut-trails', () => updateDonutMotionTrails(dt));
   safeLoopStep('impact-marks', () => updateImpactMarks());
   safeLoopStep('bot-ai', () => updateBotAI(dt));
@@ -74131,13 +75482,13 @@ function loop() {
   updateBatCrowdClear(dt);
   updateMeleeSlam(dt);
   updateMeleeDash(dt);
-  updateBackstabGlide(dt);
   updateMeleeCombo(dt);
   updateScytheDash(dt);
   updateChainsawFuel(dt);
   updateAutoLunge(dt);
   updatePendingFanFire(dt);
   updateAbilityHUD();
+  updateFistStrike(dt);
   updateMeleeSwing(dt);
   updateChainMaulSwing(dt);
   updateMeleeGripPose();
@@ -74449,7 +75800,7 @@ function renderShopUpgrades(body) {
   const uniq  = [...new Set(owned)];
   for (const id of uniq) {
     const w = WEAPONS.find(x => x.id === id) || MELEE_ITEMS.find(x => x.id === id) || SUPPORT_ITEMS.find(x => x.id === id);
-    if (!w) continue;
+    if (!w || w.id==='harpoon_gun') continue;
     // Only primary/secondary upgrades affect gameplay right now — filter to slot-bearing items
     if (w.slot !== 'primary' && w.slot !== 'secondary') continue;
     const up = getWeaponUpgrades(id);
@@ -74560,13 +75911,48 @@ function decorateWeaponTier(card, item) {
   price.textContent=FREE_WEAPONS.has(item.id)?'Free starter':cost==null?'Restricted unlock':catalogPrice(cost);
   (card.querySelector('.lc-copy') || card).appendChild(price);
 }
-function catalogSkin(id){return MODEL_SKINS.find(s=>s.id===id)||MELEE_MODEL_SKINS.find(s=>s.id===id);}
+function catalogSkin(id){return MODEL_SKINS.find(s=>s.id===id)||MELEE_MODEL_SKINS.find(s=>s.id===id)||SUPPORT_MODEL_SKINS.find(s=>s.id===id);}
 const catalogSkinArt={};
 function catalogSkinImage(id){
   if(catalogSkinArt[id])return catalogSkinArt[id];
   const def=catalogSkin(id);if(!def)return '';
   const model=def.build();
   try{return (catalogSkinArt[id]=_renderWeaponIcon(model));}finally{disposeBody(model);}
+}
+function hydrateSkinPicker(panel) {
+  panel._skinPreviewCleanup?.();
+  let frame=0,stopped=false;
+  const queue=[];
+  const drain=()=>{
+    frame=0;
+    if(stopped||!panel.isConnected||panel.style.display==='none'){queue.length=0;return;}
+    const img=queue.shift();
+    if(img?.isConnected){
+      try{const src=catalogSkinImage(img.dataset.skinPreview);if(src)img.src=src;}
+      catch(e){img.style.visibility='hidden';}
+    }
+    if(queue.length)frame=requestAnimationFrame(drain);
+  };
+  const observer=new IntersectionObserver(entries=>{
+    for(const entry of entries)if(entry.isIntersecting){
+      observer.unobserve(entry.target);queue.push(entry.target);
+    }
+    if(queue.length&&!frame)frame=requestAnimationFrame(drain);
+  },{root:panel,rootMargin:'80px'});
+  panel._skinPreviewCleanup=()=>{stopped=true;observer.disconnect();cancelAnimationFrame(frame);queue.length=0;};
+  panel.querySelectorAll('.is-cell,.ms-cell,.mms-cell,.sms-cell').forEach(cell=>{
+    const id=cell.dataset.previewSkin||cell.dataset.mskin||cell.dataset.mmskin||cell.dataset.smskin;
+    const skin=id&&catalogSkin(id);
+    cell.setAttribute('role','button');cell.tabIndex=0;
+    cell.style.minWidth='0';cell.style.overflowWrap='anywhere';cell.style.touchAction='pan-y';
+    cell.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();e.stopPropagation();cell.click();}};
+    if(!skin)return;
+    cell.setAttribute('aria-label',skin.name);
+    const img=document.createElement('img');
+    img.alt=skin.name;img.dataset.skinPreview=id;img.draggable=false;
+    img.style.cssText='display:block;width:100%;height:88px;object-fit:contain;background:#20262b;border-radius:4px;margin-bottom:6px;';
+    cell.firstElementChild?.replaceWith(img);observer.observe(img);
+  });
 }
 function openShopWeaponPreview(id){
   const item=WEAPONS.find(w=>w.id===id)||MELEE_ITEMS.find(w=>w.id===id)||SUPPORT_ITEMS.find(w=>w.id===id);
@@ -74904,6 +76290,15 @@ function toggleBestLoadoutsPanel(show) {
 }
 
 let loadoutBefore = null; // the picks when the loadout opened — ← BACK puts them back
+let liveLoadoutDraft = null;
+function selectedLoadoutKit() {
+  return liveLoadoutDraft || {p:selectedPrimaryIdx,s:selectedSecondaryIdx,m:selectedMeleeIdx,u:selectedSupportIdx};
+}
+function discardLiveLoadout() {
+  if(!liveLoadoutOpen())return;
+  liveLoadoutDraft=null;
+  document.getElementById('loadout-screen').style.display='none';
+}
 function showLoadoutScreen(mode) {
   if (fixedKitModeActive()) {
     applyM4TowerKit();
@@ -74911,7 +76306,9 @@ function showLoadoutScreen(mode) {
     requestPointerLockSafe();
     return;
   }
-  if (!isLoadoutOpen()) loadoutBefore = { p: selectedPrimaryIdx, s: selectedSecondaryIdx, m: selectedMeleeIdx, u: selectedSupportIdx };
+  if(mode!=='live')discardLiveLoadout();
+  if (!isLoadoutOpen()) loadoutBefore = selectedLoadoutKit();
+  if(mode==='live')liveLoadoutDraft ||= {...loadoutBefore};
   showFunFact('loadout-screen');
   loadoutMode = mode || 'death';
   releasePointer();
@@ -74920,6 +76317,9 @@ function showLoadoutScreen(mode) {
   document.getElementById('loadout-exit-btn').textContent =
     (inLiveMatch() && loadoutMode === 'death') ? '🚪 LEAVE MATCH' : '← BACK';
   const screen = document.getElementById('loadout-screen');
+  screen.querySelector('#best-loadouts-btn').hidden=!!liveLoadoutDraft;
+  screen.querySelector('#live-loadout-status').hidden=!liveLoadoutDraft;
+  if(liveLoadoutDraft&&!countdownActive)screen.querySelector('#live-loadout-status').textContent='ROUND LIVE';
   const pList  = document.getElementById('loadout-primary-list');
   const sList  = document.getElementById('loadout-secondary-list');
   const mList  = document.getElementById('loadout-melee-list');
@@ -74962,6 +76362,7 @@ function showLoadoutScreen(mode) {
   const rerenderLoadout = () => showLoadoutScreen(loadoutMode); // re-paint with fresh state
   // The SKINS button: shows on the card you have picked. Everything that can dress that weapon is behind it.
   function addSkinsButton(card, kind, id) {
+    if(liveLoadoutDraft)return;
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'lc-skins-btn'; b.textContent = '🎨 SKINS';
     b.addEventListener('click', e => { e.stopPropagation(); openItemSkins(kind, id, rerenderLoadout); });
@@ -75044,6 +76445,12 @@ function showLoadoutScreen(mode) {
 
   // Always pre-select previous loadout when one exists; only fall back to defaults the very first time
   const readyBtn = document.getElementById('loadout-ready-btn');
+  readyBtn.textContent=liveLoadoutDraft?'APPLY LOADOUT':'READY';
+  if(liveLoadoutDraft){
+    const {p,s,m,u}=liveLoadoutDraft;
+    for(const card of [cardEls[p],cardEls[s],meleeEls[m],supportEls[u]])card?.classList.add('selected');
+    readyBtn.disabled=false;readyBtn.style.pointerEvents='all';
+  }else{
   if (selectedPrimaryIdx != null && WEAPONS[selectedPrimaryIdx]?.skinOnly) {
     const r = resolveWeaponLoadoutId(WEAPONS[selectedPrimaryIdx].id);
     selectedPrimaryIdx = findWeaponIdx(r.id);
@@ -75082,12 +76489,14 @@ function showLoadoutScreen(mode) {
     readyBtn.disabled = !loadoutReady();
     readyBtn.style.pointerEvents = loadoutReady() ? 'all' : 'none';
   }
+  }
 
   // Update title label to show context
   const title = screen.querySelector('h2');
   if (title) title.textContent = loadoutMode === 'swap' ? 'SWAP LOADOUT' : 'SELECT LOADOUT';
 
   screen.style.display = 'flex';
+  syncLiveLoadoutButton();
   window.PVP_LOADOUT_HUB?.mount(screen);
   hydrateLoadoutPreviews(screen);
   if (loadoutMode === 'death' && gameStarted && match && !match.over && loadoutReady()) startAutoRespawn();
@@ -75136,7 +76545,8 @@ function pickLoadoutWeapon(idx, isPrimary, card) {
   const listId = isPrimary ? 'loadout-primary-list' : 'loadout-secondary-list';
   document.querySelectorAll(`#${listId} .loadout-card`).forEach(c => c.classList.remove('selected'));
   card.classList.add('selected');
-  if (isPrimary) selectedPrimaryIdx = idx; else selectedSecondaryIdx = idx;
+  if(liveLoadoutDraft)liveLoadoutDraft[isPrimary?'p':'s']=idx;
+  else if (isPrimary) selectedPrimaryIdx = idx; else selectedSecondaryIdx = idx;
   const ready = document.getElementById('loadout-ready-btn');
   const bothChosen = loadoutReady();
   ready.disabled = !bothChosen;
@@ -75147,7 +76557,7 @@ function pickLoadoutWeapon(idx, isPrimary, card) {
 function pickMelee(idx, card) {
   document.querySelectorAll('#loadout-melee-list .loadout-card').forEach(c => c.classList.remove('selected'));
   card.classList.add('selected');
-  selectedMeleeIdx = idx;
+  if(liveLoadoutDraft)liveLoadoutDraft.m=idx;else selectedMeleeIdx = idx;
   const ready = document.getElementById('loadout-ready-btn');
   ready.disabled = !loadoutReady();
   ready.style.pointerEvents = loadoutReady() ? 'all' : 'none';
@@ -75156,7 +76566,7 @@ function pickMelee(idx, card) {
 function pickSupport(idx, card) {
   document.querySelectorAll('#loadout-support-list .loadout-card').forEach(c => c.classList.remove('selected'));
   card.classList.add('selected');
-  selectedSupportIdx = idx;
+  if(liveLoadoutDraft)liveLoadoutDraft.u=idx;else selectedSupportIdx = idx;
   const ready = document.getElementById('loadout-ready-btn');
   ready.disabled = !loadoutReady();
   ready.style.pointerEvents = loadoutReady() ? 'all' : 'none';
@@ -75667,6 +77077,23 @@ function renderStagingLobby() {
 
 function confirmLoadout() {
   cancelAutoRespawn();
+  if(liveLoadoutOpen()){
+    const kit=liveLoadoutDraft,previous=loadoutBefore;
+    discardLiveLoadout();syncLiveLoadoutButton();
+    if(!liveLoadoutAllowed()||!kit)return;
+    const used=match.liveKitUses ||= {guns:new Set([previous.p,previous.s]),utilities:new Set([previous.u])};
+    for(const idx of [kit.p,kit.s]){
+      if(used.guns.has(idx))continue;
+      const w=applyUpgrades(WEAPONS[idx]);
+      if(w.id!=='harpoon_gun'||!window.PVP_TETHER_WEAPONS?.deployed)weaponAmmo[idx]={ammo:w.mag,reserve:w.reserve};
+      used.guns.add(idx);
+    }
+    if(!used.utilities.has(kit.u)){supportUses[kit.u]=SUPPORT_ITEMS[kit.u].uses;used.utilities.add(kit.u);}
+    ({p:selectedPrimaryIdx,s:selectedSecondaryIdx,m:selectedMeleeIdx,u:selectedSupportIdx}=kit);
+    if(isDead){if(match.type==='elim')watchEliminationRound();return;}
+    equipActiveSlot();broadcastHeldWeapon();requestPointerLockSafe();
+    return;
+  }
   // Guard: both slots must be chosen (belt-and-suspenders against spurious mobile touch events)
   if (!loadoutReady()) return;
   sanitizeLoadoutSlots();       // and the right kind in each: a primary in the secondary slot is put right here
@@ -75721,6 +77148,7 @@ function releasePointer() {
   if (document.pointerLockElement && document.exitPointerLock) document.exitPointerLock();
 }
 function requestPointerLockSafe() {
+  if (window.PVP_BATTLE_SIM?.active) return;
   if (!renderer.domElement.requestPointerLock) return;
   try {
     const lock = renderer.domElement.requestPointerLock();
@@ -75936,12 +77364,13 @@ function passwordProblem(pw, username) {
 }
 
 const AUTH_BASE = SERVER.base;
-async function authRequest(url, body, method = 'POST') {
+async function authRequest(url, body, method = 'POST', options = {}) {
   try {
     const r = await fetch(AUTH_BASE + url, method === 'GET' ? {} : {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      keepalive: !!options.keepalive,
     });
     return await r.json();
   } catch (e) {
@@ -76021,6 +77450,7 @@ async function login() {
   if (saved && saved.guest && (!name || name === saved.username)) {
     const r = await authRequest('/auth/login', { username: saved.username, password: saved.password });
     if (r && r.ok) { finishLogin(r, saved); return; }
+    if (r?.error !== 'user not found') { setAuthStatus(r?.error || 'Could not reopen your guest account. Try again.', '#ff6666'); return; }
     // (the server lost it — fall through and make a fresh guest with the same nickname)
   }
   // A nickname you typed is yours or nobody's: taken → say so, offer a free one, stay here. It used
@@ -76239,6 +77669,9 @@ function afterDeath(ms, fn) {
 // Everything a finished match (or Lobby 13) leaves behind that the next start must not
 // inherit. Shared by the mode menu and the end-of-match buttons so they can't drift apart.
 function teardownMatchWorld() {
+  discardLiveLoadout();
+  document.getElementById('match-loadout-btn').hidden=true;
+  window.PVP_BATTLE_SIM?.stop();
   window.PVP_RAGDOLL?.clear();
   window.PVP_BACKROOMS?.stop();
   window.PVP_UNDERWORLD?.stop();
@@ -77453,7 +78886,7 @@ async function spinWheel() {
 // Apply weapon upgrades to a base weapon definition for the current user.
 // Returns a shallow-cloned object with scaled damage/mag/reloadTime.
 function applyUpgrades(w) {
-  if (!w || !currentUser || !currentUser.upgrades) return w;
+  if (!w || w.id==='harpoon_gun' || !currentUser || !currentUser.upgrades) return w;
   const up = currentUser.upgrades[w.id];
   if (!up) return w;
   const clone = { ...w };
@@ -77465,6 +78898,7 @@ function applyUpgrades(w) {
 }
 
 function selectMode(modeId) {
+  if (modeId === 'battle_simulator' && window.PVP_BATTLE_SIM) { window.PVP_BATTLE_SIM.open(); return; }
   if (ARCHIVED_MODES.has(modeId)) { try { showAnnouncement('ARCHIVED', 'That mode has been retired · here is FFA instead', '#ffcc66', 2600); } catch (e) {} modeId = 'ffa5'; }
   if (modeId === 'backrooms' && window.PVP_BACKROOMS) { window.PVP_BACKROOMS.open(); return; }
   if (modeId === 'underworld' && window.PVP_UNDERWORLD) { window.PVP_UNDERWORLD.open(); return; }
@@ -77756,7 +79190,7 @@ function openItemSkins(kind, id, onClose, alwaysOnClose = false) {
   const bg = sw => `linear-gradient(90deg, ${sw[0]} 0 50%, ${sw[1]} 50% 100%)`;
   const cell = o => {
     const n = picks.push(o) - 1, edge = o.on ? '#ffdd55' : '#444';
-    return `<div class="is-cell" data-pick="${n}" style="cursor:${o.locked ? 'not-allowed' : 'pointer'};opacity:${o.locked ? 0.5 : 1};border:2px solid ${edge};border-radius:6px;padding:8px;background:${o.on ? '#2a2410' : '#1d1a12'};">
+    return `<div class="is-cell" data-pick="${n}" data-preview-skin="${o.skinId || ''}" aria-pressed="${!!o.on}" style="cursor:${o.locked ? 'not-allowed' : 'pointer'};opacity:${o.locked ? 0.5 : 1};border:2px solid ${edge};border-radius:6px;padding:8px;background:${o.on ? '#2a2410' : '#1d1a12'};">
       <div style="height:30px;border-radius:4px;border:1px solid #000;margin-bottom:6px;background:${o.bg};"></div>
       <div style="font-size:11px;letter-spacing:1px;color:${o.on ? '#ffdd55' : '#ddd'};">${o.locked ? '🔒 ' : ''}${escHtml(o.name)}${o.on ? ' ✔' : ''}</div>
       ${o.sub ? `<div style="font-size:9px;color:#998;margin-top:3px;line-height:1.3;">${escHtml(o.sub)}</div>` : ''}
@@ -77785,7 +79219,7 @@ function openItemSkins(kind, id, onClose, alwaysOnClose = false) {
           const legend = isLegendLocked(ms), locked = (GATED_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id)) || legend;
           const note = legend ? ffaLegendProgressText() : GEN2_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id) ? 'Pull from Gen 2 cases.'
             : TOWER_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id) ? 'Escape the Zombie Tower to get this one.' : locked ? 'Open Gen 1 cases in Lobby 13.' : '';
-          return { name: ms.name, sub: ms.blurb, bg: bg(ms.sw), on: onModel === ms.id, locked, note,
+          return { skinId: ms.id, name: ms.name, sub: ms.blurb, bg: bg(ms.sw), on: onModel === ms.id, locked, note,
             run: () => { if (locked) { alert(note || 'Locked.'); return false; } setModelSkin(id, ms.id); } };
         });
         sections.push(section('WEAPON MODEL', 'Replaces the gun itself, not its colour. Same stats and reload.', [cell(stockCell(!onModel, () => setModelSkin(id, null))), ...cells.map(cell)]));
@@ -77802,7 +79236,7 @@ function openItemSkins(kind, id, onClose, alwaysOnClose = false) {
         const cells = models.map(ms => {
           const legend = isLegendLocked(ms), gen2 = GEN2_MELEE_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id), locked = legend || gen2;
           const note = legend ? 'FFA Legend skins are earned in FFA.' : gen2 ? 'Pull from Gen 2 cases.' : '';
-          return { name: ms.name, sub: ms.blurb, bg: bg(ms.sw), on: onModel === ms.id, locked, note,
+          return { skinId: ms.id, name: ms.name, sub: ms.blurb, bg: bg(ms.sw), on: onModel === ms.id, locked, note,
             run: () => { if (locked) { alert(note); return false; } setMeleeModelSkin(id, ms.id); } };
         });
         sections.push(section('MODEL', 'Replaces the weapon itself. Same damage, reach and ability.', [cell(stockCell(!onModel, () => setMeleeModelSkin(id, null))), ...cells.map(cell)]));
@@ -77812,7 +79246,7 @@ function openItemSkins(kind, id, onClose, alwaysOnClose = false) {
       if (models.length) {
         const cells = models.map(ms => {
           const gen2 = GEN2_SUPPORT_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id), note = gen2 ? 'Pull from Gen 2 cases.' : '';
-          return { name: ms.name, sub: ms.blurb, bg: bg(ms.sw), on: onModel === ms.id, locked: gen2, note,
+          return { skinId: ms.id, name: ms.name, sub: ms.blurb, bg: bg(ms.sw), on: onModel === ms.id, locked: gen2, note,
             run: () => { if (gen2) { alert(note); return false; } setSupportModelSkin(id, ms.id); } };
         });
         sections.push(section('MODEL', 'A different thing in your hand. Same throw, same blast, same uses.', [cell(stockCell(!onModel, () => setSupportModelSkin(id, null))), ...cells.map(cell)]));
@@ -77854,10 +79288,13 @@ function openItemSkins(kind, id, onClose, alwaysOnClose = false) {
       if (r === false) return;
       changed = true;
       const top = panel.scrollTop;
+      const selected=el.dataset.pick;
       render(); panel.scrollTop = top;
+      panel.querySelector(`[data-pick="${selected}"]`)?.focus({preventScroll:true});
     }));
+    hydrateSkinPicker(panel);
   };
-  const close = () => { panel.style.display = 'none'; if ((changed || alwaysOnClose) && onClose) onClose(); };
+  const close = () => { panel._skinPreviewCleanup?.(); panel.style.display = 'none'; if ((changed || alwaysOnClose) && onClose) onClose(); };
   render();
 }
 
@@ -77870,6 +79307,8 @@ function openWeaponSkinsPanel() {
     panel.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9900;background:#16140e;border:2px solid #ccaa44;border-radius:8px;padding:22px;color:#fff;font-family:"Courier New",monospace;width:440px;max-height:80vh;overflow-y:auto;box-shadow:0 4px 30px rgba(0,0,0,0.6);';
     document.body.appendChild(panel);
   }
+  const previousScroll=panel.style.display==='block'?panel.scrollTop:0;
+  panel.style.width='min(760px,94vw)';panel.style.boxSizing='border-box';
   panel.style.display = 'block';
   // Model skins are per weapon and replace the gun itself, so they get their
   // own section rather than a swatch in a grid that applies to everything.
@@ -78210,8 +79649,10 @@ function openWeaponSkinsPanel() {
       openWeaponSkinsPanel(); // refresh highlight
     });
   });
-  document.getElementById('ws-close').addEventListener('click', () => panel.style.display = 'none');
+  document.getElementById('ws-close').addEventListener('click', () => {panel._skinPreviewCleanup?.();panel.style.display = 'none';});
   panel.querySelector('#ws-stealth-open').onclick = () => PVE_STEALTH_SHOWROOM.open();
+  hydrateSkinPicker(panel);
+  panel.scrollTop=previousScroll;
 }
 const _wsBtn = document.getElementById('weapon-skins-btn');
 if (_wsBtn) {
@@ -78462,6 +79903,7 @@ async function logOut() {
     ? 'Log out? This guest profile only lives on this device — you won\'t be able to get it back.'
     : 'Log out? You\'ll have to sign in again.';
   if (!await uiConfirm(msg)) return;
+  window.PVP_PLAYER_RECORD?.flush();
   localStorage.removeItem('pvp_user');
   currentUser = null;
   refreshLegendSkins();              // logged out: an equipped Legend goes back to stock
@@ -79132,6 +80574,11 @@ document.querySelectorAll('.map-card').forEach(card => {
 });
 syncAdminCustomMapCards();
 document.getElementById('loadout-exit-btn').addEventListener('click', () => {
+  if(liveLoadoutOpen()){
+    discardLiveLoadout();syncLiveLoadoutButton();
+    if(!isDead)requestPointerLockSafe();
+    return;
+  }
   if (inLiveMatch() && loadoutMode === 'death') { leaveMatch('menu'); return; }
   cancelAutoRespawn();
   if (loadoutBefore) ({ p: selectedPrimaryIdx, s: selectedSecondaryIdx, m: selectedMeleeIdx, u: selectedSupportIdx } = loadoutBefore);
@@ -79144,6 +80591,7 @@ document.getElementById('loadout-exit-btn').addEventListener('click', () => {
   }
   requestPointerLockSafe();                                           // SWAP: back to the fight, kit unchanged
 });
+document.getElementById('match-loadout-btn').addEventListener('click',openLiveLoadout);
 document.getElementById('loadout-ready-btn').addEventListener('click', confirmLoadout);
 document.getElementById('loadout-ready-btn').addEventListener('touchstart', e => { e.preventDefault(); confirmLoadout(); }, { passive: false });
 // Change loadout while waiting between rounds in elim mode
@@ -79304,6 +80752,7 @@ document.getElementById('btn-ads').addEventListener('touchstart', e => {
 document.getElementById('btn-reload-mobile').addEventListener('touchstart', e => {
   e.stopPropagation(); e.preventDefault();
   if (activeSlot !== 'primary' && activeSlot !== 'secondary') return;
+  if (currentWeapon?.id==='harpoon_gun') { window.PVP_TETHER_WEAPONS?.recall();return; }
   const pool = weaponAmmo[currentWeaponIdx];
   if (reloading) tryActiveReload();
   else if (!currentWeapon.noReload && pool.ammo < currentWeapon.mag && pool.reserve > 0) startReload();

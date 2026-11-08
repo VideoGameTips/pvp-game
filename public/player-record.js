@@ -3,8 +3,10 @@
   const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const number = value => Number.isFinite(value) ? Number(value.toFixed(4)).toLocaleString('en-US', {maximumFractionDigits:4}) : value === Infinity ? 'Unlimited' : '\u2014';
   const time = seconds => seconds < 60 ? `${Math.floor(seconds)}s` : `${Math.floor(seconds / 3600)}h ${Math.floor(seconds % 3600 / 60)}m`;
-  const empty = () => ({since:Date.now(),seconds:0,wins:0,losses:0,draws:0,streak:0,best:0,kills:0,weapons:{}});
+  const empty = () => ({since:Date.now(),seconds:0,wins:0,losses:0,draws:0,streak:0,best:0,kills:0,lastResult:0,weapons:{}});
   let profile = null, record = empty(), lastTick = performance.now(), dirty = false, saveAt = 0, lastFocus = null;
+  let device = null, others = null, uploaded = '', uploadAt = 0, pending = null;
+  const totals = ['seconds','wins','losses','draws','kills'];
   const results = new WeakSet();
   function baseWeapon(id) {
     if(typeof resolveMeleeLoadoutId==='function')id=resolveMeleeLoadoutId(id).id;
@@ -13,16 +15,44 @@
   }
   function save() {
     if (!profile || !dirty) return;
-    try { localStorage.setItem('pvp_player_record_v1:' + profile, JSON.stringify(record)); dirty = false; } catch (_) {}
+    try { localStorage.setItem('pvp_player_record_v1:' + profile, JSON.stringify({...record,device})); dirty = false; } catch (_) {}
+  }
+  function combined() {
+    const out=JSON.parse(JSON.stringify(record));
+    if (!others) return out;
+    for (const key of totals) out[key]+=others[key];
+    out.since=Math.min(out.since,others.since);out.best=Math.max(out.best,others.best);
+    if (others.lastResult>out.lastResult) out.streak=others.streak;
+    for (const [id,use] of Object.entries(others.weapons)) {
+      const sum=out.weapons[id] ||= {seconds:0,kills:0};sum.seconds+=use.seconds;sum.kills+=use.kills;
+    }
+    return out;
+  }
+  function upload(keepalive=false) {
+    if (!profile || !device || currentUser?.username!==profile || !currentUser.password) return;
+    save();
+    const snapshot=JSON.stringify(record);
+    if (snapshot===uploaded || (pending&&!keepalive)) return pending;
+    const name=profile, id=device;
+    uploadAt=performance.now();
+    const request=authRequest('/profile/career',{username:name,password:currentUser.password,device:id,record:JSON.parse(snapshot)},'POST',{keepalive}).then(result=>{
+      if (!result?.ok || profile!==name || device!==id) return;
+      others=result.others;
+      if (JSON.stringify(record)===snapshot) { record=result.record;uploaded=JSON.stringify(record);dirty=true;save(); }
+      const panel=document.getElementById('player-record-panel');
+      if (panel?.style.display==='flex'&&view==='overview') overview(panel);
+    }).finally(()=>{if(pending===request)pending=null;});
+    pending=request;return request;
   }
   function sync() {
     const username = currentUser?.username || null;
     if (username !== profile) {
-      save(); profile = username; record = empty();
+      save(); profile = username; record = empty();device=null;others=null;uploaded='';pending=null;
       try {
         const saved = JSON.parse(localStorage.getItem('pvp_player_record_v1:' + profile) || 'null');
         if (saved && typeof saved.weapons === 'object' && saved.weapons) {
-          for (const key of ['since','seconds','wins','losses','draws','streak','best','kills']) {
+          if (typeof saved.device==='string' && /^[a-f0-9]{32}$/.test(saved.device)) device=saved.device;
+          for (const key of ['since',...totals,'streak','best','lastResult']) {
             if (Number.isFinite(saved[key]) && saved[key] >= 0) record[key] = saved[key];
           }
           for (const [id, use] of Object.entries(saved.weapons)) {
@@ -30,12 +60,17 @@
           }
         }
       } catch (_) {}
+      if (profile) {
+        device ||= Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,'0')).join('');
+        dirty=true;save();upload();
+      }
       lastTick = performance.now();
     }
     return record;
   }
   function tick(now = performance.now()) {
     sync();
+    if (now-uploadAt>=60000) upload();
     const delta = Math.max(0, Math.min(2, (now - lastTick) / 1000)); lastTick = now;
     if (!profile || document.hidden || !gameStarted) return;
     record.seconds += delta; dirty = true;
@@ -52,13 +87,13 @@
     if (draw) record.draws++;
     else if (won) { record.wins++; record.streak++; record.best = Math.max(record.best, record.streak); }
     else { record.losses++; record.streak = 0; }
-    dirty = true; save();
+    record.lastResult=Date.now();dirty = true; save();upload();
   }
   function kill(id) {
     sync(); if (!profile || inLobby || !match || match.over || ['range','aim_trainer'].includes(match.type)) return;
     id=baseWeapon(id);
     record.kills++; record.weapons[id] ||= {seconds:0,kills:0}; record.weapons[id].kills++;
-    dirty = true;
+    dirty = true;save();
   }
   const groups = () => [
     ...WEAPONS.filter(w => !w.archived && !w.skinOnly && !w.modeOnly && !w.ddayOnly).map(item => ({item,slot:item.slot === 'secondary'?'Secondary':'Primary',kind:'gun'})),
@@ -121,11 +156,12 @@
     if (lastFocus?.isConnected) lastFocus.focus();
   }
   function overview(panel) {
-    const r = sync(), total = r.wins+r.losses+r.draws;
+    sync();
+    const r = combined(), total = r.wins+r.losses+r.draws;
     const available = new Set(groups().map(entry => entry.item.id));
     const favourites = Object.entries(r.weapons).filter(([id])=>available.has(id)).sort((a,b) => b[1].seconds-a[1].seconds || b[1].kills-a[1].kills).slice(0,5);
     const name = id => [...WEAPONS,...MELEE_ITEMS,...SUPPORT_ITEMS].find(w=>w.id===id)?.name || id;
-    panel.querySelector('.pr-content').innerHTML = `<div class="pr-overview"><h2>${escape(currentUser?.username || 'Player')}</h2><p class="pr-provenance">This device \u00b7 recorded since ${escape(new Date(r.since).toLocaleDateString())}</p>${section('Player record',[
+    panel.querySelector('.pr-content').innerHTML = `<div class="pr-overview"><h2>${escape(currentUser?.username || 'Player')}</h2><p class="pr-provenance">${others?'Account record':'This device'} \u00b7 recorded since ${escape(new Date(r.since).toLocaleDateString())}</p>${section('Player record',[
       ['Recorded playtime',time(r.seconds)], ['Win rate',total?number(r.wins / total * 100)+'%':'\u2014'],
       ['Matches',number(total)], ['Wins / losses / draws',`${r.wins} / ${r.losses} / ${r.draws}`],
       ['Current win streak',number(r.streak)],['Highest win streak',number(Math.max(r.best,currentUser?.bestStreak||0))],
@@ -176,7 +212,8 @@
     if(!button){button=document.createElement('button');button.id='lobby-record-btn';button.textContent='STATS';button.onclick=()=>open();document.body.appendChild(button);}
     button.hidden=!show;
   }
-  window.PVP_PLAYER_RECORD={open,showLobbyButton,result,kill,tick,get snapshot(){return JSON.parse(JSON.stringify(sync()));},weaponDetails};
+  function flush(){sync();save();return upload(true);}
+  window.PVP_PLAYER_RECORD={open,showLobbyButton,result,kill,tick,flush,get snapshot(){sync();return combined();},weaponDetails};
   window.addEventListener('DOMContentLoaded',()=>{
     const button=document.createElement('button');button.id='player-record-btn';button.textContent='STATS';button.onclick=()=>open();
     document.getElementById('mode-tools')?.appendChild(button);
@@ -185,7 +222,7 @@
     const panel=document.getElementById('player-record-panel');
     if(e.key==='Escape'&&panel?.style.display==='flex'){e.preventDefault();e.stopImmediatePropagation();close();}
   },true);
-  document.addEventListener('visibilitychange',()=>{lastTick=performance.now();save();});
-  window.addEventListener('pagehide',save);
+  document.addEventListener('visibilitychange',()=>{lastTick=performance.now();if(document.hidden)flush();});
+  window.addEventListener('pagehide',flush);
   setInterval(()=>tick(),1000);
 })();

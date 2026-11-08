@@ -1,0 +1,25 @@
+#battle-sim{position:fixed;inset:0;z-index:180;color:#eef2f5;font:13px Arial,sans-serif;pointer-events:none;letter-spacing:0;display:grid;grid-template-rows:auto minmax(0,1fr)}
+#battle-sim[hidden]{display:none}
+#battle-sim *{box-sizing:border-box;letter-spacing:0}
+#battle-sim button,#battle-sim select,#battle-sim input{font:inherit;color:inherit;min-height:38px;border:1px solid #4b545a;border-radius:4px;background:#252b30;padding:8px;max-width:100%}
+#battle-sim button{cursor:pointer}#battle-sim button:hover{background:#354148}#battle-sim button:disabled{opacity:.4;cursor:default}
+.bs-header{pointer-events:auto;display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 14px;background:#151a1ef5;border-bottom:1px solid #4b545a}
+.bs-header strong{font-size:15px;margin-right:8px}.bs-header label{display:flex;align-items:center;gap:8px}.bs-header select{max-width:200px}
+#bs-start{background:#217552;border-color:#63c995}.bs-stats{margin-left:auto;display:flex;gap:12px;font-weight:bold}
+.bs-blue{color:#71caff}.bs-red{color:#ff8994}
+.bs-performance{display:flex;flex-wrap:wrap;align-items:center;gap:12px;width:100%}
+.bs-performance input[type=checkbox]{width:18px;height:18px;min-height:0;padding:0;margin:0;accent-color:#71caff}
+.bs-performance select{width:72px}
+.bs-deployment-actions{display:grid;grid-template-columns:minmax(0,1fr) 40px;gap:8px;align-items:end}
+.bs-deployment-actions>button:last-child{width:40px;height:40px;padding:4px;font-size:22px}
+.bs-editor{pointer-events:auto;position:relative;grid-row:2;align-self:start;margin:12px;width:230px;background:#151a1ef2;border:1px solid #4b545a;border-radius:4px;padding:12px;display:grid;gap:12px;max-height:calc(100% - 90px);overflow:auto}
+.bs-editor label{display:grid;gap:6px}.bs-editor fieldset{padding:0;border:0;margin:0;display:flex;gap:8px}.bs-editor legend{margin-bottom:6px}
+.bs-editor fieldset label{display:flex;align-items:center;gap:5px;flex:1;padding:6px;border:1px solid #4b545a;border-radius:4px}
+.bs-editor input[type=radio]{min-height:20px;width:18px;margin:0;accent-color:#71caff}
+.bs-editor input[type=number]{width:100%}.bs-editor figure{margin:0;background:#30393f;height:92px;display:flex;align-items:center;justify-content:center;border-radius:4px;overflow:hidden}
+.bs-editor canvas{width:100%;height:92px}.bs-editor figure img{width:100%;height:100%;object-fit:contain}
+#bs-status{pointer-events:auto;position:absolute;left:50%;bottom:16px;transform:translateX(-50%);background:#151a1eee;border:1px solid #4b545a;border-radius:4px;padding:10px 16px;max-width:calc(100% - 160px);text-align:center;white-space:normal}
+.bs-camera{position:absolute;bottom:14px;right:12px;pointer-events:auto;display:grid;grid-template-columns:repeat(3,38px);gap:4px}
+.bs-camera button{padding:4px;font-size:20px;width:38px;height:38px}.bs-camera button[aria-label="Zoom out"]{grid-column:1}.bs-camera button[aria-label="Zoom in"]{grid-column:3}
+#battle-sim[data-phase=running] .bs-editor,#battle-sim[data-phase=paused] .bs-editor,#battle-sim[data-phase=finished] .bs-editor{display:none}
+@media(max-width:700px){.bs-header{padding:6px;gap:5px}.bs-header strong{width:100%;font-size:13px}.bs-header select{max-width:130px}.bs-header label{gap:4px}.bs-stats{font-size:12px;gap:8px}.bs-performance{gap:8px;font-size:12px}.bs-editor{margin:6px;width:166px;padding:8px;gap:8px;max-height:calc(100% - 90px)}.bs-editor figure{height:64px}.bs-editor canvas{height:64px}.bs-editor fieldset{gap:4px}.bs-editor fieldset label{padding:3px}#battle-sim button,#battle-sim select,#battle-sim input{min-height:40px;padding:5px}#battle-sim .bs-performance input[type=checkbox]{min-height:0;padding:0}#bs-status{left:8px;bottom:8px;transform:none;max-width:calc(100% - 150px);font-size:12px}.bs-camera button{min-height:38px!important;padding:4px!important}}

@@ -1,0 +1,67 @@
+const assert=require('node:assert/strict');
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+(async()=>{
+  const browser=await chromium.launch({headless:true});
+  try{
+    const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+    await page.goto(process.env.PVP_TEST_URL || 'http://localhost:3001/');
+    await page.waitForFunction(()=>window.PVP_BATTLE_SIM && myId && typeof botAbilityDecision==='function');
+    await page.evaluate(()=>{requestAnimationFrame=()=>0;});await page.waitForTimeout(100);
+    console.log(await page.evaluate(()=>{
+      let now=1000000;Date.now=()=>now;
+      isShielded=()=>false;isRiotShieldBlocking=()=>false;
+      const target={x:3,z:0,isPlayer:false},bot={difficulty:'medium',botAmmo:6,nextAbilityAt:0,reloadUntil:0};
+      const lever=WEAPONS.find(w=>w.id==='lever'),rpd=WEAPONS.find(w=>w.id==='rpd'),revolver=WEAPONS.find(w=>w.id==='revolver');
+      if(botAbilityDecision(bot,lever,target,15,now,true)?.kind!=='power')throw Error('No powershot against bots');
+      if(botAbilityDecision(bot,rpd,target,15,now,true)?.kind!=='buff')throw Error('No fire-rate buff');
+      if(botAbilityDecision(bot,revolver,target,10,now,true)?.kind!=='volley')throw Error('No fanfire');
+      bot.nextAbilityAt=now+1000;
+      if(botAbilityDecision(bot,lever,target,15,now,true))throw Error('Cooldown bypass');
+      bot.nextAbilityAt=0;bot.reloadUntil=now+1000;
+      if(botAbilityDecision(bot,lever,target,15,now,true))throw Error('Ability while reloading');
+      bot.reloadUntil=0;
+      if(botAbilityDecision(bot,lever,target,100,now,true)||botAbilityDecision(bot,lever,target,15,now,false))throw Error('Ability without range/LOS');
+      meleeAbilityBuff={type:'deflect'};
+      if(botAbilityDecision(bot,lever,{...target,isPlayer:true},15,now,true))throw Error('Ability wasted into deflect');
+      meleeAbilityBuff=null;
+      document.getElementById('overlay').style.display='none';document.body.classList.remove('login-open');
+      selectMode('battle_simulator');const select=document.getElementById('bs-map');select.value='duel_grid';select.onchange();
+      const sim=PVP_BATTLE_SIM,s=sim.state;s.weapon='lever';s.utility='';s.hp=3000;
+      const found=[];
+      for(let z=-20;z<20;z+=3)for(let x=-20;x<20;x+=3){if(found.length===2)break;if(found.length&&(Math.hypot(x-found[0].x,z-found[0].z)>4||!hasLineOfSight(x,z,found[0].x,found[0].z)))continue;s.team=found.length?'enemy':'ally';if(sim.place(new THREE.Vector3(x,0,z)))found.push({x,z});}
+      if(found.length!==2)throw Error('No test positions');
+      sim.start();s.active=false;inLobby=false;BOT_STRATEGY_ON=false;
+      const shooter=gameBots[0],victim=gameBots[1];
+      const shots=[];spawnLocalBullet=(...args)=>shots.push(args);
+      const messages=[];socket.emit=(event,data)=>messages.push({event,data});
+      let phantomDamage=0;applyBotDamageToPlayer=()=>{phantomDamage++;};
+      hasLineOfSight=()=>true;
+      getBotTarget=b=>b.id===shooter.id?{x:victim.x,z:victim.z,isPlayer:false,botRef:victim}:null;
+      shooter.nextAbilityAt=0;shooter.lastShot=0;shooter.reactionMs=0;shooter.meleeId=null;shooter.utilityId=null;
+      victim.state='target';
+      updateBotAI(.016);
+      if(!shots.some(args=>args[7]==='lever_ab'))throw Error('Powershot did not use the projectile path: '+JSON.stringify({shots:shots.map(a=>a[7]),state:shooter.state,power:shooter._gunAbilityPower,next:shooter.nextAbilityAt}));
+      if(phantomDamage)throw Error('Instant player damage at ability activation');
+      const cooldown=shooter.nextAbilityAt;
+      now+=100;updateBotAI(.016);
+      if(shooter.nextAbilityAt!==cooldown)throw Error('Cooldown restarted/reused early');
+      shooter.meleeId='combat_axe';shooter._meleeAbilityAt=0;
+      victim.x=shooter.x+1;victim.z=shooter.z;victim.y=shooter.y||0;
+      const meleeTarget={x:victim.x,z:victim.z,isPlayer:false,botRef:victim};
+      tickBotMeleeAbility(shooter,meleeTarget,.016,now,true);
+      if(!shooter._regularMelee?.spin||remoteMeshes[shooter.id]._gunId!=='combat_axe')throw Error('No equipped axe whirlwind');
+      const hp=victim.hp;now+=150;
+      tickBotMeleeAbility(shooter,meleeTarget,.016,now,true);
+      if(victim.hp>=hp)throw Error('Axe did not hit');
+      const hitHp=victim.hp;tickBotMeleeAbility(shooter,meleeTarget,.016,now+10,true);
+      if(victim.hp!==hitHp)throw Error('Melee damage repeated every frame');
+      now+=1000;shooter._meleeAbilityAt=now+1000;tickBotMeleeAbility(shooter,meleeTarget,.016,now,true);
+      if(shooter._regularMelee||remoteMeshes[shooter.id]._gunId!==shooter.weaponId)throw Error('Did not return to firearm');
+      shooter._gunAbilityBuff={until:now+1000};shooter._gunAbilityVolley={left:3};
+      syncBotMesh(shooter,{resetPose:true});
+      if(shooter._gunAbilityBuff||shooter._gunAbilityVolley||shooter._regularMelee)throw Error('Respawn kept ability state');
+      return {opponentAware:true,cooldowns:true,rangeAndLOS:true,deflectReaction:true,projectilePowershots:true,axeWhirlwind:true,singleMeleeHit:true,reset:true};
+    }));
+    assert.deepEqual(errors,[]);console.log('PASS: regular bot ability decisions and combat integration');
+  }finally{await browser.close();}
+})().catch(e=>{console.error(e);process.exitCode=1;});
