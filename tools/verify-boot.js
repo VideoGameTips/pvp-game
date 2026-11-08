@@ -2561,7 +2561,7 @@ if (ok && process.argv.includes('--hammersickle')) {
       const s = hammerSickleInspectBegin(m);
       s.t0 = performance.now() - s.ms * 0.56; hammerSickleInspectStep(s);
       const up = Math.abs(h.sickle.rotation.x - Math.PI / 2) < 0.2 && Math.abs(h.hammer.rotation.x - Math.PI / 2) < 0.2;
-      const cross = h.sickle.rotation.z < -0.3 && h.hammer.rotation.z > 0.3;
+      const cross = h.sickle.rotation.z > 0.3 && h.hammer.rotation.z < -0.3;
       if (!(up && cross)) issues.push('mid-inspect the two tools should point up and cross: ' + [h.sickle.rotation.x, h.sickle.rotation.z, h.hammer.rotation.x, h.hammer.rotation.z].map(n => n.toFixed(2)));
       if (!h.glow.visible) issues.push('the emblem should glow while crossed');
       s.t0 = performance.now() - s.ms * 2; if (hammerSickleInspectStep(s)) issues.push('the inspect should be over');

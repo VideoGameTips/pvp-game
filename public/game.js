@@ -57468,38 +57468,43 @@ function buildElectricToothbrush() {
 // two into the old emblem, holds it with a gold glow, and puts them back. All cosmetic: it swings as the Knife and hits as the Knife.
 function buildHammerSickle() {
   const g = new THREE.Group();
-  const steel = new THREE.MeshPhongMaterial({ color: 0x3b3f47, shininess: 120, specular: 0x9aa0aa });
+  const steel = new THREE.MeshPhongMaterial({ color: 0x5b606a, shininess: 130, specular: 0xb0b6c0 });
   const dark = new THREE.MeshPhongMaterial({ color: 0x23262c, shininess: 90, specular: 0x777777 });
   const red = new THREE.MeshPhongMaterial({ color: 0xb01e1e, shininess: 50 });
   const gold = new THREE.MeshPhongMaterial({ color: 0xd9a81e, shininess: 160, specular: 0xfff0a0 });
-  const tool = () => {                                         // a grip: dark shaft, three red wraps, a gold pommel; it ends at z = -0.04, the business end is beyond
-    const t = new THREE.Group();
-    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.0125, 0.015, 0.15, 10), dark);
-    shaft.rotation.x = Math.PI / 2; shaft.position.z = 0.035; t.add(shaft);
-    for (const z of [0.0, 0.04, 0.08]) { const w = new THREE.Mesh(new THREE.TorusGeometry(0.0145, 0.0035, 6, 12), red); w.position.z = z; t.add(w); }
-    const pommel = new THREE.Mesh(new THREE.SphereGeometry(0.019, 10, 8), gold); pommel.position.z = 0.112; t.add(pommel);
-    const collar = new THREE.Mesh(new THREE.TorusGeometry(0.0165, 0.004, 6, 12), gold); collar.position.z = -0.04; t.add(collar);
+  const shaft = (z0, z1) => {                                  // a straight dark handle from z0 (the pommel end) to z1 (the working end), red wraps, a gold pommel and collar
+    const t = new THREE.Group(), len = z0 - z1;
+    const s = new THREE.Mesh(new THREE.CylinderGeometry(0.0125, 0.0155, len, 10), dark);
+    s.rotation.x = Math.PI / 2; s.position.z = (z0 + z1) / 2; t.add(s);
+    for (let i = 0; i < 3; i++) { const w = new THREE.Mesh(new THREE.TorusGeometry(0.0155, 0.0035, 6, 12), red); w.position.z = z0 - 0.03 - i * 0.04; t.add(w); }
+    const pommel = new THREE.Mesh(new THREE.SphereGeometry(0.019, 10, 8), gold); pommel.position.z = z0 + 0.004; t.add(pommel);
+    const collar = new THREE.Mesh(new THREE.TorusGeometry(0.0175, 0.004, 6, 12), gold); collar.position.z = z1; t.add(collar);
     return t;
   };
-  // The sickle: a flat blade that arcs out and curls back, a gold edge along the inside of the curve.
-  const sickle = tool();
-  const R = 0.07, N = 10, A = Math.PI * 1.15, zc = -0.045;
+  // The sickle, as on the emblem: a short straight handle and a broad blade that sweeps forward and round in a big C, wide at the base and
+  // thinning to a point that curls back toward the handle, the gold edge along the inside of the curve.
+  const sickle = shaft(0.08, -0.04);
+  const R = 0.10, N = 18, A = Math.PI * 1.22, zc = -0.04;
   for (let i = 0; i < N; i++) {
     const a0 = A * i / N, a1 = A * (i + 1) / N, am = (a0 + a1) / 2;
     const px = R * (1 - Math.cos(am)), pz = zc - R * Math.sin(am);
     const tx = R * Math.sin(am), tz = -R * Math.cos(am);
-    const len = R * (a1 - a0) * 1.12, w = 0.022 * (1 - 0.75 * am / A) + 0.004;
-    const seg = new THREE.Mesh(new THREE.BoxGeometry(w, 0.006, len), steel);
+    const len = R * (a1 - a0) * 1.15, w = 0.040 * Math.pow(1 - am / A, 0.8) + 0.004;
+    const seg = new THREE.Mesh(new THREE.BoxGeometry(w, 0.009, len), steel);
     seg.position.set(px, 0, pz); seg.rotation.y = Math.atan2(tx, tz); sickle.add(seg);
-    const edge = new THREE.Mesh(new THREE.BoxGeometry(0.003, 0.0072, len), gold);
+    const edge = new THREE.Mesh(new THREE.BoxGeometry(0.0035, 0.0105, len), gold);
     edge.position.set(px + Math.cos(am) * w / 2, 0, pz + Math.sin(am) * w / 2); edge.rotation.y = seg.rotation.y; sickle.add(edge);
   }
-  // The hammer: a steel head across the top of the grip, gold bands on its faces.
-  const hammer = tool();
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.045, 0.045), steel); head.position.z = -0.065; hammer.add(head);
-  for (const sx of [-1, 1]) { const band = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.049, 0.049), gold); band.position.set(sx * 0.0425, 0, -0.065); hammer.add(band); }
+  // The hammer: a long straight handle, a heavy rectangular head across the top with a flat gold-ringed face on one side and a tapering peen on the other.
+  const hammer = shaft(0.15, -0.11);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.070, 0.050, 0.058), steel); head.position.set(0.012, 0, -0.105); hammer.add(head);
+  const face = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.056, 0.064), steel); face.position.set(0.058, 0, -0.105); hammer.add(face);
+  const ring = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.060, 0.068), gold); ring.position.set(0.0415, 0, -0.105); hammer.add(ring);
+  const peen = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.036, 0.040), steel); peen.position.set(-0.046, 0, -0.105); hammer.add(peen);
+  const tip = new THREE.Mesh(new THREE.BoxGeometry(0.020, 0.024, 0.026), steel); tip.position.set(-0.074, 0, -0.105); hammer.add(tip);
+  const peenBand = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.040, 0.044), gold); peenBand.position.set(-0.026, 0, -0.105); hammer.add(peenBand);
   hammer.visible = false;
-  const glow = new THREE.Mesh(new THREE.RingGeometry(0.075, 0.115, 36), new THREE.MeshBasicMaterial({ color: 0xffc83a, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+  const glow = new THREE.Mesh(new THREE.RingGeometry(0.115, 0.15, 40), new THREE.MeshBasicMaterial({ color: 0xffc83a, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
   glow.visible = false; g.add(sickle, hammer, glow);
   g._hs = { form: 0, t: 1, clanged: true, sickle, hammer, glow, insp: false };
   g._onSwing = () => hammerSickleSwitch(g);
@@ -69822,8 +69827,8 @@ function hammerSickleInspectStep(s) {
   cur.scale.setScalar(1);
   const up = w(0.12, 0.40) * (1 - w(0.70, 0.90)), tilt = w(0.30, 0.46) * (1 - w(0.70, 0.84));
   h.sickle.rotation.order = h.hammer.rotation.order = 'ZYX';           // point up first, then tilt in the plane of the view: an X
-  h.sickle.rotation.set(up * Math.PI / 2, 0, -0.55 * tilt);
-  h.hammer.rotation.set(up * Math.PI / 2, 0, 0.55 * tilt);
+  h.sickle.rotation.set(up * Math.PI / 2, 0, 0.62 * tilt);                                   // as on the emblem: the sickle leans to the left, curling over...
+  h.hammer.rotation.set(up * Math.PI / 2, 0, -0.62 * tilt);                                  // ...the hammer leaning to the right
   const crossed = t > 0.46 && t < 0.72;
   h.glow.visible = crossed;
   if (crossed) { h.glow.material.opacity = 0.55 + 0.25 * Math.sin(performance.now() * 0.02); h.glow.scale.setScalar(1 + 0.08 * Math.sin(performance.now() * 0.011)); h.glow.position.set(0, 0, 0.02); }
