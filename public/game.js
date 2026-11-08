@@ -30198,6 +30198,121 @@ function buildDoubleTrouble() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+function spawnOrbitalBeam(pos) {
+  // 🛰️ Orbital Strike: where the grenade lands, a vertical orange beam from the sky for 0.2 s and a holographic targeting circle on the ground. All for show; the damage is the
+  // Grenade Launcher's own.
+  const epoch = matchEpoch, t0 = performance.now();
+  const add = new THREE.MeshBasicMaterial({ color: 0xff7a1a, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending });
+  const white = new THREE.MeshBasicMaterial({ color: 0xfff0d0, transparent: true, opacity: 1, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending });
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 80, 16, 1, true), add); beam.position.set(pos.x, pos.y + 40, pos.z);
+  const core = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 80, 10, 1, true), white); core.position.copy(beam.position);
+  const holo = new THREE.Group(); holo.position.set(pos.x, Math.max(0.06, pos.y - 0.4), pos.z);
+  const holoM = new THREE.MeshBasicMaterial({ color: 0xff8a2a, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending });
+  for (const [a, b] of [[2.6, 2.75], [1.4, 1.48], [0.5, 0.58]]) { const r = new THREE.Mesh(new THREE.RingGeometry(a, b, 48, 1), holoM); r.rotation.x = -Math.PI / 2; holo.add(r); }
+  for (let i = 0; i < 4; i++) { const bar = new THREE.Mesh(new THREE.PlaneGeometry(0.07, 1.9), holoM); bar.rotation.x = -Math.PI / 2; bar.rotation.z = i * Math.PI / 2; bar.position.set(Math.sin(i * Math.PI / 2) * -1.85, 0, Math.cos(i * Math.PI / 2) * -1.85); bar.position.set(0, 0, 0); bar.scale.set(1, 1, 1); holo.add(bar); }
+  for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2, tk = new THREE.Mesh(new THREE.PlaneGeometry(0.09, i % 4 ? 0.28 : 0.5), holoM); tk.rotation.x = -Math.PI / 2; tk.rotation.z = -a; tk.position.set(Math.sin(a) * 3.0, 0, Math.cos(a) * 3.0); holo.add(tk); }
+  scene.add(beam, core, holo);
+  const tick = () => {
+    const t = (performance.now() - t0) / 1000;
+    if (epoch !== matchEpoch || t > 1.0) { scene.remove(beam, core, holo); [beam, core].forEach(m => m.geometry.dispose()); holo.traverse(o => { if (o.geometry) o.geometry.dispose(); }); add.dispose(); white.dispose(); holoM.dispose(); return; }
+    const b = Math.max(0, 1 - t / 0.2); beam.visible = core.visible = b > 0; add.opacity = 0.9 * b; white.opacity = b; beam.scale.set(1 + (1 - b) * 0.6, 1, 1 + (1 - b) * 0.6);
+    const lock = Math.min(1, t / 0.18); holo.scale.setScalar(1.7 - 0.7 * lock); holo.rotation.y = (1 - lock) * 1.6 + t * 0.5;
+    holoM.opacity = 0.85 * Math.min(1, lock * 2) * (t < 0.6 ? 1 : 1 - (t - 0.6) / 0.4);
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+function buildOrbitalStrikeLauncher() {
+  // 🛰️ Grenade Launcher -> Orbital Strike. A chunky white-and-black launcher dressed as a little military satellite: two blue solar-panel wings, an orange reactor, a
+  // targeting dish, a rotating grenade cylinder, and four stabiliser legs and a holographic globe that only come out for the inspect.
+  //   idle     the wings are folded flat against the gun
+  //   aim      the wings unfold and the dish rises over the barrel
+  //   fire     the reactor flashes, the dish kicks back, a glowing grenade leaves; where it lands, an orange beam drops from the sky for 0.2 s over a holographic target ring
+  //   reload   the wings fold in while the grenade cylinder turns and locks
+  //   inspect  four stabiliser arms extend and a wireframe globe turns above the gun
+  const g = new THREE.Group();
+  const white = new THREE.MeshPhongMaterial({ color: 0xe9edf0, shininess: 240, specular: 0xffffff });
+  const black = new THREE.MeshPhongMaterial({ color: 0x14161a, shininess: 120, specular: 0x8a94a0 });
+  const grey = new THREE.MeshPhongMaterial({ color: 0x8c949c, shininess: 200, specular: 0xffffff });
+  const orange = new THREE.MeshBasicMaterial({ color: 0xff7a1a }), hot = new THREE.MeshBasicMaterial({ color: 0xffd08a });
+  const cv = document.createElement('canvas'); cv.width = cv.height = 64; { const x = cv.getContext('2d'); x.fillStyle = '#1b3f94'; x.fillRect(0, 0, 64, 64); x.strokeStyle = '#6fa8ff'; x.lineWidth = 2; for (let i = 0; i <= 64; i += 16) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i, 64); x.stroke(); x.beginPath(); x.moveTo(0, i); x.lineTo(64, i); x.stroke(); } }
+  const tex = new THREE.CanvasTexture(cv); const solar = new THREE.MeshPhongMaterial({ map: tex, color: 0xffffff, shininess: 300, specular: 0xaad0ff, emissive: 0x081840 });
+  const body = new THREE.Group(); g.add(body);
+  gpBox(body, white, 0.062, 0.072, 0.190, 0, 0.012, 0.050); gpBox(body, black, 0.064, 0.020, 0.120, 0, 0.040, 0.060); gpBox(body, black, 0.050, 0.014, 0.100, 0, -0.026, 0.050);
+  gpBox(body, orange, 0.0016, 0.044, 0.0016, 0.0318, 0.012, 0.100); gpBox(body, orange, 0.0016, 0.044, 0.0016, -0.0318, 0.012, 0.100);
+  gpPlate(body, black, [[0.108, -0.014], [0.122, -0.092], [0.092, -0.108], [0.066, -0.092], [0.070, -0.014]], 0.032, -0.012);
+  gpBox(body, grey, 0.012, 0.018, 0.012, 0, -0.016, 0.062, 0.2);
+  const barrel = new THREE.Group(); g.add(barrel);
+  gpCyl(barrel, black, 0.020, 0.020, 0.200, 18, 0, 0.022, -0.150);
+  for (const z of [-0.080, -0.140, -0.200]) gpCyl(barrel, white, 0.0235, 0.0235, 0.016, 18, 0, 0.022, z);
+  gpCyl(barrel, grey, 0.026, 0.026, 0.010, 18, 0, 0.022, -0.252);
+  const drum = new THREE.Group(); drum.position.set(0, 0.010, -0.010); g.add(drum);
+  { const d = new THREE.Mesh(new THREE.CylinderGeometry(0.050, 0.050, 0.064, 24), grey); d.rotation.x = Math.PI / 2; drum.add(d);
+    for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; const h = new THREE.Mesh(new THREE.CylinderGeometry(0.0118, 0.0118, 0.066, 12), new THREE.MeshBasicMaterial({ color: 0x050607 })); h.rotation.x = Math.PI / 2; h.position.set(Math.cos(a) * 0.030, Math.sin(a) * 0.030, 0); drum.add(h); const m = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.006, 0.066), orange); m.position.set(Math.cos(a + 0.52) * 0.0505, Math.sin(a + 0.52) * 0.0505, 0); drum.add(m); } }
+  const reactor = new THREE.Group(); reactor.position.set(0, 0.062, 0.075); g.add(reactor);                // the orange reactor, in a glass jar on top
+  { const jar = new THREE.Mesh(new THREE.CylinderGeometry(0.0165, 0.0165, 0.032, 16), new THREE.MeshPhongMaterial({ color: 0xffb070, transparent: true, opacity: 0.35, shininess: 600, specular: 0xffffff, depthWrite: false })); reactor.add(jar);
+    const rc = new THREE.Mesh(new THREE.SphereGeometry(0.0105, 12, 10), orange); reactor.add(rc); reactor.userData.core = rc;
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.006, 16), black); cap.position.y = 0.019; reactor.add(cap); const cap2 = cap.clone(); cap2.position.y = -0.019; reactor.add(cap2); }
+  const wings = [-1, 1].map(s => {                                                                          // the solar wings, hinged at the top corners of the body
+    const w = new THREE.Group(); w.position.set(s * 0.033, 0.040, 0.060); g.add(w);
+    const panel = new THREE.Mesh(new THREE.BoxGeometry(0.100, 0.003, 0.088), solar); panel.position.set(s * 0.052, 0, 0); w.add(panel);
+    const spar = new THREE.Mesh(new THREE.BoxGeometry(0.104, 0.005, 0.006), grey); spar.position.set(s * 0.052, 0.002, -0.046); w.add(spar);
+    return { w, s };
+  });
+  const dish = new THREE.Group(); dish.position.set(0, 0.040, -0.110); g.add(dish);                          // the targeting dish
+  { const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.012, 0.010, 20), white); bowl.position.y = 0.018; dish.add(bowl);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.034, 0.0022, 6, 28), grey); rim.rotation.x = Math.PI / 2; rim.position.y = 0.023; dish.add(rim);
+    const horn = new THREE.Mesh(new THREE.CylinderGeometry(0.0016, 0.0016, 0.030, 6), grey); horn.position.y = 0.036; dish.add(horn);
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.004, 8, 6), orange); tip.position.y = 0.052; dish.add(tip);
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.026, 8), grey); mast.position.y = 0.004; dish.add(mast); }
+  const arms = [[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([sx, sz]) => {                                    // four stabiliser arms, folded in until the inspect
+    const a = new THREE.Group(); a.position.set(sx * 0.030, -0.012, sz > 0 ? 0.120 : -0.030); a.visible = false; g.add(a);
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.006, 0.060), grey); bar.position.z = sz * 0.030; a.add(bar);
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.020, 0.004, 0.020), black); foot.position.z = sz * 0.062; a.add(foot);
+    return { a, sx, sz };
+  });
+  const globe = new THREE.Group(); globe.userData.eqFx = true; globe.visible = false; g.add(globe);            // the holographic globe over the gun
+  { const wire = new THREE.MeshBasicMaterial({ color: 0xff9a3a, wireframe: true, transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending });
+    globe.add(new THREE.Mesh(new THREE.SphereGeometry(0.034, 14, 10), wire));
+    const ringM = new THREE.MeshBasicMaterial({ color: 0xffd08a, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending });
+    for (const r of [0, 1.05, -1.05]) { const t = new THREE.Mesh(new THREE.TorusGeometry(0.041, 0.0012, 6, 32), ringM); t.rotation.x = Math.PI / 2; t.rotation.y = r; globe.add(t); }
+    for (let i = 0; i < 6; i++) { const d = new THREE.Mesh(new THREE.SphereGeometry(0.0032, 6, 5), hot); const la = (i * 0.9 + 0.3) % 3 - 1.5, lo = i * 1.1; d.position.set(Math.cos(la) * Math.sin(lo) * 0.034, Math.sin(la) * 0.034, Math.cos(la) * Math.cos(lo) * 0.034); globe.add(d); } }
+  globe.position.set(0, 0.160, -0.030);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.022, -0.275); _hackFlash(flash, 0xff8a2a); g.add(flash);
+  const ease = u => u * u * (3 - 2 * u), clamp01 = u => Math.max(0, Math.min(1, u));
+  let aim = 0, kick = 0, was = false, wing = 0, dishT = 0, drumA = 0, drumGoal = 0, locked = false;
+  g._tick = (dt, now, assembling) => {
+    if (assembling) { arms.forEach(x => x.a.visible = false); globe.visible = false; return; }
+    const fired = !!(g._flash && g._flash.visible); if (fired && !was) { kick = 1; drumGoal += Math.PI / 3; } was = fired;
+    kick *= Math.exp(-dt * 9);
+    aim += ((isADS ? 1 : 0) - aim) * Math.min(1, dt * 10);
+    const t0 = g._reloadStart && g._reloadDur ? (Date.now() - g._reloadStart) / g._reloadDur : -1;
+    const inspecting = !!g._inspectMode && t0 >= 0 && t0 < 1, reloading = !g._inspectMode && t0 >= 0 && t0 < 1;
+    const wingGoal = reloading ? 0 : aim > 0.4 ? 1 : 0;                                                    // folded at rest and on a reload, open when aiming
+    wing += (wingGoal - wing) * Math.min(1, dt * 7); dishT += ((reloading ? 0 : aim > 0.4 ? 1 : 0) - dishT) * Math.min(1, dt * 8);
+    wings.forEach(x => { x.w.rotation.z = -x.s * (Math.PI / 2) * (1 - ease(wing)) + Math.sin(now * 1.2 + x.s) * 0.012 * wing; });
+    dish.position.y = 0.012 + 0.030 * ease(dishT); dish.scale.setScalar(0.25 + 0.75 * ease(dishT)); dish.visible = dishT > 0.03;
+    dish.position.z = -0.110 + 0.022 * kick; dish.rotation.x = 0.35 * kick + Math.sin(now * 0.9) * 0.02 * dishT; dish.rotation.y += dt * (0.4 + dishT * 1.2);
+    const core = reactor.userData.core; core.scale.setScalar(1 + 0.12 * Math.sin(now * 6) + kick * 1.1); core.material = kick > 0.35 ? hot : orange;
+    if (reloading) {                                                                                         // the cylinder turns a full lap and locks
+      drumGoal = Math.round(drumGoal / (Math.PI / 3)) * (Math.PI / 3);
+      const u = t0, turn = ease(clamp01((u - 0.12) / 0.62)) * Math.PI * 2;
+      drum.rotation.z = drumA + turn;
+      if (u >= 0.78 && !locked) { locked = true; try { playEquipSound('snapin'); } catch (e) {} }
+      if (u >= 0.99) drumA += Math.PI * 2;
+    } else { locked = false; drumA += (drumGoal - drumA) * Math.min(1, dt * 14); drum.rotation.z = drumA; }
+    const f = inspecting ? (t0 < 0.22 ? ease(t0 / 0.22) : t0 < 0.80 ? 1 : 1 - ease((t0 - 0.80) / 0.20)) : 0;
+    arms.forEach(x => { x.a.visible = f > 0.02; x.a.rotation.y = x.sx * x.sz * -0.7 * f; x.a.rotation.x = 0.0; x.a.scale.setScalar(Math.max(0.001, f)); });
+    globe.visible = f > 0.02; globe.scale.setScalar(Math.max(0.001, f)); globe.rotation.y = now * 1.4; globe.position.y = 0.150 + 0.012 * f + Math.sin(now * 2) * 0.003;
+    if (inspecting) wings.forEach(x => { x.w.rotation.z = -x.s * (Math.PI / 2) * (1 - ease(Math.max(wing, f * 0.8))); });
+    body.position.z = 0.016 * kick;
+  };
+  g._calm = () => { kick = 0; locked = false; arms.forEach(x => x.a.visible = false); globe.visible = false; };
+  g._flash = flash; g._kickZ = 0.020; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
 function buildHackerAK() {
   // 🟩 AK-20 -> Hacker AK. The stock rifle's own shape with every part turned to the void and outlined in green (_hackerize), and the hacker's fittings on it: a screen of running
   // 1s and 0s down the receiver that flashes bright when it fires, circuit traces on the handguard, a lit line down the magazine, edge lights along the top cover, a green front sight.
@@ -45170,6 +45285,7 @@ const BOOM_THEMES = {
   music:    { fire: 0xb08aff, core: 0xffffff, smoke: 0x4a3a7a, bits: [0xb08aff, 0xffd24a, 0xffffff], bit: 'ball', ring: 0xffd24a, flash: [190, 150, 255] },
   ice:      { fire: 0xbdf3ff, core: 0xffffff, smoke: 0xe8fbff, bits: [0xbdf3ff, 0xffffff], bit: 'shard', ring: 0x9ae8ff, flash: [170, 235, 255] },
   cash:     { fire: 0xe0303a, core: 0xffe8e8, smoke: 0xb87074, bits: [0xe0303a, 0xf08a92, 0xe6d27a, 0xffffff], bit: 'flake', ring: 0xff6666, flash: [255, 90, 90] },
+  orbital:  { fire: 0xff7a1a, core: 0xfff0d0, smoke: 0x34363c, bits: [0xff7a1a, 0xffffff, 0x2a2c32], bit: 'chunk', ring: 0xff9a2a, flash: [255, 150, 60], orbital: true },   // the Orbital Strike launcher: a beam from the sky and a target ring
   nuke:     { fire: 0xff7a1a, core: 0xfff4c8, smoke: 0x4a4540, bits: [0xff8a2a, 0xffd24a, 0x555048, 0xffffff], bit: 'chunk', ring: 0xff9a2a, flash: [255, 170, 70], mushroom: true },
   star:     { fire: 0xfff0a0, core: 0xffffff, smoke: 0x4a5a9a, bits: [0xfff0a0, 0x8ab4ff, 0xffffff], bit: 'shard', ring: 0x8ab4ff, flash: [255, 245, 170] },
 };
@@ -45237,6 +45353,7 @@ const SKIN_SHOT = {};
   G({ shape: 'shard', c: [0xcff4ff, 0x7fd8ff], k: 1.5 }, 'ice', ['pistol_frost']);                            // the Frost Pistol: an icicle on a pale-blue trail
   G({ shape: 'goldbullet', c: [0xffc83d, 0xfff2b8], k: 1.6 }, null, ['revolver_midas']);                       // the Midas Revolver: a gold round on a gold trail
   G({ shape: 'bolt', c: [0x35e8ff, 0xffffff], k: 1.2 }, null, ['machine_pistol_overclocked']);
+  G({ shape: 'ball', c: [0xff7a1a, 0xfff0d0], k: 1.5 }, 'orbital', ['grenade_launcher_orbital']);                        // Orbital Strike: a glowing orange grenade
   G({ shape: 'goldbullet', c: [0xff7a1a, 0xffd08a], k: 1.5 }, null, ['hand_cannon_iron_judge']);                  // The Iron Judge: a molten round                    // Overclocked: a cyan bolt
   G({ shape: 'hackbullet', c: [0x0a0a0a, 0xff2a3d], k: 1.8 }, null, ['ak20_xerror']);                       // X!@&!@: the hacker round in red, and a size bigger               // the Hacker Grenade: a black ball in a green ring, trailing code
   G({ shape: 'cube', c: [0xe74c3c, 0x2ecc71] }, 'pixel', ['p90_rubiks_cube']);
@@ -56264,6 +56381,9 @@ const MODEL_SKINS = [
   { id: 'sawed_off_classic_shorty', weapon: 'sawed_off', name: 'Classic Shorty', rarity: 'good',
     sw: ['#6b4a2a', '#9aa2ab'], build: buildShorty,
     blurb: 'The original Shorty: a pump shotgun cut to the legal minimum, with its tube magazine, ribbed slide handle and bird\'s-head grip. It was its own weapon until it was merged into the Sawed-Off, which took its name.' },
+  { id: 'grenade_launcher_orbital', weapon: 'grenade_launcher', name: 'Orbital Strike', rarity: 'legendary',
+    sw: ['#e9edf0', '#ff7a1a'], build: buildOrbitalStrikeLauncher,
+    blurb: 'A chunky white-and-black launcher dressed as a little military satellite: blue solar wings folded flat at rest, an orange reactor, a targeting dish and a turning grenade cylinder. Aim and the wings unfold and the dish rises. Where a grenade lands, an orange beam drops from the sky for a fifth of a second over a holographic target ring. The damage is the Grenade Launcher\'s own. Inspect puts out four stabiliser arms and a spinning holographic globe.' },
   { id: 'ak20_hacker', weapon: 'ak20', name: 'Hacker AK', rarity: 'rare', look: { hit: 'hack' },
     sw: ['#08090a', '#2dff6a'], build: buildHackerAK,
     blurb: 'The Hacker Pistol, full size: a void-black AK with green outlines and a screen of 1s and 0s down the receiver. Black rounds on a green trail, a laser-blaster crack, the same flash and scrambling damage number, and what it kills glitches into an ERROR and is gone.' },
@@ -56678,7 +56798,7 @@ const GEN2_MODEL_SKIN_IDS = new Set([
   'revolver_donut', 'ak20_donut', 'rpg_donut', 'machine_pistol_donut', 'pistol_donut',
   'sg8_donut', 'srx_donut', 'vector_donut', 'grenade_launcher_donut', 'minigun_donut',
   'mp40_donut', 'deagle_donut', 'shorty_donut',
-  'revolver_midas', 'pistol_frost', 'ak20_xerror', 'revolver_shatterpoint', 'machine_pistol_overclocked', 'hand_cannon_iron_judge', 'sawed_off_double_trouble', 'sawed_off_classic_shorty',            // the Gen 2 case's two new top rarities: EPIC and MYTHIC (server.js GEN2_EPIC_SKIN_IDS / GEN2_NEW_MYTHIC_SKIN_IDS)
+  'revolver_midas', 'pistol_frost', 'ak20_xerror', 'revolver_shatterpoint', 'machine_pistol_overclocked', 'hand_cannon_iron_judge', 'sawed_off_double_trouble', 'sawed_off_classic_shorty', 'grenade_launcher_orbital',            // the Gen 2 case's two new top rarities: EPIC and MYTHIC (server.js GEN2_EPIC_SKIN_IDS / GEN2_NEW_MYTHIC_SKIN_IDS)
   'ak20_rainbow', 'ak20_hyperspace', 'ak20_blueprint', 'sg8_portal', 'vector_portal',
   'railgun_portal_detector', 'p90_quantum_scanner', 'freeze_hyperslush', 'firework_showman',
   'shorty_outlaw', 'snub_gunslinger', 'deagle_glitch', 'deagle_phantom', 'vector_glitch_exe',
@@ -61982,6 +62102,7 @@ const SKIN_FX = {
   ak20_blueprint: { sound: _fxS('holo', .26, .05, 1800, 900),
     equip: 'scan', equipMs: 1000, equipSfx: ['scan', 'beep'],
     reload: _fxR(RELOAD_KEYS.ak20, (RELOAD_PROPS.ak20 || []).map(e => e.k === 'mag' ? Object.assign({}, e, { k: 'holomag' }) : e), null, 'beep') },
+  grenade_launcher_orbital: { equip: 'unfold', equipMs: 1000, equipSfx: ['whoosh', 'snapin'] },
   sawed_off_classic_shorty: { equip: 'slam', equipMs: 850, equipSfx: ['whoosh', null] },
   sawed_off_double_trouble: { equip: 'slam', equipMs: 900, equipSfx: ['whoosh', 'snapin'] },
   hand_cannon_iron_judge: { equip: 'unfold', equipMs: 1000, equipSfx: ['whoosh', 'snapin'] },
@@ -68929,6 +69050,7 @@ function spawnExplosion(pos, boom = null) {
   };
   requestAnimationFrame(tick);
   if (boom && boom.mushroom) spawnMushroomCloud(pos);
+  if (boom && boom.orbital) spawnOrbitalBeam(pos);
   if (boom && boom.splash) spawnWaterSplash(pos);
 
   // ── Debris chunks ──

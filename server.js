@@ -471,7 +471,7 @@ const GEN2_GOOD_SKIN_IDS = [
 // The Neon Rift series: seven Gen 2 skins that light up. Ordinary rarity, so they drop alongside the other 'rare' entrances.
 GEN2_RARE_SKIN_IDS.push('ak20_cyberpunk', 'srx_cyberpunk', 'sg8_cyberpunk', 'vector_cyberpunk', 'pistol_cyberpunk', 'mp40_cyberpunk', 'revolver_cyberpunk');
 GEN2_LEGENDARY_SKIN_IDS.push('pistol_electron');   // Electron: the unstable pistol that bursts apart on reload
-GEN2_LEGENDARY_SKIN_IDS.push('rpg_black_hole', 'hand_cannon_iron_judge', 'sawed_off_double_trouble');
+GEN2_LEGENDARY_SKIN_IDS.push('rpg_black_hole', 'hand_cannon_iron_judge', 'sawed_off_double_trouble', 'grenade_launcher_orbital');
 GEN2_GOOD_SKIN_IDS.push('sawed_off_classic_shorty');   // the old Shorty pump, as a skin of the merged Shorty   // Black Hole Cannon
 GEN2_RARE_SKIN_IDS.push('srx_absolute_zero', 'sg8_tectonic');   // Absolute Zero, Tectonic
 // 🟠🔴 The case's two newest top rarities, EPIC and MYTHIC (MODEL_SKINS rarity 'epic' / 'mythic' in public/game.js): the Midas Revolver (EPIC), the Frost Pistol (EPIC) and X!@&!@ (MYTHIC). Each has an entrance like every Gen 2 skin; what is new is how
