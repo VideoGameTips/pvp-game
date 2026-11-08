@@ -29391,6 +29391,136 @@ function buildHackerPistol() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+function buildElectronPistol() {
+  // ⚡ Pistol -> Electron. A gun that is not quite holding together: gloss-black (mirror-bright), every edge traced in electric blue, sparks crawling
+  // over it and little arcs jumping between its parts, with a bright core in the slide and three electrons orbiting it. Reloading, the charge gets
+  // away from it: it shakes, then bursts apart into its pieces, which hang in the air spitting lightning -- and then glitch, flickering and
+  // stuttering, back into place.
+  const g = new THREE.Group();
+  const black = new THREE.MeshPhongMaterial({ color: 0x050507, shininess: 1000, specular: 0xffffff, emissive: 0x03030c });
+  const cyan = new THREE.MeshBasicMaterial({ color: 0x7af0ff }), violet = new THREE.MeshBasicMaterial({ color: 0xb48cff }), white = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const edgeM = new THREE.LineBasicMaterial({ color: 0x5fe6ff, transparent: true, opacity: 0.95 });
+  const edges = (host, mesh) => { const e = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, 30), edgeM); e.position.copy(mesh.position); e.rotation.copy(mesh.rotation); e.userData.noSmooth = true; host.add(e); };
+  const parts = [];                                                  // the pieces it comes apart into (direct children of the model, like every entrance expects)
+  const piece = (dir, d, spin) => { const p = new THREE.Group(); g.add(p); parts.push({ p, dir: new THREE.Vector3(...dir).normalize(), d, spin: new THREE.Vector3(...spin) }); return p; };
+  const slide = piece([0, 1, -0.25], 0.085, [2.0, 1.2, 3.0]);
+  const sBody = gpBox(slide, black, 0.028, 0.030, 0.152, 0, 0.036, -0.008); edges(slide, sBody);
+  for (const s of [-1, 1]) gpBox(slide, cyan, 0.0014, 0.0014, 0.100, s * 0.0145, 0.049, -0.020);                   // a blue line along each shoulder of the slide
+  for (let i = 0; i < 3; i++) gpBox(slide, cyan, 0.0014, 0.006, 0.012, -0.0146, 0.034, -0.044 + i * 0.030);         // vents, lit from inside
+  gpBox(slide, black, 0.005, 0.008, 0.008, 0, 0.0545, -0.072); gpBox(slide, violet, 0.0028, 0.0028, 0.0028, 0, 0.0595, -0.072);
+  gpBox(slide, black, 0.012, 0.007, 0.012, 0, 0.0545, 0.052); gpBox(slide, violet, 0.0026, 0.0026, 0.0026, 0, 0.0585, 0.052);
+  const barrel = piece([0, 0.25, -1], 0.13, [1.0, 3.0, 2.0]);
+  gpCyl(barrel, black, 0.0068, 0.0068, 0.016, 14, 0, 0.034, -0.086);
+  { const r = new THREE.Mesh(new THREE.TorusGeometry(0.0074, 0.0011, 6, 18), cyan); r.position.set(0, 0.034, -0.0945); r.userData.noSmooth = true; barrel.add(r); }
+  const frame = piece([-1, -0.3, 0.2], 0.095, [-1.5, 2.2, 1.0]);
+  const fBody = gpBox(frame, black, 0.026, 0.058, 0.130, 0, 0.006, -0.006); edges(frame, fBody);
+  const grip = piece([0.7, -1, 0.4], 0.12, [2.5, -1.0, 1.8]);
+  const gPlate = gpPlate(grip, black, [[0.048, -0.020], [0.048, -0.108], [0.026, -0.122], [-0.006, -0.110], [-0.006, -0.018]], 0.028, -0.010);
+  { const e = new THREE.LineSegments(new THREE.EdgesGeometry(gPlate.geometry, 40), edgeM); e.userData.noSmooth = true; grip.add(e); }
+  for (let i = 0; i < 4; i++) gpBox(grip, cyan, 0.0012, 0.0024, 0.020, -0.0243, -0.040 - i * 0.016, 0.026, 0, 0, 0.15);   // lit grooves down the grip
+  const mag = piece([0, -1, 0.5], 0.15, [1.2, 0.6, 3.2]);
+  { const fp = gpBox(mag, black, 0.022, 0.024, 0.026, 0, -0.128, 0.004); edges(mag, fp); } gpBox(mag, cyan, 0.016, 0.0016, 0.0016, 0, -0.1155, 0.012);
+  const trig = piece([1, -0.5, -0.3], 0.1, [3.0, 1.0, -2.0]);
+  gpBox(trig, cyan, 0.005, 0.012, 0.005, 0, -0.018, -0.014, 0.22);
+  // the core: a bright charge in a window of the slide, with three electrons circling it
+  const core = piece([-0.6, 0.6, 0.8], 0.11, [2.0, 2.0, 2.0]);
+  const coreMesh = new THREE.Mesh(new THREE.SphereGeometry(0.0058, 12, 10), white); coreMesh.position.set(-0.0160, 0.040, 0.034); core.add(coreMesh);
+  const halo = new THREE.Mesh(new THREE.SphereGeometry(0.0105, 12, 10), new THREE.MeshBasicMaterial({ color: 0x5fe6ff, transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending })); halo.position.copy(coreMesh.position); core.add(halo);
+  const electrons = [0, 1, 2].map(i => { const m = new THREE.Mesh(new THREE.SphereGeometry(0.0021, 8, 6), i === 1 ? violet : cyan); core.add(m); return m; });
+  // sparks that crawl over the gun, and arcs that jump about it (these are the show, not pieces: the entrances leave them alone)
+  const fx = new THREE.Group(); fx.userData.eqFx = true; g.add(fx);
+  const sparks = [];
+  for (let i = 0; i < 18; i++) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.0026, 0.0026, 0.0026), i % 3 === 0 ? white : i % 3 === 1 ? cyan : violet); m.userData.eqFx = true; m.userData.next = 0; fx.add(m); sparks.push(m);
+  }
+  const ARC_PTS = 7, arcs = [];
+  for (let i = 0; i < 6; i++) {
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(ARC_PTS * 3), 3));
+    const ln = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: i % 2 ? 0xffffff : 0x6ae8ff, transparent: true, opacity: 1, depthWrite: false, blending: THREE.AdditiveBlending }));
+    ln.frustumCulled = false; ln.userData.eqFx = true; ln.userData.next = 0; fx.add(ln); arcs.push(ln);
+  }
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const inBox = (k) => new THREE.Vector3(rnd(-0.03, 0.03) * k, rnd(-0.12, 0.07) * (0.5 + 0.5 * k), rnd(-0.11, 0.09) * k);
+  const zap = (ln, k) => {
+    const a = inBox(k), b = inBox(k), pos = ln.geometry.attributes.position;
+    for (let i = 0; i < ARC_PTS; i++) {
+      const t = i / (ARC_PTS - 1), j = (i === 0 || i === ARC_PTS - 1) ? 0 : 0.010 * k;
+      pos.setXYZ(i, a.x + (b.x - a.x) * t + rnd(-j, j), a.y + (b.y - a.y) * t + rnd(-j, j), a.z + (b.z - a.z) * t + rnd(-j, j));
+    }
+    pos.needsUpdate = true;
+  };
+  const hsh = (x, s) => { const v = Math.sin(x * 12.9898 + s * 78.233) * 43758.5453; return v - Math.floor(v); };
+  const ease = u => 1 - Math.pow(1 - u, 3);
+  const clamp01 = u => Math.max(0, Math.min(1, u));
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.034, -0.100); _hackFlash(flash, 0x7af0ff); g.add(flash);
+  let kick = 0, bang = false, back = false;
+  const settle = () => {
+    for (const q of parts) { q.p.position.set(0, 0, 0); q.p.rotation.set(0, 0, 0); q.p.scale.set(1, 1, 1); q.p.visible = true; }
+    bang = back = false;
+  };
+  g._tick = (dt, now, assembling) => {
+    fx.visible = !assembling;
+    if (assembling) { settle(); kick = 0; return; }
+    const u = g._reloadStart && g._reloadDur && !g._inspectMode ? (Date.now() - g._reloadStart) / g._reloadDur : -1;
+    const reloading = u >= 0 && u < 1;
+    let boost = 0;                                                    // how wild the lightning is: calm when holstered, frantic mid-reload
+    if (!reloading) {
+      if (bang || back) settle();
+      kick = g._flash && g._flash.visible ? 1 : kick * Math.exp(-dt * 22);
+      slide.position.z = (g._inspectMode ? Math.pow(Math.max(0, Math.sin(now * 5)), 3) : kick) * 0.028;
+    } else {
+      kick = 0;
+      const step = Math.floor(now * 24);
+      parts.forEach((q, i) => {
+        let f = 0, vis = true, sc = 1;
+        if (u < 0.12) {                                               // it starts to shake: the charge is getting away
+          const a = u / 0.12 * 0.0035; boost = u / 0.12;
+          q.p.position.set((hsh(step, i) - 0.5) * a * 2, (hsh(step + 1, i) - 0.5) * a * 2, (hsh(step + 2, i) - 0.5) * a * 2);
+          q.p.rotation.set(0, 0, 0); q.p.scale.set(1, 1, 1); q.p.visible = true; return;
+        }
+        if (!bang && i === 0) { bang = true; playEquipSound('glitchsfx'); for (const ln of arcs) zap(ln, 1.8); try { flashScreen('rgba(120,230,255,.18)', 120); } catch (e) {} }
+        if (u < 0.40) { f = ease(clamp01((u - 0.12) / 0.28)); boost = 1; }                                   // the bang: it flies apart
+        else if (u < 0.62) { f = 1 + Math.sin(now * 2.3 + i * 1.7) * 0.06; boost = 1; }                      // and hangs there, spitting
+        else {                                                                                               // then it glitches home, piece by piece
+          const x = clamp01((u - 0.62 - i * 0.022) / 0.2);
+          f = 1 - x; boost = 0.7;
+          if (x > 0 && x < 1) {
+            const h = hsh(step, i + 3);
+            if (h < 0.45) f = Math.round(f * 4) / 4 + (hsh(step + 5, i) - 0.5) * 0.35 * f;                   // stutter: snaps to the wrong place
+            vis = hsh(step + 9, i) > 0.22;                                                                   // blinks out now and then
+            sc = 1 + (hsh(step + 2, i + 8) - 0.5) * 0.9 * f;                                                 // and stretches
+          }
+        }
+        q.p.position.copy(q.dir).multiplyScalar(q.d * f);
+        q.p.rotation.set(q.spin.x * f * 1.6, q.spin.y * f * 1.6, q.spin.z * f * 1.6);
+        q.p.scale.set(sc, 1 + (sc - 1) * 0.6, 1); q.p.visible = vis;
+      });
+      if (u >= 0.86 && !back) { back = true; playEquipSound('snapin'); for (const ln of arcs) zap(ln, 1.0); }
+    }
+    // core and electrons
+    const t = now;
+    electrons.forEach((m, i) => {
+      const a = t * (5 + i * 1.7) + i * 2.1, r = 0.014;
+      const cx = coreMesh.position.x, cy = coreMesh.position.y, cz = coreMesh.position.z;
+      if (i === 0) m.position.set(cx, cy + Math.cos(a) * r, cz + Math.sin(a) * r);
+      else if (i === 1) m.position.set(cx + Math.sin(a) * r * 0.6, cy + Math.cos(a) * r * 0.6, cz + Math.cos(a) * r * 0.6);
+      else m.position.set(cx + Math.sin(a) * r * 0.6, cy + Math.sin(a * 0.5) * r * 0.4, cz + Math.cos(a) * r);
+    });
+    halo.scale.setScalar(1 + 0.25 * Math.sin(now * 14) + boost * 0.5);
+    // sparks crawl, arcs jump
+    const k = 1 + boost * 0.8, spread = 1 + boost * 1.3;
+    for (const m of sparks) {
+      if (now > m.userData.next) { m.userData.next = now + rnd(0.04, 0.16) / (1 + boost * 2); m.position.copy(inBox(spread)); m.visible = Math.random() < 0.55 + boost * 0.4; m.scale.setScalar(rnd(0.6, 1.8)); }
+    }
+    for (const ln of arcs) {
+      if (now > ln.userData.next) { ln.userData.next = now + rnd(0.05, 0.14) / k; ln.visible = Math.random() < 0.35 + boost * 0.6; if (ln.visible) zap(ln, spread); }
+    }
+  };
+  g._calm = () => { settle(); kick = 0; slide.position.z = 0; };
+  g._flash = flash; g._kickZ = 0.010; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
 function buildHackerAK() {
   // 🟩 AK-20 -> Hacker AK. The stock rifle's own shape with every part turned to the void and outlined in green (_hackerize), and the hacker's fittings on it: a screen of running
   // 1s and 0s down the receiver that flashes bright when it fires, circuit traces on the handguard, a lit line down the magazine, edge lights along the top cover, a green front sight.
@@ -44311,7 +44441,7 @@ const SKIN_SHOT = {};
   // music
   G({ shape: 'note', c: [0x2a1a3a, 0xffd24a] }, 'music', ['mk44_keytar', 'lever_trombone', 'sg8_accordion', 'mg42_accordion', 'boombow_harp', 'bazooka_tuba', 'gau19_pipe_organ', 'shockwave_launcher_boombox', 'signal_pistol_bike_horn', 'hand_cannon_megaphone']);
   // the neon, the pixels, the clockwork, the stars
-  G({ shape: 'bolt', c: [0x00f0ff, 0xff2bd6] }, 'cyber', ['ak20_cyberpunk', 'srx_cyberpunk', 'sg8_cyberpunk', 'vector_cyberpunk', 'pistol_cyberpunk', 'mp40_cyberpunk', 'revolver_cyberpunk', 'smart_smg_neon', 'p90_neon_sign']);
+  G({ shape: 'bolt', c: [0x00f0ff, 0xff2bd6] }, 'cyber', ['ak20_cyberpunk', 'srx_cyberpunk', 'sg8_cyberpunk', 'vector_cyberpunk', 'pistol_cyberpunk', 'mp40_cyberpunk', 'revolver_cyberpunk', 'smart_smg_neon', 'p90_neon_sign', 'pistol_electron']);
   G({ shape: 'cube', c: [0x58d85a, 0xffffff] }, 'pixel', ['srx_8bit', 'ak20_8bit', 'sg8_8bit', 'revolver_8bit', 'vector_8bit', 'shorty_8bit']);
   G({ shape: 'orb', c: [0xff8a1c, 0x2a8cff] }, 'cyber', ['sg8_portal', 'vector_portal', 'railgun_portal_detector', 'p90_quantum_scanner']);
   G({ shape: 'star', c: [0xfff0a0, 0x8ab4ff] }, 'star', ['railgun_constellation', 'portal_launcher_constellation']);
@@ -55319,6 +55449,9 @@ const MODEL_SKINS = [
   { id: 'pistol_hacker', weapon: 'pistol', name: 'Hacker Pistol', rarity: 'rare', look: { hit: 'hack' },
     sw: ['#08090a', '#2dff6a'], build: buildHackerPistol,
     blurb: 'Matte black with a green outline and a screen of 1s and 0s on the slide. Black rounds on a green trail; a hit flashes and spills code; the damage number scrambles before it settles; what it kills glitches into an ERROR and is gone.' },
+  { id: 'pistol_electron', weapon: 'pistol', name: 'Electron', rarity: 'rare',
+    sw: ['#050507', '#5fe6ff'], build: buildElectronPistol,
+    blurb: 'A gloss-black pistol that is not quite holding together: edges traced in electric blue, sparks crawling over it, arcs jumping between its parts and a bright core with three electrons circling it. Reloading, the charge gets away: it shakes, bursts apart, and its pieces hang spitting lightning until they glitch, stuttering, back into place.' },
   { id: 'ak20_hacker', weapon: 'ak20', name: 'Hacker AK', rarity: 'rare', look: { hit: 'hack' },
     sw: ['#08090a', '#2dff6a'], build: buildHackerAK,
     blurb: 'The Hacker Pistol, full size: a void-black AK with green outlines and a screen of 1s and 0s down the receiver. Black rounds on a green trail, a laser-blaster crack, the same flash and scrambling damage number, and what it kills glitches into an ERROR and is gone.' },
@@ -55740,6 +55873,7 @@ const GEN2_MODEL_SKIN_IDS = new Set([
   'shorty_buzzdraw', 'srx_8bit', 'ak20_8bit', 'sg8_8bit', 'revolver_8bit', 'vector_8bit',
   'shorty_8bit',
   'ak20_cyberpunk', 'srx_cyberpunk', 'sg8_cyberpunk', 'vector_cyberpunk', 'pistol_cyberpunk', 'mp40_cyberpunk', 'revolver_cyberpunk',
+  'pistol_electron',
   'akimbo_apex', 'railgun_oblivion', 'machine_pistol_money_gun', 'sawed_off_baguette', 'freeze_gun_lava_lamp', 'cycler_smartphone',   // (no skin is free: server.js GEN2_RARE / LEGENDARY / GOOD_SKIN_IDS)
 ]);
 const GEN2_MELEE_MODEL_SKIN_IDS = new Set([
@@ -60941,6 +61075,8 @@ const SKIN_FX = {
   ak20_blueprint: { sound: _fxS('holo', .26, .05, 1800, 900),
     equip: 'scan', equipMs: 1000, equipSfx: ['scan', 'beep'],
     reload: _fxR(RELOAD_KEYS.ak20, (RELOAD_PROPS.ak20 || []).map(e => e.k === 'mag' ? Object.assign({}, e, { k: 'holomag' }) : e), null, 'beep') },
+  pistol_electron: { sound: _fxS('laser', .26, .08, 2100, 380),
+    equip: 'glitch', equipMs: 900, equipSfx: ['glitchsfx', 'snapin'] },
   deagle_glitch: { sound: _fxS('glitch', .34, .10, 0, 0),
     equip: 'glitch', equipMs: 850, equipSfx: ['glitchsfx', 'snapin'] },
   // (no `sound`: their shots are SKIN_VOICE / SKIN_CHIME, and a profile here would make the revolver's recording and the AK's lose to it)
