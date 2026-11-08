@@ -470,7 +470,7 @@ const GEN2_GOOD_SKIN_IDS = [
 ];
 // The Neon Rift series: seven Gen 2 skins that light up. Ordinary rarity, so they drop alongside the other 'rare' entrances.
 GEN2_RARE_SKIN_IDS.push('ak20_cyberpunk', 'srx_cyberpunk', 'sg8_cyberpunk', 'vector_cyberpunk', 'pistol_cyberpunk', 'mp40_cyberpunk', 'revolver_cyberpunk');
-GEN2_RARE_SKIN_IDS.push('pistol_electron');   // Electron: the unstable pistol that bursts apart on reload
+GEN2_LEGENDARY_SKIN_IDS.push('pistol_electron');   // Electron: the unstable pistol that bursts apart on reload
 // 🟠🔴 The case's two newest top rarities, EPIC and MYTHIC (MODEL_SKINS rarity 'epic' / 'mythic' in public/game.js): the Midas Revolver (EPIC), the Frost Pistol (EPIC) and X!@&!@ (MYTHIC). Each has an entrance like every Gen 2 skin; what is new is how
 // rare they are. (The donut guns above are this file's old "mythic" tier and still show as DONUT on the reel. The new MYTHIC is rarer than any single one of them.)
 const GEN2_EPIC_SKIN_IDS = ['revolver_midas', 'pistol_frost'];
@@ -3115,7 +3115,7 @@ io.on('connection', (socket) => {
     if (now - (p._spearPlantedAt || 0) < 150) return;
     p._spearPlantedAt = now;
     emitToMatchExcept(p.matchId, socket.id, 'spearPlant', { ownerId: p.id, id, x: data.x, y: data.y, z: data.z,
-      dx: data.dx / len, dy: data.dy / len, dz: data.dz / len, floorY: data.floorY });
+      dx: data.dx / len, dy: data.dy / len, dz: data.dz / len, floorY: data.floorY, trident: data.trident === true });
   });
 
   socket.on('hit', (data) => {
