@@ -57543,19 +57543,21 @@ function buildThunderSpear() {
 }
 
 function buildTidalFang() {
-  // 🌊 Katana -> Tidal Fang. A captured wave: the blade is blue water with a white foam spine, a wave curling over it near
-  // the tip and the tip hooked like a fang. Foam crawls along the edge and bubbles rise inside it. Drawn, the water
-  // rises up in the blade.
+  // 🌊 Katana -> Tidal Fang. A captured wave: a slim, mirror-bright blade of blue water with a white foam spine, a wave curling over it
+  // near the tip and the tip hooked like a fang. Foam crawls along the edge and bubbles rise inside it. Drawn, the water rises up in the blade.
+  // Every deflect flicks the blade round (a full turn or a short sweep, any direction) and leaves a blue metal ribbon where it went.
   const g = new THREE.Group();
+  const rig = new THREE.Group(); g.add(rig);                      // everything lives in here, so the whole weapon can be spun about the grip
   const O = [0, 0.022, -0.020];
-  const navy = new THREE.MeshPhongMaterial({ color: 0x12283c, shininess: 60, specular: 0x5a7a96 });
-  const pearl = new THREE.MeshPhongMaterial({ color: 0xeaf6f4, shininess: 200, specular: 0xffffff });
-  const brass = new THREE.MeshPhongMaterial({ color: 0xc89a48, shininess: 160, specular: 0xfff0b0 });
-  const water = new THREE.MeshPhongMaterial({ color: 0x2aa8d8, emissive: 0x0a5a8a, emissiveIntensity: 0.55, shininess: 220, specular: 0xffffff, transparent: true, opacity: 0.82 });
-  const deep = new THREE.MeshPhongMaterial({ color: 0x1470b0, emissive: 0x06304a, emissiveIntensity: 0.5, shininess: 200, specular: 0xffffff, transparent: true, opacity: 0.88 });
+  const navy = new THREE.MeshPhongMaterial({ color: 0x12283c, shininess: 120, specular: 0x8aaac6 });
+  const pearl = new THREE.MeshPhongMaterial({ color: 0xeaf6f4, shininess: 300, specular: 0xffffff });
+  const brass = new THREE.MeshPhongMaterial({ color: 0xc89a48, shininess: 300, specular: 0xfff0b0 });
+  const water = new THREE.MeshPhongMaterial({ color: 0x4cc6f2, emissive: 0x0e6a9e, emissiveIntensity: 0.6, shininess: 900, specular: 0xffffff, transparent: true, opacity: 0.96 });
+  const deep = new THREE.MeshPhongMaterial({ color: 0x1a86cc, emissive: 0x083a60, emissiveIntensity: 0.55, shininess: 900, specular: 0xffffff, transparent: true, opacity: 0.97 });
   const foamM = new THREE.MeshBasicMaterial({ color: 0xf4ffff });
+  const glintM = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95 });
   const add = (geo, mat, x, y, z, rx = 0, ry = 0) => {
-    const m = new THREE.Mesh(geo, mat); m.position.set(x + O[0], y + O[1], z + O[2]); m.rotation.set(rx, ry, 0); g.add(m); return m;
+    const m = new THREE.Mesh(geo, mat); m.position.set(x + O[0], y + O[1], z + O[2]); m.rotation.set(rx, ry, 0); rig.add(m); return m;
   };
   add(new THREE.CylinderGeometry(0.012, 0.012, 0.150, 12), navy, 0, 0, 0.078, Math.PI / 2);        // the hilt
   for (let i = 0; i < 5; i++) add(new THREE.TorusGeometry(0.0125, 0.0016, 6, 16), brass, 0, 0, 0.030 + i * 0.026);   // its brass bands
@@ -57565,25 +57567,27 @@ function buildTidalFang() {
     const a = i / 8 * Math.PI * 2;
     add(new THREE.SphereGeometry(0.0048, 8, 6), brass, Math.cos(a) * 0.030, Math.sin(a) * 0.030, 0);
   }
-  add(new THREE.BoxGeometry(0.010, 0.022, 0.014), brass, 0, 0, -0.011);                           // the collar
-  g._water = add(new THREE.BoxGeometry(0.0075, 0.032, 0.290), water, 0, 0, -0.160);               // the blade: water. It rises on the draw.
-  add(new THREE.BoxGeometry(0.0090, 0.011, 0.290), deep, 0, -0.011, -0.160);                      // the deep, along the edge
-  add(new THREE.ConeGeometry(0.0160, 0.080, 4), water, 0, 0.0, -0.345, -Math.PI / 2 - 0.12);     // the fang: the tip, hooked down
-  add(new THREE.TorusGeometry(0.030, 0.0088, 8, 16, Math.PI * 0.9), water, 0, 0.016, -0.215, 0, -Math.PI / 2);   // the wave curling over
-  add(new THREE.SphereGeometry(0.0085, 8, 6), foamM, 0, 0.016 + 0.0093, -0.215 - 0.0285);                          // its foam lip
-  add(new THREE.TorusGeometry(0.018, 0.0066, 8, 12, Math.PI * 0.9), water, 0, 0.016, -0.100, 0, -Math.PI / 2);   // a smaller one behind
-  add(new THREE.SphereGeometry(0.0062, 8, 6), foamM, 0, 0.016 + 0.0056, -0.100 - 0.0171);
-  add(new THREE.BoxGeometry(0.0046, 0.0050, 0.290), foamM, 0, 0.0175, -0.160);                    // the foam along the spine
+  add(new THREE.BoxGeometry(0.008, 0.016, 0.014), brass, 0, 0, -0.011);                           // the collar
+  g._water = add(new THREE.BoxGeometry(0.0055, 0.020, 0.290), water, 0, 0, -0.160);               // the blade: water, and slim. It rises on the draw.
+  add(new THREE.BoxGeometry(0.0068, 0.0075, 0.290), deep, 0, -0.0075, -0.160);                    // the deep, along the edge
+  add(new THREE.BoxGeometry(0.0012, 0.0045, 0.270), glintM, 0.0030, 0.0035, -0.160);              // a bright glint down the flat
+  add(new THREE.BoxGeometry(0.0012, 0.0045, 0.270), glintM, -0.0030, 0.0035, -0.160);
+  add(new THREE.ConeGeometry(0.0105, 0.080, 4), water, 0, 0.0, -0.345, -Math.PI / 2 - 0.12);     // the fang: the tip, hooked down
+  add(new THREE.TorusGeometry(0.020, 0.0062, 8, 16, Math.PI * 0.9), water, 0, 0.011, -0.215, 0, -Math.PI / 2);   // the wave curling over
+  add(new THREE.SphereGeometry(0.0060, 8, 6), foamM, 0, 0.011 + 0.0065, -0.215 - 0.0190);                          // its foam lip
+  add(new THREE.TorusGeometry(0.012, 0.0046, 8, 12, Math.PI * 0.9), water, 0, 0.011, -0.100, 0, -Math.PI / 2);   // a smaller one behind
+  add(new THREE.SphereGeometry(0.0044, 8, 6), foamM, 0, 0.011 + 0.0038, -0.100 - 0.0114);
+  add(new THREE.BoxGeometry(0.0034, 0.0038, 0.290), foamM, 0, 0.0122, -0.160);                    // the foam along the spine
   const beads = [], N = 9;                                                                          // foam crawling along it
   for (let i = 0; i < N; i++) {
-    const m = new THREE.Mesh(new THREE.SphereGeometry(0.0058, 8, 6), foamM);
-    m.userData.eqFx = true; g.add(m); beads.push(m);
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.0046, 8, 6), foamM);
+    m.userData.eqFx = true; rig.add(m); beads.push(m);
   }
   const bubbleM = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7, depthWrite: false });
   const bubbles = [];
   for (let i = 0; i < 6; i++) {                                                                     // and bubbles rising in the water
-    const m = new THREE.Mesh(new THREE.SphereGeometry(0.0026 + (i % 3) * 0.0006, 6, 5), bubbleM);
-    m.userData.eqFx = true; g.add(m); bubbles.push(m);
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.0022 + (i % 3) * 0.0005, 6, 5), bubbleM);
+    m.userData.eqFx = true; rig.add(m); bubbles.push(m);
   }
   g._tick = (dt, now, assembling) => {
     for (const m of beads) m.visible = !assembling;
@@ -57591,14 +57595,78 @@ function buildTidalFang() {
     if (assembling) return;
     beads.forEach((m, i) => {
       const u = (now * 0.24 + i / N) % 1, edge = i % 2 === 0;
-      m.position.set(O[0] + Math.sin(now * 5 + i) * 0.003, O[1] + (edge ? -0.0185 : 0.0195) + Math.sin(now * 7 + i * 2) * 0.0015, O[2] - 0.02 - u * 0.30);
+      m.position.set(O[0] + Math.sin(now * 5 + i) * 0.003, O[1] + (edge ? -0.0120 : 0.0130) + Math.sin(now * 7 + i * 2) * 0.001, O[2] - 0.02 - u * 0.30);
       m.scale.setScalar(0.7 + 0.5 * Math.sin(u * Math.PI));                                          // swell mid-blade, vanish at the ends
     });
     bubbles.forEach((m, i) => {
       const u = (now * 0.35 + i * 0.17) % 1;
-      m.position.set(O[0] + Math.sin(now * 3 + i * 1.7) * 0.0025, O[1] - 0.012 + u * 0.026, O[2] - 0.05 - i * 0.04);
+      m.position.set(O[0] + Math.sin(now * 3 + i * 1.7) * 0.0018, O[1] - 0.008 + u * 0.017, O[2] - 0.05 - i * 0.04);
       m.scale.setScalar(Math.sin(u * Math.PI) + 0.05);
     });
+  };
+  // 🌀 A deflect: the blade flicks round the grip -- a whole turn, or a short sweep out and back -- in a random direction, and a blue metal
+  // ribbon is drawn behind the blade (tip to hilt) for as long as it moves.
+  let flick = null;
+  const BLADE = [new THREE.Vector3(O[0], O[1], O[2] - 0.02), new THREE.Vector3(O[0], O[1], O[2] - 0.385)];   // hilt end, tip
+  const trail = [];                                                                                   // [{a: Vector3, b: Vector3, t}] newest last
+  let ribbon = null;
+  const rebuildRibbon = (nowMs) => {
+    if (!ribbon) {
+      const mk = (col, op, wide) => {
+        const geo = new THREE.BufferGeometry();
+        const mat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: op, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending });
+        const m = new THREE.Mesh(geo, mat); m.frustumCulled = false; m.renderOrder = 998; m.userData = { col, wide }; scene.add(m); return m;
+      };
+      ribbon = [mk(0x1c78ff, 0.9, 1), mk(0xd8f6ff, 1, 0.12)];                                         // the body of it, and a hot white-blue core line
+    }
+    const n = trail.length;
+    for (const m of ribbon) {
+      if (n < 2) { m.visible = false; continue; }
+      m.visible = true;
+      const pos = new Float32Array(n * 2 * 3), col = new Float32Array(n * 2 * 3), idx = [];
+      const c = new THREE.Color(m.userData.col), w = m.userData.wide;
+      for (let i = 0; i < n; i++) {
+        const s = trail[i], age = Math.min(1, (nowMs - s.t) / 420), k = (1 - age) * (1 - age);          // sharp: bright at the blade, gone by the end
+        const mid = s.a.clone().lerp(s.b, 0.5);
+        const a = mid.clone().lerp(s.a, w), b = mid.clone().lerp(s.b, w);
+        pos.set([a.x, a.y, a.z, b.x, b.y, b.z], i * 6);
+        const tip = 0.35 + 0.65 * k;                                                                    // brighter near the tip edge, like polished metal
+        col.set([c.r * k, c.g * k, c.b * k, c.r * k * tip, c.g * k * tip, c.b * k * tip], i * 6);
+        if (i < n - 1) idx.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2);
+      }
+      m.geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      m.geometry.setAttribute('color', new THREE.BufferAttribute(col, 3));
+      m.geometry.setIndex(idx); m.geometry.computeBoundingSphere();
+    }
+  };
+  const endFlick = () => {
+    rig.quaternion.identity(); rig.position.set(0, 0, 0); flick = null;
+    if (ribbon) { for (const m of ribbon) { scene.remove(m); m.geometry.dispose(); m.material.dispose(); } ribbon = null; }
+    trail.length = 0;
+  };
+  g._fangDeflect = () => {
+    if (flick) return;                                                                                 // one at a time; a fast volley keeps the spin going
+    const axis = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
+    const full = Math.random() < 0.5, sign = Math.random() < 0.5 ? -1 : 1;
+    flick = { t0: performance.now(), dur: full ? 480 : 340, axis, ang: full ? Math.PI * 2 * sign : (Math.PI * 80 / 180) * sign, full, epoch: matchEpoch };
+    const tick = () => {
+      if (!flick) return;
+      const nowMs = performance.now(), u = Math.min(1, (nowMs - flick.t0) / flick.dur);
+      if (flick.epoch !== matchEpoch) { endFlick(); return; }
+      const e = flick.full ? 1 - Math.pow(1 - u, 3) : Math.sin(u * Math.PI);                            // a turn eases out; a sweep goes out and back
+      const q = new THREE.Quaternion().setFromAxisAngle(flick.axis, flick.ang * e);
+      rig.quaternion.copy(q);
+      rig.position.set(O[0], O[1], O[2]).sub(new THREE.Vector3(O[0], O[1], O[2]).applyQuaternion(q));   // turn about the grip, not the model's origin
+      g.updateWorldMatrix(true, true);
+      if (u < 1) {
+        trail.push({ a: rig.localToWorld(BLADE[0].clone()), b: rig.localToWorld(BLADE[1].clone()), t: nowMs });
+      }
+      while (trail.length && nowMs - trail[0].t > 420) trail.shift();
+      rebuildRibbon(nowMs);
+      if (u >= 1 && !trail.length) { endFlick(); return; }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
   };
   g._greebled = true; g._handDetailed = true;
   g.position.set(0.10, -0.12, -0.20); return g;
@@ -65135,6 +65203,7 @@ function triggerDeflectImpact(pos, opts = {}) {
   if (katana) {
     _katanaDeflectFx(at, sector);
     const tape=meleeModels[selectedMeleeIdx];
+    tape?._fangDeflect?.();   // Tidal Fang: the blade flicks round and leaves a ribbon
     if(tape?._tapeDeflect){
       tape._tapeDeflect(at);
       const ctx=getAudioCtx();
