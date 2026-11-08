@@ -49451,6 +49451,7 @@ function updateMovement(dt, socialBlocked = false) {
   if (!aquatic && !slamState && !pilotedVehicle && !pilotedMortar) {
     const groundEyeY = getGroundEyeY() + (window._crouchEye - PLAYER_EYE_HEIGHT);
     const isGrounded = camera.position.y <= groundEyeY + 0.05 && playerYVel <= 0;
+    window._pvpGrounded = isGrounded;   // (the portal speed boost reads this: it ends if you are back on the ground)
     // Edge-detect Space so a held key doesn't auto-trigger the air jump
     const spaceDown = (keys['Space'] || window._mobileJump) && !crouchHeld;
     const spaceEdge = spaceDown && !window._prevSpaceDown;

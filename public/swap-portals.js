@@ -10,7 +10,9 @@
   // Two bugs kept on purpose: every trip through a portal makes you a little faster (stacking, for BOOST_HOLD ms after the last one), and
   // going through one while sliding starts the slide's clock again, so a slide can be kept going for as long as there are portals to run through.
   const BOOST_STEP = 1.1, BOOST_MAX = 8, BOOST_HOLD = 8000, BOOST_FADE = 2000;
-  let boost = 1, boostUntil = 0;
+  // ...but the speed ends on its own: 0.9 s after the last portal, if you are standing on the ground, it is over.
+  const GROUND_END = 900;
+  let boost = 1, boostUntil = 0, lastHop = 0;
   const EYE = 1.65;                                            // the eye is this far above the feet
   const COLORS = [0xff8a22, 0x2a8cff];
   const owners = new Map();                                    // ownerId -> [portal, portal], oldest first
@@ -189,7 +191,7 @@
       if (c.vy !== null) { playerYVel = c.vy; slamState = null; }
       lastPlayerPos.copy(cam); prev.copy(cam);
       try { resolveWallCollisions(); } catch (e) {}
-      boost = Math.min(BOOST_MAX, boost * BOOST_STEP); boostUntil = now + BOOST_HOLD;
+      boost = Math.min(BOOST_MAX, boost * BOOST_STEP); boostUntil = now + BOOST_HOLD; lastHop = now;
       try { flashAbilityName('PORTAL SPEED x' + boost.toFixed(2)); } catch (e) {}
       if (to.kind === 'wall' && window._slideUntil && Date.now() < window._slideUntil) {          // sliding when I went in: the slide starts over, pointing out of the exit
         window._slideUntil = Date.now() + SLIDE_MS;
@@ -242,7 +244,12 @@
       }
       if (!list.length) owners.delete(id); else list.forEach(paint);
     }
-    if (live()) hopPlayer(now, dt || 0.016); else { havePrev = false; boost = 1; }
+    if (live()) {
+      hopPlayer(now, dt || 0.016);
+      if (boost > 1 && lastHop && now - lastHop >= GROUND_END && window._pvpGrounded) {      // back on the ground 0.9 s after the portal: the speed is gone
+        boost = 1; boostUntil = 0; lastHop = 0; _extVel.x = _extVel.z = 0; peak = 0;
+      }
+    } else { havePrev = false; boost = 1; }
     hopBots(now);
   }
 
