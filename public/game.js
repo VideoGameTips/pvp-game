@@ -57546,8 +57546,8 @@ function buildTidalFang() {
   // 🌊 Katana -> Tidal Fang. A captured wave: a slim, mirror-bright blade of blue water with a white foam spine, a wave curling over it
   // near the tip and the tip hooked like a fang. Foam crawls along the edge and bubbles rise inside it. Drawn, the water rises up in the blade.
   // Every deflect flicks the blade round (a full turn or a short sweep, any direction) and leaves a blue metal ribbon where it went.
+  // (The parts stay direct children of the model: the draw-in entrance moves those, and `_water` has to be one of them.)
   const g = new THREE.Group();
-  const rig = new THREE.Group(); g.add(rig);                      // everything lives in here, so the whole weapon can be spun about the grip
   const O = [0, 0.022, -0.020];
   const navy = new THREE.MeshPhongMaterial({ color: 0x12283c, shininess: 120, specular: 0x8aaac6 });
   const pearl = new THREE.MeshPhongMaterial({ color: 0xeaf6f4, shininess: 300, specular: 0xffffff });
@@ -57557,7 +57557,7 @@ function buildTidalFang() {
   const foamM = new THREE.MeshBasicMaterial({ color: 0xf4ffff });
   const glintM = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95 });
   const add = (geo, mat, x, y, z, rx = 0, ry = 0) => {
-    const m = new THREE.Mesh(geo, mat); m.position.set(x + O[0], y + O[1], z + O[2]); m.rotation.set(rx, ry, 0); rig.add(m); return m;
+    const m = new THREE.Mesh(geo, mat); m.position.set(x + O[0], y + O[1], z + O[2]); m.rotation.set(rx, ry, 0); g.add(m); return m;
   };
   add(new THREE.CylinderGeometry(0.012, 0.012, 0.150, 12), navy, 0, 0, 0.078, Math.PI / 2);        // the hilt
   for (let i = 0; i < 5; i++) add(new THREE.TorusGeometry(0.0125, 0.0016, 6, 16), brass, 0, 0, 0.030 + i * 0.026);   // its brass bands
@@ -57581,13 +57581,13 @@ function buildTidalFang() {
   const beads = [], N = 9;                                                                          // foam crawling along it
   for (let i = 0; i < N; i++) {
     const m = new THREE.Mesh(new THREE.SphereGeometry(0.0046, 8, 6), foamM);
-    m.userData.eqFx = true; rig.add(m); beads.push(m);
+    m.userData.eqFx = true; g.add(m); beads.push(m);
   }
   const bubbleM = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7, depthWrite: false });
   const bubbles = [];
   for (let i = 0; i < 6; i++) {                                                                     // and bubbles rising in the water
     const m = new THREE.Mesh(new THREE.SphereGeometry(0.0022 + (i % 3) * 0.0005, 6, 5), bubbleM);
-    m.userData.eqFx = true; rig.add(m); bubbles.push(m);
+    m.userData.eqFx = true; g.add(m); bubbles.push(m);
   }
   g._tick = (dt, now, assembling) => {
     for (const m of beads) m.visible = !assembling;
@@ -57606,7 +57606,15 @@ function buildTidalFang() {
   };
   // 🌀 A deflect: the blade flicks round the grip -- a whole turn, or a short sweep out and back -- in a random direction, and a blue metal
   // ribbon is drawn behind the blade (tip to hilt) for as long as it moves.
-  let flick = null;
+  let flick = null, homes = null;
+  const pivot = new THREE.Vector3(O[0], O[1], O[2]), tmpV = new THREE.Vector3(), tmpQ = new THREE.Quaternion();
+  const spinBy = (q) => {                                                                             // every part turned by q about the grip
+    for (const c of g.children) {
+      const h = homes.get(c); if (!h) continue;
+      c.position.copy(h.p).sub(pivot).applyQuaternion(q).add(pivot); c.quaternion.copy(q).multiply(h.q);
+    }
+  };
+  const spunPoint = (v, q) => tmpV.copy(v).sub(pivot).applyQuaternion(q).add(pivot).clone();
   const BLADE = [new THREE.Vector3(O[0], O[1], O[2] - 0.02), new THREE.Vector3(O[0], O[1], O[2] - 0.385)];   // hilt end, tip
   const trail = [];                                                                                   // [{a: Vector3, b: Vector3, t}] newest last
   let ribbon = null;
@@ -57640,26 +57648,28 @@ function buildTidalFang() {
     }
   };
   const endFlick = () => {
-    rig.quaternion.identity(); rig.position.set(0, 0, 0); flick = null;
+    if (homes) { for (const c of g.children) { const h = homes.get(c); if (h) { c.position.copy(h.p); c.quaternion.copy(h.q); } } homes = null; }
+    flick = null;
     if (ribbon) { for (const m of ribbon) { scene.remove(m); m.geometry.dispose(); m.material.dispose(); } ribbon = null; }
     trail.length = 0;
   };
   g._fangDeflect = () => {
     if (flick) return;                                                                                 // one at a time; a fast volley keeps the spin going
+    if (_equip && _equip.model === g) return;                                                          // not while it is being drawn
+    homes = new Map(); for (const c of g.children) homes.set(c, { p: c.position.clone(), q: c.quaternion.clone() });
     const axis = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
     const full = Math.random() < 0.5, sign = Math.random() < 0.5 ? -1 : 1;
     flick = { t0: performance.now(), dur: full ? 480 : 340, axis, ang: full ? Math.PI * 2 * sign : (Math.PI * 80 / 180) * sign, full, epoch: matchEpoch };
     const tick = () => {
       if (!flick) return;
       const nowMs = performance.now(), u = Math.min(1, (nowMs - flick.t0) / flick.dur);
-      if (flick.epoch !== matchEpoch) { endFlick(); return; }
+      if (flick.epoch !== matchEpoch || (_equip && _equip.model === g)) { endFlick(); return; }
       const e = flick.full ? 1 - Math.pow(1 - u, 3) : Math.sin(u * Math.PI);                            // a turn eases out; a sweep goes out and back
       const q = new THREE.Quaternion().setFromAxisAngle(flick.axis, flick.ang * e);
-      rig.quaternion.copy(q);
-      rig.position.set(O[0], O[1], O[2]).sub(new THREE.Vector3(O[0], O[1], O[2]).applyQuaternion(q));   // turn about the grip, not the model's origin
+      spinBy(q);                                                                                        // turn about the grip, not the model's origin
       g.updateWorldMatrix(true, true);
       if (u < 1) {
-        trail.push({ a: rig.localToWorld(BLADE[0].clone()), b: rig.localToWorld(BLADE[1].clone()), t: nowMs });
+        trail.push({ a: g.localToWorld(spunPoint(BLADE[0], q)), b: g.localToWorld(spunPoint(BLADE[1], q)), t: nowMs });
       }
       while (trail.length && nowMs - trail[0].t > 420) trail.shift();
       rebuildRibbon(nowMs);
