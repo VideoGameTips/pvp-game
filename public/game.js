@@ -2017,6 +2017,14 @@ let playerYVel = 0;               // Player vertical velocity (for air grenades 
 // with JUMP_VEL untouched the plain jump lands back on the original 3.0 m, and
 // blast arcs come down fast and hard instead of hanging.
 const GRAVITY       = 24;    // m/s² -> 3.97 m apex, 1.15 s hang (was 31.5, before that 21)
+// The longer you stay off the ground, the harder it pulls you down. A jump is over before it starts (1.5 s of ordinary gravity), then the
+// pull doubles every second -- a launch pad or a long fall ends in a crash -- up to 64 times the ordinary pull. Landing starts it over.
+const AIR_PULL = { grace: 1.5, doubleEvery: 1.0, max: 64 };
+let airTime = 0;
+function airPull(dt, counting) {
+  if (counting) airTime += dt;
+  return airTime <= AIR_PULL.grace ? 1 : Math.min(AIR_PULL.max, 2 ** ((airTime - AIR_PULL.grace) / AIR_PULL.doubleEvery));
+}
 const JUMP_VEL      = 13.8;  // m/s standing jump -> 3.02 m apex
 const AIR_JUMP_VEL  = 12.3;  // m/s mid-air second jump -> 2.4 m, same ratio as before
 const DEFAULT_MOVE_MULT = 0.65; // calmer default player/bot ground speed
@@ -49393,13 +49401,14 @@ function updateMovement(dt, socialBlocked = false) {
     if (!climbing) window._climbing = false;
     if (!isGrounded) {
       const prevEyeY = camera.position.y;
-      if (!climbing) playerYVel -= GRAVITY * dt; // gravity (suspended while climbing)
+      if (!climbing) playerYVel -= GRAVITY * dt * airPull(dt, true); // gravity (suspended while climbing), harder the longer you are up
       camera.position.y += playerYVel * dt;
       resolvePlayerCeiling(prevEyeY);
       const landingEyeY = getLandingEyeY(prevEyeY) + (window._crouchEye - PLAYER_EYE_HEIGHT);
       if (playerYVel <= 0 && camera.position.y <= Math.max(groundEyeY, landingEyeY)) {
         camera.position.y = Math.max(groundEyeY, landingEyeY);
         playerYVel = 0;
+        airTime = 0;
         window._slideUntil = 0;
         _extVel.x *= 0.2; _extVel.z *= 0.2;
         window._blastCarry = false;
@@ -49408,6 +49417,7 @@ function updateMovement(dt, socialBlocked = false) {
       // glue to ground when not jumping
       camera.position.y = groundEyeY;
       playerYVel = 0;
+      airTime = 0;
     }
   }
   // Ice: blend current input direction with last frame's direction for a slide feel
@@ -49472,7 +49482,7 @@ function updateMovement(dt, socialBlocked = false) {
     // Low-grav zones reduce gravity to 1/3
     const gravMult = (typeof _playerInLowGrav !== 'undefined' && _playerInLowGrav) ? 0.33 : 1;
     const prevEyeY = camera.position.y;
-    slamState.vel -= GRAVITY * dt * gravMult; // gravity
+    slamState.vel -= GRAVITY * dt * gravMult * (slamState.type === 'slam' ? 1 : airPull(dt, true)); // gravity (a slam keeps its own pace; every other kind of air gets heavier the longer you are up)
     if (slamState.vel < 2.5 && tryWallClimbMove(dt, dir)) {
       slamState.vel = 5.4;
       slamState.type = 'jump';
@@ -49496,6 +49506,7 @@ function updateMovement(dt, socialBlocked = false) {
     if (camera.position.y <= groundEyeY && slamState.vel <= 0) {
       const landingHardness = Math.min(1.2, Math.abs(slamState.vel || 0) / 12);
       camera.position.y = groundEyeY;
+      airTime = 0;
       window._slideUntil = 0;
       _extVel.x *= 0.2; _extVel.z *= 0.2;
       window._blastCarry = false;
