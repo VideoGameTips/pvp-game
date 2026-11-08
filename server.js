@@ -445,9 +445,10 @@ const DONUT_SKIN_IDS = [
 // (gotcha #4): that list decides what the picker locks, this one what drops.
 const GEN2_MYTHIC_SKIN_IDS = DONUT_SKIN_IDS;   // one list, so the two cannot drift apart
 const GEN2_LEGENDARY_SKIN_IDS = [
-  'ak20_rainbow', 'railgun_oblivion',
+  'ak20_rainbow', 'railgun_oblivion', 'javelin_katyusha',
 ];
 const GEN2_RARE_SKIN_IDS = [
+  'p90_ppsh41', 'black_hole_sputnik',
   'revolver_final_notice','vector_crimson',
   'ak20_hyperspace', 'ak20_blueprint', 'sg8_portal', 'vector_portal',
   'railgun_portal_detector', 'p90_quantum_scanner', 'freeze_hyperslush', 'firework_showman',
@@ -2983,7 +2984,7 @@ io.on('connection', (socket) => {
     const now = Date.now();
     if (now - (p._blackHoleAt || 0) < 3000) return;
     p._blackHoleAt = now;
-    emitToMatch(p.matchId, 'blackHole', { ownerId: p.id, x: data.x, y: data.y, z: data.z });
+    emitToMatch(p.matchId, 'blackHole', { ownerId: p.id, x: data.x, y: data.y, z: data.z, sputnik: data.sputnik === true });
   });
 
   // Destructible identities are deterministic; relay only inside the shooter's match.
