@@ -3115,7 +3115,7 @@ io.on('connection', (socket) => {
     if (now - (p._spearPlantedAt || 0) < 150) return;
     p._spearPlantedAt = now;
     emitToMatchExcept(p.matchId, socket.id, 'spearPlant', { ownerId: p.id, id, x: data.x, y: data.y, z: data.z,
-      dx: data.dx / len, dy: data.dy / len, dz: data.dz / len, floorY: data.floorY });
+      dx: data.dx / len, dy: data.dy / len, dz: data.dz / len, floorY: data.floorY, trident: data.trident === true });
   });
 
   socket.on('hit', (data) => {
