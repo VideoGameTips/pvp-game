@@ -29968,6 +29968,117 @@ function buildOverclockedPistol() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+function buildIronJudge() {
+  // 🏭 Hand Cannon -> The Iron Judge. An industrial cannon squeezed into one hand: black, gunmetal and molten orange. The barrel is four separate steel blocks held
+  // together by a bar of glowing orange energy running through them.
+  //   idle     the four segments float slightly apart and the core shows in the gaps
+  //   aim      they slide forward and lock into one enormous barrel
+  //   fire     the barrel splits open for a blink, an orange shockwave goes out, and the segments slam shut
+  //   reload   all five cartridges lift up over the gun and then drop into their chambers one after another
+  //   inspect  the handgun unfolds into a little artillery piece -- barrel raised, trail legs, wheels -- and folds back
+  const g = new THREE.Group();
+  const black = new THREE.MeshPhongMaterial({ color: 0x0d0e10, shininess: 120, specular: 0x8a8f96 });
+  const steel = new THREE.MeshPhongMaterial({ color: 0x4a5058, shininess: 160, specular: 0xc8d0d8 });
+  const orange = new THREE.MeshBasicMaterial({ color: 0xff7a1a }), hot = new THREE.MeshBasicMaterial({ color: 0xffd08a });
+  const glow = new THREE.MeshBasicMaterial({ color: 0xff6a10, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false });
+  const brass = new THREE.MeshPhongMaterial({ color: 0xd2a24a, shininess: 160, specular: 0xfff0b0 });
+  const parts = [];
+  const piece = (cx, cy, cz) => { const p = new THREE.Group(); g.add(p); parts.push({ p, c: new THREE.Vector3(cx, cy, cz) }); return p; };
+  const Y = 0.028;
+  const frame = piece(0, 0.018, 0.025);
+  gpBox(frame, black, 0.038, 0.062, 0.110, 0, 0.018, 0.025); gpBox(frame, steel, 0.030, 0.010, 0.150, 0, 0.052, 0.005);
+  gpBox(frame, orange, 0.0016, 0.0016, 0.110, 0.0196, 0.036, 0.025); gpBox(frame, orange, 0.0016, 0.0016, 0.110, -0.0196, 0.036, 0.025);
+  const grip = piece(0, -0.050, 0.060);
+  gpPlate(grip, black, [[0.082, -0.010], [0.092, -0.100], [0.062, -0.118], [0.030, -0.102], [0.034, -0.010]], 0.032, -0.012);
+  gpBox(grip, steel, 0.034, 0.010, 0.040, 0, -0.116, 0.062, 0.2);
+  const hammer = piece(0, 0.058, 0.080); gpBox(hammer, steel, 0.010, 0.022, 0.012, 0, 0.058, 0.080, -0.45);
+  const trig = piece(0, -0.002, 0.020); gpBox(trig, hot, 0.006, 0.018, 0.006, 0, -0.002, 0.020, 0.25);
+  { const t = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.0034, 6, 14, Math.PI * 1.05), steel); t.rotation.set(0, Math.PI / 2, -0.4); t.position.set(0, -0.014, 0.030); trig.add(t); }
+  const cylP = piece(0, Y, -0.040);                                                         // the cylinder: five chambers
+  const spin = new THREE.Group(); spin.position.set(0, Y, -0.040); cylP.add(spin);
+  { const body = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.050, 20), steel); body.rotation.x = Math.PI / 2; spin.add(body);
+    for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2 + Math.PI / 2; const h = new THREE.Mesh(new THREE.CylinderGeometry(0.0072, 0.0072, 0.052, 10), new THREE.MeshBasicMaterial({ color: 0x050403 })); h.rotation.x = Math.PI / 2; h.position.set(Math.cos(a) * 0.0165, Math.sin(a) * 0.0165, 0); spin.add(h); } }
+  const segs = [];
+  for (let i = 0; i < 4; i++) {                                                             // four barrel blocks
+    const z = -0.100 - i * 0.054, p = piece(0, Y, z); segs.push(p);
+    gpBox(p, steel, 0.034, 0.036, 0.050, 0, Y, z); gpBox(p, black, 0.036, 0.010, 0.040, 0, Y + 0.0205, z); gpBox(p, black, 0.036, 0.010, 0.040, 0, Y - 0.0205, z);
+    gpBox(p, orange, 0.0018, 0.020, 0.0018, 0.0178, Y, z + 0.018); gpBox(p, orange, 0.0018, 0.020, 0.0018, -0.0178, Y, z + 0.018);
+  }
+  gpBox(segs[3], orange, 0.036, 0.038, 0.004, 0, Y, -0.100 - 3 * 0.054 - 0.027); gpBox(segs[3], black, 0.012, 0.012, 0.005, 0, Y, -0.100 - 3 * 0.054 - 0.0295);   // the muzzle face and its bore
+  gpBox(segs[3], steel, 0.005, 0.012, 0.006, 0, Y + 0.030, -0.100 - 3 * 0.054 + 0.010);                                                                    // the front sight
+  const coreP = piece(0, Y, -0.190);                                                        // the energy bar through the barrel
+  const coreBar = new THREE.Mesh(new THREE.BoxGeometry(0.010, 0.010, 0.250), glow); coreBar.position.set(0, Y, -0.195); coreP.add(coreBar);
+  const coreIn = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.004, 0.250), hot); coreIn.position.copy(coreBar.position); coreP.add(coreIn);
+  // the artillery bits, folded away inside the gun until the inspect: two trail legs and two wheels
+  const legs = [-1, 1].map(s => { const p = piece(s * 0.012, 0.000, 0.080); gpBox(p, steel, 0.008, 0.008, 0.120, s * 0.012, 0.000, 0.140); gpBox(p, black, 0.014, 0.004, 0.020, s * 0.012, -0.004, 0.204); return { p, s }; });
+  const wheels = [-1, 1].map(s => { const p = piece(s * 0.030, -0.010, 0.010); const w = new THREE.Mesh(new THREE.CylinderGeometry(0.030, 0.030, 0.008, 18), black); w.rotation.z = Math.PI / 2; w.position.set(s * 0.034, -0.010, 0.010); p.add(w); const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.010, 0.010, 0.010, 10), orange); hub.rotation.z = Math.PI / 2; hub.position.copy(w.position); hub.position.x += s * 0.002; p.add(hub); return { p, s }; });
+  const shells = [];
+  for (let i = 0; i < 5; i++) {
+    const s = new THREE.Group(); s.userData.eqFx = true; s.visible = false;
+    const c = new THREE.Mesh(new THREE.CylinderGeometry(0.0066, 0.0066, 0.030, 10), brass); c.rotation.x = Math.PI / 2; s.add(c);
+    const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.0022, 0.0066, 0.010, 10), new THREE.MeshPhongMaterial({ color: 0xb87333, shininess: 120 })); tip.rotation.x = Math.PI / 2; tip.position.z = -0.019; s.add(tip);
+    g.add(s); shells.push(s);
+  }
+  const waves = [0, 1].map(i => { const m = new THREE.Mesh(new THREE.TorusGeometry(0.030, 0.0034, 8, 32), new THREE.MeshBasicMaterial({ color: i ? 0xffd08a : 0xff6a10, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending })); m.userData.eqFx = true; m.visible = false; g.add(m); return m; });
+  const flash = makeMuzzleFlash(); flash.position.set(0, Y, -0.340); _hackFlash(flash, 0xff8a2a); g.add(flash);
+  const ease = u => u * u * (3 - 2 * u), clamp01 = u => Math.max(0, Math.min(1, u));
+  const MUZ = new THREE.Vector3(0, Y, -0.335), PIV = new THREE.Vector3(0, Y, -0.045), rot = new THREE.Matrix4(), tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
+  let aim = 0, was = false, fireAt = -9, clicked = 0, spinA = 0, wave = -9;
+  g._tick = (dt, now, assembling) => {
+    waves.forEach(w => w.visible = w.visible && !assembling);
+    if (assembling) { for (const q of parts) { q.p.position.set(0, 0, 0); q.p.rotation.set(0, 0, 0); q.p.scale.set(1, 1, 1); } legs.forEach(l => l.p.visible = false); wheels.forEach(w => w.p.visible = false); return; }
+    const fired = !!(g._flash && g._flash.visible); if (fired && !was) { fireAt = now; wave = now; } was = fired;
+    aim += ((isADS ? 1 : 0) - aim) * Math.min(1, dt * 9);
+    const t0 = g._reloadStart && g._reloadDur ? (Date.now() - g._reloadStart) / g._reloadDur : -1;
+    const inspecting = !!g._inspectMode && t0 >= 0 && t0 < 1, reloading = !g._inspectMode && t0 >= 0 && t0 < 1;
+    const sf = now - fireAt, split = sf < 0.05 ? sf / 0.05 : sf < 0.20 ? 1 - ease((sf - 0.05) / 0.15) : 0;     // opens fast, slams shut
+    const idle = (1 - aim) * 1 + split * 2.4;
+    segs.forEach((p, i) => {
+      p.position.set(0, 0, (1.5 - i) * 0.012 * idle - aim * 0.008 + Math.sin(now * 1.2 + i) * 0.0014 * (1 - aim));
+      p.rotation.set(0, 0, 0);
+    });
+    coreP.position.set(0, 0, -0.004 * aim); coreP.rotation.set(0, 0, 0);
+    for (const q of parts) if (!segs.includes(q.p) && q.p !== coreP) { q.p.position.set(0, 0, 0); q.p.rotation.set(0, 0, 0); q.p.scale.set(1, 1, 1); }
+    legs.forEach(l => l.p.visible = false); wheels.forEach(w => w.p.visible = false);
+    // fire: shockwave rings from the muzzle
+    const wt = now - wave;
+    waves.forEach((w, i) => {
+      if (wt < 0 || wt > 0.32) { w.visible = false; return; }
+      const k = wt / 0.32; w.visible = true; w.position.copy(MUZ).add(tmp.set(0, 0, -0.02 - i * 0.03 - k * 0.06)); w.scale.setScalar(0.4 + k * (3.4 + i)); w.material.opacity = (1 - k) * (i ? 0.7 : 0.9);
+    });
+    coreBar.material.opacity = 0.7 + 0.15 * Math.sin(now * 6) + split * 0.3;
+    coreBar.scale.set(1 + split * 1.2, 1 + split * 1.2, 1);
+    shells.forEach(s => s.visible = false);
+    if (reloading) {                                                                          // five cartridges float up over the gun, then drop into their chambers
+      const u = t0, up = ease(clamp01((u - 0.08) / 0.30));
+      shells.forEach((s, i) => {
+        const fan = (i - 2) * 0.030, hoverP = tmp.set(fan, 0.120 + Math.sin(now * 3 + i) * 0.004, -0.040 + Math.abs(i - 2) * 0.012);
+        const ang = i / 5 * Math.PI * 2 + Math.PI / 2, chamber = tmp2.set(Math.cos(ang) * 0.0165, Y + Math.sin(ang) * 0.0165, -0.040);
+        const drop = ease(clamp01((u - 0.50 - i * 0.075) / 0.16));
+        s.position.set(fan * up * (1 - drop) + chamber.x * drop, (Y + (hoverP.y - Y) * up) * (1 - drop) + chamber.y * drop, hoverP.z * (1 - drop) + (chamber.z + 0.040 * (1 - drop)) * drop);
+        s.rotation.set(0, 0, 0); s.scale.setScalar(Math.max(0.0001, 1 - drop * drop)); s.visible = u > 0.06 && drop < 1;
+        if (drop >= 0.98 && clicked < i + 1) { clicked = i + 1; spinA += Math.PI * 2 / 5; try { playEquipSound('snapin'); } catch (e) {} }
+      });
+    } else clicked = 0;
+    spin.rotation.z += (spinA - spin.rotation.z) * Math.min(1, dt * 12);
+    if (inspecting) {                                                                         // unfold into artillery, hold, fold back
+      const f = t0 < 0.30 ? ease(t0 / 0.30) : t0 < 0.70 ? 1 : 1 - ease((t0 - 0.70) / 0.30);
+      const raise = 0.38 * f;
+      rot.makeRotationX(raise);
+      const lift = (q, extra) => { tmp.copy(q.c).sub(PIV).applyMatrix4(rot).add(PIV).sub(q.c); q.p.position.add(tmp); q.p.position.z += extra; q.p.rotation.x += raise; };
+      parts.forEach(q => { if (segs.includes(q.p) || q.p === coreP || q.p === cylP) { /* barrel group raises about the cylinder */ lift(q, 0); } });
+      segs.forEach((p, i) => { p.position.z += (1.5 - i) * 0.020 * f; p.position.y += 0.0; });
+      legs.forEach(l => { l.p.visible = f > 0.02; l.p.position.set(l.s * 0.010 * f, -0.010 * f, -0.030 * f); l.p.rotation.set(0.9 * f, 0, l.s * 0.35 * f); });
+      wheels.forEach(w => { w.p.visible = f > 0.02; w.p.scale.setScalar(Math.max(0.001, f)); w.p.position.set(w.s * 0.006 * f, -0.020 * f, 0.020 * f); });
+      const tilt = Math.sin(t0 * 7) * 0.02 * f; g.rotation.z = tilt;
+      grip.rotation.x = -0.6 * f; grip.position.y += 0.010 * f;
+    } else g.rotation.z = 0;
+  };
+  g._calm = () => { fireAt = -9; wave = -9; clicked = 0; waves.forEach(w => w.visible = false); for (const q of parts) { q.p.position.set(0, 0, 0); q.p.rotation.set(0, 0, 0); } };
+  g._flash = flash; g._kickZ = 0.020; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
 function buildHackerAK() {
   // 🟩 AK-20 -> Hacker AK. The stock rifle's own shape with every part turned to the void and outlined in green (_hackerize), and the hacker's fittings on it: a screen of running
   // 1s and 0s down the receiver that flashes bright when it fires, circuit traces on the handguard, a lit line down the magazine, edge lights along the top cover, a green front sight.
@@ -45006,7 +45117,8 @@ const SKIN_SHOT = {};
   G({ shape: 'hackball', c: [0x0a0a0a, 0x2dff6a], k: 1.3 }, 'hacker', ['frag_hacker']);
   G({ shape: 'shard', c: [0xcff4ff, 0x7fd8ff], k: 1.5 }, 'ice', ['pistol_frost']);                            // the Frost Pistol: an icicle on a pale-blue trail
   G({ shape: 'goldbullet', c: [0xffc83d, 0xfff2b8], k: 1.6 }, null, ['revolver_midas']);                       // the Midas Revolver: a gold round on a gold trail
-  G({ shape: 'bolt', c: [0x35e8ff, 0xffffff], k: 1.2 }, null, ['machine_pistol_overclocked']);                    // Overclocked: a cyan bolt
+  G({ shape: 'bolt', c: [0x35e8ff, 0xffffff], k: 1.2 }, null, ['machine_pistol_overclocked']);
+  G({ shape: 'goldbullet', c: [0xff7a1a, 0xffd08a], k: 1.5 }, null, ['hand_cannon_iron_judge']);                  // The Iron Judge: a molten round                    // Overclocked: a cyan bolt
   G({ shape: 'hackbullet', c: [0x0a0a0a, 0xff2a3d], k: 1.8 }, null, ['ak20_xerror']);                       // X!@&!@: the hacker round in red, and a size bigger               // the Hacker Grenade: a black ball in a green ring, trailing code
   G({ shape: 'cube', c: [0xe74c3c, 0x2ecc71] }, 'pixel', ['p90_rubiks_cube']);
   G({ shape: 'shard', c: [0xb0b8ff, 0x6a6aff] }, 'star', ['ak20_hyperspace', 'deagle_phantom', 'burst_cannon_phantom', 'deagle_glitch']);
@@ -56024,6 +56136,9 @@ const MODEL_SKINS = [
   { id: 'machine_pistol_overclocked', weapon: 'machine_pistol', name: 'Overclocked', rarity: 'epic',
     sw: ['#c4ccd6', '#35e8ff'], build: buildOverclockedPistol,
     blurb: 'A compact black-and-silver machine pistol with a glowing cyan core and six silver plates floating round it. The plates shuttle with every burst and the core pulses; aim and they close into a sleek armoured gun with one thin glowing seam; reload and they unfold while the magazine floats out, turns over and snaps back in. Inspect breaks it into fifteen parts that turn round once and reassemble.' },
+  { id: 'hand_cannon_iron_judge', weapon: 'hand_cannon', name: 'The Iron Judge', rarity: 'legendary',
+    sw: ['#0d0e10', '#ff7a1a'], build: buildIronJudge,
+    blurb: 'An industrial cannon squeezed into one hand: black, gunmetal and molten orange, the barrel four steel blocks held together by a bar of glowing energy. They float apart when idle, slide forward and lock when you aim, and split open for a blink with an orange shockwave when you fire. Reloading floats all five cartridges over the gun before they drop into their chambers. Inspect unfolds it into a little artillery piece and back.' },
   { id: 'ak20_hacker', weapon: 'ak20', name: 'Hacker AK', rarity: 'rare', look: { hit: 'hack' },
     sw: ['#08090a', '#2dff6a'], build: buildHackerAK,
     blurb: 'The Hacker Pistol, full size: a void-black AK with green outlines and a screen of 1s and 0s down the receiver. Black rounds on a green trail, a laser-blaster crack, the same flash and scrambling damage number, and what it kills glitches into an ERROR and is gone.' },
@@ -56438,7 +56553,7 @@ const GEN2_MODEL_SKIN_IDS = new Set([
   'revolver_donut', 'ak20_donut', 'rpg_donut', 'machine_pistol_donut', 'pistol_donut',
   'sg8_donut', 'srx_donut', 'vector_donut', 'grenade_launcher_donut', 'minigun_donut',
   'mp40_donut', 'deagle_donut', 'shorty_donut',
-  'revolver_midas', 'pistol_frost', 'ak20_xerror', 'revolver_shatterpoint', 'machine_pistol_overclocked',            // the Gen 2 case's two new top rarities: EPIC and MYTHIC (server.js GEN2_EPIC_SKIN_IDS / GEN2_NEW_MYTHIC_SKIN_IDS)
+  'revolver_midas', 'pistol_frost', 'ak20_xerror', 'revolver_shatterpoint', 'machine_pistol_overclocked', 'hand_cannon_iron_judge',            // the Gen 2 case's two new top rarities: EPIC and MYTHIC (server.js GEN2_EPIC_SKIN_IDS / GEN2_NEW_MYTHIC_SKIN_IDS)
   'ak20_rainbow', 'ak20_hyperspace', 'ak20_blueprint', 'sg8_portal', 'vector_portal',
   'railgun_portal_detector', 'p90_quantum_scanner', 'freeze_hyperslush', 'firework_showman',
   'shorty_outlaw', 'snub_gunslinger', 'deagle_glitch', 'deagle_phantom', 'vector_glitch_exe',
@@ -61742,6 +61857,7 @@ const SKIN_FX = {
   ak20_blueprint: { sound: _fxS('holo', .26, .05, 1800, 900),
     equip: 'scan', equipMs: 1000, equipSfx: ['scan', 'beep'],
     reload: _fxR(RELOAD_KEYS.ak20, (RELOAD_PROPS.ak20 || []).map(e => e.k === 'mag' ? Object.assign({}, e, { k: 'holomag' }) : e), null, 'beep') },
+  hand_cannon_iron_judge: { equip: 'unfold', equipMs: 1000, equipSfx: ['whoosh', 'snapin'] },
   machine_pistol_overclocked: { equip: 'windup', equipMs: 1000, equipSfx: ['windup', 'ding'] },
   revolver_shatterpoint: { equip: 'assemble', equipMs: 1000, equipSfx: ['snapin', 'chime'] },
   rpg_black_hole: { equip: 'blackhole', equipMs: 1100, equipSfx: ['singularity', 'chime'] },
