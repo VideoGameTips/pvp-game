@@ -55449,7 +55449,7 @@ const MODEL_SKINS = [
   { id: 'pistol_hacker', weapon: 'pistol', name: 'Hacker Pistol', rarity: 'rare', look: { hit: 'hack' },
     sw: ['#08090a', '#2dff6a'], build: buildHackerPistol,
     blurb: 'Matte black with a green outline and a screen of 1s and 0s on the slide. Black rounds on a green trail; a hit flashes and spills code; the damage number scrambles before it settles; what it kills glitches into an ERROR and is gone.' },
-  { id: 'pistol_electron', weapon: 'pistol', name: 'Electron', rarity: 'rare',
+  { id: 'pistol_electron', weapon: 'pistol', name: 'Electron', rarity: 'legendary',
     sw: ['#050507', '#5fe6ff'], build: buildElectronPistol,
     blurb: 'A gloss-black pistol that is not quite holding together: edges traced in electric blue, sparks crawling over it, arcs jumping between its parts and a bright core with three electrons circling it. Reloading, the charge gets away: it shakes, bursts apart, and its pieces hang spitting lightning until they glitch, stuttering, back into place.' },
   { id: 'ak20_hacker', weapon: 'ak20', name: 'Hacker AK', rarity: 'rare', look: { hit: 'hack' },
