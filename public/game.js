@@ -22425,7 +22425,7 @@ function _gunDetails(g, o) {
 let _muzzleLight = null;
 function _getMuzzleLight() {
   if (!_muzzleLight) {
-    _muzzleLight = new THREE.PointLight(0xffcc66, 0, 10, 2);
+    _muzzleLight = new THREE.PointLight(0xffcc66, 0, 14, 2);
     scene.add(_muzzleLight);
   }
   return _muzzleLight;
@@ -22518,13 +22518,14 @@ function ejectFiredCase(model) {
 //   · the LIGHT leads with a white-hot kick and settles to the gun's colour.
 // None of it lasts long or sits in the middle of the screen: the view has to stay clear of the target.
 const MUZZLE_STYLES = {
-  rifle:   { len: 1.20, wid: 0.95, sparks: 4, spd: 5.5, cone: 0.20, spark: 0.020, ring: 0,    puffs: 1, smoke: 1.0, light: 1.00 },
-  rapid:   { len: 1.00, wid: 0.85, sparks: 1, spd: 4.5, cone: 0.28, spark: 0.016, ring: 0,    puffs: 1, smoke: 0.8, light: 0.85 },
-  pistol:  { len: 0.85, wid: 1.15, sparks: 3, spd: 4.5, cone: 0.34, spark: 0.018, ring: 0,    puffs: 1, smoke: 0.8, light: 0.90 },
-  shotgun: { len: 0.95, wid: 1.75, sparks: 8, spd: 6.0, cone: 0.50, spark: 0.022, ring: 0.42, puffs: 2, smoke: 1.4, light: 1.15 },
-  heavy:   { len: 1.55, wid: 1.25, sparks: 7, spd: 8.0, cone: 0.16, spark: 0.026, ring: 0.62, puffs: 2, smoke: 1.7, light: 1.35 },
-  energy:  { len: 1.00, wid: 1.00, sparks: 3, spd: 3.5, cone: 0.45, spark: 0.016, ring: 0.30, puffs: 0, smoke: 0,   light: 1.10, energy: true },
-  quiet:   { len: 0.60, wid: 0.70, sparks: 0, spd: 0,   cone: 0,    spark: 0,     ring: 0,    puffs: 1, smoke: 0.5, light: 0.30 },
+  // (Turned up on purpose: bigger, longer jets, twice the sparks, a shock ring on every loud gun and a much brighter light. The smoke is left alone so the view still clears.)
+  rifle:   { len: 1.75, wid: 1.30, sparks: 8,  spd: 6.5, cone: 0.24, spark: 0.026, ring: 0.40, puffs: 1, smoke: 1.0, light: 1.80 },
+  rapid:   { len: 1.45, wid: 1.15, sparks: 3,  spd: 5.5, cone: 0.32, spark: 0.021, ring: 0.28, puffs: 1, smoke: 0.8, light: 1.55 },
+  pistol:  { len: 1.25, wid: 1.55, sparks: 6,  spd: 5.5, cone: 0.38, spark: 0.024, ring: 0.36, puffs: 1, smoke: 0.8, light: 1.65 },
+  shotgun: { len: 1.40, wid: 2.40, sparks: 16, spd: 7.0, cone: 0.56, spark: 0.029, ring: 0.62, puffs: 2, smoke: 1.4, light: 2.10 },
+  heavy:   { len: 2.25, wid: 1.70, sparks: 14, spd: 9.5, cone: 0.18, spark: 0.034, ring: 0.90, puffs: 2, smoke: 1.7, light: 2.50 },
+  energy:  { len: 1.45, wid: 1.35, sparks: 6,  spd: 4.5, cone: 0.50, spark: 0.021, ring: 0.48, puffs: 0, smoke: 0,   light: 2.00, energy: true },
+  quiet:   { len: 0.95, wid: 1.05, sparks: 0,  spd: 0,   cone: 0,    spark: 0,     ring: 0,    puffs: 1, smoke: 0.5, light: 0.75 },   // (a suppressed gun still throws no sparks and no ring: bigger, but quiet)
 };
 function muzzleStyleFor(w) {
   if (!w) return MUZZLE_STYLES.rifle;
@@ -22632,7 +22633,7 @@ function triggerMuzzleBlast(model, opts = {}) {
   const st = muzzleStyleFor(opts.weapon);
   const tint = opts.color || (flash.material && flash.material.color ? flash.material.color.getHex() : 0xffcc66);
   // No two shots look alike: random roll and a size jitter.
-  const s0 = (opts.scale || 1) * hyperrealismFactor('muzzle') * (1.12 + Math.random() * 0.46);   // steadier, harder: less size lottery
+  const s0 = (opts.scale || 1) * hyperrealismFactor('muzzle') * (1.12 + Math.random() * 0.46) * 1.3;   // steadier, harder: less size lottery (and 30% bigger: turned up on purpose)
   flash.visible = true;
   flash.rotation.z = Math.random() * Math.PI * 2;
   flash.scale.set(s0 * st.wid, s0 * st.wid, s0 * st.len);
@@ -22646,7 +22647,7 @@ function triggerMuzzleBlast(model, opts = {}) {
   // Sparks thrown forward and (on the loud guns) the blast front racing out ahead of the muzzle.
   try { spawnMuzzleSparks(world, fwd, st, tint, opts.scale || 1); spawnMuzzleRing(world, fwd, st, tint); } catch (e) {}
 
-  const dur = opts.duration || 46;   // a spike: shorter than it was (62) so it reads as a flash, not a glow
+  const dur = opts.duration || 66;   // a spike: shorter than it was (62) so it reads as a flash, not a glow
   const start = performance.now();
   const step = () => {
     const t = (performance.now() - start) / dur;
@@ -22663,7 +22664,7 @@ function triggerMuzzleBlast(model, opts = {}) {
       flash.scale.set(f * st.wid, f * st.wid, f * st.len);
       // The light leads white-hot and settles to the gun's own colour.
       if (t < 0.22) light.color.setHex(0xfff4dc); else if (t < 0.40) light.color.setHex(tint);
-      light.intensity = 8.6 * s0 * st.light * (1 - t) * (1 - t) * (1 - t) * (1 - t);
+      light.intensity = 16 * s0 * st.light * (1 - t) * (1 - t) * (1 - t) * (1 - t);
       requestAnimationFrame(step);
     }
   };
@@ -22730,9 +22731,12 @@ function makeMuzzleFlash() {
   const core = new THREE.Mesh(new THREE.SphereGeometry(0.014, 7, 5), glow(0xfffaf0, 1.0));
   core.position.z = -0.006; g.add(core);
   // The needle: thin, long, blinding white, dead along the bore.
-  const needle = new THREE.Mesh(new THREE.ConeGeometry(0.0062, 0.150, 4), glow(0xffffff, 0.95));
-  needle.rotation.x = Math.PI / 2; needle.position.z = -0.075;
+  const needle = new THREE.Mesh(new THREE.ConeGeometry(0.0075, 0.210, 4), glow(0xffffff, 0.98));
+  needle.rotation.x = Math.PI / 2; needle.position.z = -0.105;
   g.add(needle);
+  // A bloom round the crown: a soft white-yellow ball that makes the whole flash read brighter and bigger.
+  const bloom = new THREE.Mesh(new THREE.SphereGeometry(0.040, 10, 8), glow(0xffe2a0, 0.34));
+  bloom.position.z = -0.022; g.add(bloom);
   // Five thin, uneven spikes thrown off the crown. Real flashes are lopsided; the
   // splay is one fixed angle so it stays predictable rather than an Euler surprise.
   const PETALS = [[0.3, 1.00], [1.45, 0.66], [2.6, 0.90], [3.85, 0.62], [5.1, 0.84]];
