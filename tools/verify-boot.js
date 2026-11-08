@@ -4904,8 +4904,8 @@ if (ok && process.argv.includes('--epic')) {
     for (const r of ['epic', 'mythic']) { if (!RARITY_CSS[r]) issues.push('the reel has no colour for ' + r); if (!new RegExp(r + ':0x[0-9a-f]{6}').test(lobby)) issues.push('the 3D case has no colour for ' + r); }
     if (RARITY_CSS.epic === RARITY_CSS.mythic || RARITY_CSS.epic === RARITY_CSS.rare || RARITY_CSS.mythic === RARITY_CSS.legend) issues.push('the new rarities should each have a colour of their own');
     // case membership: the same ids on both sides, and they are Gen 2 skins (the picker locks them until pulled)
-    if (JSON.stringify(epicIds) !== JSON.stringify(['revolver_midas', 'pistol_frost'])) issues.push('server EPIC list should be the Midas Revolver and the Frost Pistol: ' + epicIds);
-    if (JSON.stringify(mythicIds) !== JSON.stringify(['ak20_xerror'])) issues.push('server MYTHIC list should be X!@&!@: ' + mythicIds);
+    if (JSON.stringify(epicIds) !== JSON.stringify(['revolver_midas', 'pistol_frost', 'machine_pistol_overclocked'])) issues.push('server EPIC list should be the Midas Revolver, the Frost Pistol and the Overclocked machine pistol: ' + epicIds);
+    if (JSON.stringify(mythicIds) !== JSON.stringify(['ak20_xerror', 'revolver_shatterpoint'])) issues.push('server MYTHIC list should be X!@&!@ and Shatterpoint: ' + mythicIds);
     for (const id of [...epicIds, ...mythicIds]) { if (!GEN2_MODEL_SKIN_IDS.has(id)) issues.push(id + ' is dealt by the server but the picker would not lock it (GEN2_MODEL_SKIN_IDS)'); if (GEN1_GATED_MODEL_SKIN_IDS.has(id)) issues.push(id + ' is in the Gen 1 case too'); }
     // an entrance, like every Gen 2 skin; no sound profile (their shots are SKIN_VOICE / SKIN_CHIME and a profile would out-vote the recordings)
     for (const [id, equip] of [['revolver_midas', 'midas'], ['pistol_frost', 'assemble'], ['ak20_xerror', 'glitch']]) {

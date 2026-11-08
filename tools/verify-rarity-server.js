@@ -12,8 +12,8 @@ vm.createContext(context);
 vm.runInContext(source.slice(from, to) + '\n' + source.slice(fnStart, fnEnd), context);
 const { GEN1_SKIN_IDS, GEN2_SKIN_IDS, GEN2_SKIN_WEIGHTS, SKIN_CASES, GEN2_EPIC_SKIN_IDS, GEN2_NEW_MYTHIC_SKIN_IDS, GEN2_RARE_SKIN_IDS, GEN2_GOOD_SKIN_IDS, GEN2_LEGENDARY_SKIN_IDS, DONUT_SKIN_IDS } = vm.runInContext('({ GEN1_SKIN_IDS, GEN2_SKIN_IDS, GEN2_SKIN_WEIGHTS, SKIN_CASES, GEN2_EPIC_SKIN_IDS, GEN2_NEW_MYTHIC_SKIN_IDS, GEN2_RARE_SKIN_IDS, GEN2_GOOD_SKIN_IDS, GEN2_LEGENDARY_SKIN_IDS, DONUT_SKIN_IDS })', context);
 
-assert.equal(JSON.stringify(GEN2_EPIC_SKIN_IDS), '["revolver_midas","pistol_frost"]'); assert.equal(JSON.stringify(GEN2_NEW_MYTHIC_SKIN_IDS), '["ak20_xerror","revolver_shatterpoint"]');   // (arrays made inside the vm are not this realm's: compare as text)
-for (const id of ['revolver_midas', 'pistol_frost', 'ak20_xerror', 'revolver_shatterpoint']) {
+assert.equal(JSON.stringify(GEN2_EPIC_SKIN_IDS), '["revolver_midas","pistol_frost","machine_pistol_overclocked"]'); assert.equal(JSON.stringify(GEN2_NEW_MYTHIC_SKIN_IDS), '["ak20_xerror","revolver_shatterpoint"]');   // (arrays made inside the vm are not this realm's: compare as text)
+for (const id of ['revolver_midas', 'pistol_frost', 'machine_pistol_overclocked', 'ak20_xerror', 'revolver_shatterpoint']) {
   assert(GEN2_SKIN_IDS.includes(id), id + ' is in the Gen 2 skins');
   assert(SKIN_CASES.gen2_entrances.pool.includes(id), id + ' is dealt by the Gen 2 case');
   assert(!GEN1_SKIN_IDS.includes(id) && !SKIN_CASES.gen1_basic.pool.includes(id), id + ' is not in Gen 1');

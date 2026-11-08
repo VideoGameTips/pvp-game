@@ -475,7 +475,7 @@ GEN2_LEGENDARY_SKIN_IDS.push('rpg_black_hole');   // Black Hole Cannon
 GEN2_RARE_SKIN_IDS.push('srx_absolute_zero', 'sg8_tectonic');   // Absolute Zero, Tectonic
 // 🟠🔴 The case's two newest top rarities, EPIC and MYTHIC (MODEL_SKINS rarity 'epic' / 'mythic' in public/game.js): the Midas Revolver (EPIC), the Frost Pistol (EPIC) and X!@&!@ (MYTHIC). Each has an entrance like every Gen 2 skin; what is new is how
 // rare they are. (The donut guns above are this file's old "mythic" tier and still show as DONUT on the reel. The new MYTHIC is rarer than any single one of them.)
-const GEN2_EPIC_SKIN_IDS = ['revolver_midas', 'pistol_frost'];
+const GEN2_EPIC_SKIN_IDS = ['revolver_midas', 'pistol_frost', 'machine_pistol_overclocked'];
 const GEN2_NEW_MYTHIC_SKIN_IDS = ['ak20_xerror', 'revolver_shatterpoint'];
 const GEN2_SKIN_IDS = [...GEN2_MYTHIC_SKIN_IDS, ...GEN2_NEW_MYTHIC_SKIN_IDS, ...GEN2_EPIC_SKIN_IDS, ...GEN2_LEGENDARY_SKIN_IDS, ...GEN2_RARE_SKIN_IDS, ...GEN2_GOOD_SKIN_IDS];
 const GEN2_SKIN_WEIGHTS = {};

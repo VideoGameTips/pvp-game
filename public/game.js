@@ -29880,6 +29880,94 @@ function playShatterFinisher(targetId) {                                        
   return playGlassFinisher(targetId);
 }
 
+function buildOverclockedPistol() {
+  // ⚡ Machine Pistol -> Overclocked. A compact black-and-silver machine pistol with a glowing cyan core, and six angular silver armour plates floating round
+  // the body with small gaps between them. Fifteen separate components in all (the inspect takes every one of them apart).
+  //   fire     the plates shuttle back and forth with every burst, and the core pulses with every shot
+  //   aim      the plates close up into a sleek armoured pistol with one narrow glowing seam
+  //   reload   the plates unfold, the magazine floats out, turns over 180 degrees and snaps back in, and the plates close again
+  //   inspect  it breaks into its fifteen parts, which turn round once together, and it reassembles
+  const g = new THREE.Group();
+  const black = new THREE.MeshPhongMaterial({ color: 0x0c0e12, shininess: 200, specular: 0x9fb4c8, emissive: 0x030406 });
+  const silver = new THREE.MeshPhongMaterial({ color: 0xc4ccd6, shininess: 500, specular: 0xffffff, emissive: 0x10161c });
+  const cyan = new THREE.MeshBasicMaterial({ color: 0x35e8ff }), seamM = new THREE.MeshBasicMaterial({ color: 0x35e8ff, transparent: true, opacity: 0.4, depthWrite: false, blending: THREE.AdditiveBlending });
+  const parts = [];
+  const piece = (cx, cy, cz, hover) => { const p = new THREE.Group(); g.add(p); const q = { p, c: new THREE.Vector3(cx, cy, cz), hover: new THREE.Vector3(...hover), rest: new THREE.Vector3() }; parts.push(q); return { p, q }; };
+  const body = {};
+  { const { p, q } = piece(0, 0.036, -0.008, [0, 0, 0]); body.slide = p; body.slideQ = q;
+    gpBox(p, black, 0.026, 0.028, 0.148, 0, 0.036, -0.008); gpBox(p, cyan, 0.0014, 0.0014, 0.100, 0.0137, 0.040, -0.014); gpBox(p, cyan, 0.0014, 0.0014, 0.100, -0.0137, 0.040, -0.014); }
+  { const { p } = piece(0, 0.034, -0.092, [0, 0, -0.004]); gpCyl(p, black, 0.0072, 0.0072, 0.024, 14, 0, 0.034, -0.092); gpBox(p, cyan, 0.016, 0.0014, 0.0014, 0, 0.034, -0.1045); }
+  { const { p } = piece(0, 0.056, 0.052, [0, 0.004, 0.004]); gpBox(p, black, 0.012, 0.006, 0.012, 0, 0.0545, 0.052); gpBox(p, cyan, 0.0026, 0.0026, 0.0026, 0, 0.0585, 0.052); }
+  { const { p } = piece(0, 0.008, 0.000, [0, 0, 0]); gpBox(p, black, 0.024, 0.040, 0.118, 0, 0.008, 0.000); }
+  { const { p } = piece(0, -0.050, 0.030, [0, 0, 0]);
+    gpPlate(p, black, [[0.048, -0.020], [0.050, -0.100], [0.030, -0.116], [0.000, -0.104], [0.000, -0.018]], 0.026, -0.010); gpBox(p, cyan, 0.0014, 0.060, 0.0014, -0.0135, -0.060, 0.040); }
+  const magP = piece(0, -0.108, 0.022, [0, 0, 0]);                                       // the magazine: long, it floats out on a reload
+  gpBox(magP.p, black, 0.022, 0.090, 0.030, 0, -0.108, 0.022); gpBox(magP.p, silver, 0.024, 0.008, 0.032, 0, -0.156, 0.022); gpBox(magP.p, cyan, 0.0030, 0.050, 0.0014, 0.0116, -0.108, 0.010);
+  const mag = magP.p;
+  { const { p } = piece(0, -0.004, -0.004, [0, 0, 0]); gpBox(p, silver, 0.005, 0.016, 0.005, 0, -0.004, -0.004, 0.25); }
+  { const { p } = piece(0, -0.004, 0.004, [0, 0, 0]); const t = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.0028, 6, 14, Math.PI * 1.05), black); t.rotation.set(0, Math.PI / 2, -0.4); t.position.set(0, -0.012, 0.004); p.add(t); }
+  const coreP = piece(0, 0.022, -0.012, [0, 0, 0]);                                       // the glowing cyan core, in a window of the frame
+  const coreBall = new THREE.Mesh(new THREE.SphereGeometry(0.0085, 14, 10), cyan); coreBall.position.set(0, 0.022, -0.012); coreP.p.add(coreBall);
+  const halo = new THREE.Mesh(new THREE.SphereGeometry(0.016, 12, 10), new THREE.MeshBasicMaterial({ color: 0x35e8ff, transparent: true, opacity: 0.4, depthWrite: false, blending: THREE.AdditiveBlending })); halo.position.copy(coreBall.position); coreP.p.add(halo);
+  const plates = [];                                                                       // six floating plates; `out` is the way each one stands off the body
+  const plate = (w, h, d, x, y, z, rx, out) => {
+    const { p } = piece(x, y, z, out.map(v => v * 0.014)); const m = gpBox(p, silver, w, h, d, x, y, z, rx, 0, 0);
+    const edge = new THREE.Mesh(new THREE.BoxGeometry(w > 0.01 ? w * 0.9 : w + 0.0006, h > 0.01 ? Math.min(h * 0.12, 0.002) + 0.0006 : h + 0.0006, d > 0.01 ? d * 0.9 : d + 0.0006), cyan);
+    edge.position.set(x, y + (h > 0.01 ? h / 2 : 0), z); edge.rotation.x = rx; p.add(edge); plates.push(p); return p;
+  };
+  plate(0.030, 0.004, 0.100, 0, 0.060, -0.010, 0, [0, 1, 0]);
+  plate(0.004, 0.022, 0.100, -0.0185, 0.040, -0.008, 0, [-1, 0.2, 0]);
+  plate(0.004, 0.022, 0.100, 0.0185, 0.040, -0.008, 0, [1, 0.2, 0]);
+  plate(0.004, 0.028, 0.070, -0.0165, 0.006, 0.010, 0, [-1, -0.2, 0]);
+  plate(0.004, 0.028, 0.070, 0.0165, 0.006, 0.010, 0, [1, -0.2, 0]);
+  plate(0.030, 0.034, 0.004, 0, 0.036, 0.076, 0.15, [0, 0.1, 1]);
+  const seam = new THREE.Mesh(new THREE.BoxGeometry(0.0022, 0.0022, 0.140), seamM); seam.position.set(0, 0.0235, -0.010); seam.userData.eqFx = true; g.add(seam);   // the narrow seam you see when aiming
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.034, -0.108); _hackFlash(flash, 0x35e8ff); g.add(flash);
+  const ease = u => u * u * (3 - 2 * u), clamp01 = u => Math.max(0, Math.min(1, u));
+  const CEN = new THREE.Vector3(0, 0.020, 0.004), tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
+  let aim = 0, kick = 0, was = false, clicked = false, shuttle = 0;
+  g._tick = (dt, now, assembling) => {
+    seam.visible = !assembling;
+    if (assembling) { for (const q of parts) q.p.position.set(0, 0, 0); return; }
+    const fired = !!(g._flash && g._flash.visible); if (fired) { kick = 1; if (!was) shuttle = 1; } was = fired;
+    kick = fired ? 1 : kick * Math.exp(-dt * 14); shuttle *= Math.exp(-dt * 4);
+    aim += ((isADS ? 1 : 0) - aim) * Math.min(1, dt * 10);
+    const t0 = g._reloadStart && g._reloadDur ? (Date.now() - g._reloadStart) / g._reloadDur : -1;
+    const inspecting = !!g._inspectMode && t0 >= 0 && t0 < 1, reloading = !g._inspectMode && t0 >= 0 && t0 < 1;
+    let open = 1 - aim * 0.92;                                                              // how far the plates stand off the gun
+    if (reloading) open = Math.max(open, t0 < 0.12 ? ease(t0 / 0.12) * 2.2 : t0 < 0.82 ? 2.2 : 2.2 - ease((t0 - 0.82) / 0.18) * 1.2);
+    parts.forEach((q, i) => { q.p.position.copy(q.hover).multiplyScalar(open); q.p.rotation.set(0, 0, 0); });
+    plates.forEach((p, i) => {                                                              // each plate: bobbing a little, and shuttling back and forth while it fires
+      p.position.y += Math.sin(now * 1.4 + i * 1.3) * 0.0016 * open;
+      p.position.z += (Math.sin(now * 38 + i * 0.9) * 0.0085 * kick + 0.012 * shuttle) * (1 - aim * 0.6);
+    });
+    body.slide.position.z += 0.010 * kick;
+    if (reloading) {                                                                         // the magazine floats out, turns over 180 degrees, snaps back in
+      const u = t0, drop = u < 0.12 ? 0 : u < 0.40 ? ease((u - 0.12) / 0.28) : u < 0.72 ? 1 : 1 - ease((u - 0.72) / 0.16);
+      mag.position.y -= 0.085 * drop; mag.position.x += 0.012 * drop * (1 - 0.0);
+      mag.rotation.y = Math.PI * ease(clamp01((u - 0.30) / 0.34));
+      if (u >= 0.88 && !clicked) { clicked = true; try { playEquipSound('snapin'); } catch (e) {} }
+      mag.position.x -= 0.012 * drop;
+    } else { clicked = false; mag.rotation.y = 0; }
+    if (inspecting) {                                                                        // fifteen parts, turning round once, then back together
+      const f = t0 < 0.14 ? ease(t0 / 0.14) : t0 < 0.80 ? 1 : 1 - ease((t0 - 0.80) / 0.20);
+      const turn = Math.PI * 2 * ease(clamp01((t0 - 0.14) / 0.66));
+      parts.forEach((q, i) => {
+        tmp.copy(q.c).sub(CEN); const d = tmp.length() || 0.01;
+        tmp.multiplyScalar(2.6).add(new THREE.Vector3(Math.sin(i * 2.4) * 0.03, Math.cos(i * 1.9) * 0.03, Math.sin(i * 1.3) * 0.03));
+        tmp2.copy(tmp).applyAxisAngle(new THREE.Vector3(0, 1, 0), turn).add(CEN).sub(q.c);
+        q.p.position.lerp(tmp2, f); q.p.rotation.y = turn * f;
+      });
+    }
+    const pulse = 1 + 0.18 * Math.sin(now * 8) + kick * 0.9;
+    coreBall.scale.setScalar(pulse * 0.9); halo.scale.setScalar(pulse * 1.2);
+    seamM.opacity = 0.2 + 0.7 * aim + kick * 0.3; seam.scale.y = 1 + aim * 0.4;
+  };
+  g._calm = () => { kick = 0; shuttle = 0; clicked = false; mag.rotation.y = 0; for (const q of parts) { q.p.position.set(0, 0, 0); q.p.rotation.set(0, 0, 0); } };
+  g._flash = flash; g._kickZ = 0.008; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
 function buildHackerAK() {
   // 🟩 AK-20 -> Hacker AK. The stock rifle's own shape with every part turned to the void and outlined in green (_hackerize), and the hacker's fittings on it: a screen of running
   // 1s and 0s down the receiver that flashes bright when it fires, circuit traces on the handguard, a lit line down the magazine, edge lights along the top cover, a green front sight.
@@ -44918,6 +45006,7 @@ const SKIN_SHOT = {};
   G({ shape: 'hackball', c: [0x0a0a0a, 0x2dff6a], k: 1.3 }, 'hacker', ['frag_hacker']);
   G({ shape: 'shard', c: [0xcff4ff, 0x7fd8ff], k: 1.5 }, 'ice', ['pistol_frost']);                            // the Frost Pistol: an icicle on a pale-blue trail
   G({ shape: 'goldbullet', c: [0xffc83d, 0xfff2b8], k: 1.6 }, null, ['revolver_midas']);                       // the Midas Revolver: a gold round on a gold trail
+  G({ shape: 'bolt', c: [0x35e8ff, 0xffffff], k: 1.2 }, null, ['machine_pistol_overclocked']);                    // Overclocked: a cyan bolt
   G({ shape: 'hackbullet', c: [0x0a0a0a, 0xff2a3d], k: 1.8 }, null, ['ak20_xerror']);                       // X!@&!@: the hacker round in red, and a size bigger               // the Hacker Grenade: a black ball in a green ring, trailing code
   G({ shape: 'cube', c: [0xe74c3c, 0x2ecc71] }, 'pixel', ['p90_rubiks_cube']);
   G({ shape: 'shard', c: [0xb0b8ff, 0x6a6aff] }, 'star', ['ak20_hyperspace', 'deagle_phantom', 'burst_cannon_phantom', 'deagle_glitch']);
@@ -55932,6 +56021,9 @@ const MODEL_SKINS = [
   { id: 'revolver_shatterpoint', weapon: 'revolver', name: 'Shatterpoint', rarity: 'mythic', look: { hit: 'shatter' },
     sw: ['#20262e', '#4aa8ff'], build: buildShatterpoint,
     blurb: 'A revolver in fifteen pieces, hovering a finger-width apart and held together by blue energy, the cylinder floating loose and always turning. Aim and it pulls itself nearly solid; fire and the barrel jumps and the pieces are thrown out and drawn back; reload and the cylinder floats out, six cartridges circle it and slide home together. A kill breaks the victim in a blue shockwave of glass.' },
+  { id: 'machine_pistol_overclocked', weapon: 'machine_pistol', name: 'Overclocked', rarity: 'epic',
+    sw: ['#c4ccd6', '#35e8ff'], build: buildOverclockedPistol,
+    blurb: 'A compact black-and-silver machine pistol with a glowing cyan core and six silver plates floating round it. The plates shuttle with every burst and the core pulses; aim and they close into a sleek armoured gun with one thin glowing seam; reload and they unfold while the magazine floats out, turns over and snaps back in. Inspect breaks it into fifteen parts that turn round once and reassemble.' },
   { id: 'ak20_hacker', weapon: 'ak20', name: 'Hacker AK', rarity: 'rare', look: { hit: 'hack' },
     sw: ['#08090a', '#2dff6a'], build: buildHackerAK,
     blurb: 'The Hacker Pistol, full size: a void-black AK with green outlines and a screen of 1s and 0s down the receiver. Black rounds on a green trail, a laser-blaster crack, the same flash and scrambling damage number, and what it kills glitches into an ERROR and is gone.' },
@@ -56346,7 +56438,7 @@ const GEN2_MODEL_SKIN_IDS = new Set([
   'revolver_donut', 'ak20_donut', 'rpg_donut', 'machine_pistol_donut', 'pistol_donut',
   'sg8_donut', 'srx_donut', 'vector_donut', 'grenade_launcher_donut', 'minigun_donut',
   'mp40_donut', 'deagle_donut', 'shorty_donut',
-  'revolver_midas', 'pistol_frost', 'ak20_xerror', 'revolver_shatterpoint',            // the Gen 2 case's two new top rarities: EPIC and MYTHIC (server.js GEN2_EPIC_SKIN_IDS / GEN2_NEW_MYTHIC_SKIN_IDS)
+  'revolver_midas', 'pistol_frost', 'ak20_xerror', 'revolver_shatterpoint', 'machine_pistol_overclocked',            // the Gen 2 case's two new top rarities: EPIC and MYTHIC (server.js GEN2_EPIC_SKIN_IDS / GEN2_NEW_MYTHIC_SKIN_IDS)
   'ak20_rainbow', 'ak20_hyperspace', 'ak20_blueprint', 'sg8_portal', 'vector_portal',
   'railgun_portal_detector', 'p90_quantum_scanner', 'freeze_hyperslush', 'firework_showman',
   'shorty_outlaw', 'snub_gunslinger', 'deagle_glitch', 'deagle_phantom', 'vector_glitch_exe',
@@ -61650,6 +61742,7 @@ const SKIN_FX = {
   ak20_blueprint: { sound: _fxS('holo', .26, .05, 1800, 900),
     equip: 'scan', equipMs: 1000, equipSfx: ['scan', 'beep'],
     reload: _fxR(RELOAD_KEYS.ak20, (RELOAD_PROPS.ak20 || []).map(e => e.k === 'mag' ? Object.assign({}, e, { k: 'holomag' }) : e), null, 'beep') },
+  machine_pistol_overclocked: { equip: 'windup', equipMs: 1000, equipSfx: ['windup', 'ding'] },
   revolver_shatterpoint: { equip: 'assemble', equipMs: 1000, equipSfx: ['snapin', 'chime'] },
   rpg_black_hole: { equip: 'blackhole', equipMs: 1100, equipSfx: ['singularity', 'chime'] },
   srx_absolute_zero: { equip: 'assemble', equipMs: 950, equipSfx: ['crystal', 'chime'] },
