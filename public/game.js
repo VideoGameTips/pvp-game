@@ -31259,7 +31259,7 @@ function buildCeilingFan() {
 }
 
 // 🪽 Minigun -> Stormwing. Grey metallic with blue light: one real minigun (the cluster spins up as ever) and a pair of folded wings.
-// Aim (or brace with E) and the wings snap open and four more barrels slide out of them and fire along with the main gun. Same damage:
+// Fire a lot and the back goes red-hot and blasts flame out like a jet. Aim (or brace with E) and the wings snap open and four more barrels slide out of them and fire along with the main gun. Same damage:
 // the four extra barrels are for show, the stats are the minigun's.
 function buildStormwing() {
   const g = new THREE.Group();
@@ -31312,6 +31312,33 @@ function buildStormwing() {
     wing.userData.eqHome = { p: wing.position.clone(), q: wing.quaternion.clone(), s: wing.scale.clone() };   // (the entrance always comes back to this)
     wings.push({ wing, side, barrels });
   }
+  // the jet exhaust: a block across the back, heat panels on top and two dorsal nozzles. Fire a lot and it goes red-hot and the nozzles blast flame
+  const hotM = new THREE.MeshPhongMaterial({ color: 0x6f7a88, shininess: 120, specular: 0xdde6f0, emissive: 0x000000 });
+  const flameOut = new THREE.MeshBasicMaterial({ color: 0xff5a14, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  const flameIn = new THREE.MeshBasicMaterial({ color: 0xffd25a, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  gpBox(g, hotM, 0.064, 0.056, 0.030, 0, 0.004, 0.140);                  // the exhaust block
+  for (const s of [-1, 1]) gpBox(g, hotM, 0.020, 0.003, 0.110, s * 0.026, 0.0435, 0.045);   // heat panels along the top: the part you see go red
+  for (let i = 0; i < 3; i++) gpBox(g, dark, 0.050, 0.004, 0.004, 0, -0.014 + i * 0.011, 0.156);   // vent slats
+  const flames = [];
+  for (const s of [-1, 1]) {
+    gpCyl(g, hotM, 0.017, 0.012, 0.024, 12, s * 0.022, 0.050, 0.100);   // a flared dorsal nozzle (on top, where you can see the flame)
+    const f = new THREE.Group(); f.position.set(s * 0.022, 0.050, 0.113); f.rotation.y = s * 0.10; f.userData.eqFx = true; g.add(f);
+    const outer = new THREE.Mesh(new THREE.ConeGeometry(0.016, 0.075, 10, 1, true), flameOut); outer.rotation.x = Math.PI / 2; outer.position.z = 0.0375; f.add(outer);
+    const inner = new THREE.Mesh(new THREE.ConeGeometry(0.008, 0.045, 8, 1, true), flameIn); inner.rotation.x = Math.PI / 2; inner.position.z = 0.0225; f.add(inner);
+    f.visible = false; flames.push(f);
+  }
+  let heat = 0, hold = 0;
+  const exhaust = (dt, fired) => {
+    if (fired) hold = 0.18; else hold = Math.max(0, hold - dt);
+    heat = Math.max(0, Math.min(1, heat + (hold > 0 ? dt * 0.8 : -dt * 0.45)));       // a second or two of fire to get hot, a couple of seconds to cool
+    hotM.color.setRGB(0.435 + 0.565 * heat, 0.478 - 0.25 * heat, 0.533 - 0.43 * heat);
+    hotM.emissive.setRGB(heat * 0.9, heat * 0.16, 0);
+    const len = Math.max(0, (heat - 0.3) / 0.7);
+    for (const f of flames) {
+      f.visible = len > 0;
+      if (len > 0) { const fl = 0.8 + Math.random() * 0.4; f.scale.set(0.7 + len * 0.5 * fl, 0.7 + len * 0.5 * fl, len * fl); }
+    }
+  };
   _skGrip(g, dark, -0.034);
   _skFinish(g, -0.362, 0.004, 0.006);
   let open = 0, last = 0, turn = 0;
@@ -31323,14 +31350,15 @@ function buildStormwing() {
     }
   };
   pose(0);
-  g._calm = () => { open = 0; pose(0); for (const f of tips) f.visible = false; };
+  g._calm = () => { open = 0; pose(0); for (const f of tips) f.visible = false; heat = 0; hold = 0; exhaust(0, false); };
   g._tick = (dt, now, assembling) => {
-    if (assembling) { open = 0; for (const f of tips) f.visible = false; return; }       // the entrance owns the wings
+    if (assembling) { open = 0; for (const f of tips) f.visible = false; for (const f of flames) f.visible = false; return; }       // the entrance owns the wings
     const aimed = (typeof isADS !== 'undefined' && isADS) || (typeof minigunBraced === 'function' && minigunBraced());
     open += ((aimed ? 1 : 0) - open) * Math.min(1, dt * (aimed ? 7 : 5));
     if (Math.abs(open - (aimed ? 1 : 0)) < 0.004) open = aimed ? 1 : 0;
     pose(open);
     const fired = !!(g._flash && g._flash.visible), full = open > 0.95;
+    exhaust(dt, fired);
     const k = 0.75 + 0.25 * Math.sin(now * 3) + (fired ? 0.5 : 0);                       // the blue lights breathe, and flare when it fires
     blue.color.setRGB(Math.min(1, 0.22 * k), Math.min(1, 0.72 * k), 1);
     for (const f of tips) { f.visible = fired && full && Math.random() < 0.8; if (f.visible) f.scale.setScalar(0.7 + Math.random() * 0.7); }
