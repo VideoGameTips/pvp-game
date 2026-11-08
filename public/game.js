@@ -30313,6 +30313,125 @@ function buildOrbitalStrikeLauncher() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+function buildRedlineMinigun() {
+  // 🔴 Minigun -> Redline. A bulky, angular black frame with six dark-metal barrels and sharp crimson light strips. Six black armour plates cover most of the barrels at rest.
+  //   idle      the plates cover the barrels and the red strips pulse slowly
+  //   aim/fire  the plates slide back and spread out, showing the barrels and a glowing red reactor between them
+  //   spin-up   a red light runs down each barrel in turn, quicker as the motor winds up
+  //   firing    red holographic rings turn round the cluster and the reactor pulses with each burst
+  //   stop      the rings collapse inward, the barrels slow and the plates close
+  //   reload    the reactor powers down, the ammunition door opens, and red lights come back up as it restarts
+  //   SYSTEM OVERLOAD  after 100 shots in a row the plates light up with red circuitry, the reactor flashes and red arcs jump between the barrels (looks only: no damage change)
+  const g = new THREE.Group();
+  const black = new THREE.MeshPhongMaterial({ color: 0x0b0b0e, shininess: 90, specular: 0x6a727c });
+  const metal = new THREE.MeshPhongMaterial({ color: 0x2b2f36, shininess: 320, specular: 0xdde4ee });
+  const plateM = new THREE.MeshPhongMaterial({ color: 0x141519, shininess: 220, specular: 0x9aa4b0 });
+  const stripM = new THREE.MeshBasicMaterial({ color: 0xff2030 });
+  const reactorM = new THREE.MeshBasicMaterial({ color: 0xff2a2a });
+  const circuitM = new THREE.MeshBasicMaterial({ color: 0xff3a3a, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending });
+  const poly = GUN_MATS.polymer(), bright = GUN_MATS.bright();
+  // the frame: heavy and angular
+  gpBox(g, black, 0.078, 0.070, 0.170, 0, 0.004, 0.044); gpBox(g, black, 0.060, 0.030, 0.150, 0, 0.046, 0.050, -0.10); gpBox(g, plateM, 0.080, 0.012, 0.120, 0, 0.038, 0.050);
+  gpBox(g, black, 0.090, 0.040, 0.050, 0, 0.004, -0.050); gpBox(g, plateM, 0.092, 0.010, 0.030, 0, 0.026, -0.050, 0.4);
+  for (const sd of [-1, 1]) {                                                                               // crimson light strips down the sides and the shoulders
+    gpBox(g, stripM, 0.0022, 0.0034, 0.150, sd * 0.0392, 0.020, 0.046); gpBox(g, stripM, 0.0022, 0.0034, 0.110, sd * 0.0392, -0.014, 0.060);
+    gpBox(g, stripM, 0.0022, 0.0034, 0.070, sd * 0.0452, 0.004, -0.050); gpBox(g, stripM, 0.0034, 0.0034, 0.100, sd * 0.024, 0.0525, 0.050);
+  }
+  // the barrel cluster, which the render loop spins (it must hold every part that turns)
+  const cluster = new THREE.Group(); cluster.position.set(0, 0.004, -0.190); g.add(cluster);
+  const segs = [];
+  for (let b = 0; b < 6; b++) {
+    const a = b / 6 * Math.PI * 2, bx = Math.cos(a) * 0.024, by = Math.sin(a) * 0.024;
+    const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.0088, 0.0088, 0.300, 10), metal); bar.rotation.x = Math.PI / 2; bar.position.set(bx, by, 0); cluster.add(bar);
+    const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.0106, 0.0106, 0.020, 10), black); tip.rotation.x = Math.PI / 2; tip.position.set(bx, by, -0.146); cluster.add(tip);
+    for (let s = 0; s < 4; s++) { const m = new THREE.MeshBasicMaterial({ color: 0x3a0610 }); const seg = new THREE.Mesh(new THREE.BoxGeometry(0.0036, 0.0036, 0.030), m); seg.position.set(bx + Math.cos(a) * 0.0090, by + Math.sin(a) * 0.0090, 0.095 - s * 0.062); seg.rotation.z = a; cluster.add(seg); segs.push({ m, b, s }); }
+  }
+  for (const z of [-0.090, 0.040, 0.130]) { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.036, 0.014, 12), black); c.rotation.x = Math.PI / 2; c.position.z = z; cluster.add(c); }
+  const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.0115, 0.0115, 0.270, 12), reactorM); rod.rotation.x = Math.PI / 2; cluster.add(rod);        // the reactor: a red rod down the middle of the barrels
+  g._barrelCluster = cluster; g._spinRate = 10;
+  const reactorFace = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.004, 18), reactorM); reactorFace.rotation.x = Math.PI / 2; reactorFace.position.set(0, 0.004, -0.0775); g.add(reactorFace);
+  const halo = new THREE.Mesh(new THREE.SphereGeometry(0.034, 12, 10), new THREE.MeshBasicMaterial({ color: 0xff2a2a, transparent: true, opacity: 0.28, depthWrite: false, blending: THREE.AdditiveBlending })); halo.position.set(0, 0.004, -0.10); g.add(halo);
+  // six armour plates, round the barrels
+  const plates = [];
+  for (let i = 0; i < 6; i++) {
+    const a = i / 6 * Math.PI * 2, p = new THREE.Group(); p.rotation.z = a; g.add(p);
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.006, 0.180), plateM); slab.position.set(0, 0, 0); p.add(slab);
+    const edge = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.007, 0.006), black); edge.position.set(0, 0, -0.090); p.add(edge);
+    const lt = new THREE.Mesh(new THREE.BoxGeometry(0.0018, 0.0016, 0.150), stripM); lt.position.set(0.011, 0.0035, 0); p.add(lt);
+    for (const [x, z, w, d] of [[-0.006, -0.050, 0.012, 0.0016], [-0.012, -0.040, 0.0016, 0.020], [0.004, 0.010, 0.0016, 0.060], [0.010, 0.040, 0.014, 0.0016], [-0.006, 0.060, 0.0016, 0.030]]) {   // circuit traces, lit on overload
+      const c = new THREE.Mesh(new THREE.BoxGeometry(w, 0.0012, d), circuitM); c.position.set(x, 0.0036, z); p.add(c);
+    }
+    plates.push({ p, a });
+  }
+  const rings = [-0.115, -0.205, -0.295].map((z, i) => { const r = new THREE.Mesh(new THREE.TorusGeometry(0.058, 0.0016, 6, 40), new THREE.MeshBasicMaterial({ color: i % 2 ? 0xff6a6a : 0xff2030, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending })); r.position.set(0, 0.004, z); r.userData.eqFx = true; r.visible = false; g.add(r); return r; });
+  // motor, delinker, chute, spade grips and the belt
+  gpCyl(g, poly, 0.026, 0.026, 0.070, 12, -0.050, 0.010, 0.030, Math.PI / 2, Math.PI / 2);
+  gpBox(g, black, 0.030, 0.036, 0.046, 0, -0.046, 0.030); gpBox(g, poly, 0.026, 0.030, 0.090, 0, -0.070, 0.076, 0.25);
+  for (const sd of [-1, 1]) { gpBox(g, metal, 0.008, 0.008, 0.070, sd * 0.030, 0.010, 0.150); gpBox(g, poly, 0.014, 0.062, 0.018, sd * 0.030, -0.022, 0.180, 0.22); }
+  gpBox(g, metal, 0.070, 0.010, 0.014, 0, 0.010, 0.184); gpBox(g, bright, 0.006, 0.014, 0.006, 0, -0.008, 0.176, 0.2);
+  try { addBeltAndCover(g, { topY: 0.040, trayZ: 0.040, coverW: 0.060, coverLen: 0.085, beltZ: 0.070, drop: 0.140, side: 1 }); } catch (e) {}
+  const door = new THREE.Group(); door.position.set(0.0405, 0.004, 0.084); g.add(door);                                  // the ammunition compartment door, hinged at its back edge
+  { const d = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.050, 0.074), plateM); d.position.set(0, 0, -0.037); door.add(d); }
+  const inside = new THREE.Mesh(new THREE.BoxGeometry(0.002, 0.044, 0.068), new THREE.MeshBasicMaterial({ color: 0xff2a2a, transparent: true, opacity: 0 })); inside.position.set(0.0392, 0.004, 0.047); g.add(inside);
+  const ARC = 6, arcs = [];
+  for (let i = 0; i < 5; i++) { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(ARC * 3), 3)); const ln = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: i % 2 ? 0xffffff : 0xff4a4a, transparent: true, opacity: 1, depthWrite: false, blending: THREE.AdditiveBlending })); ln.frustumCulled = false; ln.userData.eqFx = true; ln.visible = false; g.add(ln); arcs.push({ ln, next: 0 }); }
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 7), new THREE.MeshBasicMaterial({ color: 0xff5a40 })); flash.visible = false; flash.position.set(0, 0.004, -0.352); g.add(flash);
+  const ease = u => u * u * (3 - 2 * u), clamp01 = u => Math.max(0, Math.min(1, u));
+  const R0 = 0.0400, R1 = 0.0740;
+  let open = 0, spin = 0, kick = 0, was = false, ringK = 0, shots = 0, lastShot = -9, over = 0, powerHold = 1;
+  g._onFire = () => { const t = performance.now() / 1000; if (t - lastShot > 0.7) shots = 0; lastShot = t; shots++; kick = 1; };
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  g._tick = (dt, now, assembling) => {
+    if (assembling) { plates.forEach(x => { x.p.position.set(0, 0, -0.230); x.p.position.x = -Math.sin(x.a) * R0; x.p.position.y = Math.cos(x.a) * R0 + 0.004; }); return; }
+    const sh = typeof shooting !== 'undefined' && shooting, braced = typeof minigunBraced === 'function' && minigunBraced();
+    const t0 = g._reloadStart && g._reloadDur ? (Date.now() - g._reloadStart) / g._reloadDur : -1;
+    const reloading = !g._inspectMode && t0 >= 0 && t0 < 1;
+    const goalOpen = (!reloading && (sh || braced || isADS)) ? 1 : 0;
+    open += (goalOpen - open) * Math.min(1, dt * (goalOpen ? 7 : 4)); const o = ease(clamp01(open));
+    const warm = (sh || braced) ? (braced ? 1 : Math.min(1, Math.max(0, (Date.now() - (typeof minigunTriggerStartedAt !== 'undefined' && minigunTriggerStartedAt ? minigunTriggerStartedAt : Date.now())) / 2000))) : 0;
+    spin += (warm - spin) * Math.min(1, dt * (warm > spin ? 1.6 : 2.4));
+    const fired = !!(g._flash && g._flash.visible); if (fired && !was) kick = 1; was = fired; kick *= Math.exp(-dt * 10);
+    if (now - lastShot > 1.2 && shots > 0 && performance.now() / 1000 - lastShot > 1.2) shots = 0;
+    over += ((shots >= 100 ? 1 : 0) - over) * Math.min(1, dt * (shots >= 100 ? 5 : 1.5));
+    // plates: slide back and spread out
+    plates.forEach((x, i) => {
+      const r = R0 + (R1 - R0) * o, a = x.a + o * 0.10 * (i % 2 ? 1 : -1);
+      x.p.rotation.z = a; x.p.position.set(-Math.sin(a) * r, Math.cos(a) * r + 0.004, -0.230 + 0.120 * o);
+    });
+    // light running down each barrel, in turn, faster as the motor winds up
+    const ph = now * (0.5 + spin * 3.2);
+    segs.forEach(sg => { const k = ((ph - sg.s * 0.22 - sg.b * 0.14) % 1 + 1) % 1, v = Math.pow(Math.max(0, 1 - k * 2.4), 1.5) * (0.25 + 0.75 * spin) + 0.10 + over * 0.5; sg.m.color.setRGB(0.25 + 0.75 * v, 0.02 + 0.5 * v * v, 0.03 + 0.5 * v * v); });
+    // rings turn round it while it fires, and fall in when it stops
+    ringK += (((sh || braced) && !reloading ? 1 : 0) - ringK) * Math.min(1, dt * ((sh || braced) ? 6 : 9));
+    rings.forEach((r, i) => { r.visible = ringK > 0.02; r.scale.setScalar(Math.max(0.12, ringK)); r.material.opacity = 0.85 * ringK * (0.7 + 0.3 * Math.sin(now * 12 + i)); r.rotation.x = Math.sin(now * (2 + i)) * 0.35; r.rotation.y = Math.cos(now * (1.6 + i)) * 0.35; r.rotation.z += dt * (3 + i * 2) * (i % 2 ? -1 : 1); });
+    // the reactor: pulses with each burst, powers down on a reload, flashes wildly on overload
+    let power = 1;
+    if (reloading) power = t0 < 0.30 ? 1 - 0.92 * ease(t0 / 0.30) : t0 < 0.62 ? 0.08 : 0.08 + 0.92 * ease((t0 - 0.62) / 0.38);
+    const pulse = (0.78 + 0.22 * Math.sin(now * 3)) * (1 + 0.5 * kick) * (over > 0.3 ? 0.55 + 0.45 * Math.sin(now * 40) : 1) * power;
+    reactorM.color.setRGB(Math.min(1, 0.35 + 0.65 * pulse), 0.06 + 0.4 * Math.max(0, pulse - 0.9), 0.06 + 0.3 * Math.max(0, pulse - 0.95));
+    halo.scale.setScalar(0.8 + 0.5 * pulse); halo.material.opacity = 0.12 + 0.30 * pulse * (0.4 + 0.6 * o);
+    reactorFace.scale.setScalar(0.9 + 0.2 * pulse);
+    const strip = (0.55 + 0.45 * Math.sin(now * 1.6)) * (over > 0.3 ? 0.6 + 0.4 * Math.sin(now * 24) : 1) * (reloading ? 0.3 + 0.7 * power : 1);
+    stripM.color.setRGB(0.35 + 0.65 * strip, 0.04 + 0.12 * strip, 0.07 + 0.1 * strip);
+    // the ammunition door
+    const doorA = reloading ? (t0 < 0.10 ? 0 : t0 < 0.28 ? ease((t0 - 0.10) / 0.18) : t0 < 0.82 ? 1 : 1 - ease((t0 - 0.82) / 0.14)) : 0;
+    door.rotation.y = -1.25 * doorA; inside.material.opacity = 0.85 * doorA * (0.6 + 0.4 * Math.sin(now * 14));
+    // SYSTEM OVERLOAD: red circuitry on the plates and arcs between the barrels
+    circuitM.opacity = over * (0.75 + 0.25 * Math.sin(now * 16));
+    arcs.forEach(a => {
+      a.ln.visible = over > 0.3 && Math.random() < 0.8;
+      if (over > 0.3 && now > a.next) {
+        a.next = now + rnd(0.04, 0.10); const pos = a.ln.geometry.attributes.position, a1 = rnd(0, 6.28), a2 = a1 + rnd(1.0, 3.2), z1 = rnd(-0.31, -0.06), z2 = z1 + rnd(-0.06, 0.06);
+        for (let k = 0; k < ARC; k++) { const t = k / (ARC - 1), j = k === 0 || k === ARC - 1 ? 0 : 0.008, an = a1 + (a2 - a1) * t, rr = 0.050 - Math.sin(t * Math.PI) * 0.014; pos.setXYZ(k, Math.cos(an) * rr + rnd(-j, j), 0.004 + Math.sin(an) * rr + rnd(-j, j), z1 + (z2 - z1) * t + rnd(-j, j)); }
+        pos.needsUpdate = true;
+      }
+    });
+  };
+  g._calm = () => { kick = 0; open = 0; ringK = 0; shots = 0; over = 0; rings.forEach(r => r.visible = false); arcs.forEach(a => a.ln.visible = false); circuitM.opacity = 0; };
+  g._flash = flash; g._kickZ = 0.006; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
 function buildHackerAK() {
   // 🟩 AK-20 -> Hacker AK. The stock rifle's own shape with every part turned to the void and outlined in green (_hackerize), and the hacker's fittings on it: a screen of running
   // 1s and 0s down the receiver that flashes bright when it fires, circuit traces on the handguard, a lit line down the magazine, edge lights along the top cover, a green front sight.
@@ -56384,6 +56503,9 @@ const MODEL_SKINS = [
   { id: 'grenade_launcher_orbital', weapon: 'grenade_launcher', name: 'Orbital Strike', rarity: 'legendary',
     sw: ['#e9edf0', '#ff7a1a'], build: buildOrbitalStrikeLauncher,
     blurb: 'A chunky white-and-black launcher dressed as a little military satellite: blue solar wings folded flat at rest, an orange reactor, a targeting dish and a turning grenade cylinder. Aim and the wings unfold and the dish rises. Where a grenade lands, an orange beam drops from the sky for a fifth of a second over a holographic target ring. The damage is the Grenade Launcher\'s own. Inspect puts out four stabiliser arms and a spinning holographic globe.' },
+  { id: 'minigun_redline', weapon: 'minigun', name: 'Redline', rarity: 'legendary',
+    sw: ['#0b0b0e', '#ff2030'], build: buildRedlineMinigun,
+    blurb: 'A bulky, angular black minigun with six dark barrels and sharp crimson light strips. Six armour plates cover the barrels at rest; when you aim or fire they slide back and spread to show the barrels and a glowing red reactor, a red light runs down each barrel as the motor winds up, and red holographic rings turn round the cluster. Stop and the rings fall in and the plates close. A reload powers the reactor down and opens the ammunition door. After 100 shots in a row it goes into SYSTEM OVERLOAD: red circuitry on the plates, a flashing reactor and red arcs between the barrels. Looks only.' },
   { id: 'ak20_hacker', weapon: 'ak20', name: 'Hacker AK', rarity: 'rare', look: { hit: 'hack' },
     sw: ['#08090a', '#2dff6a'], build: buildHackerAK,
     blurb: 'The Hacker Pistol, full size: a void-black AK with green outlines and a screen of 1s and 0s down the receiver. Black rounds on a green trail, a laser-blaster crack, the same flash and scrambling damage number, and what it kills glitches into an ERROR and is gone.' },
@@ -56798,7 +56920,7 @@ const GEN2_MODEL_SKIN_IDS = new Set([
   'revolver_donut', 'ak20_donut', 'rpg_donut', 'machine_pistol_donut', 'pistol_donut',
   'sg8_donut', 'srx_donut', 'vector_donut', 'grenade_launcher_donut', 'minigun_donut',
   'mp40_donut', 'deagle_donut', 'shorty_donut',
-  'revolver_midas', 'pistol_frost', 'ak20_xerror', 'revolver_shatterpoint', 'machine_pistol_overclocked', 'hand_cannon_iron_judge', 'sawed_off_double_trouble', 'sawed_off_classic_shorty', 'grenade_launcher_orbital',            // the Gen 2 case's two new top rarities: EPIC and MYTHIC (server.js GEN2_EPIC_SKIN_IDS / GEN2_NEW_MYTHIC_SKIN_IDS)
+  'revolver_midas', 'pistol_frost', 'ak20_xerror', 'revolver_shatterpoint', 'machine_pistol_overclocked', 'hand_cannon_iron_judge', 'sawed_off_double_trouble', 'sawed_off_classic_shorty', 'grenade_launcher_orbital', 'minigun_redline',            // the Gen 2 case's two new top rarities: EPIC and MYTHIC (server.js GEN2_EPIC_SKIN_IDS / GEN2_NEW_MYTHIC_SKIN_IDS)
   'ak20_rainbow', 'ak20_hyperspace', 'ak20_blueprint', 'sg8_portal', 'vector_portal',
   'railgun_portal_detector', 'p90_quantum_scanner', 'freeze_hyperslush', 'firework_showman',
   'shorty_outlaw', 'snub_gunslinger', 'deagle_glitch', 'deagle_phantom', 'vector_glitch_exe',
@@ -62102,6 +62224,7 @@ const SKIN_FX = {
   ak20_blueprint: { sound: _fxS('holo', .26, .05, 1800, 900),
     equip: 'scan', equipMs: 1000, equipSfx: ['scan', 'beep'],
     reload: _fxR(RELOAD_KEYS.ak20, (RELOAD_PROPS.ak20 || []).map(e => e.k === 'mag' ? Object.assign({}, e, { k: 'holomag' }) : e), null, 'beep') },
+  minigun_redline: { equip: 'windup', equipMs: 1000, equipSfx: ['windup', 'ding'] },
   grenade_launcher_orbital: { equip: 'unfold', equipMs: 1000, equipSfx: ['whoosh', 'snapin'] },
   sawed_off_classic_shorty: { equip: 'slam', equipMs: 850, equipSfx: ['whoosh', null] },
   sawed_off_double_trouble: { equip: 'slam', equipMs: 900, equipSfx: ['whoosh', 'snapin'] },
