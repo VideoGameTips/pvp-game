@@ -2577,6 +2577,62 @@ if (ok && process.argv.includes('--hammersickle')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+// WIDOWMAKER (the Crossbow skin): a legendary from the Gen 2 case whose eight legs fold, unfold with the aim, snap on a shot, crawl a bolt along the rail on a reload and
+// walk it across the view on inspect; and what it kills hangs in a red web that shatters.
+if (ok && process.argv.includes('--widowmaker')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const sk = MODEL_SKINS.find(s => s.id === 'crossbow_widowmaker');
+    if (!sk || sk.weapon !== 'crossbow') return ['the Widowmaker skin of the Crossbow is missing'];
+    if (!GEN2_MODEL_SKIN_IDS.has(sk.id)) issues.push('Widowmaker is not dealt by the Gen 2 case (no skin is free)');
+    const fx = SKIN_FX[sk.id];
+    if (!fx || !fx.equip || !fx.inspect) issues.push('Widowmaker has no entrance or no inspect track');
+    if (_hitKindOfSkin(sk.id) !== 'web') issues.push('the skin does not carry the web hit look');
+    const m = sk.build();
+    if (!m._legs || m._legs.length !== 8 || !m._tick || !m._calm || !m._steamShot || !m._flash) return issues.concat(['the model is missing its eight legs, its tick, its calm, its shot hook or its flash']);
+    const fr = m._legs.find(L => L.sd > 0 && L.row === 0), rr = m._legs.find(L => L.sd > 0 && L.row === 3), fl = m._legs.find(L => L.sd < 0 && L.row === 0);
+    const frame = (n, dt = 0.016) => { let t = performance.now() / 1000; for (let i = 0; i < n; i++) { t += dt; m._tick(dt, t, false); } };
+    const keep = { ads: isADS };
+    try {
+      frame(2);
+      const folded = fr.root.rotation.y, rearFolded = rr.root.rotation.y;
+      if (!(folded < -1.2)) issues.push('idle: the legs should be folded back along the body, front-right yaw ' + folded.toFixed(2));
+      isADS = true; frame(80);
+      if (!(fr.root.rotation.y > 0 && fr.j3.rotation.y > 0.7)) issues.push('aim: the front legs should unfold into bow arms: ' + [fr.root.rotation.y, fr.j3.rotation.y].map(n => n.toFixed(2)));
+      if (!(rr.root.rotation.y < -0.5)) issues.push('aim: the rear legs should spread backward: ' + rr.root.rotation.y.toFixed(2));
+      if (!(Math.abs(fl.root.rotation.y - (Math.PI - fr.root.rotation.y)) < 1e-6)) issues.push('the left legs should mirror the right');
+      const aimJ3 = fr.j3.rotation.y;
+      m._steamShot(); frame(1, 0.016);
+      if (!(fr.j3.rotation.y > aimJ3 + 0.3)) issues.push('fire: the front legs should snap in: ' + fr.j3.rotation.y.toFixed(2) + ' vs ' + aimJ3.toFixed(2));
+      if (m._bolt.visible) issues.push('fire: the bolt should be gone until the reload brings the next');
+      frame(40);
+      if (Math.abs(fr.j3.rotation.y - aimJ3) > 0.05) issues.push('fire: the front legs should reset after the snap');
+      isADS = false; frame(80);
+      m._reloadStart = Date.now() - 600; m._reloadDur = 1200; frame(1);
+      if (!m._crawler.visible || m._bolt.visible) issues.push('reload: a little spider should be carrying the bolt along the rail');
+      m._reloadStart = Date.now() - 1100; frame(1);
+      if (!m._bolt.visible) issues.push('reload: the bolt should be in the groove at the end');
+      m._reloadStart = 0; frame(2);
+      if (m._crawler.visible) issues.push('reload: the little spider should be gone afterwards');
+      m._inspectMode = true; m._reloadStart = Date.now() - 1300; m._reloadDur = 2400; frame(2);
+      if (!(rr.root.rotation.y > rearFolded + 0.4)) issues.push('inspect: the legs should be out, standing it up: ' + rr.root.rotation.y.toFixed(2));
+      m._inspectMode = false; m._reloadStart = 0; m._calm();
+      if (Math.abs(fr.root.rotation.y - folded) > 1e-6 || !m._bolt.visible) issues.push('calm should put the legs and the bolt back');
+    } finally { isADS = keep.ads; }
+    if (!(HIT_STYLES.web && typeof _buildWeb === 'function')) issues.push('no web');
+    else { const w = _buildWeb(1.75, 12, 6); if (w.pieces.length < 100) issues.push('the web is too thin: ' + w.pieces.length + ' strands'); }
+    const body = new THREE.Group(); body.add(new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.7, 0.3), new THREE.MeshBasicMaterial()));
+    body.visible = true; remoteMeshes.wx = body; players.wx = { dead: true };
+    const keepSound = playSoundEvent, keepFeed = pushFeedLine, keepRaf = typeof requestAnimationFrame !== 'undefined' ? requestAnimationFrame : null, keepTo = setTimeout;
+    playSoundEvent = () => {}; pushFeedLine = () => {}; requestAnimationFrame = () => 0; setTimeout = () => 0;
+    try { if (_playSkinFinisher('web', 'wx', 'someone') !== true) issues.push('the web kill does not play'); }
+    finally { playSoundEvent = keepSound; pushFeedLine = keepFeed; setTimeout = keepTo; if (keepRaf) requestAnimationFrame = keepRaf; delete remoteMeshes.wx; delete players.wx; }
+    return issues;
+  })()`);
+  console.log('WIDOWMAKER checks: Gen 2, folded legs, aim unfolds, fire snaps, reload crawler, inspect walk, web kill');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 // Bot strategy: on every map, ten random bot/enemy pairs 20-36 m apart each ask for a plan. A plan has to be a route a body can
 // walk (each step at most 0.65 m up and 2 m down, one cell at a time), end where it says it does (a perch is 2.4 m or higher
 // and sees the enemy), and most maps with a deck or a roof should have at least one.

@@ -32937,6 +32937,120 @@ function buildGlitchVector() {
   return g;
 }
 
+function buildWidowmaker() {
+  // 🕷️ Crossbow -> WIDOWMAKER. A mechanical spider that is also a crossbow: eight jointed legs folded along its sides. Aim and the front four unfold into the bow
+  // arms while the rear four spread; a shot snaps the front legs in and they reset; a reload sends a little spider crawling along the rail with the next bolt; inspect
+  // stands it on its legs and walks it across the view.
+  const g = new THREE.Group();
+  const blk = new THREE.MeshPhongMaterial({ color: 0x0e0e12, shininess: 150, specular: 0x7a4a4a });
+  const dark = new THREE.MeshPhongMaterial({ color: 0x1c1c22, shininess: 80, specular: 0x555555 });
+  const red = new THREE.MeshPhongMaterial({ color: 0xc41418, emissive: 0x3c0204, shininess: 120, specular: 0xff9a9a });
+  const glow = new THREE.MeshBasicMaterial({ color: 0xff2a2a });
+  gpPlate(g, blk, [
+    [-0.250,0.004],[-0.240,0.020],[0.040,0.022],[0.070,0.014],[0.140,0.016],
+    [0.176,-0.004],[0.170,-0.038],[0.096,-0.042],[0.062,-0.030],[0.030,-0.086],
+    [-0.004,-0.088],[0.004,-0.030],[-0.238,-0.014],
+  ], 0.034, 0);
+  gpBox(g, dark, 0.026, 0.010, 0.330, 0, 0.026, -0.090);                       // flight rail
+  gpBox(g, red, 0.008, 0.006, 0.330, 0, 0.030, -0.090);                        // red groove
+  gpBox(g, blk, 0.054, 0.032, 0.060, 0, 0.016, -0.236);                        // the carapace the front legs hang from
+  gpBox(g, red, 0.010, 0.006, 0.052, 0, 0.034, -0.236);
+  for (const x of [-0.016, -0.006, 0.006, 0.016]) gpBox(g, glow, 0.006, 0.006, 0.004, x, 0.024, -0.268);     // a row of eyes
+  for (const x of [-0.021, 0.021]) gpBox(g, glow, 0.008, 0.010, 0.004, x, 0.014, -0.267);
+  gpBox(g, red, 0.014, 0.003, 0.014, 0, 0.0235, -0.150, 0, Math.PI / 4, 0);   // the hourglass on the back: two diamonds
+  gpBox(g, red, 0.008, 0.003, 0.008, 0, 0.0235, -0.128, 0, Math.PI / 4, 0);
+  gpBox(g, red, 0.008, 0.003, 0.008, 0, 0.0235, -0.172, 0, Math.PI / 4, 0);
+  const bolt = new THREE.Group(); bolt.position.set(0, 0.034, -0.126); g.add(bolt);
+  gpCyl(bolt, dark, 0.0038, 0.0038, 0.180, 8, 0, 0, 0);
+  gpCyl(bolt, red, 0.0075, 0.0028, 0.026, 6, 0, 0, -0.100);                    // broadhead
+  [0, 1, 2].forEach(i => gpBox(bolt, red, 0.0035, 0.012, 0.020, 0, 0, 0.084, (i * Math.PI * 2) / 3));
+  g._bolt = bolt;
+  gpOptic(g, 0, 0.060, 0.010, 0.075, 0.012, 0.038);
+  gpBox(g, dark, 0.025, 0.004, 0.018, 0, 0.040, 0.010);
+  gpPlate(g, blk, [[0.036,-0.028],[0.058,-0.048],[0.060,-0.096],[0.036,-0.104],[0.020,-0.056],[0.018,-0.032]], 0.028, 0);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.0032, 6, 12, Math.PI * 1.05), dark);
+  guard.rotation.set(0, Math.PI / 2, -0.4); guard.position.set(0, -0.032, -0.004); g.add(guard);
+  gpBox(g, red, 0.005, 0.014, 0.005, 0, -0.024, -0.004, 0.2);
+  gpBox(g, blk, 0.024, 0.044, 0.030, 0, -0.026, -0.152);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.034, -0.272); g.add(flash);
+  g._flash = flash; g._kickZ = 0.006; g._greebled = true; g._handDetailed = true;
+  // The eight legs. Each is three segments on hinges: root (yaw + lift), j2, j3. Angles are for the right side; the left side mirrors them.
+  const LEN = [0.075, 0.080, 0.072], ATTACH = [-0.240, -0.214, -0.112, -0.062];
+  const legs = [];
+  const seg = (parent, len, w) => { const m = new THREE.Mesh(new THREE.BoxGeometry(len, w, w), blk); m.position.x = len / 2; parent.add(m); return m; };
+  const knob = (parent, r) => { const k = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6), red); parent.add(k); return k; };
+  for (const sd of [1, -1]) for (let row = 0; row < 4; row++) {
+    const root = new THREE.Group(), j2 = new THREE.Group(), j3 = new THREE.Group();
+    root.position.set(sd * 0.030, 0.016, ATTACH[row]);
+    seg(root, LEN[0], 0.013); knob(root, 0.0105);
+    j2.position.x = LEN[0]; root.add(j2); seg(j2, LEN[1], 0.011); knob(j2, 0.0085);
+    j3.position.x = LEN[1]; j2.add(j3); seg(j3, LEN[2], 0.0085); knob(j3, 0.007);
+    const tip = new THREE.Mesh(new THREE.ConeGeometry(0.0055, 0.022, 6), red); tip.rotation.z = -Math.PI / 2; tip.position.x = LEN[2] + 0.008; j3.add(tip);
+    g.add(root); legs.push({ root, j2, j3, sd, row });
+  }
+  //            yaw    turn2  turn3  lift1  lift2  lift3
+  const FOLD = [[-1.45, 2.9, -2.9, 0.04, 0.35, -0.35], [-1.50, 2.9, -2.9, 0.10, 0.40, -0.40], [-1.55, 2.9, -2.9, 0.04, 0.35, -0.35], [-1.60, 2.9, -2.9, 0.10, 0.40, -0.40]];
+  const AIM  = [[0.10, 0.50, 0.95, 0.00, 0.00, 0.00], [0.00, 0.58, 0.85, 0.12, 0.00, 0.00], [-0.55, -0.45, 0.80, 0.12, 0.25, -0.85], [-0.85, -0.40, 0.75, 0.16, 0.25, -0.85]];
+  const CRAWL = [[0.50, 0.45, 0.70, 0.25, 0.20, -0.90], [0.10, 0.45, 0.60, 0.25, 0.20, -0.90], [-0.40, -0.35, 0.60, 0.25, 0.20, -0.90], [-0.80, -0.40, 0.60, 0.25, 0.20, -0.90]];
+  const apply = (L, p) => {
+    L.root.rotation.set(0, L.sd > 0 ? p[0] : Math.PI - p[0], p[3]);
+    L.j2.rotation.set(0, L.sd > 0 ? p[1] : -p[1], p[4]);
+    L.j3.rotation.set(0, L.sd > 0 ? p[2] : -p[2], p[5]);
+  };
+  const mix = (a, b, k) => a.map((v, i) => v + (b[i] - v) * k);
+  const smooth = (a, b, t) => { const x = Math.max(0, Math.min(1, (t - a) / (b - a))); return x * x * (3 - 2 * x); };
+  legs.forEach(L => apply(L, FOLD[L.row]));
+  // The little spider that brings the next bolt.
+  const crawler = new THREE.Group(); crawler.visible = false; g.add(crawler);
+  const cBody = new THREE.Mesh(new THREE.SphereGeometry(0.010, 8, 6), blk); cBody.scale.set(1, 0.7, 1.4); crawler.add(cBody);
+  const cDot = new THREE.Mesh(new THREE.SphereGeometry(0.0035, 6, 5), glow); cDot.position.set(0, 0.004, -0.012); crawler.add(cDot);
+  const cLegs = [];
+  for (const sd of [1, -1]) for (let i = 0; i < 3; i++) {
+    const l = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.0025, 0.0025), red);
+    l.position.set(sd * 0.012, -0.002, (i - 1) * 0.008); crawler.add(l); cLegs.push({ l, sd, i });
+  }
+  const cBolt = new THREE.Group(); cBolt.position.y = 0.012; crawler.add(cBolt);
+  gpCyl(cBolt, dark, 0.0030, 0.0030, 0.130, 6, 0, 0, 0); gpCyl(cBolt, red, 0.0055, 0.0022, 0.020, 6, 0, 0, -0.075);
+  let aimK = 0, fireK = 0, boltOut = false, wasReloading = false;
+  const calm = () => {
+    legs.forEach(L => apply(L, FOLD[L.row]));
+    crawler.visible = false; bolt.visible = true; aimK = 0; fireK = 0; boltOut = false; wasReloading = false;
+  };
+  g._calm = calm; g._legs = legs; g._crawler = crawler;
+  g._steamShot = () => { fireK = 1; boltOut = true; bolt.visible = false; };     // the muzzle-blast hook: the front legs snap in as the bolt goes
+  g._tick = (dt, now, assembling) => {
+    if (assembling) { calm(); return; }
+    const inspecting = !!(g._inspectMode && g._reloadStart), reloading = !!(g._reloadStart && !g._inspectMode);
+    aimK += ((isADS ? 1 : 0) - aimK) * Math.min(1, dt * 7);
+    fireK = Math.max(0, fireK - dt / 0.18);
+    let crawl = 0, phase = now * 14;
+    if (inspecting) { const t = Math.min(1, (Date.now() - g._reloadStart) / (g._reloadDur || 2400)); crawl = smooth(0.14, 0.26, t) * (1 - smooth(0.80, 0.92, t)); }
+    const snap = fireK * fireK;
+    for (const L of legs) {
+      let p = mix(FOLD[L.row], AIM[L.row], aimK);
+      if (crawl > 0) {
+        p = mix(p, CRAWL[L.row], crawl);
+        const w = Math.sin(phase + (L.row + (L.sd > 0 ? 0 : 2)) * 1.6);       // a walk: alternate legs lift and swing
+        p = p.slice(); p[0] += 0.20 * w * crawl; p[4] += 0.22 * Math.max(0, w) * crawl;
+      }
+      if (L.row < 2 && snap > 0) { p = p.slice(); p[0] -= 0.30 * snap; p[2] += 0.90 * snap; }     // the front legs snap in
+      apply(L, p);
+    }
+    if (reloading) {                                                            // the crawler walks the bolt along the rail
+      if (!wasReloading) { wasReloading = true; bolt.visible = false; }
+      const t = Math.min(1, (Date.now() - g._reloadStart) / (g._reloadDur || 1200));
+      const run = smooth(0.08, 0.62, t);
+      crawler.visible = t > 0.06 && t < 0.82;
+      crawler.position.set(0, 0.052, 0.17 - run * 0.30);
+      const out = smooth(0.62, 0.82, t);
+      crawler.scale.setScalar(Math.max(0.01, 1 - out)); cBolt.visible = t < 0.62;
+      cLegs.forEach(c => { c.l.rotation.y = Math.sin(now * 30 + c.i * 2 + (c.sd > 0 ? 0 : 3)) * 0.5; });
+      if (t >= 0.62) { bolt.visible = true; boltOut = false; }
+    } else if (wasReloading) { wasReloading = false; crawler.visible = false; bolt.visible = true; boltOut = false; }
+  };
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
 function buildFishbowlCarbine() {
   // 🐠 Plasma Carbine -> Fishbowl Carbine. A clear tank on a grip, gravel on the
   // bottom, a nozzle out the front. Drawn, it fills with water from the bottom
@@ -45710,6 +45824,7 @@ const HIT_STYLES = {
   gold:  { coins: true,        glow: '#ff9a00', fill: '#ffd24a', hit: 0xfff0b0, miss: 0xffd24a, screen: 'rgba(255,205,70,0.14)', num: '#ffd24a', numShadow: '0 0 8px #ff9a00, 0 0 2px #4a2a00, -1px -1px 0 #3a2200, 1px 1px 0 #3a2200', scramble: '0123456789' },
   shatter: { shards: true,     glow: '#4aa8ff', fill: '#d8f0ff', hit: 0xd8f0ff, miss: 0x6ac4ff, screen: 'rgba(74,168,255,0.16)', num: '#7ac8ff', numShadow: '0 0 8px #2a7fff, 0 0 2px #04204f, -1px -1px 0 #04204f, 1px 1px 0 #04204f', scramble: null },
   pixel: { chars: '▓▒░█■',  glow: '#ff2bd6', fill: '#2bf0ff', hit: 0xffd0f6, miss: 0x2bf0ff, screen: 'rgba(255,43,214,0.16)', num: '#2bf0ff', numShadow: '0 0 8px #ff2bd6, 0 0 2px #2a0030, -1px -1px 0 #14001a, 1px 1px 0 #14001a', scramble: '▓▒░█■01' },
+  web:   { chars: '╳✕+',   glow: '#ff2020', fill: '#ff8a8a', hit: 0xffc0c0, miss: 0xff4040, screen: 'rgba(255,30,30,0.16)', num: '#ff4040', numShadow: '0 0 8px #ff1010, 0 0 2px #3a0000, -1px -1px 0 #1a0000, 1px 1px 0 #1a0000', scramble: '╳✕+0123' },
 };
 const _hackGlyphs = {};
 function _hackGlyph(ch, style = 'hack') {
@@ -56875,6 +56990,9 @@ const MODEL_SKINS = [
   { id: 'deagle_glitch', weapon: 'desert_eagle', name: 'Glitch Deagle', rarity: 'rare',
     sw: ['#0a0a10', '#ff2bd6'], build: buildGlitchDeagle,
     blurb: 'Teleports together when drawn. Every so often, a piece is somewhere it should not be.' },
+  { id: 'crossbow_widowmaker', weapon: 'crossbow', name: 'WIDOWMAKER', rarity: 'legendary', look: { hit: 'web' },
+    sw: ['#0e0e12', '#ff2a2a'], build: buildWidowmaker,
+    blurb: 'A mechanical spider that is also a crossbow. Eight legs fold along its sides; aim and they unfold into the bow arms. A shot snaps the front legs in, a reload sends a little spider crawling along the rail with the next bolt, and inspect stands it up and walks it across your view. Whoever it kills hangs in a giant red web that then shatters.' },
   { id: 'vector_glitch_exe', weapon: 'vector', name: 'GLITCH.EXE', rarity: 'rare', look: { hit: 'pixel' },
     sw: ['#0a0a10', '#2bf0ff'], build: buildGlitchVector,
     blurb: 'A weapon that looks like reality failed to render. Parts of it flicker into fragments; its rounds leave neon pixel trails; the magazine breaks into 0s and 1s when you reload and reforms; what it kills turns into a pixelated hologram and glitches out of existence.' },
@@ -57091,7 +57209,7 @@ const GEN2_MODEL_SKIN_IDS = new Set([
   'revolver_midas', 'pistol_frost', 'ak20_xerror', 'revolver_shatterpoint', 'machine_pistol_overclocked', 'hand_cannon_iron_judge', 'sawed_off_double_trouble', 'sawed_off_classic_shorty', 'grenade_launcher_orbital', 'minigun_redline',            // the Gen 2 case's two new top rarities: EPIC and MYTHIC (server.js GEN2_EPIC_SKIN_IDS / GEN2_NEW_MYTHIC_SKIN_IDS)
   'ak20_rainbow', 'ak20_hyperspace', 'ak20_blueprint', 'sg8_portal', 'vector_portal',
   'railgun_portal_detector', 'p90_quantum_scanner', 'freeze_hyperslush', 'firework_showman',
-  'shorty_outlaw', 'snub_gunslinger', 'deagle_glitch', 'deagle_phantom', 'vector_glitch_exe',
+  'shorty_outlaw', 'snub_gunslinger', 'deagle_glitch', 'deagle_phantom', 'vector_glitch_exe', 'crossbow_widowmaker',
   'burst_cannon_phantom', 'plasma_carbine_fishbowl', 'paintball_fishbowl', 'coilgun_clockwork',
   'rpd_clockwork_belt', 'smart_smg_neon', 'p90_neon_sign', 'portal_launcher_constellation',
   'railgun_constellation', 'pistol_origami', 'xm7_bricks', 'vector_brick_labeler',
@@ -62462,6 +62580,9 @@ const SKIN_FX = {
     equip: 'glitch', equipMs: 900, equipSfx: ['glitchsfx', 'snapin'] },
   deagle_glitch: { sound: _fxS('glitch', .34, .10, 0, 0),
     equip: 'glitch', equipMs: 850, equipSfx: ['glitchsfx', 'snapin'] },
+  crossbow_widowmaker: { equip: 'unfold', equipMs: 1000, equipSfx: ['fold', 'click'],
+    inspect: [K(.14, { py: .012 }), K(.26, { py: .05 }), K(.34, { py: .05, px: -.02, ry: .9 }), K(.54, { py: .05, px: -.17, ry: .9 }), K(.62, { py: .05, px: -.17, ry: -.9 }),
+              K(.80, { py: .05, px: -.01, ry: -.9 }), K(.90, { py: .012 }), K(1, {})] },
   vector_glitch_exe: { sound: _fxS('glitch', .28, .06, 0, 0),
     equip: 'glitch', equipMs: 900, equipSfx: ['glitchsfx', 'snapin'],
     reload: _fxR(_RK.under(), [RP(.22, 'bit', 'eject', 7), RP(.50, 'bit', 'arrive', 7)], [[.20, 'glitchsfx']], 'snapin') },
@@ -63394,7 +63515,7 @@ function _playClassicFinisher(mesh, targetId, fin, pos) {
 }
 function triggerFinisher(targetId, weaponId, killerId = myId, skinId = null) {
   const kind = killerId === myId ? _hitKind(weaponId) : _hitKindOfSkin(skinId);
-  if (kind && _playSkinFinisher(kind, targetId)) return;                  // killed with a skin that has a hit look (yours, or the id the server passed on for somebody else's): its own end, whatever finisher was picked
+  if (kind && _playSkinFinisher(kind, targetId, killerId)) return;                  // killed with a skin that has a hit look (yours, or the id the server passed on for somebody else's): its own end, whatever finisher was picked
   const chosen = finisherChoiceOf(killerId);                   // the finisher its killer picked, if they picked one
   if (chosen && playChosenFinisher(targetId, chosen, killerId)) return;
   if (killerId !== myId) return;                                // someone else's kill with no finisher chosen: nothing of ours to play
@@ -63646,6 +63767,85 @@ FINISHER_MOVES.gold = function (mesh, id, c) {
     playSoundEvent('hitmarker', { position: at, volume: 0.9, minGap: 40 });
   });
 };
+// 🕷️ WIDOWMAKER: a giant red spiderweb snaps into being behind the body, which goes dark and still, hangs there a moment, then the web shatters and takes it with it.
+function _buildWeb(R, spokes, rings) {
+  const group = new THREE.Group(), pieces = [];
+  const mat = () => new THREE.MeshBasicMaterial({ color: 0xff2a2a, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+  const geo = new THREE.BoxGeometry(1, 0.03, 0.012);
+  const add = (x0, y0, x1, y1) => {
+    const m = new THREE.Mesh(geo, mat());
+    m.position.set((x0 + x1) / 2, (y0 + y1) / 2, 0); m.scale.x = Math.hypot(x1 - x0, y1 - y0) * 1.04; m.rotation.z = Math.atan2(y1 - y0, x1 - x0);
+    group.add(m); pieces.push(m);
+  };
+  for (let s = 0; s < spokes; s++) {
+    const a = s * Math.PI * 2 / spokes;
+    for (let r = 0; r < rings; r++) add(Math.cos(a) * R * r / rings, Math.sin(a) * R * r / rings, Math.cos(a) * R * (r + 1) / rings, Math.sin(a) * R * (r + 1) / rings);
+  }
+  for (let r = 1; r <= rings; r++) {
+    const rad = R * r / rings;
+    for (let s = 0; s < spokes; s++) {
+      const a0 = s * Math.PI * 2 / spokes, a1 = (s + 1) * Math.PI * 2 / spokes, sag = 0.92;
+      const am = (a0 + a1) / 2;
+      add(Math.cos(a0) * rad, Math.sin(a0) * rad, Math.cos(am) * rad * sag, Math.sin(am) * rad * sag);
+      add(Math.cos(am) * rad * sag, Math.sin(am) * rad * sag, Math.cos(a1) * rad, Math.sin(a1) * rad);
+    }
+  }
+  return { group, pieces };
+}
+FINISHER_MOVES.web = function (mesh, id, c, killerId) {
+  const body = _finisherMat('web', 0x140406); body.color.setHex(0x140406); body.emissive.setHex(0x2a0000);
+  _finisherSwap(mesh, body);
+  playSoundEvent('emp_zap', { position: mesh.position, volume: 0.7, minGap: 80 });
+  const killer = killerId === myId ? camera.position : (remoteMeshes[killerId] && remoteMeshes[killerId].position);
+  const away = new THREE.Vector3(mesh.position.x - (killer ? killer.x : mesh.position.x), 0, mesh.position.z - (killer ? killer.z : mesh.position.z - 1));
+  if (away.lengthSq() < 0.01) away.set(0, 0, -1);
+  away.normalize();
+  const web = _buildWeb(1.75, 12, 6);
+  web.group.position.set(mesh.position.x + away.x * 0.85, mesh.position.y + 1.0, mesh.position.z + away.z * 0.85);
+  web.group.lookAt(web.group.position.x + away.x, web.group.position.y, web.group.position.z + away.z);
+  scene.add(web.group);
+  const vel = web.pieces.map(m => new THREE.Vector3(m.position.x * 2.2 + (Math.random() - 0.5) * 2, m.position.y * 2.2 + 1 + Math.random() * 2, 1.5 + Math.random() * 3));
+  let gone = false, shattered = false, tShatter = 0;
+  const cleanup = () => {
+    if (gone) return; gone = true;
+    scene.remove(web.group);
+    for (const m of web.pieces) m.material.dispose();
+  };
+  setTimeout(cleanup, 2600);                                                     // the body can be given back early (it respawned): the web must not outlive it
+  _finisherDrive(mesh, id, 1700, (t, dt, st) => {
+    const now = performance.now();
+    mesh.position.copy(st.p); mesh.rotation.y = st.r.y + Math.sin(now * 0.09) * 0.03 * (t < 0.55 ? 1 : 0); mesh.scale.copy(st.s);
+    if (t < 0.55) {
+      const grow = Math.min(1, t / 0.12);
+      web.group.scale.setScalar(0.3 + 0.7 * grow);
+      const pulse = 0.85 + 0.15 * Math.sin(now * 0.03);
+      for (const m of web.pieces) m.material.opacity = grow * pulse;
+    } else {
+      if (!shattered) {
+        shattered = true; tShatter = now;
+        playSoundEvent('freeze_shatter', { position: web.group.position, volume: 0.8, minGap: 60 });
+        const at = st.p.clone().setY(st.p.y + 1.0);
+        _finisherBurst(at, 0xff2a2a, 26, [0xff2a2a, 0xff8a8a, 0x2a0000]); _spawnFinisherRing(st.p.clone(), 0xff2a2a, 2.0);
+      }
+      const k = Math.min(1, (now - tShatter) / 520);
+      web.pieces.forEach((m, i) => {                                             // every strand flies off, turning, and fades
+        m.position.x += vel[i].x * dt; m.position.y += vel[i].y * dt; m.position.z += vel[i].z * dt; vel[i].y -= 6 * dt;
+        m.rotation.z += dt * 4 * (i % 2 ? 1 : -1);
+        m.material.opacity = Math.max(0, 1 - k);
+      });
+      mesh.visible = k < 0.25;                                                   // the body goes with the first of it
+    }
+  }, st => { cleanup(); });
+};
+function playWebFinisher(targetId, killerId) {
+  const mesh = remoteMeshes[targetId];
+  if (!mesh || !mesh.visible) return false;
+  if (mesh._finisher && performance.now() < mesh._finisher.until) return true;
+  mesh._finisher = { id: 'web', until: performance.now() + 4200 };
+  FINISHER_MOVES.web(mesh, targetId, 0xff2a2a, killerId);
+  pushFeedLine('WEBBED', players[targetId]?.name || 'Enemy', '#ff2a2a');
+  return true;
+}
 // 👾 GLITCH.EXE: the body flickers into a cyan-and-magenta hologram, tears into blocky slices, shrinks away in steps like a low-res image, and bursts into pixels.
 FINISHER_MOVES.hologram = function (mesh, id, c) {
   const body = new THREE.MeshBasicMaterial({ color: 0x2bf0ff, transparent: true, opacity: 0.6, depthWrite: false, blending: THREE.AdditiveBlending });
@@ -63800,7 +64000,7 @@ function playGlassFinisher(targetId) {
   return true;
 }
 // The end a skin's hit style gives a kill; false = it has none (the finisher the player picked, or the ragdoll, runs as always). Looked up at the call, so a test can stand in for any of them.
-function _playSkinFinisher(kind, targetId) {
+function _playSkinFinisher(kind, targetId, killerId = null) {
   if (kind === 'hack') return playGlitchFinisher(targetId);
   if (kind === 'error') return playGlitchFinisher(targetId, 'error');
   if (kind === 'gold') return playGoldFinisher(targetId);
@@ -63808,6 +64008,7 @@ function _playSkinFinisher(kind, targetId) {
   if (kind === 'frost') return playGlassFinisher(targetId);
   if (kind === 'shatter') return playShatterFinisher(targetId);
   if (kind === 'pixel') return playHologramFinisher(targetId);
+  if (kind === 'web') return playWebFinisher(targetId, killerId);
   return false;
 }
 // Plays the chosen finisher on a body. The seven classic ones run the classic effect (see _playClassicFinisher); the others have a move
