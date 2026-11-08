@@ -29551,6 +29551,194 @@ function buildElectronPistol() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+// Re-colour a finished gun in three materials by how light each part was (dark / mid / light). The flash and any fx are left alone.
+function _reskinByLum(g, mats) {
+  g.traverse(m => {
+    if (!m.isMesh || m === g._flash || m.userData.eqFx) return;
+    const mt = m.material; if (!mt || mt.transparent) return;
+    const c = mt.color, l = c ? c.r * 0.3 + c.g * 0.59 + c.b * 0.11 : 0.3;
+    m.material = l > 0.5 ? mats[2] : l > 0.22 ? mats[1] : mats[0];
+  });
+}
+function _gunReload(g) { return g._reloadStart && g._reloadDur && !g._inspectMode ? (Date.now() - g._reloadStart) / g._reloadDur : -1; }
+function buildBlackHoleCannon() {
+  // 🕳️ RPG -> Black Hole Cannon. A gloss-black tube with a black hole sitting where the warhead goes: a dead-black sphere, a bright thin lensing ring, a
+  // tilted accretion disk that swirls from white-hot to violet, and dust spiralling in. Firing makes it flare. Reloading, a small bright star is pulled in
+  // from the dark ahead of it and swallowed, and the disk spins up and flares when it goes. The rocket it fires is a black hole too.
+  const g = new THREE.Group();
+  const black = new THREE.MeshPhongMaterial({ color: 0x040406, shininess: 900, specular: 0xffffff, emissive: 0x05050f });
+  const inner = GUN_MATS.inner();
+  const violet = new THREE.MeshBasicMaterial({ color: 0xa77bff }), white = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  gpCyl(g, black, 0.034, 0.034, 0.380, 20, 0, 0.030, 0.020);
+  gpCyl(g, black, 0.041, 0.041, 0.060, 20, 0, 0.030, 0.150);
+  gpCyl(g, black, 0.034, 0.052, 0.060, 20, 0, 0.030, 0.240);
+  for (const z of [-0.140, -0.100, 0.100, 0.190]) { const r = new THREE.Mesh(new THREE.TorusGeometry(0.0365, 0.0014, 6, 28), violet); r.position.set(0, 0.030, z); r.userData.noSmooth = true; g.add(r); }
+  gpBox(g, black, 0.024, 0.030, 0.080, 0, 0.074, 0.020);
+  gpBox(g, violet, 0.004, 0.018, 0.004, 0, 0.098, -0.010);
+  gpPlate(g, inner, [[0.030, -0.004], [0.060, -0.020], [0.068, -0.120], [0.040, -0.134], [0.012, -0.042], [0.008, -0.006]], 0.034, 0);
+  gpPlate(g, inner, [[-0.090, -0.004], [-0.066, -0.006], [-0.062, -0.090], [-0.086, -0.096]], 0.030, 0);
+  gpBox(g, white, 0.006, 0.014, 0.006, 0, -0.016, 0.004, 0.22);
+  // the hole
+  const hole = new THREE.Group(); hole.position.set(0, 0.030, -0.215); hole.userData.eqFx = true; g.add(hole);
+  const core = new THREE.Mesh(new THREE.SphereGeometry(0.040, 20, 14), new THREE.MeshBasicMaterial({ color: 0x000000 })); core.scale.set(1, 1, 0.55); hole.add(core);
+  const lens = new THREE.Mesh(new THREE.TorusGeometry(0.0435, 0.0022, 8, 40), white); hole.add(lens);
+  const diskGeo = new THREE.RingGeometry(0.048, 0.108, 56, 1), dp = diskGeo.attributes.position, dc = new Float32Array(dp.count * 3);
+  for (let i = 0; i < dp.count; i++) {                                      // white-hot at the inside, orange, then violet; bright and dim arms spiralling round
+    const x = dp.getX(i), y = dp.getY(i), r = Math.hypot(x, y), th = Math.atan2(y, x), k = (r - 0.048) / 0.060, arm = 0.5 + 0.5 * Math.cos(2 * th + k * 9);
+    const a = [1, 0.95, 0.8], b = [1, 0.5, 0.15], c = [0.38, 0.2, 0.95], w = k < 0.4 ? k / 0.4 : (k - 0.4) / 0.6, p = k < 0.4 ? a : b, q = k < 0.4 ? b : c;
+    const lum = (0.35 + 0.65 * arm) * (1 - 0.35 * k);
+    for (let j = 0; j < 3; j++) dc[i * 3 + j] = (p[j] + (q[j] - p[j]) * w) * lum;
+  }
+  diskGeo.setAttribute('color', new THREE.BufferAttribute(dc, 3));
+  const disk = new THREE.Mesh(diskGeo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+  disk.rotation.x = 0.38; hole.add(disk);
+  const dust = [];
+  for (let i = 0; i < 18; i++) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.0026, 0.0026, 0.0026), i % 3 ? white : violet); hole.add(m);
+    dust.push({ m, r: 0.05 + Math.random() * 0.06, th: Math.random() * 6.28, sp: 1.2 + Math.random() * 1.6 });
+  }
+  const star = new THREE.Group(); star.userData.eqFx = true; star.visible = false; g.add(star);
+  star.add(new THREE.Mesh(new THREE.SphereGeometry(0.0075, 10, 8), white));
+  star.add(new THREE.Mesh(new THREE.SphereGeometry(0.016, 10, 8), new THREE.MeshBasicMaterial({ color: 0xc8b0ff, transparent: true, opacity: 0.4, depthWrite: false, blending: THREE.AdditiveBlending })));
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.030, -0.30); _hackFlash(flash, 0xd8c8ff); g.add(flash);
+  let pulse = 0, was = false, swallowed = false, spin = 1;
+  const SRC = new THREE.Vector3(0.17, 0.20, -0.52), DST = new THREE.Vector3(0, 0.030, -0.215), tmp = new THREE.Vector3();
+  g._tick = (dt, now, assembling) => {
+    hole.visible = !assembling; if (assembling) { star.visible = false; return; }
+    const fired = !!(g._flash && g._flash.visible); if (fired && !was) pulse = 1; was = fired;
+    pulse *= Math.exp(-dt * 5);
+    const u = _gunReload(g), reloading = u >= 0 && u < 1;
+    let want = 1, flare = 0;
+    star.visible = false;
+    if (reloading) {
+      want = 3.5;
+      if (u > 0.12 && u < 0.78) {                                               // the star comes in, curling, and shrinks as it falls
+        const k = (u - 0.12) / 0.66, e = k * k, ang = k * 9;
+        tmp.copy(SRC).lerp(DST, e); tmp.x += Math.cos(ang) * 0.05 * (1 - e); tmp.y += Math.sin(ang) * 0.05 * (1 - e);
+        star.position.copy(tmp); star.scale.setScalar(1 - 0.75 * e); star.visible = true; swallowed = false;
+      } else if (u >= 0.78 && !swallowed) { swallowed = true; pulse = 1.6; try { playEquipSound('singularity'); } catch (e) {} }
+      if (u >= 0.78) flare = Math.max(0, 1 - (u - 0.78) / 0.2);
+    } else swallowed = false;
+    spin += (want - spin) * Math.min(1, dt * 4);
+    disk.rotation.z += dt * (0.9 * spin + pulse * 3);
+    hole.scale.setScalar(1 + 0.22 * pulse + 0.18 * flare);
+    disk.material.opacity = Math.min(1, 0.85 + 0.15 * Math.sin(now * 3) + flare * 0.3);
+    for (const d of dust) {
+      d.th += dt * d.sp * spin * (0.11 / d.r) * 4; d.r -= dt * 0.012 * spin;
+      if (d.r < 0.046) { d.r = 0.11; d.th = Math.random() * 6.28; }
+      d.m.position.set(Math.cos(d.th) * d.r, Math.sin(d.th) * d.r * Math.cos(0.38), Math.sin(d.th) * d.r * Math.sin(0.38));
+    }
+  };
+  g._calm = () => { pulse = 0; swallowed = false; };
+  g._flash = flash; g._kickZ = 0.020; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function buildAbsoluteZero() {
+  // ❄️ SR-X -> Absolute Zero. The sniper rifle at the bottom of the thermometer: every part gone to polished ice, the barrel frosted over and hung with
+  // icicles, crystals growing off the scope, and snowflakes drifting off it all the time. Firing and reloading shake a flurry loose.
+  const g = buildSRX();
+  const oldTick = g._tick;
+  const ice = (c, e, s) => new THREE.MeshPhongMaterial({ color: c, shininess: 700, specular: 0xffffff, emissive: e, flatShading: false });
+  _reskinByLum(g, [ice(0x1d4a78, 0x061a30), ice(0x7fc6ea, 0x103a5a), ice(0xeaf8ff, 0x2a5a78)]);
+  const frostM = new THREE.MeshPhongMaterial({ color: 0xe4f8ff, shininess: 900, specular: 0xffffff, transparent: true, opacity: 0.62, emissive: 0x2a6a8a, emissiveIntensity: 0.5 });
+  const crys = new THREE.MeshPhongMaterial({ color: 0xbff0ff, shininess: 900, specular: 0xffffff, transparent: true, opacity: 0.85, emissive: 0x3aa0d0, emissiveIntensity: 0.6 });
+  const crust = new THREE.Mesh(new THREE.CylinderGeometry(0.0108, 0.0108, 0.360, 16), frostM); crust.rotation.x = Math.PI / 2; crust.position.set(0, 0.016, -0.290); g.add(crust);
+  for (let i = 0; i < 7; i++) {                                                                // icicles hanging off the barrel
+    const h = 0.014 + (i % 3) * 0.007, c = new THREE.Mesh(new THREE.ConeGeometry(0.0036, h, 5), crys); c.rotation.x = Math.PI;
+    c.position.set((i % 2 ? 1 : -1) * 0.002, 0.016 - 0.010 - h / 2, -0.150 - i * 0.050); g.add(c);
+  }
+  for (let i = 0; i < 4; i++) {                                                                // crystals pushing up off the scope
+    const h = 0.016 + (i % 2) * 0.008, c = new THREE.Mesh(new THREE.ConeGeometry(0.0042, h, 5), crys);
+    c.position.set((i - 1.5) * 0.007, 0.100 + h / 2 - 0.004, -0.010 - i * 0.034); c.rotation.z = (i - 1.5) * 0.16; g.add(c);
+  }
+  for (let i = 0; i < 3; i++) { const c = new THREE.Mesh(new THREE.ConeGeometry(0.0034, 0.022, 5), crys); c.rotation.set(-Math.PI / 2, 0, (i - 1) * 0.5); c.position.set((i - 1) * 0.005, 0.016 + (i - 1) * 0.002, -0.508); g.add(c); }   // a spray off the muzzle
+  const fx = new THREE.Group(); fx.userData.eqFx = true; g.add(fx);
+  const flakeM = new THREE.MeshBasicMaterial({ color: 0xeaf8ff, transparent: true, depthWrite: false });
+  const flakes = [];
+  for (let i = 0; i < 22; i++) {
+    const f = new THREE.Group();
+    for (let k = 0; k < 3; k++) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.0105, 0.0011, 0.0011), flakeM); b.rotation.z = k * Math.PI / 3; f.add(b); }
+    f.visible = false; fx.add(f); flakes.push({ f, age: 9, life: 1, v: new THREE.Vector3(), ph: Math.random() * 6.28 });
+  }
+  const SPAWN = [[0, 0.016, -0.50], [0, 0.010, -0.30], [0, 0.076, -0.115], [0, 0.060, -0.030]];
+  let was = false, acc = 0;
+  const emit = (burst) => {
+    const q = flakes.find(x => x.age >= x.life); if (!q) return;
+    const s = SPAWN[burst ? 0 : Math.floor(Math.random() * SPAWN.length)];
+    q.f.position.set(s[0] + (Math.random() - 0.5) * 0.02, s[1] + (Math.random() - 0.5) * 0.01, s[2] + (Math.random() - 0.5) * 0.04);
+    q.age = 0; q.life = 1.2 + Math.random() * 1.4; q.f.visible = true;
+    q.v.set((Math.random() - 0.5) * 0.02, -0.014 - Math.random() * 0.02, 0.006 + Math.random() * 0.012);
+    if (burst) q.v.set((Math.random() - 0.5) * 0.14, (Math.random() - 0.2) * 0.07, -0.05 - Math.random() * 0.12);
+    q.f.rotation.z = Math.random() * 6.28; q.f.scale.setScalar(0.8 + Math.random() * 0.9);
+  };
+  g._tick = (dt, now, assembling) => {
+    if (oldTick) oldTick(dt, now, assembling);
+    fx.visible = !assembling; if (assembling) return;
+    const fired = !!(g._flash && g._flash.visible); if (fired && !was) for (let i = 0; i < 6; i++) emit(true); was = fired;
+    const u = _gunReload(g), reloading = u >= 0 && u < 1;
+    acc += dt * (reloading ? 22 : 6); while (acc >= 1) { acc -= 1; emit(false); }
+    for (const q of flakes) {
+      if (q.age >= q.life) { q.f.visible = false; continue; }
+      q.age += dt; const k = q.age / q.life;
+      q.f.position.x += (q.v.x + Math.sin(now * 2 + q.ph) * 0.012) * dt; q.f.position.y += q.v.y * dt; q.f.position.z += q.v.z * dt;
+      q.f.rotation.z += dt * 1.2; flakeM.opacity = 1;
+      q.f.scale.setScalar((0.8 + 0.5 * Math.sin(Math.PI * Math.min(1, k * 1.2))) * (q.f.scale.x > 0 ? 1 : 1));
+    }
+  };
+  if (g._flash) _hackFlash(g._flash, 0xbff0ff);
+  return g;
+}
+
+function buildTectonic() {
+  // 🌋 SG-8 -> Tectonic. A pump shotgun cut from dark rock, with magma showing through the cracks. The cracks glow hotter every shot you fire and cool
+  // when you stop; run it hot and embers lift off it. A few loose slabs of stone hang in the air round the muzzle.
+  const g = buildSG8();
+  const oldTick = g._tick;
+  const rock = (c, s) => new THREE.MeshPhongMaterial({ color: c, shininess: 14, specular: 0x2a2622, flatShading: true });
+  _reskinByLum(g, [rock(0x34302d), rock(0x4d4640), rock(0x6d645a)]);
+  const crackM = new THREE.MeshBasicMaterial({ color: 0xff5a14, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false });
+  const meshes = []; g.traverse(m => { if (m.isMesh && m !== g._flash && m.geometry && m.geometry.type === 'BoxGeometry') meshes.push(m); });
+  const spots = [];
+  g.updateMatrixWorld(true);
+  const off = g.position.clone();
+  for (let n = 0; n < 30 && meshes.length; n++) {
+    const m = meshes[Math.floor(Math.random() * meshes.length)], bb = new THREE.Box3().setFromObject(m); bb.min.sub(off); bb.max.sub(off);
+    const sz = bb.getSize(new THREE.Vector3()); if (sz.z < 0.03) continue;
+    const top = Math.random() < 0.5, sx = Math.random() < 0.5 ? 1 : -1;
+    let x = top ? bb.min.x + Math.random() * sz.x : (sx > 0 ? bb.max.x + 0.0008 : bb.min.x - 0.0008);
+    let y = top ? bb.max.y + 0.0008 : bb.min.y + Math.random() * sz.y, z = bb.min.z + Math.random() * sz.z;
+    for (let s = 0; s < 3; s++) {                                                                 // a zigzag of three short segments
+      const len = 0.012 + Math.random() * 0.018, ang = (Math.random() - 0.5) * 1.6;
+      const seg = new THREE.Mesh(new THREE.BoxGeometry(top ? 0.0017 : 0.0012, top ? 0.0012 : 0.0017, len), crackM);
+      seg.position.set(x, y, z - len / 2); if (top) seg.rotation.y = ang; else seg.rotation.x = ang;
+      g.add(seg); z -= len * 0.9; if (top) x += Math.sin(ang) * len * 0.5; else y += Math.sin(ang) * len * 0.5;
+      if (s === 0) spots.push(seg.position.clone());
+      if (z < bb.min.z - 0.01) break;
+    }
+  }
+  const fx = new THREE.Group(); fx.userData.eqFx = true; g.add(fx);
+  const slabs = [0, 1, 2, 3].map(i => { const m = new THREE.Mesh(new THREE.IcosahedronGeometry(0.0085 + (i % 2) * 0.003, 0), rock(0x4d4640)); m.userData.ph = i * 1.57; fx.add(m); return m; });
+  const embers = [];
+  for (let i = 0; i < 12; i++) { const m = new THREE.Mesh(new THREE.BoxGeometry(0.0025, 0.0025, 0.0025), new THREE.MeshBasicMaterial({ color: 0xffa040, transparent: true, depthWrite: false })); m.visible = false; fx.add(m); embers.push({ m, age: 9, life: 1 }); }
+  let heat = 0, was = false, acc = 0;
+  const cold = new THREE.Color(0x7a1c06), hot = new THREE.Color(0xffe27a);
+  g._tick = (dt, now, assembling) => {
+    if (oldTick) oldTick(dt, now, assembling);
+    fx.visible = !assembling; if (assembling) return;
+    const fired = !!(g._flash && g._flash.visible); if (fired && !was) heat = Math.min(1, heat + 0.24); was = fired;
+    heat = Math.max(0, heat - dt * 0.28);
+    const u = _gunReload(g); if (u >= 0 && u < 1) heat = Math.max(heat, 0.35);                   // a reload shakes the seams open a little
+    const k = Math.min(1, 0.22 + heat * 0.78) * (0.88 + 0.12 * Math.sin(now * 3.1));
+    crackM.color.copy(cold).lerp(hot, k);
+    slabs.forEach((m, i) => { const a = now * 0.7 + m.userData.ph; m.position.set(Math.cos(a) * 0.034, 0.020 + Math.sin(a * 1.3) * 0.016, -0.300 + Math.sin(a) * 0.03); m.rotation.set(a, a * 0.7, 0); });
+    acc += dt * heat * 16; while (acc >= 1 && spots.length) { acc -= 1; const e = embers.find(x => x.age >= x.life); if (!e) break; const s = spots[Math.floor(Math.random() * spots.length)]; e.m.position.copy(s); e.age = 0; e.life = 0.5 + Math.random() * 0.6; e.m.visible = true; }
+    for (const e of embers) { if (e.age >= e.life) { e.m.visible = false; continue; } e.age += dt; e.m.position.y += 0.05 * dt; e.m.position.x += Math.sin(now * 9 + e.life * 7) * 0.01 * dt; e.m.material.opacity = 1 - e.age / e.life; }
+  };
+  if (g._flash) _hackFlash(g._flash, 0xff9a3a);
+  return g;
+}
+
 function buildHackerAK() {
   // 🟩 AK-20 -> Hacker AK. The stock rifle's own shape with every part turned to the void and outlined in green (_hackerize), and the hacker's fittings on it: a screen of running
   // 1s and 0s down the receiver that flashes bright when it fires, circuit traces on the handguard, a lit line down the magazine, edge lights along the top cover, a green front sight.
@@ -55521,6 +55709,15 @@ const MODEL_SKINS = [
   { id: 'pistol_electron', weapon: 'pistol', name: 'Electron', rarity: 'legendary',
     sw: ['#050507', '#5fe6ff'], build: buildElectronPistol,
     blurb: 'A pistol that will not hold its shape. The slide is in two halves with a charge leaking through the gap, the barrel floats loose inside drifting rings, and lightning fins stick out of the frame. It never sits still: pieces tear away, tilt, stretch and blink, then snap back. Reloading, it bursts apart, the pieces hang spitting lightning, and they glitch back into place.' },
+  { id: 'rpg_black_hole', weapon: 'rpg', name: 'Black Hole Cannon', rarity: 'legendary', look: { projectile: 'void', bulletColor: 0xffffff },
+    sw: ['#040406', '#ffa24a'], build: buildBlackHoleCannon,
+    blurb: 'A gloss-black tube with a black hole where the warhead goes: a lensing ring, a swirling accretion disk and dust spiralling in. Firing makes it flare. Reloading pulls a small star in from the dark and swallows it. The rocket is a black hole too.' },
+  { id: 'srx_absolute_zero', weapon: 'srx', name: 'Absolute Zero', rarity: 'rare',
+    sw: ['#7fc6ea', '#eaf8ff'], build: buildAbsoluteZero,
+    blurb: 'Polished ice from stock to scope: a frosted barrel hung with icicles, crystals growing off the scope, and snowflakes drifting off it all the time. A shot or a reload shakes a flurry loose.' },
+  { id: 'sg8_tectonic', weapon: 'sg8', name: 'Tectonic', rarity: 'rare',
+    sw: ['#4d4640', '#ff5a14'], build: buildTectonic,
+    blurb: 'A pump shotgun cut from dark rock with magma in the cracks. Every shot makes the seams glow hotter and they cool when you stop; run it hot and embers lift off it. Loose slabs of stone hang round the muzzle.' },
   { id: 'ak20_hacker', weapon: 'ak20', name: 'Hacker AK', rarity: 'rare', look: { hit: 'hack' },
     sw: ['#08090a', '#2dff6a'], build: buildHackerAK,
     blurb: 'The Hacker Pistol, full size: a void-black AK with green outlines and a screen of 1s and 0s down the receiver. Black rounds on a green trail, a laser-blaster crack, the same flash and scrambling damage number, and what it kills glitches into an ERROR and is gone.' },
@@ -55942,7 +56139,7 @@ const GEN2_MODEL_SKIN_IDS = new Set([
   'shorty_buzzdraw', 'srx_8bit', 'ak20_8bit', 'sg8_8bit', 'revolver_8bit', 'vector_8bit',
   'shorty_8bit',
   'ak20_cyberpunk', 'srx_cyberpunk', 'sg8_cyberpunk', 'vector_cyberpunk', 'pistol_cyberpunk', 'mp40_cyberpunk', 'revolver_cyberpunk',
-  'pistol_electron',
+  'pistol_electron', 'rpg_black_hole', 'srx_absolute_zero', 'sg8_tectonic',
   'akimbo_apex', 'railgun_oblivion', 'machine_pistol_money_gun', 'sawed_off_baguette', 'freeze_gun_lava_lamp', 'cycler_smartphone',   // (no skin is free: server.js GEN2_RARE / LEGENDARY / GOOD_SKIN_IDS)
 ]);
 const GEN2_MELEE_MODEL_SKIN_IDS = new Set([
@@ -61216,6 +61413,9 @@ const SKIN_FX = {
   ak20_blueprint: { sound: _fxS('holo', .26, .05, 1800, 900),
     equip: 'scan', equipMs: 1000, equipSfx: ['scan', 'beep'],
     reload: _fxR(RELOAD_KEYS.ak20, (RELOAD_PROPS.ak20 || []).map(e => e.k === 'mag' ? Object.assign({}, e, { k: 'holomag' }) : e), null, 'beep') },
+  rpg_black_hole: { equip: 'blackhole', equipMs: 1100, equipSfx: ['singularity', 'chime'] },
+  srx_absolute_zero: { equip: 'assemble', equipMs: 950, equipSfx: ['crystal', 'chime'] },
+  sg8_tectonic: { equip: 'slam', equipMs: 900, equipSfx: ['whoosh', null] },
   pistol_electron: { sound: _fxS('laser', .26, .08, 2100, 380),
     equip: 'glitch', equipMs: 900, equipSfx: ['glitchsfx', 'snapin'] },
   deagle_glitch: { sound: _fxS('glitch', .34, .10, 0, 0),
