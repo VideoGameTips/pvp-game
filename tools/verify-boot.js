@@ -2537,6 +2537,46 @@ if (ok && process.argv.includes('--glitchexe')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+// Hammer & Sickle (the Knife skin): in the Gen 2 case, changes form on every swing, and its inspect crosses the two tools into an X and puts everything back.
+if (ok && process.argv.includes('--hammersickle')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const sk = MELEE_MODEL_SKINS.find(s => s.id === 'knife_hammer_sickle');
+    if (!sk || sk.melee !== 'knife') return ['the Hammer & Sickle skin of the Knife is missing'];
+    if (!GEN2_MELEE_MODEL_SKIN_IDS.has(sk.id)) issues.push('Hammer & Sickle is not dealt by the Gen 2 case (no skin is free)');
+    if (!sk.equip) issues.push('Hammer & Sickle has no entrance');
+    const m = sk.build();
+    if (!m._hs || typeof m._onSwing !== 'function') return issues.concat(['the model has no tools or no swing hook']);
+    const h = m._hs;
+    if (!(h.sickle.visible && !h.hammer.visible)) issues.push('it should start as the sickle');
+    const keepSkin = _hsSkin; _hsSkin = { _model: m };
+    const keepBeat = _itemInspectBeat, keepTimeout = setTimeout;
+    _itemInspectBeat = () => {}; setTimeout = () => 0;
+    try {
+      m._onSwing(); for (let i = 0; i < 20; i++) updateHammerSickle(0.02);
+      if (!(h.hammer.visible && !h.sickle.visible && h.form === 1)) issues.push('one swing should turn the sickle into the hammer');
+      m._onSwing(); for (let i = 0; i < 20; i++) updateHammerSickle(0.02);
+      if (!(h.sickle.visible && !h.hammer.visible && h.form === 0)) issues.push('the next swing should turn it back');
+      // inspect: jump to the middle (crossed) and to the end
+      const s = hammerSickleInspectBegin(m);
+      s.t0 = performance.now() - s.ms * 0.56; hammerSickleInspectStep(s);
+      const up = Math.abs(h.sickle.rotation.x - Math.PI / 2) < 0.2 && Math.abs(h.hammer.rotation.x - Math.PI / 2) < 0.2;
+      const cross = h.sickle.rotation.z < -0.3 && h.hammer.rotation.z > 0.3;
+      if (!(up && cross)) issues.push('mid-inspect the two tools should point up and cross: ' + [h.sickle.rotation.x, h.sickle.rotation.z, h.hammer.rotation.x, h.hammer.rotation.z].map(n => n.toFixed(2)));
+      if (!h.glow.visible) issues.push('the emblem should glow while crossed');
+      s.t0 = performance.now() - s.ms * 2; if (hammerSickleInspectStep(s)) issues.push('the inspect should be over');
+      hammerSickleInspectEnd(s);
+      const clean = [h.sickle, h.hammer].every(t => t.rotation.x === 0 && t.rotation.y === 0 && t.rotation.z === 0 && t.position.lengthSq() === 0 && t.scale.x === 1);
+      if (!clean) issues.push('after the inspect the tools are not back in place');
+      if (!(h.sickle.visible && !h.hammer.visible && !h.glow.visible && !h.insp)) issues.push('after the inspect only the current form should show');
+      if (m.position.distanceTo(s.base) > 1e-6) issues.push('the model is not back where it was');
+    } finally { _itemInspectBeat = keepBeat; setTimeout = keepTimeout; _hsSkin = keepSkin; }
+    return issues;
+  })()`);
+  console.log('Hammer & Sickle checks: Gen 2, form change per swing, crossed inspect, everything put back');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 // Bot strategy: on every map, ten random bot/enemy pairs 20-36 m apart each ask for a plan. A plan has to be a route a body can
 // walk (each step at most 0.65 m up and 2 m down, one cell at a time), end where it says it does (a perch is 2.4 m or higher
 // and sees the enemy), and most maps with a deck or a roof should have at least one.

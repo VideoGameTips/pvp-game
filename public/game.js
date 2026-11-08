@@ -53930,6 +53930,7 @@ function tryMelee() {
   // flickered mid-punch instead of picking one side for the whole swing.
   const swingModel = meleeModels[selectedMeleeIdx];
   if (swingModel) {
+    if (swingModel._onSwing) swingModel._onSwing();                       // a skin that changes with every swing (Hammer & Sickle)
     if (meleeSwingType === 'punch') swingModel._punchLeft = !swingModel._punchLeft;
     else if (_prof && _prof.alt) swingModel._swingSide = (swingModel._swingSide || 1) * -1;
     else if (meleeSwingType === 'slash') swingModel._slashSide = (swingModel._slashSide || 1) * -1;
@@ -56941,7 +56942,7 @@ const GEN2_MELEE_MODEL_SKIN_IDS = new Set([
   'katana_donut', 'knife_hyperspace', 'knife_butterfly', 'knife_singularity', 'lightsabre_singularity',
   'katana_laser', 'katana_sakura', 'katana_thunder', 'combat_axe_frost', 'shock_baton_thunder',
   'spear_thunder', 'knife_balloon', 'bat_inflatable', 'frying_pan_pizza_cutter',
-  'sabre_balloon', 'katana_tidal_fang', 'knife_twin', 'chainsaw_newspaper', 'katana_tape_measure',
+  'sabre_balloon', 'katana_tidal_fang', 'knife_twin', 'chainsaw_newspaper', 'knife_hammer_sickle', 'katana_tape_measure',
 ]);
 // 🎬 Utility skins that make an entrance come out of Gen 2 too (no skin is free).
 const GEN2_SUPPORT_MODEL_SKIN_IDS = new Set(['frag_stopwatch']);
@@ -57297,6 +57298,48 @@ function buildElectricToothbrush() {
   }
   const tuft = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.022, 8), bristleA);
   tuft.rotation.x = Math.PI / 2; tuft.position.set(0, 0.006, -0.149); g.add(tuft);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+// ☭ Knife -> Hammer & Sickle. Two tools on one grip: the knife is a sickle, and every swing it changes form to a hammer, and back, with a clang. Inspect (T) crosses the
+// two into the old emblem, holds it with a gold glow, and puts them back. All cosmetic: it swings as the Knife and hits as the Knife.
+function buildHammerSickle() {
+  const g = new THREE.Group();
+  const steel = new THREE.MeshPhongMaterial({ color: 0x3b3f47, shininess: 120, specular: 0x9aa0aa });
+  const dark = new THREE.MeshPhongMaterial({ color: 0x23262c, shininess: 90, specular: 0x777777 });
+  const red = new THREE.MeshPhongMaterial({ color: 0xb01e1e, shininess: 50 });
+  const gold = new THREE.MeshPhongMaterial({ color: 0xd9a81e, shininess: 160, specular: 0xfff0a0 });
+  const tool = () => {                                         // a grip: dark shaft, three red wraps, a gold pommel; it ends at z = -0.04, the business end is beyond
+    const t = new THREE.Group();
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.0125, 0.015, 0.15, 10), dark);
+    shaft.rotation.x = Math.PI / 2; shaft.position.z = 0.035; t.add(shaft);
+    for (const z of [0.0, 0.04, 0.08]) { const w = new THREE.Mesh(new THREE.TorusGeometry(0.0145, 0.0035, 6, 12), red); w.position.z = z; t.add(w); }
+    const pommel = new THREE.Mesh(new THREE.SphereGeometry(0.019, 10, 8), gold); pommel.position.z = 0.112; t.add(pommel);
+    const collar = new THREE.Mesh(new THREE.TorusGeometry(0.0165, 0.004, 6, 12), gold); collar.position.z = -0.04; t.add(collar);
+    return t;
+  };
+  // The sickle: a flat blade that arcs out and curls back, a gold edge along the inside of the curve.
+  const sickle = tool();
+  const R = 0.07, N = 10, A = Math.PI * 1.15, zc = -0.045;
+  for (let i = 0; i < N; i++) {
+    const a0 = A * i / N, a1 = A * (i + 1) / N, am = (a0 + a1) / 2;
+    const px = R * (1 - Math.cos(am)), pz = zc - R * Math.sin(am);
+    const tx = R * Math.sin(am), tz = -R * Math.cos(am);
+    const len = R * (a1 - a0) * 1.12, w = 0.022 * (1 - 0.75 * am / A) + 0.004;
+    const seg = new THREE.Mesh(new THREE.BoxGeometry(w, 0.006, len), steel);
+    seg.position.set(px, 0, pz); seg.rotation.y = Math.atan2(tx, tz); sickle.add(seg);
+    const edge = new THREE.Mesh(new THREE.BoxGeometry(0.003, 0.0072, len), gold);
+    edge.position.set(px + Math.cos(am) * w / 2, 0, pz + Math.sin(am) * w / 2); edge.rotation.y = seg.rotation.y; sickle.add(edge);
+  }
+  // The hammer: a steel head across the top of the grip, gold bands on its faces.
+  const hammer = tool();
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.045, 0.045), steel); head.position.z = -0.065; hammer.add(head);
+  for (const sx of [-1, 1]) { const band = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.049, 0.049), gold); band.position.set(sx * 0.0425, 0, -0.065); hammer.add(band); }
+  hammer.visible = false;
+  const glow = new THREE.Mesh(new THREE.RingGeometry(0.075, 0.115, 36), new THREE.MeshBasicMaterial({ color: 0xffc83a, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+  glow.visible = false; g.add(sickle, hammer, glow);
+  g._hs = { form: 0, t: 1, clanged: true, sickle, hammer, glow, insp: false };
+  g._onSwing = () => hammerSickleSwitch(g);
   g.position.set(0.10, -0.12, -0.20); return g;
 }
 
@@ -59049,6 +59092,10 @@ const MELEE_MODEL_SKINS = [
   { id: 'chainsaw_toothbrush', melee: 'chainsaw', name: 'Electric Toothbrush', rarity: 'good',
     sw: ['#f4f6f8', '#2f8fc8'], build: buildElectricToothbrush,
     blurb: 'Two minutes, twice a day, or until they stop moving.' },
+  { id: 'knife_hammer_sickle', melee: 'knife', name: 'Hammer & Sickle', rarity: 'rare', raw: true,
+    sw: ['#b01e1e', '#d9a81e'], build: buildHammerSickle,
+    blurb: 'Two tools on one grip. Every swing it changes form with a clang: a sickle, then a hammer. Inspect it and they cross into the old emblem, then part. All cosmetic.',
+    equip: 'flip', equipMs: 900, equipSfx: ['whoosh', 'clink'] },
   { id: 'chainsaw_newspaper', melee: 'chainsaw', name: 'Newspaper Saw', rarity: 'good',
     sw: ['#e9e3cf', '#1c1c1e'], build: buildNewspaperSaw,
     blurb: 'Unfolds from the morning edition. The chain is the crossword; nobody has finished it.',
@@ -69548,6 +69595,64 @@ function _itemInspectBeat(freq, vol) {
     metalClack(ctx, ctx.currentTime + 0.002, g, vol, freq, 0.05);
   } catch (e) {}
 }
+// ☭ Hammer & Sickle: the change of form on every swing, and its own inspect (the two crossed into the emblem).
+let _hsSkin = null;
+function _hsModel() {
+  if (!_hsSkin) _hsSkin = MELEE_MODEL_SKINS.find(s => s.id === 'knife_hammer_sickle') || false;
+  return _hsSkin && _hsSkin._model && _hsSkin._model._hs ? _hsSkin._model : null;
+}
+function hammerSickleSwitch(m) {
+  const h = m._hs;
+  if (!h || h.insp) return;
+  h.form = 1 - h.form; h.t = 0; h.clanged = false;
+}
+function updateHammerSickle(dt) {
+  const m = _hsModel();
+  if (!m) return;
+  const h = m._hs;
+  if (h.insp || h.t >= 1) return;
+  h.t = Math.min(1, h.t + dt / 0.22);
+  const k = h.t, out = h.form ? h.sickle : h.hammer, inn = h.form ? h.hammer : h.sickle;
+  out.visible = k < 0.5; out.scale.setScalar(Math.max(0.01, 1 - k * 2)); out.rotation.z = k * 2.2;      // the old tool spins away to nothing...
+  inn.visible = k >= 0.5; inn.scale.setScalar(Math.max(0.01, (k - 0.5) * 2)); inn.rotation.z = (k - 1) * 2.2;   // ...and the new one spins in
+  if (k >= 0.5 && !h.clanged) {
+    h.clanged = true;
+    if (m.visible) { _itemInspectBeat(h.form ? 430 : 620, 0.34); setTimeout(() => _itemInspectBeat(h.form ? 860 : 1240, 0.14), 70); }     // CLANG
+  }
+  if (k >= 1) { inn.scale.setScalar(1); inn.rotation.set(0, 0, 0); out.visible = false; out.scale.setScalar(1); out.rotation.set(0, 0, 0); }
+}
+function hammerSickleInspectBegin(m) {
+  const h = m._hs;
+  h.insp = true; h.t = 1; h.clanged = true;
+  h.sickle.visible = h.hammer.visible = true;
+  return { m, t0: performance.now(), ms: 3400, base: m.position.clone(), c1: false, c2: false };
+}
+function hammerSickleInspectStep(s) {
+  const m = s.m, h = m._hs, t = Math.min(1, (performance.now() - s.t0) / s.ms);
+  const w = (a, b) => { const x = Math.max(0, Math.min(1, (t - a) / (b - a))); return x * x * (3 - 2 * x); };     // 0 before a, 1 after b, eased
+  const lift = w(0, 0.22) * (1 - w(0.88, 1));                       // the whole thing comes up to the middle of the view
+  m.position.set(s.base.x - 0.10 * lift, s.base.y + 0.17 * lift, s.base.z - 0.06 * lift);
+  const other = h.form ? h.sickle : h.hammer, cur = h.form ? h.hammer : h.sickle;
+  other.scale.setScalar(Math.max(0.01, w(0, 0.14) * (1 - w(0.9, 1))));          // the tool that was put away comes out and goes back
+  cur.scale.setScalar(1);
+  const up = w(0.12, 0.40) * (1 - w(0.70, 0.90)), tilt = w(0.30, 0.46) * (1 - w(0.70, 0.84));
+  h.sickle.rotation.order = h.hammer.rotation.order = 'ZYX';           // point up first, then tilt in the plane of the view: an X
+  h.sickle.rotation.set(up * Math.PI / 2, 0, -0.55 * tilt);
+  h.hammer.rotation.set(up * Math.PI / 2, 0, 0.55 * tilt);
+  const crossed = t > 0.46 && t < 0.72;
+  h.glow.visible = crossed;
+  if (crossed) { h.glow.material.opacity = 0.55 + 0.25 * Math.sin(performance.now() * 0.02); h.glow.scale.setScalar(1 + 0.08 * Math.sin(performance.now() * 0.011)); h.glow.position.set(0, 0, 0.02); }
+  if (t >= 0.46 && !s.c1) { s.c1 = true; _itemInspectBeat(520, 0.36); setTimeout(() => _itemInspectBeat(1040, 0.16), 60); }       // the clang as they meet
+  if (t >= 0.78 && !s.c2) { s.c2 = true; _itemInspectBeat(700, 0.20); }                                                          // and as they come apart
+  return t < 1;
+}
+function hammerSickleInspectEnd(s) {
+  const m = s.m, h = m._hs;
+  h.insp = false; h.glow.visible = false; h.glow.material.opacity = 0;
+  for (const t of [h.sickle, h.hammer]) { t.rotation.order = 'XYZ'; t.rotation.set(0, 0, 0); t.position.set(0, 0, 0); t.scale.setScalar(1); }
+  h.sickle.visible = !h.form; h.hammer.visible = !!h.form;
+  m.position.copy(s.base);
+}
 function startItemInspect() {
   if (isDead || reloading) return false;
   if (itemInspect) { cancelItemInspect(); return false; }     // T again puts it away
@@ -69563,6 +69668,11 @@ function startItemInspect() {
       || grenadeWindupT < 1 || _equip || spearThrown || useAnim) return false;
   const kind = itemInspectKind(slot, item), spec = ITEM_INSPECT[kind];
   if (model._park) model._park = null;
+  if (model._hs) {                                                      // Hammer & Sickle has its own show too
+    itemInspect = { model, slot, idx, kind, t0: performance.now(), ms: 1e9, keys: null, beats: [], beat: 0,
+                    base: model.position.clone(), baseRot: model.rotation.clone(), order: model.rotation.order, hs: hammerSickleInspectBegin(model) };
+    return true;
+  }
   if (model._gojo) {                                                    // Limitless has its own show (see above)
     itemInspect = { model, slot, idx, kind, t0: performance.now(), ms: 1e9, keys: null, beats: [], beat: 0,
                     base: model.position.clone(), baseRot: model.rotation.clone(), order: model.rotation.order, gojo: gojoInspectBegin() };
@@ -69580,6 +69690,7 @@ function cancelItemInspect() {
   m.position.copy(s.base); m.rotation.copy(s.baseRot); m.rotation.order = s.order;
   if (m._offHand) { m._offHand.position.copy(MELEE_OFFHAND_REST_POS); m._offHand.rotation.set(0, 0, 0); }
   if (s.gojo) gojoEnd(s.gojo);
+  if (s.hs) hammerSickleInspectEnd(s.hs);
 }
 function updateItemInspect() {
   const s = itemInspect;
@@ -69591,6 +69702,7 @@ function updateItemInspect() {
     || grenadeWindupT < 1 || _equip || useAnim;
   if (!held || busy) { cancelItemInspect(); return; }
   if (s.gojo) { if (!gojoInspectStep(s)) cancelItemInspect(); return; }
+  if (s.hs) { if (!hammerSickleInspectStep(s.hs)) cancelItemInspect(); return; }
   const t = Math.min(1, (performance.now() - s.t0) / s.ms);
   const P = _reloadPose(s.keys, t);
   m.rotation.order = 'YXZ';
@@ -76911,6 +77023,7 @@ function loop() {
   safeLoopStep('realism-feedback', () => updateRealismFeedback(dt));
   safeLoopStep('status-reset', () => watchStatusReset());
   safeLoopStep('limitless-fx', () => updateGojoFx(dt));   // the Limitless portals
+  safeLoopStep('hammer-sickle', () => updateHammerSickle(dt));   // the Hammer & Sickle changing form
   safeLoopStep('wrap-sync', () => emitMyWrap());   // a changed wrap reaches the other players
   safeLoopStep('dots', () => updateDots());       // anything set alight keeps taking damage
   safeLoopStep('bullets', () => updateBullets(dt));
