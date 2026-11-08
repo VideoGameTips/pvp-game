@@ -29881,56 +29881,75 @@ function playShatterFinisher(targetId) {                                        
 }
 
 function buildOverclockedPistol() {
-  // ⚡ Machine Pistol -> Overclocked. A compact black-and-silver machine pistol with a glowing cyan core, and six angular silver armour plates floating round
-  // the body with small gaps between them. Fifteen separate components in all (the inspect takes every one of them apart).
-  //   fire     the plates shuttle back and forth with every burst, and the core pulses with every shot
+  // ⚡ Machine Pistol -> Overclocked. Polished silver with black panels, and a glowing cyan reactor standing up out of the frame in a glass tube ringed with coils.
+  // A tachometer on the side climbs as it fires. Six wedge-cut silver armour plates float round the body with small gaps (brushed grooves, no outlines). Fifteen
+  // separate components in all: the inspect takes every one of them apart.
+  //   fire     the plates shuttle back and forth with every burst, the reactor flares and the tachometer needle jumps
   //   aim      the plates close up into a sleek armoured pistol with one narrow glowing seam
   //   reload   the plates unfold, the magazine floats out, turns over 180 degrees and snaps back in, and the plates close again
   //   inspect  it breaks into its fifteen parts, which turn round once together, and it reassembles
   const g = new THREE.Group();
-  const black = new THREE.MeshPhongMaterial({ color: 0x0c0e12, shininess: 200, specular: 0x9fb4c8, emissive: 0x030406 });
-  const silver = new THREE.MeshPhongMaterial({ color: 0xc4ccd6, shininess: 500, specular: 0xffffff, emissive: 0x10161c });
+  const silver = new THREE.MeshPhongMaterial({ color: 0xd9dee5, shininess: 700, specular: 0xffffff, emissive: 0x141a20 });
+  const dark = new THREE.MeshPhongMaterial({ color: 0x15171b, shininess: 140, specular: 0x7a8794 });
+  const gun = new THREE.MeshPhongMaterial({ color: 0x6c7580, shininess: 400, specular: 0xffffff });
   const cyan = new THREE.MeshBasicMaterial({ color: 0x35e8ff }), seamM = new THREE.MeshBasicMaterial({ color: 0x35e8ff, transparent: true, opacity: 0.4, depthWrite: false, blending: THREE.AdditiveBlending });
+  const glass = new THREE.MeshPhongMaterial({ color: 0x9fe8ff, shininess: 900, specular: 0xffffff, transparent: true, opacity: 0.32, depthWrite: false });
   const parts = [];
-  const piece = (cx, cy, cz, hover) => { const p = new THREE.Group(); g.add(p); const q = { p, c: new THREE.Vector3(cx, cy, cz), hover: new THREE.Vector3(...hover), rest: new THREE.Vector3() }; parts.push(q); return { p, q }; };
-  const body = {};
-  { const { p, q } = piece(0, 0.036, -0.008, [0, 0, 0]); body.slide = p; body.slideQ = q;
-    gpBox(p, black, 0.026, 0.028, 0.148, 0, 0.036, -0.008); gpBox(p, cyan, 0.0014, 0.0014, 0.100, 0.0137, 0.040, -0.014); gpBox(p, cyan, 0.0014, 0.0014, 0.100, -0.0137, 0.040, -0.014); }
-  { const { p } = piece(0, 0.034, -0.092, [0, 0, -0.004]); gpCyl(p, black, 0.0072, 0.0072, 0.024, 14, 0, 0.034, -0.092); gpBox(p, cyan, 0.016, 0.0014, 0.0014, 0, 0.034, -0.1045); }
-  { const { p } = piece(0, 0.056, 0.052, [0, 0.004, 0.004]); gpBox(p, black, 0.012, 0.006, 0.012, 0, 0.0545, 0.052); gpBox(p, cyan, 0.0026, 0.0026, 0.0026, 0, 0.0585, 0.052); }
-  { const { p } = piece(0, 0.008, 0.000, [0, 0, 0]); gpBox(p, black, 0.024, 0.040, 0.118, 0, 0.008, 0.000); }
-  { const { p } = piece(0, -0.050, 0.030, [0, 0, 0]);
-    gpPlate(p, black, [[0.048, -0.020], [0.050, -0.100], [0.030, -0.116], [0.000, -0.104], [0.000, -0.018]], 0.026, -0.010); gpBox(p, cyan, 0.0014, 0.060, 0.0014, -0.0135, -0.060, 0.040); }
+  const piece = (cx, cy, cz, hover) => { const p = new THREE.Group(); g.add(p); const q = { p, c: new THREE.Vector3(cx, cy, cz), hover: new THREE.Vector3(...hover), rest: new THREE.Vector3() }; parts.push(q); return p; };
+  const slide = piece(0, 0.036, -0.008, [0, 0, 0]);                                       // the slide: a tall rear block and a front wedge that slopes away, vents cut across the top
+  gpBox(slide, silver, 0.028, 0.034, 0.068, 0, 0.037, 0.030);
+  gpBox(slide, silver, 0.025, 0.026, 0.096, 0, 0.0335, -0.052, 0.09);
+  for (let i = 0; i < 4; i++) gpBox(slide, dark, 0.020, 0.0034, 0.0075, 0, 0.0535 - i * 0.0006, -0.026 - i * 0.017, 0.09);
+  gpBox(slide, dark, 0.0296, 0.012, 0.030, 0, 0.034, 0.030);
+  const barrel = piece(0, 0.032, -0.108, [0, 0, -0.004]);                                // a shrouded barrel with a ribbed brake
+  gpCyl(barrel, gun, 0.0112, 0.0112, 0.032, 16, 0, 0.032, -0.108);
+  for (let i = 0; i < 3; i++) gpCyl(barrel, dark, 0.0124, 0.0124, 0.0034, 16, 0, 0.032, -0.116 - i * 0.0075);
+  const rotor = piece(-0.017, 0.040, 0.010, [-0.002, 0, 0]);                              // the tachometer on the left of the slide
+  { const bez = new THREE.Mesh(new THREE.TorusGeometry(0.0125, 0.0018, 8, 24), silver); bez.rotation.y = Math.PI / 2; bez.position.set(-0.0166, 0.040, 0.010); rotor.add(bez);
+    const face = new THREE.Mesh(new THREE.CylinderGeometry(0.0122, 0.0122, 0.002, 20), dark); face.rotation.z = Math.PI / 2; face.position.set(-0.0156, 0.040, 0.010); rotor.add(face); }
+  const needle = new THREE.Mesh(new THREE.BoxGeometry(0.0012, 0.0100, 0.0012), cyan); needle.geometry.translate(0, 0.0045, 0); needle.position.set(-0.0176, 0.040, 0.010); rotor.add(needle);
+  const frame = piece(0, 0.004, 0.000, [0, 0, 0]);
+  gpBox(frame, gun, 0.025, 0.038, 0.116, 0, 0.004, 0.000); gpBox(frame, dark, 0.0262, 0.010, 0.040, 0, -0.008, -0.030);
+  const grip = piece(0, -0.050, 0.030, [0, 0, 0]);
+  gpPlate(grip, dark, [[0.048, -0.020], [0.052, -0.100], [0.030, -0.116], [0.000, -0.104], [0.000, -0.018]], 0.026, -0.010);
+  for (let i = 0; i < 3; i++) gpBox(grip, silver, 0.0278, 0.0026, 0.016, 0, -0.040 - i * 0.022, 0.040);
   const magP = piece(0, -0.108, 0.022, [0, 0, 0]);                                       // the magazine: long, it floats out on a reload
-  gpBox(magP.p, black, 0.022, 0.090, 0.030, 0, -0.108, 0.022); gpBox(magP.p, silver, 0.024, 0.008, 0.032, 0, -0.156, 0.022); gpBox(magP.p, cyan, 0.0030, 0.050, 0.0014, 0.0116, -0.108, 0.010);
-  const mag = magP.p;
-  { const { p } = piece(0, -0.004, -0.004, [0, 0, 0]); gpBox(p, silver, 0.005, 0.016, 0.005, 0, -0.004, -0.004, 0.25); }
-  { const { p } = piece(0, -0.004, 0.004, [0, 0, 0]); const t = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.0028, 6, 14, Math.PI * 1.05), black); t.rotation.set(0, Math.PI / 2, -0.4); t.position.set(0, -0.012, 0.004); p.add(t); }
-  const coreP = piece(0, 0.022, -0.012, [0, 0, 0]);                                       // the glowing cyan core, in a window of the frame
-  const coreBall = new THREE.Mesh(new THREE.SphereGeometry(0.0085, 14, 10), cyan); coreBall.position.set(0, 0.022, -0.012); coreP.p.add(coreBall);
-  const halo = new THREE.Mesh(new THREE.SphereGeometry(0.016, 12, 10), new THREE.MeshBasicMaterial({ color: 0x35e8ff, transparent: true, opacity: 0.4, depthWrite: false, blending: THREE.AdditiveBlending })); halo.position.copy(coreBall.position); coreP.p.add(halo);
+  gpBox(magP, dark, 0.022, 0.090, 0.030, 0, -0.108, 0.022); gpBox(magP, silver, 0.025, 0.008, 0.033, 0, -0.156, 0.022); gpBox(magP, cyan, 0.0030, 0.026, 0.0014, 0.0118, -0.100, 0.022);
+  const mag = magP;
+  const trig = piece(0, -0.004, -0.004, [0, 0, 0]); gpBox(trig, silver, 0.005, 0.016, 0.005, 0, -0.004, -0.004, 0.25);
+  const guard = piece(0, -0.004, 0.004, [0, 0, 0]);
+  { const t = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.0028, 6, 14, Math.PI * 1.05), gun); t.rotation.set(0, Math.PI / 2, -0.4); t.position.set(0, -0.012, 0.004); guard.add(t); }
+  const coreP = piece(0, 0.060, 0.034, [0, 0.003, 0]);                                    // the reactor: a glass tube standing up behind the slide, a cyan core inside, coils round it
+  const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.0088, 0.0088, 0.046, 16), glass); tube.position.set(0, 0.066, 0.034); coreP.add(tube);
+  const coreBall = new THREE.Mesh(new THREE.CylinderGeometry(0.0046, 0.0046, 0.036, 12), cyan); coreBall.position.set(0, 0.066, 0.034); coreP.add(coreBall);
+  for (let i = 0; i < 3; i++) { const c = new THREE.Mesh(new THREE.TorusGeometry(0.0102, 0.0017, 6, 18), gun); c.rotation.x = Math.PI / 2; c.position.set(0, 0.054 + i * 0.012, 0.034); coreP.add(c); }
+  gpCyl(coreP, dark, 0.0095, 0.0095, 0.004, 14, 0, 0.0425, 0.034, 0); gpCyl(coreP, dark, 0.0095, 0.0095, 0.004, 14, 0, 0.0895, 0.034, 0);
+  const halo = new THREE.Mesh(new THREE.SphereGeometry(0.022, 12, 10), new THREE.MeshBasicMaterial({ color: 0x35e8ff, transparent: true, opacity: 0.30, depthWrite: false, blending: THREE.AdditiveBlending })); halo.position.set(0, 0.066, 0.034); coreP.add(halo);
   const plates = [];                                                                       // six floating plates; `out` is the way each one stands off the body
-  const plate = (w, h, d, x, y, z, rx, out) => {
-    const { p } = piece(x, y, z, out.map(v => v * 0.014)); const m = gpBox(p, silver, w, h, d, x, y, z, rx, 0, 0);
-    const edge = new THREE.Mesh(new THREE.BoxGeometry(w > 0.01 ? w * 0.9 : w + 0.0006, h > 0.01 ? Math.min(h * 0.12, 0.002) + 0.0006 : h + 0.0006, d > 0.01 ? d * 0.9 : d + 0.0006), cyan);
-    edge.position.set(x, y + (h > 0.01 ? h / 2 : 0), z); edge.rotation.x = rx; p.add(edge); plates.push(p); return p;
+  const plate = (w, h, d, x, y, z, rx, rz, out) => {
+    const p = piece(x, y, z, out.map(v => v * 0.014)); gpBox(p, silver, w, h, d, x, y, z, rx, 0, rz);
+    for (let k = 0; k < 3; k++) {                                                          // brushed grooves instead of outlines
+      const gx = w > 0.01 ? x : x + Math.sign(x) * (w / 2 + 0.0003), gy = w > 0.01 ? y + (h / 2) + 0.0003 : y - h * 0.3 + k * h * 0.3, gz = w > 0.01 ? z - d * 0.3 + k * d * 0.3 : z;
+      gpBox(p, dark, w > 0.01 ? w * 0.7 : 0.0006, w > 0.01 ? 0.0006 : h * 0.12, w > 0.01 ? 0.003 : d * 0.7, gx, gy, gz, rx, 0, rz);
+    }
+    plates.push(p); return p;
   };
-  plate(0.030, 0.004, 0.100, 0, 0.060, -0.010, 0, [0, 1, 0]);
-  plate(0.004, 0.022, 0.100, -0.0185, 0.040, -0.008, 0, [-1, 0.2, 0]);
-  plate(0.004, 0.022, 0.100, 0.0185, 0.040, -0.008, 0, [1, 0.2, 0]);
-  plate(0.004, 0.028, 0.070, -0.0165, 0.006, 0.010, 0, [-1, -0.2, 0]);
-  plate(0.004, 0.028, 0.070, 0.0165, 0.006, 0.010, 0, [1, -0.2, 0]);
-  plate(0.030, 0.034, 0.004, 0, 0.036, 0.076, 0.15, [0, 0.1, 1]);
-  const seam = new THREE.Mesh(new THREE.BoxGeometry(0.0022, 0.0022, 0.140), seamM); seam.position.set(0, 0.0235, -0.010); seam.userData.eqFx = true; g.add(seam);   // the narrow seam you see when aiming
-  const flash = makeMuzzleFlash(); flash.position.set(0, 0.034, -0.108); _hackFlash(flash, 0x35e8ff); g.add(flash);
+  plate(0.030, 0.005, 0.100, 0, 0.0625, -0.020, -0.05, 0, [0, 1, 0]);
+  plate(0.004, 0.022, 0.098, -0.0185, 0.040, -0.012, 0, 0.12, [-1, 0.2, 0]);
+  plate(0.004, 0.022, 0.098, 0.0185, 0.040, -0.012, 0, -0.12, [1, 0.2, 0]);
+  plate(0.004, 0.028, 0.066, -0.0165, 0.004, 0.012, 0, 0.12, [-1, -0.2, 0]);
+  plate(0.004, 0.028, 0.066, 0.0165, 0.004, 0.012, 0, -0.12, [1, -0.2, 0]);
+  plate(0.030, 0.030, 0.005, 0, 0.032, 0.070, 0.2, 0, [0, 0.1, 1]);
+  const seam = new THREE.Mesh(new THREE.BoxGeometry(0.0022, 0.0022, 0.130), seamM); seam.position.set(0, 0.0215, -0.012); seam.userData.eqFx = true; g.add(seam);   // the narrow seam you see when aiming
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.032, -0.136); _hackFlash(flash, 0x35e8ff); g.add(flash);
   const ease = u => u * u * (3 - 2 * u), clamp01 = u => Math.max(0, Math.min(1, u));
   const CEN = new THREE.Vector3(0, 0.020, 0.004), tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
-  let aim = 0, kick = 0, was = false, clicked = false, shuttle = 0;
+  let aim = 0, kick = 0, was = false, clicked = false, shuttle = 0, rpm = 0;
   g._tick = (dt, now, assembling) => {
     seam.visible = !assembling;
     if (assembling) { for (const q of parts) q.p.position.set(0, 0, 0); return; }
-    const fired = !!(g._flash && g._flash.visible); if (fired) { kick = 1; if (!was) shuttle = 1; } was = fired;
-    kick = fired ? 1 : kick * Math.exp(-dt * 14); shuttle *= Math.exp(-dt * 4);
+    const fired = !!(g._flash && g._flash.visible); if (fired) { kick = 1; if (!was) { shuttle = 1; rpm = Math.min(1, rpm + 0.12); } } was = fired;
+    kick = fired ? 1 : kick * Math.exp(-dt * 14); shuttle *= Math.exp(-dt * 4); rpm = Math.max(0, rpm - dt * 0.35);
     aim += ((isADS ? 1 : 0) - aim) * Math.min(1, dt * 10);
     const t0 = g._reloadStart && g._reloadDur ? (Date.now() - g._reloadStart) / g._reloadDur : -1;
     const inspecting = !!g._inspectMode && t0 >= 0 && t0 < 1, reloading = !g._inspectMode && t0 >= 0 && t0 < 1;
@@ -29941,29 +29960,29 @@ function buildOverclockedPistol() {
       p.position.y += Math.sin(now * 1.4 + i * 1.3) * 0.0016 * open;
       p.position.z += (Math.sin(now * 38 + i * 0.9) * 0.0085 * kick + 0.012 * shuttle) * (1 - aim * 0.6);
     });
-    body.slide.position.z += 0.010 * kick;
+    slide.position.z += 0.010 * kick;
     if (reloading) {                                                                         // the magazine floats out, turns over 180 degrees, snaps back in
       const u = t0, drop = u < 0.12 ? 0 : u < 0.40 ? ease((u - 0.12) / 0.28) : u < 0.72 ? 1 : 1 - ease((u - 0.72) / 0.16);
-      mag.position.y -= 0.085 * drop; mag.position.x += 0.012 * drop * (1 - 0.0);
+      mag.position.y -= 0.085 * drop;
       mag.rotation.y = Math.PI * ease(clamp01((u - 0.30) / 0.34));
       if (u >= 0.88 && !clicked) { clicked = true; try { playEquipSound('snapin'); } catch (e) {} }
-      mag.position.x -= 0.012 * drop;
     } else { clicked = false; mag.rotation.y = 0; }
     if (inspecting) {                                                                        // fifteen parts, turning round once, then back together
       const f = t0 < 0.14 ? ease(t0 / 0.14) : t0 < 0.80 ? 1 : 1 - ease((t0 - 0.80) / 0.20);
       const turn = Math.PI * 2 * ease(clamp01((t0 - 0.14) / 0.66));
       parts.forEach((q, i) => {
-        tmp.copy(q.c).sub(CEN); const d = tmp.length() || 0.01;
+        tmp.copy(q.c).sub(CEN);
         tmp.multiplyScalar(2.6).add(new THREE.Vector3(Math.sin(i * 2.4) * 0.03, Math.cos(i * 1.9) * 0.03, Math.sin(i * 1.3) * 0.03));
         tmp2.copy(tmp).applyAxisAngle(new THREE.Vector3(0, 1, 0), turn).add(CEN).sub(q.c);
         q.p.position.lerp(tmp2, f); q.p.rotation.y = turn * f;
       });
     }
-    const pulse = 1 + 0.18 * Math.sin(now * 8) + kick * 0.9;
-    coreBall.scale.setScalar(pulse * 0.9); halo.scale.setScalar(pulse * 1.2);
+    const pulse = 1 + 0.12 * Math.sin(now * 8) + kick * 0.7;
+    coreBall.scale.set(pulse, 1, pulse); halo.scale.setScalar(pulse * 1.1);
+    needle.rotation.x = -2.1 + 4.2 * Math.min(1, rpm + kick * 0.15) + Math.sin(now * 30) * 0.03 * rpm;
     seamM.opacity = 0.2 + 0.7 * aim + kick * 0.3; seam.scale.y = 1 + aim * 0.4;
   };
-  g._calm = () => { kick = 0; shuttle = 0; clicked = false; mag.rotation.y = 0; for (const q of parts) { q.p.position.set(0, 0, 0); q.p.rotation.set(0, 0, 0); } };
+  g._calm = () => { kick = 0; shuttle = 0; rpm = 0; clicked = false; mag.rotation.y = 0; for (const q of parts) { q.p.position.set(0, 0, 0); q.p.rotation.set(0, 0, 0); } };
   g._flash = flash; g._kickZ = 0.008; g._greebled = true; g._handDetailed = true;
   g.position.set(0.12, -0.1, -0.25); return g;
 }
@@ -56135,7 +56154,7 @@ const MODEL_SKINS = [
     blurb: 'A revolver in fifteen pieces, hovering a finger-width apart and held together by blue energy, the cylinder floating loose and always turning. Aim and it pulls itself nearly solid; fire and the barrel jumps and the pieces are thrown out and drawn back; reload and the cylinder floats out, six cartridges circle it and slide home together. A kill breaks the victim in a blue shockwave of glass.' },
   { id: 'machine_pistol_overclocked', weapon: 'machine_pistol', name: 'Overclocked', rarity: 'epic',
     sw: ['#c4ccd6', '#35e8ff'], build: buildOverclockedPistol,
-    blurb: 'A compact black-and-silver machine pistol with a glowing cyan core and six silver plates floating round it. The plates shuttle with every burst and the core pulses; aim and they close into a sleek armoured gun with one thin glowing seam; reload and they unfold while the magazine floats out, turns over and snaps back in. Inspect breaks it into fifteen parts that turn round once and reassemble.' },
+    blurb: 'A polished-silver machine pistol with black panels, a cyan reactor in a glass tube standing up behind the slide, a tachometer that climbs as you fire, and six silver plates floating round it. The plates shuttle with every burst and the core pulses; aim and they close into a sleek armoured gun with one thin glowing seam; reload and they unfold while the magazine floats out, turns over and snaps back in. Inspect breaks it into fifteen parts that turn round once and reassemble.' },
   { id: 'hand_cannon_iron_judge', weapon: 'hand_cannon', name: 'The Iron Judge', rarity: 'legendary',
     sw: ['#0d0e10', '#ff7a1a'], build: buildIronJudge,
     blurb: 'An industrial cannon squeezed into one hand: black, gunmetal and molten orange, the barrel four steel blocks held together by a bar of glowing energy. They float apart when idle, slide forward and lock when you aim, and split open for a blink with an orange shockwave when you fire. Reloading floats all five cartridges over the gun before they drop into their chambers. Inspect unfolds it into a little artillery piece and back.' },
