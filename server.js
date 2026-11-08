@@ -471,7 +471,8 @@ const GEN2_GOOD_SKIN_IDS = [
 // The Neon Rift series: seven Gen 2 skins that light up. Ordinary rarity, so they drop alongside the other 'rare' entrances.
 GEN2_RARE_SKIN_IDS.push('ak20_cyberpunk', 'srx_cyberpunk', 'sg8_cyberpunk', 'vector_cyberpunk', 'pistol_cyberpunk', 'mp40_cyberpunk', 'revolver_cyberpunk');
 GEN2_LEGENDARY_SKIN_IDS.push('pistol_electron');   // Electron: the unstable pistol that bursts apart on reload
-GEN2_LEGENDARY_SKIN_IDS.push('rpg_black_hole', 'hand_cannon_iron_judge', 'sawed_off_double_trouble');   // Black Hole Cannon
+GEN2_LEGENDARY_SKIN_IDS.push('rpg_black_hole', 'hand_cannon_iron_judge', 'sawed_off_double_trouble');
+GEN2_GOOD_SKIN_IDS.push('sawed_off_classic_shorty');   // the old Shorty pump, as a skin of the merged Shorty   // Black Hole Cannon
 GEN2_RARE_SKIN_IDS.push('srx_absolute_zero', 'sg8_tectonic');   // Absolute Zero, Tectonic
 // 🟠🔴 The case's two newest top rarities, EPIC and MYTHIC (MODEL_SKINS rarity 'epic' / 'mythic' in public/game.js): the Midas Revolver (EPIC), the Frost Pistol (EPIC) and X!@&!@ (MYTHIC). Each has an entrance like every Gen 2 skin; what is new is how
 // rare they are. (The donut guns above are this file's old "mythic" tier and still show as DONUT on the reel. The new MYTHIC is rarer than any single one of them.)
@@ -671,6 +672,13 @@ function ensureShopFields(u) {
     u.economyV = ECONOMY_V;
   }
   if (!Array.isArray(u.purchased)) u.purchased = [];
+  // The Shorty was merged into the Sawed-Off (which is called Shorty now). Whoever bought the old one owns the merged weapon, and keeps the old model as a skin.
+  if (u.purchased.includes('shorty')) {
+    u.purchased = u.purchased.filter(id => id !== 'shorty');
+    if (!u.purchased.includes('sawed_off')) u.purchased.push('sawed_off');
+    if (!Array.isArray(u.skinInventory)) u.skinInventory = [];
+    if (!u.skinInventory.includes('sawed_off_classic_shorty')) u.skinInventory.push('sawed_off_classic_shorty');
+  }
   // The Freeze Ray moved from the secondaries to the utilities (id freeze_ray). Whoever bought it keeps it.
   if (u.purchased.includes('frost_blaster') && !u.purchased.includes('freeze_ray')) u.purchased.push('freeze_ray');
   if (typeof u.fragments !== 'number') u.fragments = 0;
