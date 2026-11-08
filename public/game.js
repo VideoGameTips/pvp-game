@@ -31258,6 +31258,92 @@ function buildCeilingFan() {
   return _skFinish(g, -0.112, 0, 0.014);
 }
 
+// 🪽 Minigun -> Stormwing. Grey metallic with blue light: one real minigun (the cluster spins up as ever) and a pair of folded wings.
+// Aim (or brace with E) and the wings snap open and four more barrels slide out of them and fire along with the main gun. Same damage:
+// the four extra barrels are for show, the stats are the minigun's.
+function buildStormwing() {
+  const g = new THREE.Group();
+  const gray = _skM(0x9aa6b4, 220, 0xffffff), mid = _skM(0x6f7a88, 170, 0xdde6f0), dark = _skM(0x3a424d, 90, 0x9aa8b8);
+  const blue = new THREE.MeshBasicMaterial({ color: 0x39b8ff });
+  const flashM = new THREE.MeshBasicMaterial({ color: 0x9fe4ff });
+  gpBox(g, gray, 0.076, 0.072, 0.170, 0, 0.004, 0.040);                  // the housing
+  gpBox(g, mid, 0.077, 0.010, 0.150, 0, 0.038, 0.040);                   // the top plate
+  for (const s of [-1, 1]) gpBox(g, blue, 0.0025, 0.010, 0.120, s * 0.0390, 0.010, 0.040);   // light strips down both sides
+  gpBox(g, blue, 0.040, 0.0025, 0.080, 0, 0.0415, 0.040);                // and one across the top
+  gpCyl(g, mid, 0.040, 0.040, 0.040, 16, 0, 0.004, -0.058);              // the front trunnion
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.038, 0.0025, 6, 24), blue); ring.position.set(0, 0.004, -0.080); g.add(ring);
+  gpCyl(g, dark, 0.034, 0.034, 0.026, 16, 0, 0.004, -0.036);             // the rotor face
+  // the spinning cluster: the render loop turns THIS on z while the trigger is held
+  const cluster = new THREE.Group(); cluster.position.set(0, 0.004, -0.190); g.add(cluster);
+  const bGeo = new THREE.CylinderGeometry(0.0088, 0.0088, 0.300, 10);
+  for (let i = 0; i < 6; i++) {
+    const a = i / 6 * Math.PI * 2, bx = Math.cos(a) * 0.024, by = Math.sin(a) * 0.024;
+    const b = new THREE.Mesh(bGeo, mid); b.rotation.x = Math.PI / 2; b.position.set(bx, by, 0); cluster.add(b);
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.0104, 0.0104, 0.020, 10), gray); m.rotation.x = Math.PI / 2; m.position.set(bx, by, -0.146); cluster.add(m);
+  }
+  [-0.090, 0.040, 0.130].forEach((z, i) => {
+    const clamp = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.036, 0.014, 12), gray); clamp.rotation.x = Math.PI / 2; clamp.position.z = z; cluster.add(clamp);
+    if (i < 2) { const r = new THREE.Mesh(new THREE.TorusGeometry(0.037, 0.0022, 6, 20), blue); r.position.z = z - 0.010; cluster.add(r); }   // a blue ring at each clamp
+  });
+  g._barrelCluster = cluster; g._spinRate = 10;
+  gpBox(g, dark, 0.030, 0.036, 0.046, 0, -0.046, 0.030);                 // the delinker
+  gpBox(g, mid, 0.026, 0.030, 0.090, 0, -0.070, 0.076, 0.25);            // the chute
+  gpBox(g, dark, 0.040, 0.020, 0.014, 0, 0.044, 0.120);                  // the rear sight block
+  // the wings: pivots at the housing's shoulders, folded back along the body; each carries two barrels that slide out of it
+  const wings = [];
+  const tips = [];
+  for (const side of [-1, 1]) {
+    const wing = new THREE.Group(); wing.position.set(side * 0.040, -0.010, 0.055); wing.rotation.order = 'YXZ'; g.add(wing);
+    const wpart = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(side * x, y, z); wing.add(m); return m; };
+    wpart(new THREE.BoxGeometry(0.170, 0.006, 0.066), gray, 0.085, 0, 0);                         // the main plate
+    wpart(new THREE.BoxGeometry(0.050, 0.006, 0.040), gray, 0.195, 0, -0.012);                    // the tip
+    wpart(new THREE.BoxGeometry(0.170, 0.0035, 0.004), blue, 0.085, 0.0045, -0.033);              // a light along the leading edge
+    for (let i = 0; i < 4; i++) wpart(new THREE.BoxGeometry(0.150 - i * 0.026, 0.0045, 0.011), i % 2 ? mid : gray, 0.075 - i * 0.010, -0.0005, 0.040 + i * 0.013);   // the feathers
+    const barrels = [];
+    for (const r of [0.070, 0.130]) {
+      const bg = new THREE.Group(); bg.position.set(side * r, 0.0, -0.010); wing.add(bg);
+      const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.0072, 0.0072, 0.300, 10), mid); bar.rotation.x = Math.PI / 2; bar.position.z = -0.150; bg.add(bar);
+      const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.0098, 0.0098, 0.030, 10), gray); sleeve.rotation.x = Math.PI / 2; sleeve.position.z = -0.012; bg.add(sleeve);
+      const band = new THREE.Mesh(new THREE.TorusGeometry(0.0085, 0.0016, 6, 14), blue); band.position.z = -0.200; bg.add(band);
+      const flash = new THREE.Mesh(new THREE.SphereGeometry(0.016, 8, 6), flashM); flash.position.z = -0.312; flash.visible = false; flash.userData.eqFx = true; bg.add(flash);
+      bg.visible = false; bg.scale.z = 0.001; barrels.push(bg); tips.push(flash);
+    }
+    wing.rotation.y = -side * Math.PI / 2;                                                       // folded back along the body
+    wing.userData.eqHome = { p: wing.position.clone(), q: wing.quaternion.clone(), s: wing.scale.clone() };   // (the entrance always comes back to this)
+    wings.push({ wing, side, barrels });
+  }
+  _skGrip(g, dark, -0.034);
+  _skFinish(g, -0.362, 0.004, 0.006);
+  let open = 0, last = 0, turn = 0;
+  const pose = o => {
+    const e = o * o * (3 - 2 * o), ang = Math.PI / 2 + (0.42 - Math.PI / 2) * e, ext = Math.max(0, Math.min(1, (o - 0.45) / 0.55));
+    for (const w of wings) {
+      w.wing.rotation.set(0, -w.side * ang, -w.side * 0.14 * e);
+      for (const bg of w.barrels) { bg.rotation.y = w.side * ang; bg.scale.z = Math.max(0.001, ext * ext * (3 - 2 * ext)); bg.visible = ext > 0.02; }
+    }
+  };
+  pose(0);
+  g._calm = () => { open = 0; pose(0); for (const f of tips) f.visible = false; };
+  g._tick = (dt, now, assembling) => {
+    if (assembling) { open = 0; for (const f of tips) f.visible = false; return; }       // the entrance owns the wings
+    const aimed = (typeof isADS !== 'undefined' && isADS) || (typeof minigunBraced === 'function' && minigunBraced());
+    open += ((aimed ? 1 : 0) - open) * Math.min(1, dt * (aimed ? 7 : 5));
+    if (Math.abs(open - (aimed ? 1 : 0)) < 0.004) open = aimed ? 1 : 0;
+    pose(open);
+    const fired = !!(g._flash && g._flash.visible), full = open > 0.95;
+    const k = 0.75 + 0.25 * Math.sin(now * 3) + (fired ? 0.5 : 0);                       // the blue lights breathe, and flare when it fires
+    blue.color.setRGB(Math.min(1, 0.22 * k), Math.min(1, 0.72 * k), 1);
+    for (const f of tips) { f.visible = fired && full && Math.random() < 0.8; if (f.visible) f.scale.setScalar(0.7 + Math.random() * 0.7); }
+    if (fired && full && now - last > 0.07 && typeof spawnLocalBullet === 'function') {   // a tracer from each wing barrel in turn
+      last = now;
+      const f = tips[turn++ % tips.length], p = new THREE.Vector3(), d = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+      f.getWorldPosition(p);
+      try { spawnLocalBullet(p, d, 'wing_' + now + '_' + turn, true, 150, 0x56c8ff, 0.03, 'minigun', { visualOnly: true, maxRange: 45 }); } catch (e) {}
+    }
+  };
+  return g;
+}
+
 // 🪤 Crossbow -> Mousetrap. A spring bar that really snaps, and cheese on the catch.
 function buildMousetrap() {
   const g = new THREE.Group();
@@ -55377,6 +55463,9 @@ const MODEL_SKINS = [
   { id: 'minigun_ceiling_fan', weapon: 'minigun', name: 'Ceiling Fan', rarity: 'rare',
     sw: ['#8a5a2a', '#fff2c8'], build: buildCeilingFan,
     blurb: 'Idles on low. The longer you hold the trigger, the closer it gets to taking off.' },
+  { id: 'minigun_stormwing', weapon: 'minigun', name: 'Stormwing', rarity: 'rare',
+    sw: ['#9aa6b4', '#39b8ff'], build: buildStormwing,
+    blurb: 'Grey steel and blue light. Aim, and the wings snap open and four more barrels slide out of them and fire with the main gun. Same damage: the extra barrels are for show.' },
   { id: 'crossbow_mousetrap', weapon: 'crossbow', name: 'Mousetrap', rarity: 'rare',
     sw: ['#c89a58', '#f2c230'], build: buildMousetrap,
     blurb: 'Loaded with cheese. The bar really does snap, and it is faster than it looks.' },
@@ -55606,6 +55695,7 @@ const DONUT_SKIN_IDS = [
 // Mirrors GEN2_SKIN_IDS in server.js (gotcha #4): the server owns the roll and
 // the ownership record, this list only decides what the picker locks.
 const GEN2_MODEL_SKIN_IDS = new Set([
+  'minigun_stormwing',                                          // (no skin is free: server.js GEN2_RARE_SKIN_IDS)
   'revolver_final_notice','vector_crimson',
   'revolver_donut', 'ak20_donut', 'rpg_donut', 'machine_pistol_donut', 'pistol_donut',
   'sg8_donut', 'srx_donut', 'vector_donut', 'grenade_launcher_donut', 'minigun_donut',
@@ -60673,6 +60763,7 @@ const SKIN_FX = {
       K(.62,{py:.05,rx:.15,hx:.07,hy:-.22,hz:.05,ay:.06}),
       K(.74,{py:.04,rx:.10,hy:-.04,ay:.06}), K(.90,{py:.01,ay:.0})],
       [RP(.62,'round','arrive',1,'muzzle')], [[.30,'tick'],[.46,'tick'],[.62,'tick'],[.82,'ticking']], 'ding') },
+  minigun_stormwing: { equip: 'unfold', equipMs: 950, equipSfx: ['fold', 'click'], equipBeats: [[.55, 'click'], [.82, 'chime']] },
   minigun_ceiling_fan: { sound: _fxS('whirr', .28, .07, 700, 380),
     equip: 'spin', equipMs: 900, equipSfx: ['whoosh', 'ding'],
     // the light kit unscrewed, a fresh bulb dropped in, screwed back on, and two tugs on the pull chain
