@@ -44245,44 +44245,6 @@ function _buildSpearShot() {
   return g;
 }
 
-// 🔱 The thrown trident (Trident skin on the spear): the same flight and the same landing as the spear, but it stays a trident. Tip at the
-// origin, the shaft running back along -Y, so it is aimed and planted exactly like _buildSpearShot's. The side prongs lie in the XY plane.
-function _buildTridentShot() {
-  const P = _projCache('trident_throw', () => {
-    const goldM = _lam(0xd4a935), tealM = _lam(0x1f9fae), V = (x, y) => new THREE.Vector3(x, y, 0);
-    const side = sd => new THREE.TubeGeometry(new THREE.CatmullRomCurve3([V(0, -0.50), V(sd * 0.050, -0.485), V(sd * 0.105, -0.435), V(sd * 0.150, -0.350), V(sd * 0.158, -0.200)]), 18, 0.014, 8, false);
-    return {
-      goldM, tealM,
-      head: new THREE.ConeGeometry(0.040, 0.15, 4),                                // the centre point (apex up, so the tip is the origin)
-      prong: new THREE.CylinderGeometry(0.018, 0.022, 0.32, 8),
-      collar: new THREE.CylinderGeometry(0.042, 0.030, 0.06, 10),
-      boss: new THREE.SphereGeometry(0.040, 10, 8),
-      shaft: new THREE.CylinderGeometry(0.021, 0.021, SPEAR_LENGTH - 0.52, 8),
-      butt: new THREE.ConeGeometry(0.030, 0.07, 8),
-      band: new THREE.CylinderGeometry(0.027, 0.027, 0.03, 8),
-      left: side(-1), right: side(1),
-      tip: new THREE.ConeGeometry(0.026, 0.11, 4),
-      barb: new THREE.ConeGeometry(0.012, 0.06, 5),
-    };
-  });
-  const g = new THREE.Group();
-  const add = (geo, mat, x, y, rz = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, 0); m.rotation.z = rz; g.add(m); return m; };
-  add(P.head, P.goldM, 0, -0.075);
-  add(P.prong, P.goldM, 0, -0.31);
-  add(P.collar, P.goldM, 0, -0.51);
-  add(P.boss, P.goldM, 0, -0.48).scale.set(1, 0.8, 1);
-  add(P.left, P.goldM, 0, 0); add(P.right, P.goldM, 0, 0);
-  for (const sd of [-1, 1]) {
-    add(P.tip, P.goldM, sd * 0.158, -0.145);                                        // the points of the side prongs, a hand short of the centre one
-    add(P.barb, P.goldM, sd * 0.188, -0.240, sd * 2.3);                            // a barb on the outside of each, turned back
-  }
-  add(P.shaft, P.tealM, 0, -0.52 - (SPEAR_LENGTH - 0.52) / 2);
-  for (let i = 0; i < 3; i++) add(P.band, P.goldM, 0, -0.80 - i * 0.18);
-  add(P.butt, P.goldM, 0, -SPEAR_LENGTH - 0.02, Math.PI);
-  g._alignToDir = true;
-  return g;
-}
-
 // 🔱 Spears that have landed. A spear that lands STAYS, and it is solid: a row of short boxes down the shaft in wallColliders, so
 // players (and bots) walk into it instead of through it. Bullets stop on it too, as on any collider. Five per thrower at a time (a
 // sixth landing takes that thrower's oldest out). They go with the map (activateMap) and with the match (leaving it).
@@ -44298,10 +44260,10 @@ function clearPlantedSpears(ownerId = null) {
   for (let i = plantedSpears.length - 1; i >= 0; i--) if (ownerId == null || plantedSpears[i].ownerId === ownerId) removePlantedSpear(plantedSpears[i]);
 }
 // `tip` is where the point ended up (already sunk into whatever took it), `dir` the way it points, `floorY` the floor under it.
-function plantSpear(id, ownerId, tip, dir, floorY = 0, trident = false) {
+function plantSpear(id, ownerId, tip, dir, floorY = 0) {
   if (plantedSpears.some(s => s.id === id)) return;
   const d = dir.clone().normalize();
-  const mesh = trident ? _buildTridentShot() : _buildSpearShot();
+  const mesh = _buildSpearShot();
   mesh._alignToDir = false;
   mesh.position.copy(tip);
   mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d);
@@ -44334,14 +44296,14 @@ function landThrownSpear(b, hit, normal) {
     floorY = tip.y;
   }
   tip.addScaledVector(dir, 0.22);
-  plantSpear(b.id, myId, tip, dir, floorY, !!b.trident);
-  socket.emit('spearPlant', { id: b.id, x: tip.x, y: tip.y, z: tip.z, dx: dir.x, dy: dir.y, dz: dir.z, floorY, trident: !!b.trident });
+  plantSpear(b.id, myId, tip, dir, floorY);
+  socket.emit('spearPlant', { id: b.id, x: tip.x, y: tip.y, z: tip.z, dx: dir.x, dy: dir.y, dz: dir.z, floorY });
 }
 socket.on('spearPlant', d => {
   if (!gameStarted || !d || d.ownerId === myId) return;
   const v = [d.x, d.y, d.z, d.dx, d.dy, d.dz, d.floorY];
   if (!v.every(Number.isFinite) || typeof d.id !== 'string') return;
-  plantSpear(d.id, d.ownerId, new THREE.Vector3(d.x, d.y, d.z), new THREE.Vector3(d.dx, d.dy, d.dz), d.floorY, d.trident === true);
+  plantSpear(d.id, d.ownerId, new THREE.Vector3(d.x, d.y, d.z), new THREE.Vector3(d.dx, d.dy, d.dz), d.floorY);
 });
 
 // ── 🎯 Skin shots ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -44553,7 +44515,6 @@ function skinLookById(id) {                                                 // f
     if (ev === 'shoot' && d && typeof d === 'object' && d.weapon && d.skin === undefined) {
       try { const sk = _activeModelSkin[d.weapon]; if (sk) d.skin = sk.id; else { const ss = SUPPORT_MODEL_SKINS.find(m => m.id === equippedSupportModelSkins[d.weapon]); if (ss && ss.look) d.skin = ss.id; } } catch (e) {}     // (_activeModelSkin is declared far below); a grenade skin with a look of its own (the Hacker Grenade) rides along too
     }
-    if (ev === 'shoot' && d && typeof d === 'object' && d.weapon === 'spear_throw' && d.skin === undefined) { try { if (equippedMeleeModelSkins.spear === 'spear_trident') d.skin = 'spear_trident'; } catch (e) {} }   // everybody sees a trident, not a spear
     return _emit(ev, d, ...rest);
   };
 }
@@ -51200,7 +51161,7 @@ function activateMeleeAbility() {
     const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
     const sid = `spear_${myId}_${now}`;
     socket.emit('shoot', { x: origin.x, y: origin.y, z: origin.z, dx: dir.x, dy: dir.y, dz: dir.z, weapon: 'spear_throw', spear: isSpear });
-    spawnLocalBullet(origin, dir, sid, true, 110, 0xccaa66, 0.09, 'spear_throw', isSpear ? { plantsSpear: true, trident: equippedMeleeModelSkins.spear === 'spear_trident' } : {});
+    spawnLocalBullet(origin, dir, sid, true, 110, 0xccaa66, 0.09, 'spear_throw', isSpear ? { plantsSpear: true } : {});
     // The throw: the arm draws back and drives forward, the weapon stays in hand through the release, then goes.
     startUseAnim('melee', item, 'throw');
     const thrownModel = meleeModels[selectedMeleeIdx], ep = matchEpoch;
@@ -55488,7 +55449,7 @@ const MODEL_SKINS = [
   { id: 'pistol_hacker', weapon: 'pistol', name: 'Hacker Pistol', rarity: 'rare', look: { hit: 'hack' },
     sw: ['#08090a', '#2dff6a'], build: buildHackerPistol,
     blurb: 'Matte black with a green outline and a screen of 1s and 0s on the slide. Black rounds on a green trail; a hit flashes and spills code; the damage number scrambles before it settles; what it kills glitches into an ERROR and is gone.' },
-  { id: 'pistol_electron', weapon: 'pistol', name: 'Electron', rarity: 'legendary',
+  { id: 'pistol_electron', weapon: 'pistol', name: 'Electron', rarity: 'rare',
     sw: ['#050507', '#5fe6ff'], build: buildElectronPistol,
     blurb: 'A gloss-black pistol that is not quite holding together: edges traced in electric blue, sparks crawling over it, arcs jumping between its parts and a bright core with three electrons circling it. Reloading, the charge gets away: it shakes, bursts apart, and its pieces hang spitting lightning until they glitch, stuttering, back into place.' },
   { id: 'ak20_hacker', weapon: 'ak20', name: 'Hacker AK', rarity: 'rare', look: { hit: 'hack' },
@@ -55919,7 +55880,7 @@ const GEN2_MELEE_MODEL_SKIN_IDS = new Set([
   'katana_donut', 'knife_hyperspace', 'knife_butterfly', 'knife_singularity', 'lightsabre_singularity',
   'katana_laser', 'katana_sakura', 'katana_thunder', 'combat_axe_frost', 'shock_baton_thunder',
   'spear_thunder', 'knife_balloon', 'bat_inflatable', 'frying_pan_pizza_cutter',
-  'sabre_balloon', 'katana_tidal_fang', 'knife_twin', 'katana_tape_measure',
+  'sabre_balloon', 'katana_tidal_fang', 'knife_twin', 'chainsaw_newspaper', 'katana_tape_measure',
 ]);
 // 🎬 Utility skins that make an entrance come out of Gen 2 too (no skin is free).
 const GEN2_SUPPORT_MODEL_SKIN_IDS = new Set(['frag_stopwatch']);
@@ -56275,6 +56236,65 @@ function buildElectricToothbrush() {
   }
   const tuft = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.022, 8), bristleA);
   tuft.rotation.x = Math.PI / 2; tuft.position.set(0, 0.006, -0.149); g.add(tuft);
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+
+// 📰 Chainsaw → Newspaper Saw. A thick fold of pages, a rolled-up tank held with rubber bands, and a crossword for a chain.
+function _newsprintTex() {
+  if (_newsprintTex.t !== undefined) return _newsprintTex.t;
+  let tex = null;
+  try {
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    const x = c.getContext('2d');
+    x.fillStyle = '#e9e3cf'; x.fillRect(0, 0, 256, 256);
+    x.fillStyle = '#2b2a27'; x.fillRect(10, 12, 236, 30);                         // the masthead bar
+    x.fillStyle = '#e9e3cf'; x.font = 'bold 24px serif'; x.textAlign = 'center'; x.fillText('THE DAILY SAW', 128, 36);
+    x.fillStyle = '#7d786a'; x.fillRect(10, 50, 108, 70);                         // a photo that is mostly grey
+    for (let col = 0; col < 2; col++) for (let row = 0; row < 15; row++) {        // columns of grey print
+      x.fillStyle = row % 5 === 4 ? '#bdb7a4' : '#8a8576';
+      x.fillRect(col ? 130 : 10, 56 + row * 12 + (col ? 0 : 74 * (row > 5)), (col ? 116 : 108) * (0.6 + 0.4 * ((row * 37) % 10) / 10), 4);
+    }
+    tex = new THREE.CanvasTexture(c); tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  } catch (e) { tex = null; }
+  return (_newsprintTex.t = tex);
+}
+function buildNewspaperSaw() {
+  const g = new THREE.Group();
+  const tex = _newsprintTex();
+  const paper = () => new THREE.MeshLambertMaterial(tex ? { map: tex } : { color: 0xe9e3cf });
+  const edge = new THREE.MeshLambertMaterial({ color: 0xcfc8b0 });
+  const white = new THREE.MeshLambertMaterial({ color: 0xfbf9f2 });
+  const ink = new THREE.MeshLambertMaterial({ color: 0x1c1c1e });
+  const band = new THREE.MeshLambertMaterial({ color: 0xcc2b2b });
+  // Body: a thick fold of pages, the page edges showing as stripes down the sides.
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.080, 0.065, 0.18), paper());
+  body.position.set(0, 0, 0.060); g.add(body);
+  for (let i = 0; i < 5; i++) {
+    const page = new THREE.Mesh(new THREE.BoxGeometry(0.083, 0.0025, 0.183), edge);
+    page.position.set(0, -0.026 + i * 0.013, 0.060); g.add(page);
+  }
+  // The tank: a rolled-up paper tube along the top, held by two rubber bands.
+  const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.11, 14), paper());
+  tube.rotation.x = Math.PI / 2; tube.position.set(0, 0.052, 0.045); g.add(tube);
+  const roll = new THREE.Mesh(new THREE.TorusGeometry(0.014, 0.0028, 5, 14), edge);
+  roll.position.set(0, 0.052, -0.0105); g.add(roll);
+  [0.018, 0.074].forEach(z => {
+    const rb = new THREE.Mesh(new THREE.TorusGeometry(0.0245, 0.0032, 6, 16), band);
+    rb.position.set(0, 0.052, z); g.add(rb);
+  });
+  // Guide bar: a strip of folded paper.
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.035, 0.30), paper());
+  bar.position.set(0, 0.005, -0.11); g.add(bar);
+  // The chain: crossword squares, black and white.
+  for (let i = 0; i < 9; i++) {
+    const sq = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.008, 0.030), i % 2 ? ink : white);
+    sq.position.set(0, 0.0235, -0.262 + i * 0.0345); g.add(sq);
+  }
+  // Handles: rolled paper.
+  const rear = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.070, 10), paper());
+  rear.position.set(0, 0, 0.195); g.add(rear);
+  const front = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.085, 10), paper());
+  front.rotation.z = Math.PI / 2; front.position.set(0, 0.055, 0.055); g.add(front);
   g.position.set(0.10, -0.12, -0.20); return g;
 }
 
@@ -56646,25 +56666,16 @@ function buildTrident() {
   along(new THREE.CylinderGeometry(0.0085, 0.0085, 0.52, 10), teal, 0.040);                         // the shaft
   for (let i = 0; i < 4; i++) along(new THREE.CylinderGeometry(0.0105, 0.0105, 0.010, 10), gold, 0.18 + i * 0.045);   // gold bands
   along(new THREE.ConeGeometry(0.012, 0.030, 10), gold, 0.325, 0, 0, false);                       // the butt cap
-  along(new THREE.CylinderGeometry(0.016, 0.012, 0.024, 12), gold, -0.222);                         // the collar under the head
-  const boss = new THREE.Mesh(new THREE.SphereGeometry(0.0145, 12, 9), gold); boss.position.set(0, 0, -0.238); boss.scale.set(1, 1, 0.8); g.add(boss);   // the boss the three prongs grow out of
-  // the centre prong: straight and long, with a leaf-shaped head and two barbs
-  along(new THREE.CylinderGeometry(0.0078, 0.0095, 0.110, 10), gold, -0.292);
-  along(new THREE.ConeGeometry(0.0175, 0.062, 4), gold, -0.378, 0, 0, true);                        // the head: a flat arrow
+  along(new THREE.CylinderGeometry(0.014, 0.011, 0.020, 10), gold, -0.215);                         // collar under the head
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(0.086, 0.012, 0.014), gold); bar.position.set(0, 0, -0.232); g.add(bar);   // the crossbar
+  along(new THREE.ConeGeometry(0.0095, 0.070, 8), gold, -0.282, 0, 0, true);                       // centre prong
   for (const sd of [-1, 1]) {
-    const barb = new THREE.Mesh(new THREE.ConeGeometry(0.0055, 0.026, 6), gold);
-    barb.rotation.set(Math.PI / 2 + 0.25, 0, -sd * 0.75); barb.position.set(sd * 0.0125, 0, -0.350); g.add(barb);   // turned back
+    along(new THREE.CylinderGeometry(0.0055, 0.0055, 0.050, 8), gold, -0.258, sd * 0.040);          // side prongs
+    along(new THREE.ConeGeometry(0.0075, 0.034, 8), gold, -0.302, sd * 0.040, 0, true);
+    const barb = new THREE.Mesh(new THREE.ConeGeometry(0.0045, 0.020, 6), gold);                   // a barb on each, turned back
+    barb.rotation.set(Math.PI / 2 + 0.2, 0, -sd * 0.7); barb.position.set(sd * 0.030, 0, -0.288); g.add(barb);
   }
-  // the side prongs: they sweep out from the boss in a curve, then run straight forward and end in a point, like Poseidon's
-  for (const sd of [-1, 1]) {
-    const path = new THREE.CatmullRomCurve3([new THREE.Vector3(0, 0, -0.238), new THREE.Vector3(sd * 0.018, 0, -0.244), new THREE.Vector3(sd * 0.036, 0, -0.262),
-      new THREE.Vector3(sd * 0.045, 0, -0.288), new THREE.Vector3(sd * 0.046, 0, -0.326)]);
-    const prong = new THREE.Mesh(new THREE.TubeGeometry(path, 18, 0.0058, 8, false), gold); g.add(prong);
-    along(new THREE.ConeGeometry(0.0105, 0.044, 4), gold, -0.348, sd * 0.046, 0, true);             // the point
-    const barb = new THREE.Mesh(new THREE.ConeGeometry(0.0048, 0.022, 6), gold);
-    barb.rotation.set(Math.PI / 2 + 0.2, 0, sd * 0.8); barb.position.set(sd * 0.054, 0, -0.318); g.add(barb);          // a barb on the outside of each
-  }
-  const jewel = new THREE.Mesh(new THREE.OctahedronGeometry(0.0095, 0), gem); jewel.position.set(0, 0, -0.238); jewel.scale.set(1, 1, 1.3); g.add(jewel);
+  const jewel = new THREE.Mesh(new THREE.OctahedronGeometry(0.0095, 0), gem); jewel.position.set(0, 0, -0.222); jewel.scale.set(1, 1, 1.3); g.add(jewel);
   [[-0.030, 0.030, -0.205, 0.0050], [0.034, -0.026, -0.190, 0.0040], [0.012, 0.040, -0.175, 0.0045]].forEach(([x, y, z, r]) => {
     const d = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6), drop); d.position.set(x, y, z); g.add(d);
   });
@@ -57968,6 +57979,10 @@ const MELEE_MODEL_SKINS = [
   { id: 'chainsaw_toothbrush', melee: 'chainsaw', name: 'Electric Toothbrush', rarity: 'good',
     sw: ['#f4f6f8', '#2f8fc8'], build: buildElectricToothbrush,
     blurb: 'Two minutes, twice a day, or until they stop moving.' },
+  { id: 'chainsaw_newspaper', melee: 'chainsaw', name: 'Newspaper Saw', rarity: 'good',
+    sw: ['#e9e3cf', '#1c1c1e'], build: buildNewspaperSaw,
+    blurb: 'Unfolds from the morning edition. The chain is the crossword; nobody has finished it.',
+    equip: 'unfold', equipMs: 850, equipSfx: ['fold', 'click'] },
   { id: 'riot_shield_bin_lid', melee: 'riot_shield', name: 'Trash Can Lid', rarity: 'good',
     sw: ['#a8aeb4', '#6e747a'], build: buildBinLid,
     blurb: 'Galvanised, dented, and legally a shield.' },
@@ -57989,7 +58004,7 @@ const MELEE_MODEL_SKINS = [
     equip: 'flip', equipMs: 850, equipSfx: ['whoosh', 'clink'] },
   { id: 'spear_trident', melee: 'spear', name: 'Trident', rarity: 'good',
     sw: ['#d4a935', '#1f9fae'], build: buildTrident,
-    blurb: 'A real trident: a long centre point and two curved prongs with barbs. Slightly damp. Thrown, it stays a trident, in the air and where it lands.' },
+    blurb: 'Three points where there was one. Slightly damp.' },
   { id: 'fists_one_fist', melee: 'fists', name: 'Fist', rarity: 'lame',
     sw: ['#eac39a', '#c83a30'], build: buildSingleFist,
     blurb: 'The normal fist, but only the one. The other one stayed home.' },
@@ -61512,8 +61527,7 @@ function spawnLocalBullet(origin, dir, id, isOwn, speed, color, size, weaponId, 
   if(!isOwn&&window.PVP_BATTLE_SIM?.lowEffects)return;
   // The skin's look: yours from what you wear, somebody else's from the skin id their shot carried (opts.skinId, see the bulletFired handler).
   const skinLook = isOwn ? ((typeof _modelSkinLook !== 'undefined' && _modelSkinLook[weaponId]) || null) : (opts.skinId ? skinLookById(opts.skinId) : null);
-  let mesh = makeBulletMesh(color, size, weaponId, isOwn, skinLook);
-  if (weaponId === 'spear_throw' && (opts.trident || opts.skinId === 'spear_trident')) { mesh = _buildTridentShot(); opts = Object.assign({}, opts, { trident: true }); }   // the Trident skin: a trident in flight, not a spear
+  const mesh = makeBulletMesh(color, size, weaponId, isOwn, skinLook);
   mesh.position.copy(origin);
   const flightDir = dir.clone();
   if (flightDir.lengthSq() < 0.000001) flightDir.set(0, 0, -1);
