@@ -321,7 +321,7 @@ const WEAPON_COSTS = {
   coilgun: 460,  painter_beam: 300, gravity_paint: 400,
   portal_launcher: 460,  traffic_controller: 320,
   // Primaries — Explosive / projectile
-  boombow: 500, gravity_launcher: 480, harpoon_gun: 440, mortar_rifle: 480, phase_rifle: 550, swap_gun: 600,
+  boombow: 500, gravity_launcher: 480, harpoon_gun: 440, mortar_rifle: 480, swap_gun: 600,
   firework_launcher: 360, shockwave_launcher: 460, airburst_projector: 360,
   pinball_launcher: 440, seismic_hammer: 480, glassmaker: 380,
   // Primaries — Tactical / precision / battle rifle
@@ -600,7 +600,7 @@ const ARCHIVED_ITEM_IDS = new Set([
 const ADMIN_ITEM_IDS = new Set([
   'hellfire','omega_pistol',
   'gau19', 'mk44', 'xm7', 'barrett', 'm134', 'hkmp7', 'p90_spec',
-  'desert_eagle', 'm1911', 'glock18', 'five_seven', 'chrono_pistol',
+  'desert_eagle', 'm1911', 'glock18', 'five_seven', 'chrono_pistol', 'phase_rifle',
   'karambit', 'bayonet', 'tomahawk', 'ots04', 'garrote',
   'c4', 'claymore', 'stun_grenade', 'thermite', 'predator_uav',
   'care_package', 'tac_nuke',

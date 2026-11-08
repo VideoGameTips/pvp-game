@@ -910,10 +910,10 @@ const WEAPONS = [
   { id:'swap_gun', name:'Swap Gun', type:'Position Swap', slot:'secondary', playerOnly:true,
     mag:3,reserve:9,damage:0,fireRate:1250,reloadTime:1850,auto:false,pellets:1,spread:0,
     adsZoom:55,bulletSpeed:140,bulletColor:0x70e9db,bulletSize:.055,maxRange:42 },
-  { id: 'phase_rifle', name: 'Phase Rifle', type: 'Sci-Fi Rifle', slot: 'primary',
+  { id: 'phase_rifle', name: 'Phase Rifle', type: 'Admin · Sci-Fi Rifle', slot: 'primary',
     mag: 30, reserve: 90, damage: 22, fireRate: 90, reloadTime: 2000, headshotMult: 2.2,
     auto: true, pellets: 1, spread: 0.002, adsZoom: 50, bulletSpeed: 135, noReload: false,
-    bulletColor: 0x66f0ff, bulletSize: 0.04,
+    bulletColor: 0x66f0ff, bulletSize: 0.04, adminItem: true,
     // Rounds go through walls and cover for half damage while it lasts, and every enemy glows through them (see PHASE_FX).
     ability: { name: 'Phase Shift', cd: 18000, desc: '4s · rounds pass through walls for half damage · enemies glow through cover', type: 'buff', duration: 4000, weaponAbId: 'phase_rifle_ph', bulletColor: 0xc47bff, vision: true },
   },
@@ -1600,7 +1600,7 @@ const WEAPON_COSTS = {
   coilgun: 460,  painter_beam: 300, gravity_paint: 400,
   portal_launcher: 460,  traffic_controller: 320,
   // Primaries — Explosive / projectile
-  boombow: 500, gravity_launcher: 480, harpoon_gun: 440, mortar_rifle: 480, phase_rifle: 550, swap_gun: 600,
+  boombow: 500, gravity_launcher: 480, harpoon_gun: 440, mortar_rifle: 480, swap_gun: 600,
   firework_launcher: 360, shockwave_launcher: 460, airburst_projector: 360,
   pinball_launcher: 440, seismic_hammer: 480, glassmaker: 380,
   // Primaries — Tactical / precision / battle rifle
