@@ -29739,6 +29739,147 @@ function buildTectonic() {
   return g;
 }
 
+function buildShatterpoint() {
+  // 💠 Revolver -> Shatterpoint. A compact revolver that is not one object: fifteen separate pieces of dark metal hovering a finger-width apart, held in
+  // shape by blue energy (a line from every piece to the core in the frame). The cylinder is its own floating piece and turns all the time.
+  //   idle   the pieces hover in formation, drifting a little, the cylinder spinning
+  //   aim    they pull in until the gun is nearly solid, and the cylinder locks to a chamber
+  //   fire   the barrel jumps forward, the cylinder clicks round one chamber, and every other piece is thrown out and drawn back
+  //   reload the cylinder floats out of the frame, six cartridges circle it, then they all slide home together and it comes back
+  //   inspect it comes apart into a little sculpture orbiting your hand, then snaps together
+  //   a kill (look.hit 'shatter') bursts the victim in a blue shockwave of glass
+  const g = new THREE.Group();
+  const metal = new THREE.MeshPhongMaterial({ color: 0x20262e, shininess: 260, specular: 0xbfd8ff, emissive: 0x05070c });
+  const plate = new THREE.MeshPhongMaterial({ color: 0x343c48, shininess: 300, specular: 0xdcecff, emissive: 0x070a10 });
+  const blue = new THREE.MeshBasicMaterial({ color: 0x4aa8ff }), pale = new THREE.MeshBasicMaterial({ color: 0xd8f0ff });
+  const brass = new THREE.MeshPhongMaterial({ color: 0xd2a24a, shininess: 160, specular: 0xfff0b0 });
+  const parts = [];
+  const piece = (cx, cy, cz, hover) => { const p = new THREE.Group(); g.add(p); const q = { p, c: new THREE.Vector3(cx, cy, cz), hover: new THREE.Vector3(...hover), rest: new THREE.Vector3(), i: parts.length }; parts.push(q); return p; };
+  const barrel = piece(0, 0.034, -0.100, [0, 0.004, -0.020]);
+  gpCyl(barrel, metal, 0.0095, 0.0095, 0.130, 18, 0, 0.034, -0.100); gpBox(barrel, blue, 0.0016, 0.0016, 0.110, 0, 0.0445, -0.100);
+  const lug = piece(0, 0.020, -0.095, [0, -0.016, -0.008]);
+  gpBox(lug, plate, 0.018, 0.012, 0.100, 0, 0.020, -0.095);
+  const sight = piece(0, 0.047, -0.158, [0, 0.016, -0.014]);
+  gpBox(sight, plate, 0.004, 0.008, 0.006, 0, 0.047, -0.158); gpBox(sight, blue, 0.002, 0.002, 0.002, 0, 0.052, -0.158);
+  const muzzle = piece(0, 0.034, -0.166, [0, 0.002, -0.030]);
+  { const r = new THREE.Mesh(new THREE.TorusGeometry(0.0108, 0.0016, 6, 20), blue); r.position.set(0, 0.034, -0.166); r.userData.noSmooth = true; muzzle.add(r); }
+  const cyl = piece(0, 0.030, -0.010, [0, 0.018, 0.002]);                              // the cylinder: its own floating piece, and it turns
+  const spin = new THREE.Group(); spin.position.set(0, 0.030, -0.010); cyl.add(spin);
+  { const body = new THREE.Mesh(new THREE.CylinderGeometry(0.0225, 0.0225, 0.052, 18), metal); body.rotation.x = Math.PI / 2; spin.add(body);
+    for (let i = 0; i < 6; i++) {
+      const a = i / 6 * Math.PI * 2;
+      const hole = new THREE.Mesh(new THREE.CylinderGeometry(0.0052, 0.0052, 0.054, 10), new THREE.MeshBasicMaterial({ color: 0x02040a })); hole.rotation.x = Math.PI / 2; hole.position.set(Math.cos(a) * 0.0135, Math.sin(a) * 0.0135, 0); spin.add(hole);
+      const flute = new THREE.Mesh(new THREE.BoxGeometry(0.003, 0.0035, 0.044), blue); flute.position.set(Math.cos(a + 0.52) * 0.0228, Math.sin(a + 0.52) * 0.0228, 0); flute.rotation.z = a + 0.52; spin.add(flute);
+    } }
+  const strap = piece(0, 0.056, -0.010, [0, 0.020, -0.004]);
+  gpBox(strap, plate, 0.020, 0.008, 0.088, 0, 0.056, -0.010);
+  const fl = piece(-0.013, 0.026, 0.024, [-0.020, 0.002, 0.004]);
+  gpBox(fl, plate, 0.004, 0.044, 0.072, -0.013, 0.026, 0.024, 0, 0, 0.05); gpBox(fl, blue, 0.0016, 0.030, 0.0016, -0.0155, 0.026, 0.024);
+  const fr = piece(0.013, 0.026, 0.024, [0.020, 0.002, 0.004]);
+  gpBox(fr, plate, 0.004, 0.044, 0.072, 0.013, 0.026, 0.024, 0, 0, -0.05); gpBox(fr, blue, 0.0016, 0.030, 0.0016, 0.0155, 0.026, 0.024);
+  const hammer = piece(0, 0.050, 0.052, [0, 0.012, 0.018]);
+  gpBox(hammer, metal, 0.008, 0.020, 0.010, 0, 0.050, 0.052, -0.5);
+  const trig = piece(0, -0.004, 0.012, [0, -0.018, 0.004]);
+  gpBox(trig, pale, 0.005, 0.016, 0.005, 0, -0.004, 0.012, 0.25);
+  const guard = piece(0, -0.006, 0.020, [0, -0.026, 0.006]);
+  { const t = new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.0028, 6, 14, Math.PI * 1.05), metal); t.rotation.set(0, Math.PI / 2, -0.4); t.position.set(0, -0.004, 0.020); guard.add(t); }
+  const gl = piece(-0.011, -0.040, 0.050, [-0.020, -0.012, 0.010]);
+  gpBox(gl, plate, 0.006, 0.074, 0.040, -0.011, -0.040, 0.050, 0.22);
+  const gr = piece(0.011, -0.040, 0.050, [0.020, -0.012, 0.010]);
+  gpBox(gr, plate, 0.006, 0.074, 0.040, 0.011, -0.040, 0.050, 0.22);
+  const back = piece(0, -0.040, 0.074, [0, -0.008, 0.026]);
+  gpBox(back, metal, 0.018, 0.070, 0.006, 0, -0.040, 0.074, 0.22);
+  const butt = piece(0, -0.080, 0.064, [0, -0.026, 0.014]);
+  gpBox(butt, metal, 0.026, 0.008, 0.034, 0, -0.080, 0.064, 0.22); gpBox(butt, blue, 0.016, 0.0016, 0.0016, 0, -0.0755, 0.080);
+  const rod = piece(0.017, 0.020, -0.040, [0.018, -0.008, -0.020]);
+  gpCyl(rod, pale, 0.0028, 0.0028, 0.060, 8, 0.017, 0.020, -0.040);
+  const CORE = new THREE.Vector3(0, 0.030, 0.034);                                    // the energy that holds it: a bright core in the frame, and a beam to every piece
+  const core = new THREE.Group(); core.userData.eqFx = true; g.add(core);
+  { const bead = new THREE.Mesh(new THREE.SphereGeometry(0.0062, 12, 10), pale); bead.position.copy(CORE); core.add(bead); }
+  const halo = new THREE.Mesh(new THREE.SphereGeometry(0.012, 12, 10), new THREE.MeshBasicMaterial({ color: 0x4aa8ff, transparent: true, opacity: 0.38, depthWrite: false, blending: THREE.AdditiveBlending })); halo.position.copy(CORE); core.add(halo);
+  const beams = parts.map(() => {
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+    const ln = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0x5ab4ff, transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending }));
+    ln.frustumCulled = false; ln.userData.eqFx = true; g.add(ln); return ln;
+  });
+  const shells = [];                                                                  // six cartridges, only seen on a reload
+  for (let i = 0; i < 6; i++) {
+    const s = new THREE.Group(); s.userData.eqFx = true; s.visible = false;
+    const c = new THREE.Mesh(new THREE.CylinderGeometry(0.0046, 0.0046, 0.016, 8), brass); c.rotation.x = Math.PI / 2; s.add(c);
+    const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.0015, 0.0046, 0.006, 8), new THREE.MeshPhongMaterial({ color: 0xb87333, shininess: 120 })); tip.rotation.x = Math.PI / 2; tip.position.z = -0.011; s.add(tip);
+    g.add(s); shells.push(s);
+  }
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.034, -0.176); _hackFlash(flash, 0x6ac4ff); g.add(flash);
+  const ease = u => u * u * (3 - 2 * u), clamp01 = u => Math.max(0, Math.min(1, u));
+  const OUT = new THREE.Vector3(-0.085, 0.020, 0.020), CYL = new THREE.Vector3(0, 0.030, -0.010), ORBIT_C = new THREE.Vector3(0, 0.020, 0.006);
+  const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
+  let aim = 0, kick = 0, was = false, spinA = 0, spinTarget = 0, locked = 0, clicked = false;
+  g._tick = (dt, now, assembling) => {
+    fx_vis(!assembling);
+    if (assembling) { for (const q of parts) q.p.position.set(0, 0, 0); return; }
+    const fired = !!(g._flash && g._flash.visible); if (fired && !was) { kick = 1; spinTarget += Math.PI / 3; } was = fired;
+    kick *= Math.exp(-dt * 7);
+    aim += ((isADS ? 1 : 0) - aim) * Math.min(1, dt * 10);
+    const t0 = g._reloadStart && g._reloadDur ? (Date.now() - g._reloadStart) / g._reloadDur : -1;
+    const inspecting = !!g._inspectMode && t0 >= 0 && t0 < 1, reloading = !g._inspectMode && t0 >= 0 && t0 < 1;
+    const loose = 1 - aim * 0.88;
+    // the cylinder: always turning, and it settles on a chamber when you aim
+    if (aim > 0.5) { const snap = Math.round(spinA / (Math.PI / 3)) * (Math.PI / 3); spinA += (snap - spinA) * Math.min(1, dt * 14); spinTarget = snap; }
+    else { spinTarget += dt * (reloading ? 4 : 1.1); spinA += (spinTarget - spinA) * Math.min(1, dt * 18); }
+    spin.rotation.z = spinA;
+    parts.forEach((q, i) => {
+      const bob = Math.sin(now * 1.3 + i * 1.7) * 0.0022 * loose, bob2 = Math.cos(now * 1.1 + i * 2.3) * 0.0018 * loose;
+      q.rest.copy(q.hover).multiplyScalar(loose); q.rest.y += bob; q.rest.x += bob2;
+      q.rest.addScaledVector(q.hover, kick * 0.8);                                   // thrown outward by a shot...
+      q.p.rotation.set(Math.sin(now * 0.9 + i) * 0.035 * loose, 0, Math.cos(now * 0.8 + i * 1.3) * 0.035 * loose);
+      q.p.position.copy(q.rest);
+    });
+    barrel.position.z -= kick * 0.022; muzzle.position.z -= kick * 0.022; sight.position.z -= kick * 0.012;
+    if (inspecting) {                                                               // the whole gun comes apart and orbits, then snaps back
+      const f = t0 < 0.12 ? ease(t0 / 0.12) : t0 < 0.8 ? 1 : 1 - ease((t0 - 0.8) / 0.2);
+      parts.forEach((q, i) => {
+        const a = i / parts.length * Math.PI * 2 + t0 * 11, r = 0.060 + (i % 3) * 0.014, tilt = 0.5 + (i % 4) * 0.25;
+        tmp.set(Math.cos(a) * r, Math.sin(a) * r * Math.sin(tilt), Math.sin(a) * r * Math.cos(tilt)).add(ORBIT_C).sub(q.c);
+        q.p.position.lerp(tmp, f); q.p.rotation.x += f * t0 * 9; q.p.rotation.y += f * t0 * 7;
+      });
+    }
+    // reload: the cylinder floats out, six cartridges orbit it, then they all slide home together
+    shells.forEach(s => s.visible = false);
+    if (reloading) {
+      const u = t0, out = u < 0.18 ? ease(u / 0.18) : u < 0.84 ? 1 : 1 - ease((u - 0.84) / 0.16);
+      tmp.copy(OUT).multiplyScalar(out); cyl.position.add(tmp);
+      cyl.rotation.y = 0.5 * out;
+      if (u > 0.16 && u < 0.86) {
+        const orbit = clamp01((u - 0.16) / 0.1), slide = ease(clamp01((u - 0.62) / 0.22));
+        tmp2.copy(CYL).add(cyl.position);                                           // where the cylinder is now
+        shells.forEach((s, i) => {
+          const a = i / 6 * Math.PI * 2 + u * 14, rOrbit = 0.040, rCh = 0.0135;
+          const r = rOrbit + (rCh - rOrbit) * slide, zOff = 0.060 * (1 - slide);
+          s.position.set(tmp2.x + Math.cos(a) * r * orbit, tmp2.y + Math.sin(a) * r * orbit, tmp2.z + zOff * orbit);
+          s.rotation.set(0, 0, 0); s.scale.setScalar(orbit); s.visible = true;
+        });
+      }
+      if (u >= 0.84 && !clicked) { clicked = true; try { playEquipSound('snapin'); } catch (e) {} }
+    } else clicked = false;
+    halo.scale.setScalar(1 + 0.2 * Math.sin(now * 9) + kick * 0.6 + (inspecting || reloading ? 0.3 : 0));
+    // beams: from every piece to the core; brighter the further apart they are
+    beams.forEach((ln, i) => {
+      const q = parts[i], pos = ln.geometry.attributes.position;
+      pos.setXYZ(0, q.c.x + q.p.position.x, q.c.y + q.p.position.y, q.c.z + q.p.position.z); pos.setXYZ(1, CORE.x, CORE.y, CORE.z); pos.needsUpdate = true;
+      ln.material.opacity = 0.18 + 0.4 * loose + kick * 0.3;
+    });
+  };
+  const fx_vis = v => { core.visible = v; for (const b of beams) b.visible = v; };
+  g._calm = () => { kick = 0; clicked = false; for (const q of parts) { q.p.position.set(0, 0, 0); q.p.rotation.set(0, 0, 0); } };
+  g._flash = flash; g._kickZ = 0.008; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+function playShatterFinisher(targetId) {                                                  // a kill with the Shatterpoint: a blue shockwave, then the glass breaks
+  try { const mesh = remoteMeshes[targetId]; if (mesh && mesh.visible) _spawnFinisherRing(mesh.position.clone().add(new THREE.Vector3(0, 1.05, 0)), 0x4aa8ff, 2.6); } catch (e) {}
+  return playGlassFinisher(targetId);
+}
+
 function buildHackerAK() {
   // 🟩 AK-20 -> Hacker AK. The stock rifle's own shape with every part turned to the void and outlined in green (_hackerize), and the hacker's fittings on it: a screen of running
   // 1s and 0s down the receiver that flashes bright when it fires, circuit traces on the handguard, a lit line down the magazine, edge lights along the top cover, a green front sight.
@@ -44855,6 +44996,7 @@ const HIT_STYLES = {
   void:  { void: true, glow: '#ffffff', fill: '#dfe8ff', hit: 0x000000, miss: 0x000000, screen: 'rgba(0,0,0,0.30)', num: '#f2f6ff', numShadow: '0 0 6px #000, 0 0 12px #000, -1px -1px 0 #000, 1px 1px 0 #000', scramble: '0123456789' },
   frost: { shards: true,       glow: '#7fd8ff', fill: '#e8fbff', hit: 0xe8fbff, miss: 0xa8e8ff, screen: 'rgba(160,230,255,0.16)', num: '#9fe8ff', numShadow: '0 0 8px #3aa8ff, 0 0 2px #04344f, -1px -1px 0 #04344f, 1px 1px 0 #04344f', scramble: null },
   gold:  { coins: true,        glow: '#ff9a00', fill: '#ffd24a', hit: 0xfff0b0, miss: 0xffd24a, screen: 'rgba(255,205,70,0.14)', num: '#ffd24a', numShadow: '0 0 8px #ff9a00, 0 0 2px #4a2a00, -1px -1px 0 #3a2200, 1px 1px 0 #3a2200', scramble: '0123456789' },
+  shatter: { shards: true,     glow: '#4aa8ff', fill: '#d8f0ff', hit: 0xd8f0ff, miss: 0x6ac4ff, screen: 'rgba(74,168,255,0.16)', num: '#7ac8ff', numShadow: '0 0 8px #2a7fff, 0 0 2px #04204f, -1px -1px 0 #04204f, 1px 1px 0 #04204f', scramble: null },
   pixel: { chars: '▓▒░█■',  glow: '#ff2bd6', fill: '#2bf0ff', hit: 0xffd0f6, miss: 0x2bf0ff, screen: 'rgba(255,43,214,0.16)', num: '#2bf0ff', numShadow: '0 0 8px #ff2bd6, 0 0 2px #2a0030, -1px -1px 0 #14001a, 1px 1px 0 #14001a', scramble: '▓▒░█■01' },
 };
 const _hackGlyphs = {};
@@ -55787,6 +55929,9 @@ const MODEL_SKINS = [
   { id: 'sg8_tectonic', weapon: 'sg8', name: 'Tectonic', rarity: 'rare',
     sw: ['#4d4640', '#d01808'], build: buildTectonic,
     blurb: 'A pump shotgun cut from dark rock with magma in the cracks. Every shot makes the seams glow hotter and they cool when you stop; run it hot and embers lift off it. Loose slabs of stone hang round the muzzle.' },
+  { id: 'revolver_shatterpoint', weapon: 'revolver', name: 'Shatterpoint', rarity: 'mythic', look: { hit: 'shatter' },
+    sw: ['#20262e', '#4aa8ff'], build: buildShatterpoint,
+    blurb: 'A revolver in fifteen pieces, hovering a finger-width apart and held together by blue energy, the cylinder floating loose and always turning. Aim and it pulls itself nearly solid; fire and the barrel jumps and the pieces are thrown out and drawn back; reload and the cylinder floats out, six cartridges circle it and slide home together. A kill breaks the victim in a blue shockwave of glass.' },
   { id: 'ak20_hacker', weapon: 'ak20', name: 'Hacker AK', rarity: 'rare', look: { hit: 'hack' },
     sw: ['#08090a', '#2dff6a'], build: buildHackerAK,
     blurb: 'The Hacker Pistol, full size: a void-black AK with green outlines and a screen of 1s and 0s down the receiver. Black rounds on a green trail, a laser-blaster crack, the same flash and scrambling damage number, and what it kills glitches into an ERROR and is gone.' },
@@ -56201,7 +56346,7 @@ const GEN2_MODEL_SKIN_IDS = new Set([
   'revolver_donut', 'ak20_donut', 'rpg_donut', 'machine_pistol_donut', 'pistol_donut',
   'sg8_donut', 'srx_donut', 'vector_donut', 'grenade_launcher_donut', 'minigun_donut',
   'mp40_donut', 'deagle_donut', 'shorty_donut',
-  'revolver_midas', 'pistol_frost', 'ak20_xerror',            // the Gen 2 case's two new top rarities: EPIC and MYTHIC (server.js GEN2_EPIC_SKIN_IDS / GEN2_NEW_MYTHIC_SKIN_IDS)
+  'revolver_midas', 'pistol_frost', 'ak20_xerror', 'revolver_shatterpoint',            // the Gen 2 case's two new top rarities: EPIC and MYTHIC (server.js GEN2_EPIC_SKIN_IDS / GEN2_NEW_MYTHIC_SKIN_IDS)
   'ak20_rainbow', 'ak20_hyperspace', 'ak20_blueprint', 'sg8_portal', 'vector_portal',
   'railgun_portal_detector', 'p90_quantum_scanner', 'freeze_hyperslush', 'firework_showman',
   'shorty_outlaw', 'snub_gunslinger', 'deagle_glitch', 'deagle_phantom', 'vector_glitch_exe',
@@ -61505,6 +61650,7 @@ const SKIN_FX = {
   ak20_blueprint: { sound: _fxS('holo', .26, .05, 1800, 900),
     equip: 'scan', equipMs: 1000, equipSfx: ['scan', 'beep'],
     reload: _fxR(RELOAD_KEYS.ak20, (RELOAD_PROPS.ak20 || []).map(e => e.k === 'mag' ? Object.assign({}, e, { k: 'holomag' }) : e), null, 'beep') },
+  revolver_shatterpoint: { equip: 'assemble', equipMs: 1000, equipSfx: ['snapin', 'chime'] },
   rpg_black_hole: { equip: 'blackhole', equipMs: 1100, equipSfx: ['singularity', 'chime'] },
   srx_absolute_zero: { equip: 'assemble', equipMs: 950, equipSfx: ['crystal', 'chime'] },
   sg8_tectonic: { equip: 'slam', equipMs: 900, equipSfx: ['whoosh', null] },
@@ -62856,6 +63002,7 @@ function _playSkinFinisher(kind, targetId) {
   if (kind === 'gold') return playGoldFinisher(targetId);
   if (kind === 'void') return playVoidFinisher(targetId);
   if (kind === 'frost') return playGlassFinisher(targetId);
+  if (kind === 'shatter') return playShatterFinisher(targetId);
   if (kind === 'pixel') return playHologramFinisher(targetId);
   return false;
 }
