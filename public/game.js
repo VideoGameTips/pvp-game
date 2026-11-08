@@ -2019,10 +2019,13 @@ let playerYVel = 0;               // Player vertical velocity (for air grenades 
 const GRAVITY       = 24;    // m/s² -> 3.97 m apex, 1.15 s hang (was 31.5, before that 21)
 // The longer you stay off the ground, the harder it pulls you down. A jump is over before it starts (1.5 s of ordinary gravity), then the
 // pull doubles every second -- a launch pad or a long fall ends in a crash -- up to 64 times the ordinary pull. Landing starts it over.
-const AIR_PULL = { grace: 1.5, doubleEvery: 1.0, max: 64 };
-let airTime = 0;
+// It only starts over after you have really stood on something for AIR_PULL.settle seconds: skimming a step or a ramp edge at speed, or a
+// frame of ground under a fast fall, does not reset it. It holds its strongest pull until you land, or ride a blast.
+const AIR_PULL = { grace: 1.5, doubleEvery: 1.0, max: 64, settle: 0.12 };
+let airTime = 0, airGroundT = 0;
+function airTouch(dt) { airGroundT += dt; if (airGroundT >= AIR_PULL.settle) airTime = 0; }
 function airPull(dt, counting) {
-  if (counting) airTime += dt;
+  if (counting) { airTime += dt; airGroundT = 0; }
   return airTime <= AIR_PULL.grace ? 1 : Math.min(AIR_PULL.max, 2 ** ((airTime - AIR_PULL.grace) / AIR_PULL.doubleEvery));
 }
 const JUMP_VEL      = 13.8;  // m/s standing jump -> 3.02 m apex
@@ -49348,7 +49351,7 @@ function updateMovement(dt, socialBlocked = false) {
                     ? currentWeapon.moveBoost : 1;
   const rootMult = Date.now() < playerRootedUntil ? 0 : 1;
   const minigunBraceMult = minigunBraced() ? 0.04 : 1;
-  const speedMult = baseSpeedMult * (adrenalineActive ? 1.6 : 1) * frostMult * rootMult * minigunBraceMult * adminSpeedMult * crouchMult * slideMult * fireBoost * _gimSlowNow();
+  const speedMult = baseSpeedMult * (adrenalineActive ? 1.6 : 1) * frostMult * rootMult * minigunBraceMult * adminSpeedMult * crouchMult * slideMult * fireBoost * _gimSlowNow() * (window.PVP_SWAP_PORTALS?.speedMult?.() ?? 1);
   // Drop the camera when crouching / sliding (eased)
   if (!window._crouchEye) window._crouchEye = PLAYER_EYE_HEIGHT;
   // Slide drops the eye to 0.70 m so the view clearly dips below normal
@@ -49408,7 +49411,7 @@ function updateMovement(dt, socialBlocked = false) {
       if (playerYVel <= 0 && camera.position.y <= Math.max(groundEyeY, landingEyeY)) {
         camera.position.y = Math.max(groundEyeY, landingEyeY);
         playerYVel = 0;
-        airTime = 0;
+        airTouch(dt);
         window._slideUntil = 0;
         _extVel.x *= 0.2; _extVel.z *= 0.2;
         window._blastCarry = false;
@@ -49417,7 +49420,7 @@ function updateMovement(dt, socialBlocked = false) {
       // glue to ground when not jumping
       camera.position.y = groundEyeY;
       playerYVel = 0;
-      airTime = 0;
+      airTouch(dt);
     }
   }
   // Ice: blend current input direction with last frame's direction for a slide feel
@@ -49506,7 +49509,7 @@ function updateMovement(dt, socialBlocked = false) {
     if (camera.position.y <= groundEyeY && slamState.vel <= 0) {
       const landingHardness = Math.min(1.2, Math.abs(slamState.vel || 0) / 12);
       camera.position.y = groundEyeY;
-      airTime = 0;
+      airTouch(dt);
       window._slideUntil = 0;
       _extVel.x *= 0.2; _extVel.z *= 0.2;
       window._blastCarry = false;
@@ -67517,6 +67520,7 @@ function applyBlastImpulse(pos, opts = {}) {
   window._airJumpsLeft = Math.max(window._airJumpsLeft || 0, loadoutAirJumps());
   window._blastJumpsLeft = Math.min(MAX_BLAST_JUMPS, (window._blastJumpsLeft || 0) + 1);   // explosions stack
   window._dashLeft = 1;
+  airTime = 0; airGroundT = 0;   // fly tech: a blast you ride starts your air gravity over, so a chain of blasts can keep you up for good
 }
 
 const _boomBits = {};

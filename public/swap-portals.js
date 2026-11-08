@@ -7,6 +7,10 @@
   //   floor   a round hole you walk or fall onto; you come out of it flung upwards
   //   ceiling a round hole you jump into; you come out of it dropping
   const LIFE = 25000, HALF_W = 0.58, HALF_H = 1.05, FLAT_R = 0.85, EXIT_GAP = 0.85;
+  // Two bugs kept on purpose: every trip through a portal makes you a little faster (stacking, for BOOST_HOLD ms after the last one), and
+  // going through one while sliding starts the slide's clock again, so a slide can be kept going for as long as there are portals to run through.
+  const BOOST_STEP = 1.1, BOOST_MAX = 8, BOOST_HOLD = 8000, BOOST_FADE = 2000;
+  let boost = 1, boostUntil = 0;
   const EYE = 1.65;                                            // the eye is this far above the feet
   const COLORS = [0xff8a22, 0x2a8cff];
   const owners = new Map();                                    // ownerId -> [portal, portal], oldest first
@@ -185,6 +189,15 @@
       if (c.vy !== null) { playerYVel = c.vy; slamState = null; }
       lastPlayerPos.copy(cam); prev.copy(cam);
       try { resolveWallCollisions(); } catch (e) {}
+      boost = Math.min(BOOST_MAX, boost * BOOST_STEP); boostUntil = now + BOOST_HOLD;
+      try { flashAbilityName('PORTAL SPEED x' + boost.toFixed(2)); } catch (e) {}
+      if (to.kind === 'wall' && window._slideUntil && Date.now() < window._slideUntil) {          // sliding when I went in: the slide starts over, pointing out of the exit
+        window._slideUntil = Date.now() + SLIDE_MS;
+        if (window._slideDir) {
+          if (c.yaw !== null) window._slideDir.set(to.n.x, 0, to.n.z);
+          else { const s2 = Math.sin(c.turn), k2 = Math.cos(c.turn), dx = window._slideDir.x, dz = window._slideDir.z; window._slideDir.set(dx * k2 + dz * s2, 0, dz * k2 - dx * s2); }
+        }
+      }
       exitLock = to; lockUntil = now + 1500;                          // the way out cannot send me back until I have stepped clear of it
       peak = Math.max(speed, 0);                                      // and the speed goes with me, into the next portal if it is right there
       try { playSoundEvent('air_launch', { volume: 0.7, minGap: 90 }); flashScreen('rgba(120,200,255,.28)', 160); } catch (e) {}
@@ -207,8 +220,16 @@
     }
   }
 
+  // 1 normally; more for a while after each portal. Read by the movement code.
+  function speedMult() {
+    const now = performance.now();
+    if (boost <= 1 || now < boostUntil) return boost;
+    const k = 1 - (now - boostUntil) / BOOST_FADE;
+    if (k <= 0) { boost = 1; return 1; }
+    return 1 + (boost - 1) * k;
+  }
   function step(dt) {
-    if (!owners.size) { havePrev = false; return; }
+    if (!owners.size) { havePrev = false; if (performance.now() > boostUntil + BOOST_FADE) boost = 1; return; }
     const now = performance.now();
     for (const [id, list] of [...owners]) {
       for (const p of list.slice()) {
@@ -221,7 +242,7 @@
       }
       if (!list.length) owners.delete(id); else list.forEach(paint);
     }
-    if (live()) hopPlayer(now, dt || 0.016); else havePrev = false;
+    if (live()) hopPlayer(now, dt || 0.016); else { havePrev = false; boost = 1; }
     hopBots(now);
   }
 
@@ -231,5 +252,5 @@
     open(d.ownerId, d.x, d.y, d.z, d.nx, Number.isFinite(d.ny) ? d.ny : 0, d.nz);
   });
   socket.on('playerLeft', id => drop(id));
-  window.PVP_SWAP_PORTALS = { place, step, clear };
+  window.PVP_SWAP_PORTALS = { place, step, clear, speedMult };
 })();
