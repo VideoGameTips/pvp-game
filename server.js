@@ -451,7 +451,7 @@ const GEN2_RARE_SKIN_IDS = [
   'revolver_final_notice','vector_crimson',
   'ak20_hyperspace', 'ak20_blueprint', 'sg8_portal', 'vector_portal',
   'railgun_portal_detector', 'p90_quantum_scanner', 'freeze_hyperslush', 'firework_showman',
-  'shorty_outlaw', 'snub_gunslinger', 'deagle_glitch', 'deagle_phantom',
+  'shorty_outlaw', 'snub_gunslinger', 'deagle_glitch', 'deagle_phantom', 'vector_glitch_exe',
   'burst_cannon_phantom', 'plasma_carbine_fishbowl', 'paintball_fishbowl', 'coilgun_clockwork',
   'rpd_clockwork_belt', 'smart_smg_neon', 'p90_neon_sign', 'portal_launcher_constellation',
   'railgun_constellation', 'knife_hyperspace', 'knife_butterfly', 'knife_singularity',

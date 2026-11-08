@@ -2498,6 +2498,45 @@ if (ok && process.argv.includes('--knife')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+// GLITCH.EXE (the Vector skin): in the Gen 2 case, a round with a trail of neon pixels, a model that flickers and always puts itself back, a magazine that
+// breaks into 0s and 1s, and a pixel hit look whose kill is a hologram that glitches out.
+if (ok && process.argv.includes('--glitchexe')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const sk = MODEL_SKINS.find(s => s.id === 'vector_glitch_exe');
+    if (!sk || sk.weapon !== 'vector') return ['the GLITCH.EXE skin of the Vector is missing'];
+    if (!GEN2_MODEL_SKIN_IDS.has(sk.id)) issues.push('GLITCH.EXE is not dealt by the Gen 2 case (no skin is free)');
+    if (!SKIN_FX[sk.id] || !SKIN_FX[sk.id].equip || !SKIN_FX[sk.id].reload) issues.push('GLITCH.EXE has no entrance or no reload');
+    if (!HIT_STYLES.pixel) issues.push('there is no pixel hit style');
+    if (_hitKindOfSkin(sk.id) !== 'pixel') issues.push('the skin does not carry the pixel hit look');
+    const shot = SKIN_SHOT[sk.id];
+    if (!shot) issues.push('no neon pixel round');
+    else { const m = _skinShotMesh(shot.shot, 0.05); if (!m || m.children.length < 8) issues.push('the round has no trail of pixels: ' + (m && m.children.length)); }
+    const model = sk.build();
+    if (!model._flash || typeof model._tick !== 'function' || typeof model._calm !== 'function') issues.push('the model has no flash, flicker or calm');
+    else {
+      const before = model.children.map(c => c.position.toArray().join() + c.visible);
+      let t = 0; for (let i = 0; i < 400; i++) { t += 0.05; model._tick(0.05, t, false); }
+      model._calm();
+      const loose = model.children.filter(c => c.geometry && c.geometry.type === 'BoxGeometry' && c.geometry.parameters.width === 0.008);
+      for (const c of loose) c.visible = true;
+      const after = model.children.map(c => c.position.toArray().join() + c.visible);
+      if (before.join('|') !== after.join('|')) issues.push('the flicker does not put every piece back');
+    }
+    const holder = new THREE.Group();
+    if (!_makeObjectProp('bit', () => new THREE.MeshBasicMaterial(), holder) || !holder.children.length) issues.push('the reload piece "bit" is not built');
+    const body = new THREE.Group(); body.add(new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.7, 0.3), new THREE.MeshBasicMaterial()));
+    body.visible = true; remoteMeshes.gx = body; players.gx = { dead: true };
+    const keepSound = playSoundEvent, keepFeed = pushFeedLine, keepRaf = typeof requestAnimationFrame !== 'undefined' ? requestAnimationFrame : null;
+    playSoundEvent = () => {}; pushFeedLine = () => {}; requestAnimationFrame = () => 0;
+    try { if (_playSkinFinisher('pixel', 'gx') !== true) issues.push('the pixel kill does not play'); }
+    finally { playSoundEvent = keepSound; pushFeedLine = keepFeed; if (keepRaf) requestAnimationFrame = keepRaf; delete remoteMeshes.gx; delete players.gx; }
+    return issues;
+  })()`);
+  console.log('GLITCH.EXE checks: Gen 2, neon pixel trail, flicker, binary reload, hologram kill');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 // Bot strategy: on every map, ten random bot/enemy pairs 20-36 m apart each ask for a plan. A plan has to be a route a body can
 // walk (each step at most 0.65 m up and 2 m down, one cell at a time), end where it says it does (a perch is 2.4 m or higher
 // and sees the enemy), and most maps with a deck or a roof should have at least one.

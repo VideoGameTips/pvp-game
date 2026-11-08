@@ -5407,7 +5407,7 @@ const PROP_SFX = {
   band: ['boing', 'boing'], dust: ['brush', 'brush'], popper: ['rustle', 'click'],
   beater: ['click', 'snapin'], refill: ['glug', 'glug'], bubble: ['bloop', 'bloop'],
   puck: ['tap', 'tap'], crisp: ['crunch', 'crunch'], pin: ['click', 'click'],
-  coin: ['clink', 'clink'], cash: ['rustle', 'rustle'], gumball: ['rattle', 'rattle'], comb: ['click', 'snapin'],
+  coin: ['clink', 'clink'], cash: ['rustle', 'rustle'], gumball: ['rattle', 'rattle'], comb: ['click', 'snapin'], bit: ['glitchsfx', 'snapin'],
   candle: ['tap', 'tap'], reel: ['rattle', 'click'], paint: ['splat', 'splat'],
   filter: ['slideout', 'snapin'], canister: ['hiss', 'snapin'], dash: ['type', 'type'],
   shard: ['clink', 'clink'], paper: ['fold', 'fold'], brick: ['click', 'snapin'], pixel: ['tick', 'tick'],
@@ -32029,6 +32029,65 @@ function buildGlitchDeagle() {
   return g;
 }
 
+function buildGlitchVector() {
+  // 👾 Vector -> GLITCH.EXE. A gun that looks like it failed to render: black, its small parts in magenta and cyan, loose pixels hanging off it,
+  // and parts that keep flickering and jumping out of place while you hold it.
+  const g = buildVectorSMG();
+  const flash = g._flash;
+  const inFlash = o => { for (let p = o; p; p = p.parent) if (p === flash) return true; return false; };
+  const body = new THREE.MeshPhongMaterial({ color: 0x0a0a10, shininess: 200, specular: 0x8a8aff });
+  const mag = new THREE.MeshBasicMaterial({ color: 0xff2bd6 }), cyan = new THREE.MeshBasicMaterial({ color: 0x2bf0ff });
+  const at = g.position.clone(); g.position.set(0, 0, 0); g.updateMatrixWorld(true);
+  const B = new THREE.Box3();
+  let n = 0;
+  g.traverse(m => {
+    if (!m.isMesh || inFlash(m) || (m.userData && m.userData.vmHand)) return;
+    const b = new THREE.Box3().setFromObject(m), sz = b.getSize(new THREE.Vector3());
+    B.union(b);
+    m.material = Math.max(sz.x, sz.y, sz.z) < 0.024 ? (n++ % 2 ? mag : cyan) : body;
+  });
+  g.position.copy(at);
+  const loose = [];
+  for (let i = 0; i < 9; i++) {
+    const px = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.008, 0.008), i % 2 ? mag : cyan);
+    px.position.set((i % 3 - 1) * 0.014, B.max.y + 0.006 + (i % 3) * 0.012, B.max.z - 0.02 - i * 0.02);
+    g.add(px); loose.push(px);
+  }
+  // Held: a burst every second or so. Whole top-level pieces jump somewhere wrong, a few blink out, and the loose pixels shuffle; never the hands,
+  // the flash or an assembly the reload drives, and all of it is put back exactly -- by the burst ending, a reload starting, or _calm.
+  let moved = [], hidden = [], burstUntil = 0, nextBurst = 0, pool = null;
+  const calm = () => {
+    for (const m of moved) m.c.position.copy(m.p);
+    for (const c of hidden) c.visible = true;
+    moved = []; hidden = [];
+  };
+  g._calm = calm;
+  g._tick = (dt, now, assembling) => {
+    if (assembling || g._reloadStart) { calm(); return; }
+    if (!pool) pool = g.children.filter(c => {
+      if (c === flash || c._home || c.userData.eqFx || loose.includes(c)) return false;
+      let hand = !!c.userData.vmHand;
+      c.traverse(o => { if (o.userData && o.userData.vmHand) hand = true; });
+      return !hand;
+    });
+    for (const px of loose) px.visible = Math.random() > 0.12;                    // the loose pixels never quite sit still
+    if ((moved.length || hidden.length) && now >= burstUntil) calm();
+    if (!moved.length && !hidden.length && now >= nextBurst && pool.length) {
+      nextBurst = now + 0.7 + Math.random() * 1.1; burstUntil = now + 0.14;
+      for (let i = 0; i < 4; i++) {
+        const c = pool[Math.floor(Math.random() * pool.length)];
+        if (moved.some(m => m.c === c) || hidden.includes(c)) continue;
+        if (Math.random() < 0.4) { c.visible = false; hidden.push(c); continue; }
+        moved.push({ c, p: c.position.clone() });
+        c.position.x += (Math.random() - 0.5) * 0.05;
+        c.position.y += (Math.random() - 0.5) * 0.05;
+        c.position.z += (Math.random() - 0.5) * 0.06;
+      }
+    }
+  };
+  return g;
+}
+
 function buildFishbowlCarbine() {
   // 🐠 Plasma Carbine -> Fishbowl Carbine. A clear tank on a grip, gravel on the
   // bottom, a nozzle out the front. Drawn, it fills with water from the bottom
@@ -44602,6 +44661,14 @@ const SKIN_SHAPES = (() => {
     hackbullet: (a, b, R) => ({ parts: [part(Cy(R * 0.26, R * 0.26, R * 1.3, 8), L(0x0a0a0a)), part(new THREE.ConeGeometry(R * 0.26, R * 0.7, 8), L(0x0a0a0a), [0, R * 1.0, 0]), part(Cy(R * 0.3, R * 0.3, R * 0.22, 8), K(b), [0, -R * 0.55, 0])], wake: b, wakeLen: 16 }),
     goldbullet: (a, b, R) => ({ parts: [part(Cy(R * 0.3, R * 0.3, R * 1.4, 10), K(a)), part(new THREE.ConeGeometry(R * 0.3, R * 0.8, 10), K(b), [0, R * 1.1, 0]), part(Cy(R * 0.36, R * 0.36, R * 0.2, 10), K(b), [0, -R * 0.6, 0])], wake: a, wakeLen: 12, spin: { x: 0, y: 6, z: 0 } }),
     voidbolt: (a, b, R) => ({ parts: [part(Cy(R * 0.16, R * 0.16, R * 1.5, 8), K(b)), part(new THREE.ConeGeometry(R * 0.16, R * 0.7, 8), K(b), [0, R * 1.1, 0]), part(Sp(R * 0.5), new THREE.MeshBasicMaterial({ color: b, transparent: true, opacity: 0.30, blending: THREE.AdditiveBlending, depthWrite: false }))], wakeDark: true, wakeLen: 30 }),
+    pixeltrail: (a, b, R) => {                                                  // a neon block with a tail of smaller and smaller blocks, strewn a little, on a glowing streak
+      const parts = [part(B(R * 1.3, R * 1.3, R * 1.3), K(a)), part(B(R * 0.6, R * 0.6, R * 0.6), K(0xffffff))];
+      for (let i = 0; i < 8; i++) {
+        const sz = R * (1.0 - i * 0.09);
+        parts.push(part(B(sz, sz, sz), K(i % 2 ? b : a), [((i * 37) % 5 - 2) * R * 0.3, -R * (1.7 + i * 1.5), ((i * 53) % 5 - 2) * R * 0.3]));
+      }
+      return { parts, wake: b, wakeLen: 14 };
+    },
     hackball: (a, b, R) => ({ parts: [part(Sp(R), L(0x0a0a0a)), part(new THREE.TorusGeometry(R * 1.08, R * 0.13, 5, 14), K(b), null, [Math.PI / 2, 0, 0])], wake: b, wakeLen: 7 }),
     carrot: (a, b, R) => ({ parts: [part(new THREE.ConeGeometry(R * 1.0, R * 4, 10), L(a), [0, R * 0.2, 0]), part(new THREE.ConeGeometry(R * 0.3, R * 1.1, 6), L(b), [R * 0.3, -R * 2.2, 0], [0, 0, 0.3]), part(new THREE.ConeGeometry(R * 0.3, R * 1.1, 6), L(b), [-R * 0.3, -R * 2.2, 0], [0, 0, -0.3])] }),
   };
@@ -44704,6 +44771,7 @@ const SKIN_SHOT = {};
   G({ shape: 'gear', c: [0xc8a030, 0x6b4a2c], min: 0.07 }, 'gears', ['coilgun_clockwork', 'rpd_clockwork_belt', 'grenade_launcher_cuckoo']);
   G({ shape: 'bolt', c: [0x4aa8ff, 0xffffff] }, 'cyber', ['ak20_blueprint']);
   G({ shape: 'hackbullet', c: [0x0a0a0a, 0x2dff6a], k: 1.5 }, null, ['pistol_hacker', 'ak20_hacker']);
+  G({ shape: 'pixeltrail', c: [0xff2bd6, 0x2bf0ff], min: 0.06 }, 'cyber', ['vector_glitch_exe']);
   G({ shape: 'hackbullet', c: [0x0a0a0a, 0x2dff6a], k: 1.5 }, 'hacker', ['grenade_launcher_hacker']);   // a black round on a green trail that bursts in green code
   G(null, 'nuke', ['rpg_nuke'], 0xff8a2a);                                                                 // the ordinary rocket, and a mushroom cloud where it lands   // the Hacker Pistol and AK: a black round on a green glowing trail
   G({ shape: 'hackball', c: [0x0a0a0a, 0x2dff6a], k: 1.3 }, 'hacker', ['frag_hacker']);
@@ -44787,6 +44855,7 @@ const HIT_STYLES = {
   void:  { void: true, glow: '#ffffff', fill: '#dfe8ff', hit: 0x000000, miss: 0x000000, screen: 'rgba(0,0,0,0.30)', num: '#f2f6ff', numShadow: '0 0 6px #000, 0 0 12px #000, -1px -1px 0 #000, 1px 1px 0 #000', scramble: '0123456789' },
   frost: { shards: true,       glow: '#7fd8ff', fill: '#e8fbff', hit: 0xe8fbff, miss: 0xa8e8ff, screen: 'rgba(160,230,255,0.16)', num: '#9fe8ff', numShadow: '0 0 8px #3aa8ff, 0 0 2px #04344f, -1px -1px 0 #04344f, 1px 1px 0 #04344f', scramble: null },
   gold:  { coins: true,        glow: '#ff9a00', fill: '#ffd24a', hit: 0xfff0b0, miss: 0xffd24a, screen: 'rgba(255,205,70,0.14)', num: '#ffd24a', numShadow: '0 0 8px #ff9a00, 0 0 2px #4a2a00, -1px -1px 0 #3a2200, 1px 1px 0 #3a2200', scramble: '0123456789' },
+  pixel: { chars: '▓▒░█■',  glow: '#ff2bd6', fill: '#2bf0ff', hit: 0xffd0f6, miss: 0x2bf0ff, screen: 'rgba(255,43,214,0.16)', num: '#2bf0ff', numShadow: '0 0 8px #ff2bd6, 0 0 2px #2a0030, -1px -1px 0 #14001a, 1px 1px 0 #14001a', scramble: '▓▒░█■01' },
 };
 const _hackGlyphs = {};
 function _hackGlyph(ch, style = 'hack') {
@@ -55920,6 +55989,9 @@ const MODEL_SKINS = [
   { id: 'deagle_glitch', weapon: 'desert_eagle', name: 'Glitch Deagle', rarity: 'rare',
     sw: ['#0a0a10', '#ff2bd6'], build: buildGlitchDeagle,
     blurb: 'Teleports together when drawn. Every so often, a piece is somewhere it should not be.' },
+  { id: 'vector_glitch_exe', weapon: 'vector', name: 'GLITCH.EXE', rarity: 'rare', look: { hit: 'pixel' },
+    sw: ['#0a0a10', '#2bf0ff'], build: buildGlitchVector,
+    blurb: 'A weapon that looks like reality failed to render. Parts of it flicker into fragments; its rounds leave neon pixel trails; the magazine breaks into 0s and 1s when you reload and reforms; what it kills turns into a pixelated hologram and glitches out of existence.' },
   { id: 'plasma_carbine_fishbowl', weapon: 'plasma_carbine', name: 'Fishbowl Carbine', rarity: 'rare',
     sw: ['#2a8ae8', '#ff7a1a'], build: buildFishbowlCarbine,
     blurb: 'Fills with water when drawn. Three fish live in it.' },
@@ -56132,7 +56204,7 @@ const GEN2_MODEL_SKIN_IDS = new Set([
   'revolver_midas', 'pistol_frost', 'ak20_xerror',            // the Gen 2 case's two new top rarities: EPIC and MYTHIC (server.js GEN2_EPIC_SKIN_IDS / GEN2_NEW_MYTHIC_SKIN_IDS)
   'ak20_rainbow', 'ak20_hyperspace', 'ak20_blueprint', 'sg8_portal', 'vector_portal',
   'railgun_portal_detector', 'p90_quantum_scanner', 'freeze_hyperslush', 'firework_showman',
-  'shorty_outlaw', 'snub_gunslinger', 'deagle_glitch', 'deagle_phantom',
+  'shorty_outlaw', 'snub_gunslinger', 'deagle_glitch', 'deagle_phantom', 'vector_glitch_exe',
   'burst_cannon_phantom', 'plasma_carbine_fishbowl', 'paintball_fishbowl', 'coilgun_clockwork',
   'rpd_clockwork_belt', 'smart_smg_neon', 'p90_neon_sign', 'portal_launcher_constellation',
   'railgun_constellation', 'pistol_origami', 'xm7_bricks', 'vector_brick_labeler',
@@ -59950,6 +60022,21 @@ const _rGeo = (key, build) => { let g = _rPropGeo.get(key); if (!g) { g = build(
 // A barcode scanner takes a battery, a glue gun takes a glue stick, a crisp tube
 // takes crisps. Each is what that object genuinely runs on, sized to sit in the
 // same hand as a magazine. Builds into `g` and says whether it knew the kind.
+const _bitTexs = {};
+function _bitTex(ch, col) {                                                   // a neon 0 or 1 on a clear square (null where there is no canvas: the piece falls back to a block)
+  const key = ch + col;
+  if (_bitTexs[key] !== undefined) return _bitTexs[key];
+  let tex = null;
+  try {
+    const c = document.createElement('canvas'); c.width = c.height = 64;
+    const x = c.getContext('2d');
+    x.font = 'bold 54px monospace'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.shadowColor = '#' + col.toString(16).padStart(6, '0'); x.shadowBlur = 10; x.fillStyle = '#ffffff';
+    x.fillText(ch, 32, 34);
+    tex = new THREE.CanvasTexture(c);
+  } catch (e) { tex = null; }
+  return (_bitTexs[key] = tex);
+}
 function _makeObjectProp(kind, M, g) {
   const add = (key, geo, mat, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) => {
     const m = new THREE.Mesh(_rGeo('op_' + kind + '_' + key, geo), mat);
@@ -60080,6 +60167,11 @@ function _makeObjectProp(kind, M, g) {
     case 'brick':
       add('b', B(0.030, 0.030, 0.050), M(0xf0c020, 140));
       add('s', C(0.0048, 0.0048, 0.005, 10), M(0xf0c020, 140), 0, 0.017, 0); return true;
+    case 'bit': {       // the glitch magazine, broken into code: a neon 0 or 1
+      const col = pick([0xff2bd6, 0x2bf0ff]), tex = _bitTex(Math.random() < 0.5 ? '1' : '0', col);
+      if (tex) add('bp', () => new THREE.PlaneGeometry(0.040, 0.040), new THREE.MeshBasicMaterial({ map: tex, color: col, transparent: true, side: THREE.DoubleSide, depthWrite: false }));
+      else add('bb', B(0.014, 0.014, 0.014), new THREE.MeshBasicMaterial({ color: col }));
+      return true; }
     case 'pixel':
       add('p', B(0.020, 0.020, 0.020), M(pick([0x2a2e34, 0x55ddff, 0x8a5a2a]), 30)); return true;
     case 'soul':       // an FFA Legend pistol's round: a burning soul in black smoke
@@ -61420,6 +61512,9 @@ const SKIN_FX = {
     equip: 'glitch', equipMs: 900, equipSfx: ['glitchsfx', 'snapin'] },
   deagle_glitch: { sound: _fxS('glitch', .34, .10, 0, 0),
     equip: 'glitch', equipMs: 850, equipSfx: ['glitchsfx', 'snapin'] },
+  vector_glitch_exe: { sound: _fxS('glitch', .28, .06, 0, 0),
+    equip: 'glitch', equipMs: 900, equipSfx: ['glitchsfx', 'snapin'],
+    reload: _fxR(_RK.under(), [RP(.22, 'bit', 'eject', 7), RP(.50, 'bit', 'arrive', 7)], [[.20, 'glitchsfx']], 'snapin') },
   // (no `sound`: their shots are SKIN_VOICE / SKIN_CHIME, and a profile here would make the revolver's recording and the AK's lose to it)
   revolver_midas: { equip: 'midas', equipMs: 1000, equipSfx: ['clink', 'ding'] },
   ak20_xerror: { equip: 'glitch', equipMs: 950, equipSfx: ['glitchsfx', 'snapin'] },
@@ -62601,6 +62696,46 @@ FINISHER_MOVES.gold = function (mesh, id, c) {
     playSoundEvent('hitmarker', { position: at, volume: 0.9, minGap: 40 });
   });
 };
+// 👾 GLITCH.EXE: the body flickers into a cyan-and-magenta hologram, tears into blocky slices, shrinks away in steps like a low-res image, and bursts into pixels.
+FINISHER_MOVES.hologram = function (mesh, id, c) {
+  const body = new THREE.MeshBasicMaterial({ color: 0x2bf0ff, transparent: true, opacity: 0.6, depthWrite: false, blending: THREE.AdditiveBlending });
+  _finisherSwap(mesh, body);
+  playSoundEvent('emp_zap', { position: mesh.position, volume: 0.8, minGap: 80 });
+  let nextTear = 0, nextPix = 0, off = new THREE.Vector3();
+  _finisherDrive(mesh, id, 1350, (t, dt, st) => {
+    const now = performance.now();
+    if (now >= nextTear) {                                                    // every 60-110 ms the picture tears: a new colour, a sideways slip
+      nextTear = now + 60 + Math.random() * 50;
+      body.color.setHex(Math.random() < 0.5 ? 0x2bf0ff : 0xff2bd6);
+      off.set((Math.random() < 0.5 ? -1 : 1) * Math.random() * 0.28, 0, (Math.random() - 0.5) * 0.18);
+    }
+    const steps = t < 0.55 ? 1 : Math.max(0.04, 1 - Math.floor((t - 0.55) / 0.45 * 7) / 7);   // the last half shrinks in seven jumps, low-res
+    mesh.position.copy(st.p).add(off);
+    mesh.scale.set(st.s.x, st.s.y * steps, st.s.z);
+    mesh.rotation.y = st.r.y;
+    body.opacity = (0.55 + 0.25 * Math.sin(now * 0.05)) * (t > 0.85 ? (1 - t) / 0.15 : 1);
+    mesh.visible = !(t > 0.1 && Math.random() < 0.22);                         // it drops out for a frame now and then
+    if (now >= nextPix) {                                                      // blocks lifting off it
+      nextPix = now + 35;
+      _spawnFinisherSpark(st.p.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.7, 0.1 + Math.random() * 1.7 * steps, (Math.random() - 0.5) * 0.7)), Math.random() < 0.5 ? 0x2bf0ff : 0xff2bd6,
+        { size: 0.06, life: 420, vel: new THREE.Vector3((Math.random() - 0.5) * 0.8, 0.5 + Math.random() * 1.2, (Math.random() - 0.5) * 0.8) });
+    }
+  }, st => {
+    body.dispose();
+    const at = st.p.clone().setY(st.p.y + 0.9);
+    _finisherBurst(at, 0xff2bd6, 34, [0xff2bd6, 0x2bf0ff, 0xffffff]); _spawnFinisherRing(st.p.clone(), 0x2bf0ff, 2.0);
+    playSoundEvent('hitmarker', { position: at, volume: 0.8, minGap: 40 });
+  });
+};
+function playHologramFinisher(targetId) {
+  const mesh = remoteMeshes[targetId];
+  if (!mesh || !mesh.visible) return false;
+  if (mesh._finisher && performance.now() < mesh._finisher.until) return true;
+  mesh._finisher = { id: 'hologram', until: performance.now() + 4200 };
+  FINISHER_MOVES.hologram(mesh, targetId, 0x2bf0ff);
+  pushFeedLine('GLITCHED OUT', players[targetId]?.name || 'Enemy', '#2bf0ff');
+  return true;
+}
 function playGoldFinisher(targetId) {
   const mesh = remoteMeshes[targetId];
   if (!mesh || !mesh.visible) return false;
@@ -62721,6 +62856,7 @@ function _playSkinFinisher(kind, targetId) {
   if (kind === 'gold') return playGoldFinisher(targetId);
   if (kind === 'void') return playVoidFinisher(targetId);
   if (kind === 'frost') return playGlassFinisher(targetId);
+  if (kind === 'pixel') return playHologramFinisher(targetId);
   return false;
 }
 // Plays the chosen finisher on a body. The seven classic ones run the classic effect (see _playClassicFinisher); the others have a move
