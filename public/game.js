@@ -30098,6 +30098,106 @@ function buildIronJudge() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+function buildDoubleTrouble() {
+  // 💥 Sawed-Off -> Double Trouble. A short, chunky double-barrel built out of rectangles and ridges: matte black, brushed steel and bright orange. Two massive barrel
+  // housings float a little apart from the central frame, with four armour plates standing off them. Fourteen separate pieces.
+  //   aim      both housings slide inward and lock together, and the four plates push outward to show the orange joints under them
+  //   fire     the housings are thrown backward hard, the plates fly out and snap back -- every shot looks like it is about to come apart
+  //   reload   the barrels separate completely, two oversized shells float into their chambers, and the front assembly snaps shut
+  //   inspect  it comes apart into its fourteen pieces, which turn round an invisible axis, and it reassembles with a heavy clunk
+  const g = new THREE.Group();
+  const black = new THREE.MeshPhongMaterial({ color: 0x0e0f11, shininess: 22, specular: 0x30343a });
+  const steel = new THREE.MeshPhongMaterial({ color: 0x9aa2ab, shininess: 70, specular: 0xdfe6ee });
+  const orange = new THREE.MeshPhongMaterial({ color: 0xff7a14, shininess: 90, specular: 0xffd0a0, emissive: 0x3a1600 });
+  const glowM = new THREE.MeshBasicMaterial({ color: 0xff8a2a });
+  const brass = new THREE.MeshPhongMaterial({ color: 0xd2a24a, shininess: 160, specular: 0xfff0b0 });
+  const parts = [];
+  const piece = (cx, cy, cz, hover) => { const p = new THREE.Group(); g.add(p); const q = { p, c: new THREE.Vector3(cx, cy, cz), hover: new THREE.Vector3(...hover), rest: new THREE.Vector3() }; parts.push(q); return { p, q }; };
+  const frame = piece(0, 0.012, 0.030, [0, 0, 0]).p;
+  gpBox(frame, black, 0.034, 0.046, 0.090, 0, 0.012, 0.030);
+  for (let i = 0; i < 4; i++) gpBox(frame, steel, 0.0356, 0.004, 0.012, 0, 0.026 - i * 0.012, 0.062);     // ridges across the rear of the frame
+  const spine = piece(0, 0.014, -0.012, [0, 0, -0.004]).p;                                                // the orange centre joint the housings lock onto
+  gpBox(spine, orange, 0.012, 0.052, 0.034, 0, 0.014, -0.012); gpBox(spine, steel, 0.016, 0.008, 0.010, 0, 0.044, -0.012);
+  const strap = piece(0, 0.040, 0.040, [0, 0.004, 0]).p; gpBox(strap, steel, 0.036, 0.008, 0.062, 0, 0.040, 0.040); gpBox(strap, black, 0.012, 0.006, 0.040, 0, 0.0455, 0.040);
+  const grip = piece(0, -0.050, 0.050, [0, -0.004, 0.004]).p;
+  gpPlate(grip, black, [[0.070, -0.010], [0.082, -0.090], [0.052, -0.108], [0.026, -0.092], [0.034, -0.010]], 0.030, -0.012);
+  for (let i = 0; i < 4; i++) gpBox(grip, steel, 0.0322, 0.003, 0.034, 0, -0.030 - i * 0.016, 0.054, 0.2);
+  const butt = piece(0, -0.108, 0.056, [0, -0.008, 0.006]).p; gpBox(butt, steel, 0.034, 0.012, 0.044, 0, -0.108, 0.056, 0.2); gpBox(butt, orange, 0.034, 0.003, 0.044, 0, -0.1015, 0.056, 0.2);
+  const trig = piece(0, -0.002, 0.018, [0, -0.004, 0]).p; gpBox(trig, orange, 0.006, 0.018, 0.006, 0, -0.002, 0.018, 0.25);
+  const guard = piece(0, -0.012, 0.028, [0, -0.006, 0]).p;
+  { const t = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.0034, 6, 14, Math.PI * 1.05), steel); t.rotation.set(0, Math.PI / 2, -0.4); t.position.set(0, -0.014, 0.028); guard.add(t); }
+  const latch = piece(0, 0.050, 0.010, [0, 0.006, 0]).p; gpBox(latch, steel, 0.010, 0.008, 0.050, 0, 0.050, 0.010, -0.05); gpBox(latch, orange, 0.012, 0.010, 0.010, 0, 0.050, -0.012);
+  const hous = [-1, 1].map(s => {                                                                         // the two barrel housings: big ridged rectangular blocks
+    const { p, q } = piece(s * 0.0225, 0.030, -0.095, [s * 0.012, 0.003, -0.010]);
+    gpBox(p, black, 0.030, 0.040, 0.150, s * 0.0225, 0.030, -0.095);
+    for (let i = 0; i < 7; i++) gpBox(p, steel, 0.0322, 0.0422, 0.006, s * 0.0225, 0.030, -0.040 - i * 0.021);   // the ribs
+    gpBox(p, black, 0.020, 0.028, 0.004, s * 0.0225, 0.030, -0.1715); gpBox(p, glowM, 0.010, 0.014, 0.0016, s * 0.0225, 0.030, -0.1736);   // the muzzle face, a hot bore
+    for (const [x, y] of [[s * 0.0388, 0.030], [s * 0.0225, 0.0518], [s * 0.0225, 0.0082]]) gpBox(p, orange, x === s * 0.0388 ? 0.004 : 0.012, x === s * 0.0388 ? 0.014 : 0.004, 0.014, x, y, -0.060);   // orange joints on the outside faces
+    return { p, q, s };
+  });
+  const plates = [];                                                                                      // four armour plates; each lies over a face of the barrels
+  const plate = (w, h, d, x, y, z, out) => {
+    const { p } = piece(x, y, z, out.map(v => v * 0.006)); gpBox(p, steel, w, h, d, x, y, z);
+    for (let k = 0; k < 3; k++) { const wide = w > h; gpBox(p, black, wide ? w * 0.9 : w + 0.0008, wide ? h + 0.0008 : h * 0.9, 0.006, x, y, z - 0.04 + k * 0.04); }       // ridges across the plate
+    plates.push({ p, out: new THREE.Vector3(...out) }); return p;
+  };
+  plate(0.082, 0.006, 0.126, 0, 0.0545, -0.082, [0, 1, 0]);
+  plate(0.082, 0.006, 0.126, 0, 0.0055, -0.082, [0, -1, 0]);
+  plate(0.006, 0.044, 0.126, -0.0435, 0.030, -0.082, [-1, 0, 0]);
+  plate(0.006, 0.044, 0.126, 0.0435, 0.030, -0.082, [1, 0, 0]);
+  const shells = [-1, 1].map(s => {
+    const sh = new THREE.Group(); sh.userData.eqFx = true; sh.visible = false;
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.0125, 0.0125, 0.046, 12), new THREE.MeshPhongMaterial({ color: 0xd8321c, shininess: 60 })); body.rotation.x = Math.PI / 2; sh.add(body);
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.0132, 0.0132, 0.012, 12), brass); base.rotation.x = Math.PI / 2; base.position.z = 0.026; sh.add(base);
+    g.add(sh); return { sh, s };
+  });
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.030, -0.185); _hackFlash(flash, 0xff8a2a); g.add(flash);
+  const ease = u => u * u * (3 - 2 * u), clamp01 = u => Math.max(0, Math.min(1, u));
+  const CEN = new THREE.Vector3(0, 0.020, -0.020), tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
+  let aim = 0, kick = 0, was = false, clunked = 0, snapped = false;
+  g._tick = (dt, now, assembling) => {
+    if (assembling) { for (const q of parts) q.p.position.set(0, 0, 0); shells.forEach(x => x.sh.visible = false); return; }
+    const fired = !!(g._flash && g._flash.visible); if (fired && !was) kick = 1; was = fired;
+    kick *= Math.exp(-dt * 11);
+    aim += ((isADS ? 1 : 0) - aim) * Math.min(1, dt * 10);
+    const t0 = g._reloadStart && g._reloadDur ? (Date.now() - g._reloadStart) / g._reloadDur : -1;
+    const inspecting = !!g._inspectMode && t0 >= 0 && t0 < 1, reloading = !g._inspectMode && t0 >= 0 && t0 < 1;
+    const loose = 1 - aim;                                                                                 // the housings float apart when idle and lock when aimed
+    parts.forEach((q, i) => { q.p.rotation.set(0, 0, 0); q.rest.copy(q.hover).multiplyScalar(loose); q.rest.y += Math.sin(now * 1.3 + i * 1.7) * 0.0016 * loose; q.p.position.copy(q.rest); });
+    hous.forEach(h => { h.p.position.z += 0.034 * kick; h.p.position.x -= h.s * 0.003 * kick; });              // thrown backward by the shot
+    plates.forEach(x => {                                                                                  // idle: just off the barrels. Aim: pushed out to show the joints. Fire: flung out and back.
+      x.p.position.copy(x.out).multiplyScalar(0.006 * loose * 0.5 + 0.014 * aim + 0.028 * kick);
+    });
+    shells.forEach(x => x.sh.visible = false);
+    if (reloading) {                                                                                        // the barrels split right apart, shells float in, the front snaps shut
+      const u = t0, sep = u < 0.18 ? ease(u / 0.18) : u < 0.66 ? 1 : 1 - clamp01((u - 0.66) / 0.14) * clamp01((u - 0.66) / 0.14);
+      hous.forEach(h => { h.p.position.x += h.s * 0.050 * sep; h.p.position.z -= 0.040 * sep; h.p.position.y += 0.010 * sep; });
+      plates.forEach(x => x.p.position.addScaledVector(x.out, 0.020 * sep));
+      shells.forEach(x => {
+        const k = ease(clamp01((u - 0.20) / 0.42)), start = tmp.set(x.s * 0.030, 0.140, -0.020), end = tmp2.set(x.s * (0.0225 + 0.050), 0.030, -0.060 + 0.040);
+        x.sh.position.set(start.x + (end.x - start.x) * k, start.y + (end.y - start.y) * k + Math.sin(k * Math.PI) * 0.015, start.z + (end.z - start.z) * k);
+        x.sh.rotation.set(Math.sin(now * 5 + x.s) * 0.1 * (1 - k), 0, Math.sin(now * 4 + x.s) * 0.15 * (1 - k));
+        x.sh.scale.setScalar(Math.max(0.001, 1 - clamp01((u - 0.56) / 0.10)));
+        x.sh.visible = u > 0.18 && u < 0.66;
+      });
+      if (u >= 0.80 && !snapped) { snapped = true; try { playEquipSound('snapin'); } catch (e) {} }
+    } else snapped = false;
+    if (inspecting) {                                                                                       // controlled demolition: fourteen pieces turning round an axis, then a clunk
+      const f = t0 < 0.14 ? ease(t0 / 0.14) : t0 < 0.80 ? 1 : 1 - ease((t0 - 0.80) / 0.20);
+      const turn = Math.PI * 2 * ease(clamp01((t0 - 0.14) / 0.66));
+      parts.forEach((q, i) => {
+        tmp.copy(q.c).sub(CEN).multiplyScalar(2.3).add(new THREE.Vector3(Math.sin(i * 2.4) * 0.02, Math.cos(i * 1.9) * 0.025, Math.sin(i * 1.3) * 0.02));
+        tmp2.copy(tmp).applyAxisAngle(new THREE.Vector3(0, 1, 0), turn).add(CEN).sub(q.c);
+        q.p.position.lerp(tmp2, f); q.p.rotation.y = turn * f;
+      });
+      if (t0 >= 0.90 && !clunked) { clunked = 1; try { playEquipSound('snapin'); playEquipSound('snapin'); } catch (e) {} }
+    } else clunked = 0;
+  };
+  g._calm = () => { kick = 0; snapped = false; clunked = 0; for (const q of parts) { q.p.position.set(0, 0, 0); q.p.rotation.set(0, 0, 0); } };
+  g._flash = flash; g._kickZ = 0.020; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
 function buildHackerAK() {
   // 🟩 AK-20 -> Hacker AK. The stock rifle's own shape with every part turned to the void and outlined in green (_hackerize), and the hacker's fittings on it: a screen of running
   // 1s and 0s down the receiver that flashes bright when it fires, circuit traces on the handguard, a lit line down the magazine, edge lights along the top cover, a green front sight.
@@ -56158,6 +56258,9 @@ const MODEL_SKINS = [
   { id: 'hand_cannon_iron_judge', weapon: 'hand_cannon', name: 'The Iron Judge', rarity: 'legendary',
     sw: ['#0d0e10', '#ff7a1a'], build: buildIronJudge,
     blurb: 'An industrial cannon squeezed into one hand: black, gunmetal and molten orange, the barrel four steel blocks held together by a bar of glowing energy. They float apart when idle, slide forward and lock when you aim, and split open for a blink with an orange shockwave when you fire. Reloading floats all five cartridges over the gun before they drop into their chambers. Inspect unfolds it into a little artillery piece and back.' },
+  { id: 'sawed_off_double_trouble', weapon: 'sawed_off', name: 'Double Trouble', rarity: 'legendary',
+    sw: ['#0e0f11', '#ff7a14'], build: buildDoubleTrouble,
+    blurb: 'A short, chunky double-barrel built from rectangles and ridges in matte black, brushed steel and bright orange, with two massive barrel housings floating apart from the frame. Aim and they lock together while four armour plates push out to show the orange joints; every shot throws the housings backward and the plates out before they snap back. Reload splits the barrels right apart so two oversized shells can float in. Inspect breaks it into fourteen hovering pieces and reassembles it with a heavy clunk.' },
   { id: 'ak20_hacker', weapon: 'ak20', name: 'Hacker AK', rarity: 'rare', look: { hit: 'hack' },
     sw: ['#08090a', '#2dff6a'], build: buildHackerAK,
     blurb: 'The Hacker Pistol, full size: a void-black AK with green outlines and a screen of 1s and 0s down the receiver. Black rounds on a green trail, a laser-blaster crack, the same flash and scrambling damage number, and what it kills glitches into an ERROR and is gone.' },
@@ -56572,7 +56675,7 @@ const GEN2_MODEL_SKIN_IDS = new Set([
   'revolver_donut', 'ak20_donut', 'rpg_donut', 'machine_pistol_donut', 'pistol_donut',
   'sg8_donut', 'srx_donut', 'vector_donut', 'grenade_launcher_donut', 'minigun_donut',
   'mp40_donut', 'deagle_donut', 'shorty_donut',
-  'revolver_midas', 'pistol_frost', 'ak20_xerror', 'revolver_shatterpoint', 'machine_pistol_overclocked', 'hand_cannon_iron_judge',            // the Gen 2 case's two new top rarities: EPIC and MYTHIC (server.js GEN2_EPIC_SKIN_IDS / GEN2_NEW_MYTHIC_SKIN_IDS)
+  'revolver_midas', 'pistol_frost', 'ak20_xerror', 'revolver_shatterpoint', 'machine_pistol_overclocked', 'hand_cannon_iron_judge', 'sawed_off_double_trouble',            // the Gen 2 case's two new top rarities: EPIC and MYTHIC (server.js GEN2_EPIC_SKIN_IDS / GEN2_NEW_MYTHIC_SKIN_IDS)
   'ak20_rainbow', 'ak20_hyperspace', 'ak20_blueprint', 'sg8_portal', 'vector_portal',
   'railgun_portal_detector', 'p90_quantum_scanner', 'freeze_hyperslush', 'firework_showman',
   'shorty_outlaw', 'snub_gunslinger', 'deagle_glitch', 'deagle_phantom', 'vector_glitch_exe',
@@ -61876,6 +61979,7 @@ const SKIN_FX = {
   ak20_blueprint: { sound: _fxS('holo', .26, .05, 1800, 900),
     equip: 'scan', equipMs: 1000, equipSfx: ['scan', 'beep'],
     reload: _fxR(RELOAD_KEYS.ak20, (RELOAD_PROPS.ak20 || []).map(e => e.k === 'mag' ? Object.assign({}, e, { k: 'holomag' }) : e), null, 'beep') },
+  sawed_off_double_trouble: { equip: 'slam', equipMs: 900, equipSfx: ['whoosh', 'snapin'] },
   hand_cannon_iron_judge: { equip: 'unfold', equipMs: 1000, equipSfx: ['whoosh', 'snapin'] },
   machine_pistol_overclocked: { equip: 'windup', equipMs: 1000, equipSfx: ['windup', 'ding'] },
   revolver_shatterpoint: { equip: 'assemble', equipMs: 1000, equipSfx: ['snapin', 'chime'] },
