@@ -2633,6 +2633,61 @@ if (ok && process.argv.includes('--widowmaker')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+// Simple limbs: no elbows or knees. Walking swings an arm and the opposite leg; a crouch is a low staggered stance; a slide lies back with the legs out and the arms clear
+// of the floor; a jump leaves the legs hanging and raises the arms, unless the body holds a weapon (then the arms stay as they were).
+if (ok && process.argv.includes('--simplelimbs')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const mesh = makePlayerMesh('limbs', false, 'enemy', 'default', {});
+    const rig = mesh._rig;
+    if (!rig) return ['no rig'];
+    const sign = v => (v > 0.05 ? 1 : v < -0.05 ? -1 : 0);
+    const step = (n, crouch, slide, jump, move, check) => {
+      for (let i = 0; i < n; i++) {
+        if (move) mesh.position.z += 0.12;
+        animateCharacterMesh(mesh, 0.016, crouch, slide, jump, 0, -1);
+        if (check) check();
+        if (rig.kneeL.rotation.x !== 0 || rig.kneeR.rotation.x !== 0) { issues.push('a knee is bent'); return; }
+        if (!rig.holdsGun && (rig.elbowL.rotation.x !== 0 || rig.elbowR.rotation.x !== 0)) { issues.push('an empty-handed elbow is bent'); return; }
+      }
+    };
+    // walking: the arm goes forward as the opposite leg does
+    let opp = 0, same = 0, maxLeg = 0, legsOpp = 0, legsSame = 0;
+    step(160, 0, 0, 0, true, () => {
+      const l = rig.legL.rotation.x, r = rig.legR.rotation.x, al = rig.armL.rotation.x;
+      maxLeg = Math.max(maxLeg, Math.abs(l));
+      if (Math.abs(l) > 0.2 && Math.abs(al) > 0.2) { if (sign(al) === -sign(l)) opp++; else same++; }
+      if (Math.abs(l) > 0.2 && Math.abs(r) > 0.2) { if (sign(l) === -sign(r)) legsOpp++; else legsSame++; }
+    });
+    if (maxLeg < 0.25) issues.push('walking: the legs barely swing ' + maxLeg.toFixed(2));
+    if (!(opp > same * 3)) issues.push('walking: an arm should swing against its own leg (' + opp + ' opposite, ' + same + ' together)');
+    if (!(legsOpp > legsSame * 3)) issues.push('walking: the legs should alternate (' + legsOpp + ' opposite, ' + legsSame + ' together)');
+    // sliding: lying back, legs straight out front, arms clear of the floor
+    step(80, 0, 1, 0, false);
+    if (!(rig.legL.rotation.x < -1.3 && rig.legR.rotation.x < -1.3)) issues.push('slide: both legs should be out in front: ' + [rig.legL.rotation.x, rig.legR.rotation.x].map(n => n.toFixed(2)));
+    if (!(rig.armL.rotation.x > -0.8 && rig.armL.rotation.x < -0.3)) issues.push('slide: the arms should be held off the floor: ' + rig.armL.rotation.x.toFixed(2));
+    if (!(rig.torso.rotation.x < -0.95)) issues.push('slide: the body should be lying back: ' + rig.torso.rotation.x.toFixed(2));
+    // crouching: a staggered stance, one leg forward, one back
+    step(80, 0.58, 0, 0, false);
+    if (!(rig.legL.rotation.x < -0.8 && rig.legR.rotation.x > 0.7)) issues.push('crouch: one leg forward and one back: ' + [rig.legL.rotation.x, rig.legR.rotation.x].map(n => n.toFixed(2)));
+    // jumping: legs hang still, arms rise
+    step(80, 0, 0, 1, false);
+    if (!(Math.abs(rig.legL.rotation.x) < 0.05 && Math.abs(rig.legR.rotation.x) < 0.05)) issues.push('jump: the legs should hang still: ' + [rig.legL.rotation.x, rig.legR.rotation.x].map(n => n.toFixed(2)));
+    if (!(rig.armL.rotation.x < -2.6 && rig.armR.rotation.x < -2.6)) issues.push('jump: the arms should rise: ' + [rig.armL.rotation.x, rig.armR.rotation.x].map(n => n.toFixed(2)));
+    // an armed body keeps its arms in the air
+    rig.holdsGun = true;
+    step(80, 0, 0, 0, false);
+    const armed0 = [rig.armL.rotation.x, rig.armR.rotation.x];
+    step(80, 0, 0, 1, false);
+    if (!(Math.abs(rig.armL.rotation.x - armed0[0]) < 0.05 && Math.abs(rig.armR.rotation.x - armed0[1]) < 0.05)) issues.push('jump with a weapon: the arms should not move: ' + armed0.map(n => n.toFixed(2)) + ' -> ' + [rig.armL.rotation.x, rig.armR.rotation.x].map(n => n.toFixed(2)));
+    if (!(Math.abs(rig.legL.rotation.x) < 0.05)) issues.push('jump with a weapon: the legs should still hang');
+    for (const k of ['legL', 'legR', 'armL', 'armR']) if (!Number.isFinite(rig[k].rotation.x)) issues.push(k + ' is not a number');
+    return issues;
+  })()`);
+  console.log('Simple limbs checks: straight limbs, opposite swing, crouch stance, lying slide, jump');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 // Bot strategy: on every map, ten random bot/enemy pairs 20-36 m apart each ask for a plan. A plan has to be a route a body can
 // walk (each step at most 0.65 m up and 2 m down, one cell at a time), end where it says it does (a perch is 2.4 m or higher
 // and sees the enemy), and most maps with a deck or a roof should have at least one.

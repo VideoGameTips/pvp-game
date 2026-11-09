@@ -44203,14 +44203,14 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
     // The arms hang off the chest, so a chest laid back by SLIDE_BACK carries them with it: an armed body adds the
     // difference back so the gun still points where it did (the old slide had the chest at -0.40), and a body with
     // empty hands props itself on them behind its hips.
-    const SLIDE_BACK = -0.82, SLIDE_GUN_FIX = -0.40 - SLIDE_BACK;
+    const SLIDE_BACK = -1.30, SLIDE_GUN_FIX = -0.40 - SLIDE_BACK;     // (lying back further now: the arms of an armed body make up the difference)
     const armLT = rig.holdsGun ? SUP.x - 0.16 * sl + SLIDE_GUN_FIX * sl + aim * 0.55 * (1 - rk)
                                : pose(-1.05, -0.8, 1.05);
     const armRT = rig.holdsGun ? (rig.firePose ? rig.firePose.x : GUN_HOLD.shoulderX) + 0.12 * sl + SLIDE_GUN_FIX * sl + aim * 0.55
                                : pose(-1.38, -0.8, 0.95);
     rig.armL.rotation.x = L(rig.armL.rotation.x, armLT, w);
     rig.armR.rotation.x = L(rig.armR.rotation.x, armRT, w);
-    rig.torso.rotation.x = L(rig.torso.rotation.x, pose(advanceLean, 0, -0.82), w);
+    rig.torso.rotation.x = L(rig.torso.rotation.x, pose(advanceLean, 0, SLIDE_BACK), w);
     rig.head.rotation.x  = L(rig.head.rotation.x, pose(-0.12, -0.10, 0.02), w);
     const elbLT = rig.holdsGun ? SUP.ex : pose(-0.85, -0.7, -1.05);
     const elbRT = rig.holdsGun ? (rig.firePose ? rig.firePose.ex : GUN_HOLD.elbowX) : pose(-0.9, -0.7, -1.15);
@@ -44223,31 +44223,14 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   // deliberate athletic hop instead of the standing pose floating upward.
   if (jump > 0.01) {
     const j = jump * (1 - slide * 0.35);
-    rig.legL.rotation.x = THREE.MathUtils.lerp(rig.legL.rotation.x, -0.72, j);
-    rig.legR.rotation.x = THREE.MathUtils.lerp(rig.legR.rotation.x, -0.54, j);
-    if (rig.kneeL) rig.kneeL.rotation.x = THREE.MathUtils.lerp(rig.kneeL.rotation.x, 1.05, j);
-    if (rig.kneeR) rig.kneeR.rotation.x = THREE.MathUtils.lerp(rig.kneeR.rotation.x, 0.95, j);
-    rig.armL.rotation.x = THREE.MathUtils.lerp(rig.armL.rotation.x, rig.holdsGun ? SUP.x - 0.12 : -0.52, j);
-    rig.armR.rotation.x = THREE.MathUtils.lerp(rig.armR.rotation.x, rig.holdsGun ? (rig.firePose ? rig.firePose.x : GUN_HOLD.shoulderX) : -0.72, j);
-    if (rig.elbowL) rig.elbowL.rotation.x = THREE.MathUtils.lerp(rig.elbowL.rotation.x, rig.holdsGun ? SUP.ex : -0.82, j);
-    if (rig.elbowR) rig.elbowR.rotation.x = THREE.MathUtils.lerp(rig.elbowR.rotation.x, rig.holdsGun ? (rig.firePose ? rig.firePose.ex : GUN_HOLD.elbowX) : -0.92, j);
     rig.torso.rotation.x = THREE.MathUtils.lerp(rig.torso.rotation.x, 0.34, j);
     rig.head.rotation.x = THREE.MathUtils.lerp(rig.head.rotation.x, -0.18, j);
-    if (rig.footL) rig.footL.rotation.x = THREE.MathUtils.lerp(rig.footL.rotation.x, -0.12, j);
-    if (rig.footR) rig.footR.rotation.x = THREE.MathUtils.lerp(rig.footR.rotation.x, -0.10, j);
   }
 
   // Landing: both knees give at once, the hips drop and the chest folds over
   // them. Applied last so it reads on top of whatever pose is underneath.
   if (land > 0.004) {
-    const L = land * 0.9;
-    if (rig.kneeL) rig.kneeL.rotation.x = THREE.MathUtils.lerp(rig.kneeL.rotation.x, 0.95, L);
-    if (rig.kneeR) rig.kneeR.rotation.x = THREE.MathUtils.lerp(rig.kneeR.rotation.x, 0.88, L);
-    rig.legL.rotation.x = THREE.MathUtils.lerp(rig.legL.rotation.x, -0.42, L);
-    rig.legR.rotation.x = THREE.MathUtils.lerp(rig.legR.rotation.x, -0.38, L);
-    rig.torso.rotation.x = THREE.MathUtils.lerp(rig.torso.rotation.x, 0.26, L);
-    if (rig.footL) rig.footL.rotation.x = THREE.MathUtils.lerp(rig.footL.rotation.x, -0.22, L);
-    if (rig.footR) rig.footR.rotation.x = THREE.MathUtils.lerp(rig.footR.rotation.x, -0.20, L);
+    rig.torso.rotation.x = THREE.MathUtils.lerp(rig.torso.rotation.x, 0.26, land * 0.9);     // no knees to give: the chest folds a little
   }
 
   // ── Spine and gaze ────────────────────────────────────────────────────────
@@ -44303,6 +44286,36 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
     if (rig.kneeR) rig.kneeR.rotation.x += 0.22 * e;
     rig.hitK *= Math.exp(-dt * 7);
   } else if (rig.hitK) { rig.hitK = 0; rig.hitT = 0; }
+
+  // ── Simple limbs ──────────────────────────────────────────────────────────
+  // No elbows and no knees: a leg is one straight piece that swings from the hip, an arm one straight piece that swings from the shoulder.
+  //   walking -- an arm goes forward as the opposite leg goes forward, and back again
+  //   crouch  -- a low staggered stance: one leg forward, one back, the hips dropped between them (the feet planting below finds the height)
+  //   slide   -- lying back, legs straight out in front, arms held clear of the floor
+  //   jump    -- the legs hang and do not move; the arms rise over the head
+  // An armed body keeps its arms exactly as the weapon pose wants them, in the air too (the weapon is held by them), and only its legs change.
+  {
+    const L = THREE.MathUtils.lerp;
+    const jj = jump * (1 - slide * 0.35), crc = ck * (1 - sl), stp = crc * 0.4;
+    let lL = swing, lR = swingR;
+    lL = L(lL, -1.05 + swing * stp, crc);  lR = L(lR, 0.95 + swingR * stp, crc);
+    lL = L(lL, -1.42, sl);                 lR = L(lR, -1.48, sl);
+    lL = L(lL, 0, jj);                     lR = L(lR, 0, jj);
+    rig.legL.rotation.x = lL; rig.legR.rotation.x = lR;
+    if (rig.kneeL) rig.kneeL.rotation.x = 0;
+    if (rig.kneeR) rig.kneeR.rotation.x = 0;
+    if (rig.footL) rig.footL.rotation.x = L(-lL, 0.2, sl);                // soles flat on the floor; on its back the toes point up a little
+    if (rig.footR) rig.footR.rotation.x = L(-lR, 0.2, sl);
+    if (!rig.holdsGun) {
+      let aL = gait(p + Math.PI) * armAmp, aR = gait(p) * armAmp;
+      aL = L(aL, -0.25, crc);  aR = L(aR, -0.25, crc);
+      aL = L(aL, -0.55, sl);   aR = L(aR, -0.55, sl);
+      aL = L(aL, -2.9, jj);    aR = L(aR, -2.9, jj);
+      rig.armL.rotation.x = aL; rig.armR.rotation.x = aR;
+      if (rig.elbowL) rig.elbowL.rotation.x = 0;
+      if (rig.elbowR) rig.elbowR.rotation.x = 0;
+    }
+  }
 
   // ── Foot planting, and the bob that falls out of it ──────────────────────
   // The old rig's boot soles floated 0.225 m above the ground, so the body
