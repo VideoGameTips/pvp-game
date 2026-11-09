@@ -12349,6 +12349,65 @@ function addGridLedges(name, s, large) {
   }
   return false;
 }
+// 🛝🛝 The ramp field. The two ramps and the ledge climb above were all these maps had to get about on; this adds a lot more, all of them built out of
+// triangles (the ramps), squares and rectangles (decks and landings) and trapezoids (a hill: up a ramp, along a flat top, down a ramp):
+//   · short low ramps up onto the nearest cover,
+//   · TRAPEZOID HILLS: a ramp, a flat top and a ramp down the other side,
+//   · DECKS: a raised square with a ramp up to it from two sides,
+//   · one long gentle ramp for running up at speed.
+// Every one is placed twice, 180 degrees apart, so neither team has the better one, and only where the ground is really clear.
+function addGridRampField(name, half, s) {
+  const free = r => _gridSpotFree(name, r);
+  const strip = (x, z, ux, uz, len, w, clear = 1.5) => {
+    const a0 = -clear, a1 = len + clear, h = w / 2 + clear, p = [x + ux * a0, z + uz * a0], q = [x + ux * a1, z + uz * a1];
+    return Math.abs(ux) > 0.5
+      ? { minX: Math.min(p[0], q[0]), maxX: Math.max(p[0], q[0]), minZ: z - h, maxZ: z + h }
+      : { minX: x - h, maxX: x + h, minZ: Math.min(p[1], q[1]), maxZ: Math.max(p[1], q[1]) };
+  };
+  const dirs = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+  const placeStrip = (cands, len, w, build, max) => {
+    let n = 0;
+    for (const [cx, cz] of cands) {
+      if (n >= max) break;
+      const x = cx * s, z = cz * s;
+      for (const [ux, uz] of dirs) {
+        if (!free(strip(x, z, ux, uz, len, w)) || !free(strip(-x, -z, -ux, -uz, len, w))) continue;
+        build(x, z, ux, uz); build(-x, -z, -ux, -uz); n++; break;
+      }
+    }
+    return n;
+  };
+  let made = 0;
+  // the hills first (they are the biggest), then the decks, the long ramp, and the little ones to fill in
+  made += placeStrip([[-22, -8], [-22, 8], [-40, -24], [-40, 24], [-12, -30], [-12, 30]], 14, 6, (x, z, ux, uz) => {
+    addRamp(name, x, z, ux, uz, { width: 6, rise: 3.5, landing: 7, color: 0xdcc39b, landColor: 0xf3e3c6, lipColor: 0xf3e3c6 });
+    addRamp(name, x + ux * 14, z + uz * 14, -ux, -uz, { width: 6, rise: 3.5, landing: 0, color: 0xdcc39b });
+  }, 2);
+  made += placeStrip([[-34, -30], [-34, 30], [-16, -44], [-16, 44]], 18, 8, (x, z, ux, uz) => {
+    addRamp(name, x, z, ux, uz, { width: 8, rise: 3, run: 14, landing: 4, color: 0xf0d9b0, landColor: 0xf7ebd0, lipColor: 0xffd76a });
+  }, 1);
+  // decks: a 9 m square, 3.2 m up, with a ramp onto it from two sides
+  const DECK = 9, H = 3.2;
+  const deckRects = (cx, cz, sg) => [
+    { minX: sg * cx - DECK / 2 - 1.5, maxX: sg * cx + DECK / 2 + 1.5, minZ: sg * cz - DECK / 2 - 1.5, maxZ: sg * cz + DECK / 2 + 1.5 },
+    strip(sg * cx, sg * (cz - DECK / 2 - H), 0, sg, H, 4), strip(sg * (cx + DECK / 2 + H), sg * cz, -sg, 0, H, 4)];
+  let decks = 0;
+  for (const [cx0, cz0] of [[-24, -26], [-24, 26], [-44, -12], [-44, 12], [-10, -46], [-10, 46]]) {
+    if (decks >= 2) break;
+    const cx = cx0 * s, cz = cz0 * s;
+    if (![1, -1].every(sg => deckRects(cx, cz, sg).every(free))) continue;
+    for (const sg of [1, -1]) {
+      addMapBox(name, sg * cx, H / 2, sg * cz, DECK, H, DECK, 0xf3e3c6);
+      addRamp(name, sg * cx, sg * (cz - DECK / 2 - H), 0, sg, { width: 4, rise: H, landing: 0, color: 0xe9cfa6 });
+      addRamp(name, sg * (cx + DECK / 2 + H), sg * cz, -sg, 0, { width: 4, rise: H, landing: 0, color: 0xe9cfa6 });
+    }
+    decks++; made++;
+  }
+  made += placeStrip([[-18, -20], [-18, 20], [-30, -2], [-46, -6], [-46, 6], [-10, -38], [-10, 38], [-36, -40], [-36, 40]], 5, 4, (x, z, ux, uz) => {
+    addRamp(name, x, z, ux, uz, { width: 4, rise: 2.5, landing: 2.5, color: 0xe9cfa6, landColor: 0xf3e3c6, lipColor: 0xffd76a });
+  }, 3);
+  return made;
+}
 // 🧱 The archetypes above give a map its SHAPE; this gives it its CLUTTER.
 // They were open floors with a handful of set-piece walls -- everywhere else
 // was bare. Scatters a wide grid of candidate cover across the WHOLE play
@@ -12645,6 +12704,7 @@ function _buildGridConceptMap(name, index) {
   const bigScaleRoutes = large || big || superBig;
   try { addGridRamps(name, s, bigScaleRoutes); } catch (e) { console.warn('[ramps]', name, e); }
   try { addGridLedges(name, s, bigScaleRoutes); } catch (e) { console.warn('[ledges]', name, e); }
+  try { addGridRampField(name, half, s); } catch (e) { console.warn('[ramp field]', name, e); }
   try { addGridClutter(name, half, s, superBig ? 1.4 : big ? 1 : 0); } catch (e) { console.warn('[clutter]', name, e); }
 
   // Small spawn-side anchors make orientation obvious without breaking the all-white look.
