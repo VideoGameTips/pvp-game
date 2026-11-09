@@ -5953,6 +5953,7 @@ function applyMapLighting(name) {
   sun.color.setHex(concept || dark || bright ? 0xffffff : 0xffefd5);
   sun.intensity = concept ? 1.2 : dark ? .85 : 1.45;
   if (MAP_GROUPS[name]?.userData.authoredVolcano) { mapAmbient.intensity=.45;mapSkyFill.intensity=.45;sun.intensity=1.15; }
+  if (GRID_MAP_IDS.includes(name)) { mapAmbient.intensity = .95; mapSkyFill.intensity = .6; mapSkyFill.color.setHex(0xe8f2ff); mapSkyFill.groundColor.setHex(0xdfe6ee); sun.color.setHex(0xffffff); sun.intensity = 1.15; }   // a bright even white room: the walls read and the grid shows
   const b = MAP_BOUNDS[name], reach = concept ? 60 : Math.min(180, Math.max(b?.halfX || 60, b?.halfZ || 60) + 12);
   if (concept) sun.position.set(30, 50, 20);
   else sun.position.set(reach * .65, reach * 1.35, reach * .4);
@@ -6275,7 +6276,7 @@ var MAP_BOT_BOUNDS = {}, MAP_VOID = {};
 // Every map that can be played, and the subset the random draw skips (#66).
 // Mirrors server.js — MAP_IDS and THIN_MAPS have to stay identical there
 // (CLAUDE.md #4), because the server picks the map and the client honours it.
-const MAP_IDS = ['blank', 'urban', 'warehouse', 'forest', 'vietnam', 'volcano', 'cyber', 'desert', 'tundra', 'space', 'airport', 'trenches', 'chernobyl', 'refinery', 'skydock', 'sewer', 'gravity_lab', 'glassworks', 'carrier', 'overgrowth', 'orbital_station', 'foundry', 'carnival', 'biosphere', 'lockdown', 'studio', 'temple', 'holiday', 'labyrinth', 'arena', 'opera', 'doomsday', 'train', 'dreamscape', 'pearl_harbor', 'titanic', 'supermarket', 'pyongyang', 'traffic_cone_republic', 'flying_moai', 'big_arena', 'super_arena', 'big_harbor', 'storm_pier', 'pinball_arcade', 'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise', 'neon_tokyo', 'sky_arena', 'shipyard', 'battleground', 'atoll', 'duel_grid', 'duel_crossroads', 'duel_pillars', 'duel_platform', 'duel_alley', 'duel_cells', 'duel_loft', 'duel_yard'];
+const MAP_IDS = ['blank', 'urban', 'warehouse', 'forest', 'vietnam', 'volcano', 'cyber', 'desert', 'tundra', 'space', 'airport', 'trenches', 'chernobyl', 'refinery', 'skydock', 'sewer', 'gravity_lab', 'glassworks', 'carrier', 'overgrowth', 'orbital_station', 'foundry', 'carnival', 'biosphere', 'lockdown', 'studio', 'temple', 'holiday', 'labyrinth', 'arena', 'opera', 'doomsday', 'train', 'dreamscape', 'pearl_harbor', 'titanic', 'supermarket', 'pyongyang', 'traffic_cone_republic', 'flying_moai', 'big_arena', 'super_arena', 'big_harbor', 'storm_pier', 'pinball_arcade', 'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise', 'neon_tokyo', 'sky_arena', 'shipyard', 'battleground', 'atoll', 'duel_grid', 'duel_crossroads', 'duel_pillars', 'duel_platform', 'duel_alley', 'duel_cells', 'duel_loft', 'duel_yard', 'grid_corridors', 'grid_rooms', 'grid_hall', 'grid_court'];
 const THIN_MAPS = new Set([]);
 // ⚔️ 1v1 duel maps: plain arenas, 72 x 112 m (about fourteen seconds spawn to spawn), dealt only to 1v1. They are in
 // MAP_IDS so that a server-sent id activates, and kept out of the random pool of every other mode.
@@ -6285,20 +6286,33 @@ const DUEL_BIG_IDS = ['duel_grid', 'duel_crossroads', 'duel_pillars', 'duel_plat
 const DUEL_SMALL_IDS = ['duel_alley', 'duel_cells', 'duel_loft', 'duel_yard'];
 const DUEL_MAP_IDS = DUEL_BIG_IDS.concat(DUEL_SMALL_IDS);
 const DUEL_ONLY_MAPS = new Set(DUEL_MAP_IDS);
+// 🗄️ ARCHIVED MAPS. Every map from before the white grid maps is archived: the lobby no longer deals, votes on or random-draws one,
+// except for 5v5 and 10v10, which keep playing all of them. (The maps for a mode's own game -- the boss arena, D-Day, the zombie tower,
+// the range, the obby -- are not lobby maps and are untouched.) Mirrors server.js.
+const GRID_SMALL_IDS = ['grid_corridors', 'grid_rooms'];
+const GRID_BIG_IDS = ['grid_hall', 'grid_court'];
+const GRID_MAP_IDS = GRID_SMALL_IDS.concat(GRID_BIG_IDS);
+const ARCHIVE_EXEMPT_MODES = new Set(['5v5', '10v10']);
+const ARCHIVED_MAP_IDS = new Set(MAP_IDS.filter(m => !GRID_MAP_IDS.includes(m)));
 // A picked map only counts in the mode it was made for: a duel map left over from a 1v1 is 'auto' anywhere else.
 // Which map a pick means in a mode: a duel map is 1v1's (anywhere else the pick counts as random). It is what
 // spawnGameBots resolves the map from, so it has to keep the duel map the VOTE chose (lobbyStart puts it in
 // selectedMap); returning 'auto' for it here re-rolled a random duel map and ignored the vote.
-function effectivePickedMap(modeId, map) { return DUEL_ONLY_MAPS.has(map) && modeId !== '1v1' && modeId !== '2v2' ? 'auto' : map; }
+function effectivePickedMap(modeId, map) {
+  if (DUEL_ONLY_MAPS.has(map) && modeId !== '1v1' && modeId !== '2v2') return 'auto';
+  if (ARCHIVED_MAP_IDS.has(map) && !ARCHIVE_EXEMPT_MODES.has(modeId)) return 'auto';        // an archived map picked anywhere but 5v5 / 10v10 is a random draw
+  return map;
+}
 // 2v2 plays the main pool and, every so often, one of the big duel arenas (room for four). Mirrors server.js DUEL_SHARE_2V2.
 const DUEL_SHARE_2V2 = 0.3;
 function mapPoolForMode(modeId) {
-  const main = MAP_IDS.filter(m => !THIN_MAPS.has(m) && !DUEL_ONLY_MAPS.has(m));
-  return modeId === '1v1' ? DUEL_SMALL_IDS : modeId === '2v2' ? main.concat(DUEL_BIG_IDS) : main;
+  const main = MAP_IDS.filter(m => !THIN_MAPS.has(m) && !DUEL_ONLY_MAPS.has(m) && !GRID_MAP_IDS.includes(m));
+  if (ARCHIVE_EXEMPT_MODES.has(modeId)) return main;                                        // 5v5 and 10v10 keep every old map
+  const base = modeId === '1v1' ? DUEL_SMALL_IDS.concat(GRID_SMALL_IDS) : modeId === '2v2' ? main.concat(DUEL_BIG_IDS).concat(GRID_BIG_IDS) : main.concat(GRID_BIG_IDS);
+  return base.filter(m => !ARCHIVED_MAP_IDS.has(m));                                         // ...so for everyone else it is the white grid maps
 }
 function randomMapForMode(modeId) {
-  const main = MAP_IDS.filter(m => !THIN_MAPS.has(m) && !DUEL_ONLY_MAPS.has(m));
-  const pool = modeId === '1v1' ? DUEL_SMALL_IDS : (modeId === '2v2' && Math.random() < DUEL_SHARE_2V2) ? DUEL_BIG_IDS : main;
+  const pool = mapPoolForMode(modeId);
   return pool[Math.floor(Math.random() * pool.length)];
 }
 // What a player asks the lobby for before anyone is found: nothing. Every lobby match picks its map by a vote once the
@@ -15577,7 +15591,7 @@ const MUSIC_FOR_MAP = {
   // the ones that had a track of their own
   atoll: 'tropic', sky_arena: 'heaven', dreamscape: 'heaven', shipyard: 'industry', battleground: 'arena', neon_tokyo: 'neon', cyber: 'neon', space: 'drift', orbital_station: 'drift', gravity_lab: 'drift',
   // and now every other place, by what kind of place it is
-  blank: 'groove', urban: 'groove', duel_grid: 'groove', duel_crossroads: 'groove', duel_pillars: 'groove', duel_platform: 'groove', duel_alley: 'groove', duel_cells: 'groove', duel_loft: 'groove', duel_yard: 'groove', m4_tower: 'groove', m4_tower_big: 'groove', m4_tower_super: 'groove',
+  blank: 'groove', urban: 'groove', duel_grid: 'groove', duel_crossroads: 'groove', duel_pillars: 'groove', duel_platform: 'groove', duel_alley: 'groove', duel_cells: 'groove', duel_loft: 'groove', duel_yard: 'groove', grid_corridors: 'groove', grid_rooms: 'groove', grid_hall: 'groove', grid_court: 'groove', m4_tower: 'groove', m4_tower_big: 'groove', m4_tower_super: 'groove',
   warehouse: 'industry', refinery: 'industry', cargo_belts: 'industry',
   volcano: 'forge', magma_rise: 'forge', foundry: 'forge',
   forest: 'jungle', vietnam: 'jungle', overgrowth: 'jungle', biosphere: 'jungle', flying_moai: 'jungle',
@@ -17935,6 +17949,71 @@ function initMapThemes() {
 }
 initMapThemes();
 
+// ⬜ The WHITE GRID maps. Every lobby map from before them is archived (see ARCHIVED_MAP_IDS): the only modes that still deal the old maps are
+// 5v5 and 10v10. These four are plain rooms: white walls and a white floor, a grid on every surface, nothing outside but a clear blue sky.
+// They are built by buildDuelMap (so the layout is a short list, the same turned half a circle, with a screen across the middle that
+// keeps the two starts from seeing each other), then every wall is given the grid, and no skyline or lit trim is added.
+let _gridWallTex = null;
+const _gridWallMats = {};
+function _gridDress(name) {
+  const G = MAP_GROUPS[name];
+  if (!_gridWallTex) _gridWallTex = _duelGridTexture('#ffffff', '#c6d0dc', '#9db0c6');
+  for (const m of G.children) {
+    const gp = m.isMesh && m.geometry && m.geometry.type === 'BoxGeometry' && m.geometry.parameters;
+    if (!gp || !m.visible || (m.material && m.material.transparent) || m.userData.themeDecor) continue;     // (the spawn pads are see-through: left alone)
+    const { width: w, height: h, depth: d } = gp, geo = m.geometry.clone(), uv = geo.attributes.uv;
+    const dims = [[d, h], [d, h], [w, d], [w, d], [w, h], [w, h]];                                             // +x -x +y -y +z -z: one grid tile per 4 m, whatever the size
+    for (let f = 0; f < 6; f++) for (let k = 0; k < 4; k++) { const i = f * 4 + k; uv.setXY(i, uv.getX(i) * dims[f][0] / 4, uv.getY(i) * dims[f][1] / 4); }
+    uv.needsUpdate = true; m.geometry = geo;
+    const hex = m.material && m.material.color ? m.material.color.getHex() : 0xffffff;
+    m.material = _gridWallMats[hex] || (_gridWallMats[hex] = new THREE.MeshLambertMaterial({ map: _gridWallTex, color: hex }));
+  }
+  G._gridMap = true;
+}
+const GRID_LOOK = { floor: '#ffffff', fine: '#cdd6e0', bold: '#a3b4c8', wall: 0xffffff, cover_: 0xeef2f6, tall: 0xffffff, accent: 0xd6e6fa, sky: 0xa9d6f8 };
+// 1. CORRIDORS (1v1): a corridor of high walls out of each start, a lane either side with low walls and crates.
+buildDuelMap('grid_corridors', { ...DUEL_SMALL, ...GRID_LOOK, cover: [], ramps: [],
+  macro: [
+    [0, 0, 22, DUEL_HIGH_WALL, 1.6, 'tall'],
+    [-9, -12, 1.6, DUEL_HIGH_WALL, 18, 'tall'], [9, -12, 1.6, DUEL_HIGH_WALL, 18, 'tall'],
+    [-19, -8, 6, 1.2, 1.2, 'cover'], [19, -14, 6, 1.2, 1.2, 'cover'], [0, -26, 8, 1.2, 1.2, 'cover'],
+    [-20, -22, 3.4, 2.2, 3.4, 'hi'], [20, -4, 3.4, 2.2, 3.4, 'hi'],
+  ] });
+// 2. ROOMS (1v1): a wall in front of each start with a wide gap and two narrow ones, and the fight in the middle.
+buildDuelMap('grid_rooms', { ...DUEL_SMALL, ...GRID_LOOK, cover: [], ramps: [],
+  macro: [
+    [0, 0, 22, DUEL_HIGH_WALL, 1.6, 'tall'],
+    [-14, -18, 12, DUEL_HIGH_WALL, 1.6, 'tall'], [14, -18, 12, DUEL_HIGH_WALL, 1.6, 'tall'],
+    [-22, -8, 3.4, 2.2, 3.4, 'hi'], [22, -8, 3.4, 2.2, 3.4, 'hi'], [0, -10, 10, 1.2, 1.2, 'cover'],
+    [-12, -28, 6, 1.2, 1.2, 'cover'], [-4, -26, 1.6, DUEL_HIGH_WALL, 8, 'tall'],
+  ] });
+// 3. HALL (every mode but 1v1, 5v5 and 10v10): 96 x 150 m, partition walls making rooms with doors, pillars and crates.
+buildDuelMap('grid_hall', { w: 96, d: 150, spawnZ: 62, ...GRID_LOOK, cover: [], ramps: [],
+  macro: [
+    [0, 0, 36, DUEL_HIGH_WALL, 1.6, 'tall'],
+    [-24, -14, 1.6, DUEL_HIGH_WALL, 24, 'tall'], [24, -14, 1.6, DUEL_HIGH_WALL, 24, 'tall'],
+    [-36, -36, 18, DUEL_HIGH_WALL, 1.6, 'tall'], [36, -36, 18, DUEL_HIGH_WALL, 1.6, 'tall'], [0, -30, 1.6, DUEL_HIGH_WALL, 16, 'tall'],
+    [-8, -50, 2.4, DUEL_HIGH_WALL, 2.4, 'tall'], [8, -50, 2.4, DUEL_HIGH_WALL, 2.4, 'tall'],
+    [-10, -18, 3.4, 2.2, 3.4, 'hi'], [10, -8, 3.4, 2.2, 3.4, 'hi'],
+    [-16, -44, 8, 1.2, 1.2, 'cover'], [16, -44, 8, 1.2, 1.2, 'cover'], [-40, -20, 6, 1.2, 1.2, 'cover'], [40, -26, 6, 1.2, 1.2, 'cover'],
+    [-40, -8, 1.6, DUEL_HIGH_WALL, 16, 'tall'], [40, -48, 1.6, DUEL_HIGH_WALL, 12, 'tall'], [-30, -52, 14, DUEL_HIGH_WALL, 1.6, 'tall'], [22, -20, 14, DUEL_HIGH_WALL, 1.6, 'tall'],
+    [-14, -38, 1.6, DUEL_HIGH_WALL, 12, 'tall'], [14, -6, 1.6, DUEL_HIGH_WALL, 10, 'tall'], [-6, -22, 10, DUEL_HIGH_WALL, 1.6, 'tall'],
+  ] });
+// 4. COURT (every mode but 1v1, 5v5 and 10v10): 144 x 224 m, long walls into lanes and rows of pillars.
+buildDuelMap('grid_court', { ...GRID_LOOK, cover: [], ramps: [],
+  macro: [
+    [0, 0, 60, DUEL_HIGH_WALL, 1.6, 'tall'],
+    [-36, -24, 1.6, DUEL_HIGH_WALL, 34, 'tall'], [36, -24, 1.6, DUEL_HIGH_WALL, 34, 'tall'],
+    [-54, -50, 24, DUEL_HIGH_WALL, 1.6, 'tall'], [54, -50, 24, DUEL_HIGH_WALL, 1.6, 'tall'], [0, -52, 1.6, DUEL_HIGH_WALL, 24, 'tall'],
+    [-20, -76, 20, DUEL_HIGH_WALL, 1.6, 'tall'], [20, -76, 20, DUEL_HIGH_WALL, 1.6, 'tall'],
+    [-60, -66, 3, DUEL_HIGH_WALL, 3, 'tall'], [-30, -66, 3, DUEL_HIGH_WALL, 3, 'tall'], [30, -66, 3, DUEL_HIGH_WALL, 3, 'tall'], [60, -66, 3, DUEL_HIGH_WALL, 3, 'tall'],
+    [-12, -12, 3.4, 2.2, 3.4, 'hi'], [14, -30, 3.4, 2.2, 3.4, 'hi'], [-62, -20, 3.4, 2.2, 3.4, 'hi'],
+    [-18, -40, 10, 1.2, 1.2, 'cover'], [18, -44, 10, 1.2, 1.2, 'cover'], [-46, -34, 8, 1.2, 1.2, 'cover'], [48, -14, 8, 1.2, 1.2, 'cover'], [0, -88, 12, 1.2, 1.2, 'cover'],
+    [-66, -30, 1.6, DUEL_HIGH_WALL, 20, 'tall'], [66, -90, 1.6, DUEL_HIGH_WALL, 20, 'tall'], [-44, -88, 16, DUEL_HIGH_WALL, 1.6, 'tall'], [26, -34, 16, DUEL_HIGH_WALL, 1.6, 'tall'],
+    [-12, -60, 1.6, DUEL_HIGH_WALL, 14, 'tall'], [50, -66, 1.6, DUEL_HIGH_WALL, 12, 'tall'],
+  ] });
+for (const id of GRID_MAP_IDS) _gridDress(id);
+
 // ✨ Finishing the four duel arenas. buildDuelMap lays the arena out in plain boxes (that is what makes a layout a short
 // list); this dresses what it laid, from the boxes themselves, so a new layout gets the same finish for free and no
 // layout line changes: a cap and a lit band on every high wall, a lit edge on every piece of cover, lit rails along each
@@ -17957,6 +18036,7 @@ for (const id of DUEL_MAP_IDS) {
   ATMO_FX['motes_' + id] = Object.assign({}, ATMO_FX.dustgold, { col: L.motes, n: 130, h: 10 });
   _ap(id, { fog: [90, 560], zen: L.zen, fx: ['motes_' + id], gusty: 0.1, snd: {} });
 }
+for (const id of GRID_MAP_IDS) _ap(id, { fog: [260, 1400], zen: 0x2a78dc, gusty: 0.04, snd: {} });   // a clear blue sky: no clouds, no weather, no sun disc
 function _duelMix(a, b, t) {
   const ch = (h, s) => (h >> s) & 255;
   return ((Math.round(ch(a, 16) + (ch(b, 16) - ch(a, 16)) * t) << 16) | (Math.round(ch(a, 8) + (ch(b, 8) - ch(a, 8)) * t) << 8) | Math.round(ch(a, 0) + (ch(b, 0) - ch(a, 0)) * t));
@@ -82626,6 +82706,10 @@ const MAP_DESCS = {
   pyongyang: 'Pyongyang — monuments, squares and wide-sweeping live-fire searchlights',
   traffic_cone_republic: '🚧 Traffic Cone Republic — giant cones, a roundabout, a flyover · TOLL LANES charge health for speed',
   flying_moai: '🗿 Flying Moai — a plateau of stone heads',
+  grid_corridors: '⬜ Grid Corridors — 1v1 · 56 × 88 m · white walls and a grid on everything: a corridor of high walls out of each start, a lane either side',
+  grid_rooms:     '⬜ Grid Rooms — 1v1 · 56 × 88 m · white walls and a grid on everything: a wall in front of each start with a wide gap and two narrow ones',
+  grid_hall:      '⬜ Grid Hall — 96 × 150 m · white walls and a grid on everything: partition walls into rooms with doors, pillars and crates, under a clear blue sky',
+  grid_court:     '⬜ Grid Court — 144 × 224 m · white walls and a grid on everything: long walls into lanes, rows of pillars and a wide open middle, under a clear blue sky',
   duel_grid:      '⚔️ Duel Grid — 2v2 · 144 × 224 m grid arena: high walls make rooms with doors, windowed walls, L bunkers, crates, and galleries up ramps',
   duel_crossroads:'⚔️ Crossroads — 2v2 · 144 × 224 m · long high walls stagger into an S through the field; ramps take you over the middle on bridges',
   duel_pillars:   '⚔️ Pillar Hall — 2v2 · 144 × 224 m · colonnades with arches, high aisle walls with doors, and raised stages up broad ramps',

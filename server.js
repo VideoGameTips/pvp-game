@@ -1847,7 +1847,7 @@ const MAP_IDS = ['blank','urban','warehouse','forest','vietnam','volcano','cyber
                         'sewer','gravity_lab','glassworks','carrier','overgrowth','orbital_station',
                         'foundry','carnival','biosphere','lockdown','studio','temple','holiday',
                         'labyrinth','arena','opera','doomsday','train','dreamscape',
-                        'pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai','big_arena','super_arena','big_harbor','storm_pier','pinball_arcade','laser_vault','cargo_belts','gale_peaks','magma_rise','neon_tokyo','sky_arena','shipyard','battleground','atoll','duel_grid','duel_crossroads','duel_pillars','duel_platform','duel_alley','duel_cells','duel_loft','duel_yard'];
+                        'pearl_harbor','titanic','supermarket','pyongyang','traffic_cone_republic','flying_moai','big_arena','super_arena','big_harbor','storm_pier','pinball_arcade','laser_vault','cargo_belts','gale_peaks','magma_rise','neon_tokyo','sky_arena','shipyard','battleground','atoll','duel_grid','duel_crossroads','duel_pillars','duel_platform','duel_alley','duel_cells','duel_loft','duel_yard','grid_corridors','grid_rooms','grid_hall','grid_court'];
 // 🗺️ Dealt at RANDOM when nobody picks, which is not the same list (#66): a
 // map that is not worth landing on by accident goes in THIN_MAPS and stays
 // pickable by name from the map cards. Empty right now — the five that were in
@@ -1863,14 +1863,22 @@ const DUEL_BIG_IDS = ['duel_grid','duel_crossroads','duel_pillars','duel_platfor
 const DUEL_SMALL_IDS = ['duel_alley','duel_cells','duel_loft','duel_yard'];
 const DUEL_MAP_IDS = DUEL_BIG_IDS.concat(DUEL_SMALL_IDS);
 const DUEL_ONLY_MAPS = new Set(DUEL_MAP_IDS);
-const LOBBY_MAP_POOL = MAP_IDS.filter(m => !THIN_MAPS.has(m) && !DUEL_ONLY_MAPS.has(m));
+// 🗄️ ARCHIVED MAPS (mirrors public/game.js). Every map from before the white grid maps is archived: the lobby no longer deals, votes on or
+// random-draws one, except for 5v5 and 10v10, which keep playing all of them. They stay in MAP_IDS so a client told one by id still loads it.
+const GRID_SMALL_IDS = ['grid_corridors','grid_rooms'];
+const GRID_BIG_IDS = ['grid_hall','grid_court'];
+const GRID_MAP_IDS = GRID_SMALL_IDS.concat(GRID_BIG_IDS);
+const ARCHIVE_EXEMPT_MODES = new Set(['5v5','10v10']);
+const ARCHIVED_MAP_IDS = new Set(MAP_IDS.filter(m => !GRID_MAP_IDS.includes(m)));
+const LOBBY_MAP_POOL = MAP_IDS.filter(m => !THIN_MAPS.has(m) && !DUEL_ONLY_MAPS.has(m) && !GRID_MAP_IDS.includes(m));   // the OLD maps (only 5v5 and 10v10 still deal them)
 // A map for the mode: 1v1 draws from the small duel maps, everything else from the main pool.
 // 2v2 draws from the main pool AND the big duel arenas (144 x 224 m: room for four), so they are on its vote
 // screen and a draw lands on one about three times in ten (DUEL_SHARE_2V2, mirrored in public/game.js).
 const DUEL_SHARE_2V2 = 0.3;
-function mapPoolFor(mode) { return mode === '1v1' ? DUEL_SMALL_IDS : mode === '2v2' ? LOBBY_MAP_POOL.concat(DUEL_BIG_IDS) : LOBBY_MAP_POOL; }
+function _basePoolFor(mode) { return mode === '1v1' ? DUEL_SMALL_IDS.concat(GRID_SMALL_IDS) : mode === '2v2' ? LOBBY_MAP_POOL.concat(DUEL_BIG_IDS).concat(GRID_BIG_IDS) : LOBBY_MAP_POOL.concat(GRID_BIG_IDS); }
+function mapPoolFor(mode) { return ARCHIVE_EXEMPT_MODES.has(mode) ? LOBBY_MAP_POOL : _basePoolFor(mode).filter(m => !ARCHIVED_MAP_IDS.has(m)); }
 function randomMapFor(mode) {
-  const pool = mode === '2v2' ? (Math.random() < DUEL_SHARE_2V2 ? DUEL_BIG_IDS : LOBBY_MAP_POOL) : mapPoolFor(mode);
+  const pool = mapPoolFor(mode);
   return pool[Math.floor(Math.random() * pool.length)];
 }
 // The lobby plays the map of the first player (in join order) who picked a specific one.
