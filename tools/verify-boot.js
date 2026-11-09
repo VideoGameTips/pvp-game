@@ -2688,6 +2688,33 @@ if (ok && process.argv.includes('--simplelimbs')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+// Octopus (the Harpoon Gun skin): in the Gen 2 case, a model whose tentacles sway and settle, a round that is a tentacle, and an ink burst.
+if (ok && process.argv.includes('--octopus')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const sk = MODEL_SKINS.find(s => s.id === 'harpoon_octopus');
+    if (!sk || sk.weapon !== 'harpoon_gun') return ['the Octopus skin of the Harpoon Gun is missing'];
+    if (!GEN2_MODEL_SKIN_IDS.has(sk.id)) issues.push('Octopus is not dealt by the Gen 2 case (no skin is free)');
+    if (!SKIN_FX[sk.id] || !SKIN_FX[sk.id].equip) issues.push('Octopus has no entrance');
+    if (!BOOM_THEMES.ink) issues.push('there is no ink burst');
+    const shot = SKIN_SHOT[sk.id];
+    if (!shot || shot.shot.shape !== 'tentacle') issues.push('the round is not a tentacle');
+    else { const m = _skinShotMesh(shot.shot, 0.08); if (!m || m.children.length < 10 || !m._alignToDir) issues.push('the tentacle round has too few parts: ' + (m && m.children.length)); }
+    const m = sk.build();
+    if (!m._flash || !m._parts || !m._parts.ammo || !m._parts.ammo.children.length) return issues.concat(['the model has no flash or no loaded round to hide']);
+    const rots = () => { const r = []; m.traverse(o => { if (o.isGroup || o === m) r.push(o.rotation.x); }); return r; };
+    const before = rots();
+    for (let i = 0; i < 90; i++) m._tick(0.016, 1 + i * 0.016, false);
+    const moved = rots().some((v, i) => Math.abs(v - before[i]) > 0.005);
+    if (!moved) issues.push('the tentacles do not sway');
+    m._calm();
+    if (rots().some((v, i) => Math.abs(v - before[i]) > 1e-9)) issues.push('calm does not put the tentacles back');
+    return issues;
+  })()`);
+  console.log('Octopus checks: Gen 2, tentacle round, swaying tentacles, ink');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 // Bot strategy: on every map, ten random bot/enemy pairs 20-36 m apart each ask for a plan. A plan has to be a route a body can
 // walk (each step at most 0.65 m up and 2 m down, one cell at a time), end where it says it does (a perch is 2.4 m or higher
 // and sees the enemy), and most maps with a deck or a roof should have at least one.

@@ -8,7 +8,12 @@
   const held=()=>activeSlot==='primary'&&currentWeapon?.id==='harpoon_gun';
   const live=()=>gameStarted&&!inLobby&&!isDead&&!countdownActive&&!match?.over;
   const v=p=>new THREE.Vector3(p.x,p.y,p.z);
-  function rope(){const m=new THREE.Mesh(ropeGeometry,ropeMaterial);scene.add(m);return m;}
+  // The Octopus skin: the line is a tentacle (thick at the gun, thin at the hit, wriggling) and the bolt that stays in a wall is a tentacle tip.
+  const tentacleGeometry=new THREE.CylinderGeometry(.012,.04,1,10);
+  const tentacleMaterial=new THREE.MeshPhongMaterial({color:0x8a2f8f,shininess:70,specular:0xe0a0e8,emissive:0x2a0830});
+  const isTentacle=skin=>skin==='harpoon_octopus';
+  const myHarpoonSkin=()=>typeof heldSkinId==='function'?heldSkinId('harpoon_gun')||null:null;
+  function rope(skin){const t=isTentacle(skin),m=new THREE.Mesh(t?tentacleGeometry:ropeGeometry,t?tentacleMaterial:ropeMaterial);m.userData.tentacle=t;scene.add(m);return m;}
   function remove(s){if(s){s.line.removeFromParent();s.bolt?.removeFromParent();if(s.flight)s.flight._cull=true;}}
   function setBoltAmmo(n){
     const idx=WEAPONS.findIndex(w=>w.id==='harpoon_gun');weaponAmmo[idx]={ammo:n,reserve:0};
@@ -25,11 +30,13 @@
   }
   function fired(b){
     if(bolts.size>=capacity()){b._cull=true;return;}
-    bolts.set(b.id,{id:b.id,epoch:matchEpoch,phase:'flight',flight:b,line:rope(),point:b.mesh.position.clone(),direction:b.dir.clone(),tripped:new Set()});
+    const skin=myHarpoonSkin();
+    bolts.set(b.id,{id:b.id,epoch:matchEpoch,phase:'flight',flight:b,skin,line:rope(skin),point:b.mesh.position.clone(),direction:b.dir.clone(),tripped:new Set()});
     setBoltAmmo(capacity()-bolts.size);
   }
-  function makeBolt(point,dir){
-    const m=makeBulletMesh(0xb8b8b8,.08,'harpoon_gun',false);m.position.copy(point);
+  function makeBolt(point,dir,skin){
+    const look=isTentacle(skin)&&typeof skinLookById==='function'?skinLookById(skin):null;
+    const m=makeBulletMesh(0xb8b8b8,.08,'harpoon_gun',false,look);m.position.copy(point);
     if(m._alignToDir)m.quaternion.setFromUnitVectors(up,dir);scene.add(m);return m;
   }
   function latch(b,point,id){
@@ -39,7 +46,7 @@
     const target=id&&remoteMeshes[id]&&players[id]&&!players[id].dead&&!players[id].isDummy&&!friendlyFireBlocked(id)&&!resolveBot(id)?.boss;
     own.target=target?id:null;
     own.offset=own.target?point.clone().sub(remoteMeshes[id].position):null;
-    own.bolt=makeBolt(own.point,own.direction);
+    own.bolt=makeBolt(own.point,own.direction,own.skin);
     socket.emit('harpoonLatch',{id:b.id,targetId:own.target,x:point.x,y:point.y,z:point.z});
     if(own.target){
       own.nextReel=performance.now()+450;
@@ -56,7 +63,7 @@
     for(const own of bolts.values()){
       if(own.phase==='return')continue;
       if(own.flight){own.point.copy(own.flight.mesh.position);own.flight._cull=true;own.flight=null;}
-      own.target=null;own.phase='return';own.bolt ||= makeBolt(own.point,own.direction);
+      own.target=null;own.phase='return';own.bolt ||= makeBolt(own.point,own.direction,own.skin);
       socket.emit('harpoonRecall',{id:own.id});recalled=true;
     }
     if(recalled)playSoundEvent('click',{volume:.7,minGap:90});
@@ -106,6 +113,7 @@
   function draw(s,start){
     const d=s.point.clone().sub(start),len=d.length();s.line.visible=len>.03;
     s.line.position.copy(start).addScaledVector(d,.5);s.line.scale.y=len;
+    if(s.line.userData.tentacle)s.line.scale.x=s.line.scale.z=1+.10*Math.sin(performance.now()/90+s.point.x);   // it wriggles
     if(len>.001)s.line.quaternion.setFromUnitVectors(up,d.divideScalar(len));
     if(s.bolt)s.bolt.position.copy(s.point);
   }
@@ -117,7 +125,7 @@
     for(const own of bolts.values()){
       if(own.flight){
         own.point.copy(own.flight.mesh.position);
-        if(!localBullets.includes(own.flight)){own.flight=null;own.phase='loose';own.bolt=makeBolt(own.point,own.direction);}
+        if(!localBullets.includes(own.flight)){own.flight=null;own.phase='loose';own.bolt=makeBolt(own.point,own.direction,own.skin);}
       }
       if(own.target){const m=remoteMeshes[own.target];if(m&&!players[own.target]?.dead)own.point.copy(m.position).add(own.offset);else own.target=null;}
       if(own.phase==='return'){
@@ -176,7 +184,8 @@
     remove(remotes.get(key));remotes.delete(key);
     if(!data.point||!remoteMeshes[data.ownerId])return;
     const point=v(data.point),target=remoteMeshes[data.targetId],dir=point.clone().sub(remoteMeshes[data.ownerId].position).normalize();
-    remotes.set(key,{ownerId:data.ownerId,epoch:matchEpoch,point,line:rope(),bolt:makeBolt(point,dir),target:data.targetId,offset:target?point.clone().sub(target.position):null});
+    const skin=players[data.ownerId]?.weaponSkin||null;
+    remotes.set(key,{ownerId:data.ownerId,epoch:matchEpoch,point,line:rope(skin),bolt:makeBolt(point,dir,skin),target:data.targetId,offset:target?point.clone().sub(target.position):null});
   });
   socket.on('harpoonTripped',({id})=>{if(!players[id]?.dead)window.PVP_RAGDOLL?.knockdown(id);});
   socket.on('weaponSwap',({positions})=>{if(gameStarted&&!inLobby&&Array.isArray(positions))positions.forEach(place);});

@@ -33193,6 +33193,70 @@ function buildWidowmaker() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+function buildOctopusHarpoon() {
+  // 🐙 Harpoon Gun -> Octopus. A purple octopus for a speargun: its mantle sits over the receiver, its eyes look about, a long tentacle is the barrel with the next
+  // tentacle-tip loaded in it, and three more tentacles hang from the body and curl round the grip, swaying while you hold it. What it fires is a tentacle, and the line is one.
+  const g = new THREE.Group();
+  const skin = new THREE.MeshPhongMaterial({ color: 0x8a2f8f, shininess: 70, specular: 0xe0a0e8 });
+  const dark = new THREE.MeshPhongMaterial({ color: 0x5e1f66, shininess: 60, specular: 0xb070c0 });
+  const pale = new THREE.MeshPhongMaterial({ color: 0xf2c6e8, shininess: 40 });
+  const white = new THREE.MeshPhongMaterial({ color: 0xffffff, shininess: 120 });
+  const black = new THREE.MeshBasicMaterial({ color: 0x120818 });
+  const mantle = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), skin);
+  mantle.scale.set(0.040, 0.046, 0.075); mantle.position.set(0, 0.026, 0.085); g.add(mantle);
+  for (let i = 0; i < 7; i++) {                                                   // dark mottling over the mantle
+    const sp = new THREE.Mesh(new THREE.SphereGeometry(0.007 + (i % 3) * 0.002, 8, 6), dark);
+    sp.scale.y = 0.5; sp.position.set(((i * 37) % 5 - 2) * 0.012, 0.070 - (i % 2) * 0.012, 0.055 + i * 0.016); g.add(sp);
+  }
+  for (const sd of [-1, 1]) {                                                     // eyes, one each side of the front of the mantle
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.014, 10, 8), white); eye.position.set(sd * 0.032, 0.046, 0.034); g.add(eye);
+    const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.0072, 8, 6), black); pupil.position.set(sd * 0.038, 0.048, 0.027); g.add(pupil);
+  }
+  const joints = [];
+  // A tentacle: n segments from a root, each a tapered cylinder along the way it points (-z), a row of pale suckers underneath, bending a little more at every joint.
+  const tentacle = (root, n, len, r0, r1, curl, sway, phase) => {
+    let parent = root;
+    for (let i = 0; i < n; i++) {
+      const r = r0 + (r1 - r0) * i / Math.max(1, n - 1), rn = r0 + (r1 - r0) * (i + 1) / Math.max(1, n - 1);
+      const seg = new THREE.Mesh(new THREE.CylinderGeometry(rn, r, len, 10), i % 2 ? skin : dark);
+      seg.rotation.x = Math.PI / 2; seg.position.z = -len / 2; parent.add(seg);
+      const su = new THREE.Mesh(new THREE.SphereGeometry(r * 0.52, 8, 6), pale);
+      su.scale.y = 0.42; su.position.set(0, -r * 0.92, -len / 2); parent.add(su);
+      const next = new THREE.Group(); next.position.z = -len; next.rotation.x = curl; parent.add(next);
+      joints.push({ j: next, base: curl, sway, phase: phase + i * 0.6 });
+      parent = next;
+    }
+    return parent;
+  };
+  const barrel = new THREE.Group(); barrel.position.set(0, 0.018, 0.045); g.add(barrel);
+  tentacle(barrel, 8, 0.046, 0.027, 0.011, 0.05, 0.012, 0);                       // the barrel
+  gpPart(g, 'ammo', () => {                                                       // the round in the muzzle: a tentacle tip, suckers on top
+    const tip = new THREE.Mesh(new THREE.ConeGeometry(0.0125, 0.10, 10), skin);
+    tip.rotation.x = -Math.PI / 2; tip.position.set(0, 0.052, -0.18); g.add(tip);
+    for (let i = 0; i < 4; i++) { const s = new THREE.Mesh(new THREE.SphereGeometry(0.0055, 8, 6), pale); s.scale.y = 0.45; s.position.set(0, 0.0645, -0.14 - i * 0.021); g.add(s); }
+  });
+  for (const [sd, ph] of [[-1, 0], [1, 2.1]]) {                                   // two tentacles hanging from the sides of the body, curling forward under the gun
+    const root = new THREE.Group(); root.position.set(sd * 0.030, 0.0, 0.11); root.rotation.set(-Math.PI / 2, 0, sd * 0.25); g.add(root);
+    tentacle(root, 6, 0.036, 0.016, 0.006, 0.34, 0.07, ph);
+  }
+  const coil = new THREE.Group(); coil.position.set(0, -0.010, 0.060); coil.rotation.set(-Math.PI / 2 + 0.5, 0, 0); g.add(coil);   // and one under the barrel
+  tentacle(coil, 7, 0.036, 0.017, 0.006, 0.42, 0.08, 4.2);
+  gpPlate(g, dark, [[0.128,-0.012],[0.156,-0.026],[0.160,-0.100],[0.130,-0.114],[0.108,-0.052],[0.106,-0.016]], 0.036, 0);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.0036, 6, 12, Math.PI * 1.05), skin);
+  guard.rotation.set(0, Math.PI / 2, -0.4); guard.position.set(0, -0.024, 0.096); g.add(guard);
+  gpBox(g, pale, 0.005, 0.016, 0.005, 0, -0.014, 0.096, 0.2);
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.020, 8, 7), new THREE.MeshBasicMaterial({ color: 0xf0b8ff }));
+  flash.visible = false; flash.position.set(0, 0.040, -0.350); g.add(flash);
+  g._flash = flash; g._kickZ = 0.016; g._greebled = true; g._handDetailed = true;
+  const calm = () => { for (const t of joints) t.j.rotation.x = t.base; };
+  g._calm = calm;
+  g._tick = (dt, now, assembling) => {
+    if (assembling) { calm(); return; }
+    for (const t of joints) t.j.rotation.x = t.base + Math.sin(now * 1.7 + t.phase) * t.sway;      // the tentacles never quite keep still
+  };
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
 function buildFishbowlCarbine() {
   // 🐠 Plasma Carbine -> Fishbowl Carbine. A clear tank on a grip, gravel on the
   // bottom, a nozzle out the front. Drawn, it fills with water from the bottom
@@ -45779,6 +45843,16 @@ const SKIN_SHAPES = (() => {
     hackbullet: (a, b, R) => ({ parts: [part(Cy(R * 0.26, R * 0.26, R * 1.3, 8), L(0x0a0a0a)), part(new THREE.ConeGeometry(R * 0.26, R * 0.7, 8), L(0x0a0a0a), [0, R * 1.0, 0]), part(Cy(R * 0.3, R * 0.3, R * 0.22, 8), K(b), [0, -R * 0.55, 0])], wake: b, wakeLen: 16 }),
     goldbullet: (a, b, R) => ({ parts: [part(Cy(R * 0.3, R * 0.3, R * 1.4, 10), K(a)), part(new THREE.ConeGeometry(R * 0.3, R * 0.8, 10), K(b), [0, R * 1.1, 0]), part(Cy(R * 0.36, R * 0.36, R * 0.2, 10), K(b), [0, -R * 0.6, 0])], wake: a, wakeLen: 12, spin: { x: 0, y: 6, z: 0 } }),
     voidbolt: (a, b, R) => ({ parts: [part(Cy(R * 0.16, R * 0.16, R * 1.5, 8), K(b)), part(new THREE.ConeGeometry(R * 0.16, R * 0.7, 8), K(b), [0, R * 1.1, 0]), part(Sp(R * 0.5), new THREE.MeshBasicMaterial({ color: b, transparent: true, opacity: 0.30, blending: THREE.AdditiveBlending, depthWrite: false }))], wakeDark: true, wakeLen: 30 }),
+    tentacle: (a, b, R) => {                                                    // a wavy tentacle tip, suckers down the side, the point leading, turning as it flies
+      const parts = [];
+      for (let i = 0; i < 6; i++) {
+        const r = R * (0.55 - i * 0.07), y = R * 1.2 - R * 0.9 * i, x = Math.sin(i * 1.25) * R * 0.28;
+        parts.push(part(Cy(r * 0.8, r, R * 1.0, 8), L(a), [x, y, 0]));
+        if (i % 2 === 0) parts.push(part(Sp(r * 0.45), L(b), [x + r * 0.9, y, 0]));
+      }
+      parts.push(part(new THREE.ConeGeometry(R * 0.5, R * 1.4, 8), L(a), [0, R * 2.0, 0]));
+      return { parts, spin: { x: 0, y: 8, z: 0 } };
+    },
     pixeltrail: (a, b, R) => {                                                  // a neon block with a tail of smaller and smaller blocks, strewn a little, on a glowing streak
       const parts = [part(B(R * 1.3, R * 1.3, R * 1.3), K(a)), part(B(R * 0.6, R * 0.6, R * 0.6), K(0xffffff))];
       for (let i = 0; i < 8; i++) {
@@ -45821,6 +45895,7 @@ const BOOM_THEMES = {
   water:    { fire: 0x55bbff, core: 0xe8f8ff, smoke: 0xcfeeff, bits: [0x55bbff, 0xaadcff, 0xffffff], bit: 'drop', ring: 0x66ccff, flash: [90, 170, 255] },
   confetti: { fire: 0xff6ab8, core: 0xffffff, smoke: 0xfff0a0, bits: [0xff4fa8, 0x4ad8ff, 0xffe14a, 0x7aff7a, 0xff8a3a], bit: 'flake', ring: 0xffe14a, flash: [255, 230, 120] },
   foam:     { fire: 0xf4f8ff, core: 0xffffff, smoke: 0xe0eaf4, bits: [0xffffff, 0xdbe8f5], bit: 'ball', ring: 0xdbe8f5, flash: [230, 240, 255] },
+  ink:      { fire: 0x7a2a8a, core: 0xf0d0f8, smoke: 0x1a0a22, bits: [0x8a2f8f, 0xb04aa0, 0x2a1236, 0xf2c6e8], bit: 'drop', ring: 0xb04aa0, flash: [160, 70, 170] },
   paint:    { fire: 0xff4fa8, core: 0xffffff, smoke: 0xaa44cc, bits: [0xff4fa8, 0x4ad8ff, 0xffe14a, 0x7aff7a], bit: 'drop', ring: 0xff4fa8, flash: [255, 90, 190] },
   cyber:    { fire: 0x00f0ff, core: 0xffffff, smoke: 0x2a1a5a, bits: [0x00f0ff, 0xff2bd6, 0xffffff], bit: 'cube', ring: 0xff2bd6, flash: [0, 220, 255] },
   pixel:    { fire: 0x58d85a, core: 0xffffff, smoke: 0x1a3a1a, bits: [0x58d85a, 0xffffff, 0x2a8a3a, 0xf0e050], bit: 'cube', ring: 0x58d85a, flash: [110, 255, 120] },
@@ -45891,6 +45966,7 @@ const SKIN_SHOT = {};
   G({ shape: 'bolt', c: [0x4aa8ff, 0xffffff] }, 'cyber', ['ak20_blueprint']);
   G({ shape: 'hackbullet', c: [0x0a0a0a, 0x2dff6a], k: 1.5 }, null, ['pistol_hacker', 'ak20_hacker']);
   G({ shape: 'pixeltrail', c: [0xff2bd6, 0x2bf0ff], min: 0.06 }, 'cyber', ['vector_glitch_exe']);
+  G({ shape: 'tentacle', c: [0xa83a9f, 0xf2c6e8], min: 0.07, k: 1.2 }, 'ink', ['harpoon_octopus']);
   G({ shape: 'hackbullet', c: [0x0a0a0a, 0x2dff6a], k: 1.5 }, 'hacker', ['grenade_launcher_hacker']);   // a black round on a green trail that bursts in green code
   G(null, 'nuke', ['rpg_nuke'], 0xff8a2a);                                                                 // the ordinary rocket, and a mushroom cloud where it lands   // the Hacker Pistol and AK: a black round on a green glowing trail
   G({ shape: 'hackball', c: [0x0a0a0a, 0x2dff6a], k: 1.3 }, 'hacker', ['frag_hacker']);
@@ -57145,6 +57221,9 @@ const MODEL_SKINS = [
   { id: 'deagle_glitch', weapon: 'desert_eagle', name: 'Glitch Deagle', rarity: 'rare',
     sw: ['#0a0a10', '#ff2bd6'], build: buildGlitchDeagle,
     blurb: 'Teleports together when drawn. Every so often, a piece is somewhere it should not be.' },
+  { id: 'harpoon_octopus', weapon: 'harpoon_gun', name: 'Octopus', rarity: 'rare',
+    sw: ['#8a2f8f', '#f2c6e8'], build: buildOctopusHarpoon,
+    blurb: 'An octopus for a speargun. Its tentacles sway while you hold it, it shoots tentacles, and the line that holds a hit is a tentacle too. It bursts into ink where it lands.' },
   { id: 'crossbow_widowmaker', weapon: 'crossbow', name: 'WIDOWMAKER', rarity: 'legendary', look: { hit: 'web' },
     sw: ['#0e0e12', '#ff2a2a'], build: buildWidowmaker,
     blurb: 'A mechanical spider that is also a crossbow. Eight legs fold along its sides; aim and they unfold into the bow arms. A shot snaps the front legs in, a reload sends a little spider crawling along the rail with the next bolt, and inspect stands it up and walks it across your view. Whoever it kills hangs in a giant red web that then shatters.' },
@@ -57364,7 +57443,7 @@ const GEN2_MODEL_SKIN_IDS = new Set([
   'revolver_midas', 'pistol_frost', 'ak20_xerror', 'revolver_shatterpoint', 'machine_pistol_overclocked', 'hand_cannon_iron_judge', 'sawed_off_double_trouble', 'sawed_off_classic_shorty', 'grenade_launcher_orbital', 'minigun_redline',            // the Gen 2 case's two new top rarities: EPIC and MYTHIC (server.js GEN2_EPIC_SKIN_IDS / GEN2_NEW_MYTHIC_SKIN_IDS)
   'ak20_rainbow', 'ak20_hyperspace', 'ak20_blueprint', 'sg8_portal', 'vector_portal',
   'railgun_portal_detector', 'p90_quantum_scanner', 'freeze_hyperslush', 'firework_showman',
-  'shorty_outlaw', 'snub_gunslinger', 'deagle_glitch', 'deagle_phantom', 'vector_glitch_exe', 'crossbow_widowmaker',
+  'shorty_outlaw', 'snub_gunslinger', 'deagle_glitch', 'deagle_phantom', 'vector_glitch_exe', 'crossbow_widowmaker', 'harpoon_octopus',
   'burst_cannon_phantom', 'plasma_carbine_fishbowl', 'paintball_fishbowl', 'coilgun_clockwork',
   'rpd_clockwork_belt', 'smart_smg_neon', 'p90_neon_sign', 'portal_launcher_constellation',
   'railgun_constellation', 'pistol_origami', 'xm7_bricks', 'vector_brick_labeler',
@@ -62735,6 +62814,7 @@ const SKIN_FX = {
     equip: 'glitch', equipMs: 900, equipSfx: ['glitchsfx', 'snapin'] },
   deagle_glitch: { sound: _fxS('glitch', .34, .10, 0, 0),
     equip: 'glitch', equipMs: 850, equipSfx: ['glitchsfx', 'snapin'] },
+  harpoon_octopus: { equip: 'unfold', equipMs: 950, equipSfx: ['whoosh', 'squeak'] },
   crossbow_widowmaker: { equip: 'unfold', equipMs: 1000, equipSfx: ['fold', 'click'],
     inspect: [K(.14, { py: .012 }), K(.26, { py: .05 }), K(.34, { py: .05, px: -.02, ry: .9 }), K(.54, { py: .05, px: -.17, ry: .9 }), K(.62, { py: .05, px: -.17, ry: -.9 }),
               K(.80, { py: .05, px: -.01, ry: -.9 }), K(.90, { py: .012 }), K(1, {})] },
