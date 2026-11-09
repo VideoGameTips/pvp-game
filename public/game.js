@@ -32597,6 +32597,169 @@ function _buildSputnikFlight() {
   return g;
 }
 
+// 🏰 RPG-7 -> Siegebreaker. A chunky rectangular iron RPG with bronze joints and wooden arms folded along its sides. Aim and it deploys: two
+// ballista arms swing out, four stabiliser struts fold down, the rocket moves forward onto an exposed rail and a thick bowstring stretches back to it.
+// Fire: the string snaps, both arms kick back and the mechanism puffs dust (the rocket itself is the ordinary RPG round: all of this is for show).
+// Reload: a crank on the side turns three times, the string is wound back, a new rocket slides onto the rail and it locks with a clunk.
+// Inspect: it unfolds fully, a tiny hologram castle appears, the ballista fires a miniature bolt at it, the castle falls into a pile of cubes, the
+// hologram goes out and the siege engine folds back into an RPG.
+function buildSiegebreaker() {
+  const g = new THREE.Group();
+  const iron = _skM(0x3a3f48, 120, 0xaab4c4), iron2 = _skM(0x4d5460, 140, 0xc0cad8), bronze = _skM(0xb8864a, 190, 0xfff0b8), wood = _skM(0x8a5a2e, 70, 0xe0b080);
+  const rope = new THREE.MeshPhongMaterial({ color: 0xd9c79a, shininess: 30 }), dark = new THREE.MeshPhongMaterial({ color: 0x14171b, shininess: 20 });
+  const rkM = _skM(0xa9b2ba, 200, 0xffffff), red = _skM(0xd6281f, 120, 0xffb0a0);
+  const ease = u => u * u * (3 - 2 * u), clamp01 = u => Math.max(0, Math.min(1, u));
+  // the body: a compact iron box with bronze straps, a rear cone and a plain grip
+  gpBox(g, iron, 0.062, 0.070, 0.300, 0, 0.012, 0.000);
+  gpBox(g, iron2, 0.070, 0.078, 0.020, 0, 0.012, -0.160);
+  gpBox(g, dark, 0.036, 0.036, 0.004, 0, 0.020, -0.171);
+  gpBox(g, iron2, 0.056, 0.008, 0.200, 0, 0.051, -0.020);
+  for (const z of [-0.09, 0.03, 0.12]) gpBox(g, bronze, 0.066, 0.074, 0.010, 0, 0.012, z);
+  gpCyl(g, bronze, 0.020, 0.040, 0.050, 12, 0, 0.012, 0.175);
+  gpBox(g, iron2, 0.006, 0.014, 0.020, 0, 0.060, 0.110);
+  _skGrip(g, wood, -0.040);
+  // the rail and the rocket: both slide forward when it deploys
+  const rail = new THREE.Group(); g.add(rail);
+  for (const s of [-1, 1]) { const r = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.008, 0.300), bronze); r.position.set(s * 0.016, 0.058, -0.150); rail.add(r); }
+  gpBox(rail, iron2, 0.044, 0.004, 0.300, 0, 0.0535, -0.150);
+  const rocket = new THREE.Group(); g.add(rocket);
+  const rb = new THREE.Mesh(new THREE.CylinderGeometry(0.0165, 0.0165, 0.200, 12), rkM); rb.rotation.x = Math.PI / 2; rb.position.z = -0.100; rocket.add(rb);
+  const rn = new THREE.Mesh(new THREE.ConeGeometry(0.0165, 0.052, 12), red); rn.rotation.x = -Math.PI / 2; rn.position.z = -0.226; rocket.add(rn);
+  const rband = new THREE.Mesh(new THREE.CylinderGeometry(0.0170, 0.0170, 0.012, 12), red); rband.rotation.x = Math.PI / 2; rband.position.z = -0.165; rocket.add(rband);
+  for (const [w, h] of [[0.040, 0.003], [0.003, 0.040]]) { const f = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.026), iron2); f.position.z = -0.012; rocket.add(f); }
+  // the two ballista arms: wood and iron, bronze tips; pivoted at the front shoulders, folded back along the body
+  const arms = [];
+  for (const s of [-1, 1]) {
+    const pivot = new THREE.Group(); pivot.position.set(s * 0.036, 0.040, -0.100); pivot.rotation.order = 'YXZ'; g.add(pivot);
+    const part = (geo, mat, x, y, z, ry = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(s * x, y, z); m.rotation.y = s * ry; pivot.add(m); return m; };
+    part(new THREE.CylinderGeometry(0.016, 0.016, 0.034, 12), bronze, 0, 0, 0);                         // the torsion bundle at the root
+    part(new THREE.BoxGeometry(0.190, 0.012, 0.020), wood, 0.100, 0, 0);                               // the limb
+    part(new THREE.BoxGeometry(0.050, 0.012, 0.016), wood, 0.205, 0, -0.010, -0.45);                   // its tip, bent forward
+    for (const x of [0.040, 0.110, 0.160]) part(new THREE.BoxGeometry(0.008, 0.016, 0.024), iron2, x, 0, 0);   // iron bands
+    const tip = part(new THREE.SphereGeometry(0.0085, 8, 6), bronze, 0.228, 0, -0.022);
+    arms.push({ pivot, s });
+  }
+  // the four stabiliser struts: folded flat against the body, they drop down and out when it deploys
+  const struts = [];
+  for (const [z, fz] of [[-0.080, 1], [0.090, -1]]) for (const s of [-1, 1]) {
+    const sg = new THREE.Group(); sg.position.set(s * 0.032, -0.026, z); sg.rotation.order = 'ZXY'; g.add(sg);
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.110, 0.008), iron2); leg.position.y = -0.055; sg.add(leg);
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.006, 0.022), bronze); foot.position.y = -0.112; sg.add(foot);
+    struts.push({ sg, s, fz });
+  }
+  // the crank on the right side
+  const crank = new THREE.Group(); crank.position.set(0.034, 0.000, 0.060); g.add(crank);
+  const axle = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.040, 8), bronze); axle.rotation.z = Math.PI / 2; axle.position.x = 0.012; crank.add(axle);
+  const cArm = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.044, 0.008), bronze); cArm.position.set(0.030, 0.022, 0); crank.add(cArm);
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.0095, 8, 6), wood); knob.position.set(0.034, 0.044, 0); crank.add(knob);
+  // the bowstring: two cords from the arm tips to the nock, which rides back and forth along the rail
+  const cord = () => { const m = new THREE.Mesh(new THREE.BoxGeometry(0.007, 0.007, 1), rope); m.userData.eqFx = true; g.add(m); return m; };
+  const cordA = cord(), cordB = cord();
+  const nock = new THREE.Mesh(new THREE.SphereGeometry(0.0085, 8, 6), bronze); nock.userData.eqFx = true; g.add(nock);
+  const seg = (m, a, b) => { const d = b.clone().sub(a), len = d.length(); m.position.copy(a).add(b).multiplyScalar(0.5); m.scale.set(1, 1, Math.max(0.0001, len)); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), d.multiplyScalar(1 / Math.max(len, 1e-6))); };
+  // dust
+  const puffs = [];
+  for (let i = 0; i < 14; i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: _getSmokeTex(), transparent: true, depthWrite: false, color: 0xd9cdb6, opacity: 0 })); sp.visible = false; sp.userData.eqFx = true; g.add(sp); puffs.push({ sp, age: 9, v: new THREE.Vector3() }); }
+  const puff = (p, n, spread = 0.05, scale = 1) => { for (let i = 0; i < n; i++) { const q = puffs.find(x => x.age >= 1); if (!q) return; q.sp.position.copy(p); q.age = 0; q.sc = scale; q.v.set((Math.random() - 0.5) * spread, 0.02 + Math.random() * 0.04, (Math.random() - 0.5) * spread); q.sp.visible = true; } };
+  // the inspect hologram: a little cube castle, a miniature bolt, and the ring it stands on
+  const holo = new THREE.Group(); holo.userData.eqFx = true; holo.position.set(0, 0.020, -0.640); holo.visible = false; g.add(holo);
+  const holoM = new THREE.MeshBasicMaterial({ color: 0x66e8ff, transparent: true, opacity: 0.6, depthWrite: false, blending: THREE.AdditiveBlending });
+  const C = 0.016, cubeGeo = new THREE.BoxGeometry(C * 0.94, C * 0.94, C * 0.94), cubes = [];
+  const addCube = (i, j, k) => { const m = new THREE.Mesh(cubeGeo, holoM); m.position.set(i * C, k * C + C / 2, j * C); holo.add(m); cubes.push({ m, home: m.position.clone(), v: new THREE.Vector3(), sp: new THREE.Vector3() }); };
+  for (let i = -3; i <= 3; i++) for (let j = -3; j <= 3; j++) {
+    if (Math.abs(i) !== 3 && Math.abs(j) !== 3) continue;
+    const corner = Math.abs(i) === 3 && Math.abs(j) === 3, h = corner ? 5 : 2;
+    for (let k = 0; k < h; k++) { if (i === 0 && j === 3 && k < 2) continue; addCube(i, j, k); }       // (a gateway in the front wall)
+    if (corner) addCube(i, j, 5); else if (((i + j) & 1) === 0) addCube(i, j, h);                      // towers and battlements
+  }
+  for (let k = 0; k < 5; k++) addCube(0, 0, k);
+  for (const [i, j] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (let k = 0; k < 2; k++) addCube(i, j, k);   // the keep
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.0016, 6, 40), holoM); ring.rotation.x = Math.PI / 2; ring.position.y = -0.004; holo.add(ring);
+  const mini = new THREE.Group(); mini.userData.eqFx = true; mini.visible = false; g.add(mini);
+  const mb = new THREE.Mesh(new THREE.CylinderGeometry(0.0045, 0.0045, 0.040, 8), bronze); mb.rotation.x = Math.PI / 2; mini.add(mb);
+  const mt = new THREE.Mesh(new THREE.ConeGeometry(0.0055, 0.016, 8), red); mt.rotation.x = -Math.PI / 2; mt.position.z = -0.028; mini.add(mt);
+  // ── the machine ────────────────────────────────────────────────────────────────
+  const A_OPEN = 0.25, RAIL = new THREE.Vector3(), tipL = new THREE.Vector3(), tipR = new THREE.Vector3(), nk = new THREE.Vector3(), tmp = new THREE.Vector3();
+  let dep = 0, draw = 0, rec = 0, was = false, wi = -1, wasReload = false, clunked = false, collapsed = false, impact = -1, shot = -1, hitFlash = 0;
+  g._calm = () => { dep = 0; rec = 0; collapsed = false; holo.visible = false; mini.visible = false; for (const q of puffs) { q.age = 9; q.sp.visible = false; } };
+  g._tick = (dt, now, assembling) => {
+    if (wi < 0) wi = WEAPONS.findIndex(w => w.id === 'rpg');
+    if (assembling) { g._calm(); dep = 0; poseAll(0, 0, 0, 1, 1, 0); return; }
+    const pool = (typeof weaponAmmo !== 'undefined' && weaponAmmo[wi]) || null;
+    const t0 = g._reloadStart && g._reloadDur ? (Date.now() - g._reloadStart) / g._reloadDur : -1;
+    const inspecting = !!g._inspectMode && t0 >= 0 && t0 < 1, reloading = !g._inspectMode && t0 >= 0 && t0 < 1;
+    // reload: the crank, the string, the new rocket
+    let crankA = crank.rotation.x, drawT, rocketSlide = 1, rocketVis;
+    const ammoLeft = pool ? pool.ammo > 0 : true;
+    let target = (typeof isADS !== 'undefined' && isADS) ? 1 : 0;
+    if (reloading) {
+      target = 1;
+      crankA = Math.PI * 6 * ease(clamp01((t0 - 0.04) / 0.48));
+      drawT = ease(clamp01((t0 - 0.52) / 0.18));
+      rocketSlide = ease(clamp01((t0 - 0.72) / 0.16)); rocketVis = t0 > 0.72;
+      if (t0 > 0.88 && !clunked) { clunked = true; rec = 0.5; puff(tmp.set(0, 0.07, 0.04), 4, 0.06); try { playEquipSound('slam'); } catch (e) {} }
+      wasReload = true;
+    } else { clunked = false; if (wasReload) { crankA = 0; wasReload = false; } rocketVis = ammoLeft; }
+    // inspect: the whole show on one timeline
+    let f = -1;
+    if (inspecting) {
+      f = t0 < 0.16 ? ease(t0 / 0.16) : t0 < 0.86 ? 1 : 1 - ease((t0 - 0.86) / 0.14);
+      target = f;
+      const holoK = t0 < 0.16 ? 0 : t0 < 0.24 ? ease((t0 - 0.16) / 0.08) : t0 < 0.80 ? 1 : 1 - ease((t0 - 0.80) / 0.08);
+      holo.visible = holoK > 0.01; holoM.opacity = 0.6 * holoK * (0.85 + 0.15 * Math.sin(now * 40)); holo.scale.set(1, Math.max(0.05, holoK), 1);
+      ring.rotation.z = now * 1.5;
+      drawT = ease(clamp01((t0 - 0.28) / 0.12));                                                   // the string comes back...
+      rocketVis = true;
+      if (t0 >= 0.42 && shot < 0) { shot = now; rec = 1; puff(tmp.set(0, 0.075, -0.06), 6, 0.10); }   // ...and snaps: a miniature bolt goes for the castle
+      if (shot >= 0) { const k = (now - shot) / 0.16; mini.visible = k < 1 && !collapsed; if (k >= 1 && !collapsed) { collapsed = true; impact = now; hitFlash = 1; for (const c of cubes) { c.v.set(c.home.x * 5 + (Math.random() - 0.5) * 0.15, 0.22 + Math.random() * 0.34, c.home.z * 5 + (Math.random() - 0.5) * 0.15); c.sp.set(Math.random() * 8, Math.random() * 8, Math.random() * 8); } puff(tmp.set(0, 0.03, -0.64), 8, 0.14, 2.2); try { playEquipSound('slam'); } catch (e) {} }
+        if (k < 1) { mini.position.set(0, 0.080 + 0.05 * Math.sin(k * Math.PI), -0.26 - k * 0.40); mini.rotation.x = -0.15 * Math.cos(k * Math.PI); } }
+      if (collapsed) for (const c of cubes) {                                                      // a pile of cubes
+        c.v.y -= 1.7 * dt; c.m.position.addScaledVector(c.v, dt);
+        if (c.m.position.y < C / 2) { c.m.position.y = C / 2; c.v.y *= -0.22; c.v.x *= 0.6; c.v.z *= 0.6; c.sp.multiplyScalar(0.7); }
+        c.m.rotation.x += c.sp.x * dt; c.m.rotation.y += c.sp.y * dt; c.m.rotation.z += c.sp.z * dt;
+      }
+      hitFlash = Math.max(0, hitFlash - dt * 4); if (hitFlash > 0) holoM.opacity = Math.min(1, holoM.opacity + hitFlash * 0.5);
+    } else {
+      if (holo.visible || shot >= 0 || collapsed) { holo.visible = false; mini.visible = false; shot = -1; collapsed = false; for (const c of cubes) { c.m.position.copy(c.home); c.m.rotation.set(0, 0, 0); } }
+    }
+    if (f >= 0) dep = f; else dep += (target - dep) * Math.min(1, dt * 9);
+    // fire: the string snaps, the arms kick back, the dust goes up
+    if (drawT === undefined) drawT = rocketVis && dep > 0.5 ? dep : 0;
+    draw += (drawT - draw) * Math.min(1, dt * (drawT < draw ? 40 : 7));
+    if (!inspecting && !reloading && !ammoLeft) draw = 0;                                           // sprung: nothing on the string
+    rec = Math.max(0, rec - dt * 0) * Math.exp(-dt * 8);
+    poseAll(dep, draw, rec, rocketVis ? 1 : 0, rocketSlide, crankA);
+    for (const q of puffs) {
+      if (q.age >= 1) { q.sp.visible = false; continue; }
+      q.age = Math.min(1, q.age + dt * 1.1); q.sp.position.addScaledVector(q.v, dt); q.sp.scale.setScalar((0.025 + q.age * 0.10) * (q.sc || 1)); q.sp.material.opacity = 0.55 * (1 - q.age);
+    }
+  };
+  // the string and the arms react to the shot through _onFire; the rocket vanishes because the ammo hits zero
+  const onShot = () => { rec = 1; draw = 0; puff(nk.set(0, 0.075, -0.05), 5, 0.10); puff(tipL, 2, 0.05); puff(tipR, 2, 0.05); };
+  g._onFire = onShot;
+  function poseAll(d, dr, rc, vis, slide, crankA) {
+    const e = ease(clamp01(d));
+    rail.position.set(0, 0, 0.14 * (1 - e));
+    rocket.visible = !!vis;
+    rocket.position.set(0, 0.079 - 0.075 * (1 - slide), 0.10 * (1 - e));
+    crank.rotation.x = crankA;
+    for (const a of arms) {
+      const th = THREE.MathUtils.lerp(-Math.PI / 2, A_OPEN, e) - 0.30 * rc;
+      a.pivot.rotation.set(0, a.s * th, 0);
+    }
+    for (const s of struts) { const open = ease(clamp01((d - 0.15) / 0.85)); s.sg.rotation.set(THREE.MathUtils.lerp(-s.fz * Math.PI / 2, s.fz * 0.40, open), 0, s.s * 0.35 * open); }
+    // the string: tips of the arms to the nock
+    const L = 0.228, th = THREE.MathUtils.lerp(-Math.PI / 2, A_OPEN, e) - 0.30 * rc;
+    tipR.set(0.036 + L * Math.cos(th), 0.040, -0.100 - L * Math.sin(th)); tipL.set(-tipR.x, 0.040, tipR.z);
+    nk.set(0, 0.079, THREE.MathUtils.lerp(tipR.z, 0.012, dr));
+    cordA.visible = cordB.visible = nock.visible = d > 0.35;
+    if (cordA.visible) { seg(cordA, tipR, nk); seg(cordB, tipL, nk); nock.position.copy(nk); }
+  }
+  poseAll(0, 0, 0, 1, 1, 0);
+  _skFinish(g, -0.290, 0.079, 0.030);
+  return g;
+}
+
 // 🪽 Minigun -> Stormwing. Grey metallic with blue light: one real minigun (the cluster spins up as ever) and a pair of folded wings.
 // Fire a lot and the back goes red-hot and blasts flame out like a jet. Aim (or brace with E) and the wings snap open and four more barrels slide out of them and fire along with the main gun. Same damage:
 // the four extra barrels are for show, the stats are the minigun's.
@@ -57187,6 +57350,9 @@ const MODEL_SKINS = [
   { id: 'minigun_ceiling_fan', weapon: 'minigun', name: 'Ceiling Fan', rarity: 'rare',
     sw: ['#8a5a2a', '#fff2c8'], build: buildCeilingFan,
     blurb: 'Idles on low. The longer you hold the trigger, the closer it gets to taking off.' },
+  { id: 'rpg_siegebreaker', weapon: 'rpg', name: 'Siegebreaker', rarity: 'legendary',
+    sw: ['#3a3f48', '#b8864a'], build: buildSiegebreaker,
+    blurb: 'A rectangular iron RPG that becomes a siege engine when you aim: ballista arms swing out, struts drop, the rocket moves onto a rail and a bowstring draws back. Inspect it and it knocks down a hologram castle. The rocket is the ordinary RPG round.' },
   { id: 'javelin_katyusha', weapon: 'javelin_launcher', name: 'Katyusha', rarity: 'legendary',
     sw: ['#56643a', '#d6281f'], build: buildKatyusha,
     blurb: 'A launch rack on an olive chassis with four red-tipped rockets. A shot kicks the rack back along its rails and sends a cloud of smoke up off the tips.' },
@@ -57434,7 +57600,7 @@ const DONUT_SKIN_IDS = [
 // Mirrors GEN2_SKIN_IDS in server.js (gotcha #4): the server owns the roll and
 // the ownership record, this list only decides what the picker locks.
 const GEN2_MODEL_SKIN_IDS = new Set([
-  'javelin_katyusha', 'p90_ppsh41',                                  // (no skin is free: server.js GEN2_LEGENDARY / GEN2_RARE_SKIN_IDS)
+  'rpg_siegebreaker', 'javelin_katyusha', 'p90_ppsh41',                                  // (no skin is free: server.js GEN2_LEGENDARY / GEN2_RARE_SKIN_IDS)
   'minigun_stormwing',                                          // (no skin is free: server.js GEN2_RARE_SKIN_IDS)
   'revolver_final_notice','vector_crimson',
   'revolver_donut', 'ak20_donut', 'rpg_donut', 'machine_pistol_donut', 'pistol_donut',
@@ -62728,6 +62894,7 @@ const SKIN_FX = {
       K(.62,{py:.05,rx:.15,hx:.07,hy:-.22,hz:.05,ay:.06}),
       K(.74,{py:.04,rx:.10,hy:-.04,ay:.06}), K(.90,{py:.01,ay:.0})],
       [RP(.62,'round','arrive',1,'muzzle')], [[.30,'tick'],[.46,'tick'],[.62,'tick'],[.82,'ticking']], 'ding') },
+  rpg_siegebreaker: { equip: 'windup', equipMs: 1000, equipSfx: ['windup', 'ding'] },
   javelin_katyusha: { equip: 'build', equipMs: 1000, equipSfx: ['whoosh', 'slam'], equipBeats: [[.7, 'click']] },
   p90_ppsh41: { equip: 'slam', equipMs: 900, equipSfx: ['whoosh', null], equipBeats: [[.55, 'slam']] },
   minigun_stormwing: { equip: 'unfold', equipMs: 950, equipSfx: ['fold', 'click'], equipBeats: [[.55, 'click'], [.82, 'chime']] },
