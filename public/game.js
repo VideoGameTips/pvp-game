@@ -22060,7 +22060,9 @@ function addMapWear(name) {
     const o = (banded ? 0.075 : 0.008) + layer * 0.004;
     return emit(f.fx + f.ux * u + f.nx * o, y, f.fz + f.uz * u + f.nz * o, f.ux, 0, f.uz, 0, 1, 0, hu, hv, f.nx, 0, f.nz, cellId, col, a, rnd() < 0.5, flipV);
   };
-  const keyed = faces.map(f => [f.len * f.b.h * (0.85 + rnd() * 0.3), f]).sort((p, q) => q[0] - p[0]).map(p => p[1]);   // biggest first
+  // The marks on the WALLS are off (too much detail: the dirt, streaks, peeled patches, cracks, stains, scorch marks and bullet holes all go through this list, and it is empty now).
+  // The floor wear and the rubble at the foot of the walls are unchanged. To bring the wall marks back, put the line below back as it was.
+  const keyed = [];   // was: faces.map(f => [f.len * f.b.h * (0.85 + rnd() * 0.3), f]).sort((p, q) => q[0] - p[0]).map(p => p[1])  (biggest first)
   const grimeK = Math.min(1.3, 0.5 + prof.grime * 0.75);
   // The point of the layers is that NO part of a wall is left clean: dirt is laid over the whole face, in layers that each
   // reach right across it (a foot, a top, a mottling), and only then do the marks that are in one place (a patch, a crack).
@@ -44053,9 +44055,8 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   const run = clamp01((rig.speedSmooth - 3.5) / 7.5);
 
   // Advance phase by distance travelled so stride length stays natural.
-  // ×1.6 (it was ×2.75, and ×5.5 before that) so the LEG GRAPHIC swings slower than the
-  // distance covered — purely cosmetic, does not change actual move speed. At a walk (about 7.3 m/s)
-  // that is 1.9 full strides a second; ×2.75 was 3.2, which read as legs spinning.
+  // ×2.75 (half of the old ×5.5) so the LEG GRAPHIC swings 2× slower than the
+  // distance covered — purely cosmetic, does not change actual move speed.
   // Which way is this body actually going, relative to the way it faces? `dist`
   // is a magnitude, so the cycle only ever ran forwards — someone back-pedalling
   // out of a fight walked at you while sliding away. Measured in a live duel
@@ -44066,7 +44067,7 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   // neither — holds the last direction instead of chattering between the two.
   const along = dist > 0 ? (dx * Math.sin(mesh.rotation.y) + dz * Math.cos(mesh.rotation.y)) / dist : 0;
   if (Math.abs(along) > 0.35) rig.gaitDir = along > 0 ? 1 : -1;
-  rig.phase += dist * 1.6 * (rig.gaitStride ?? 1) * (rig.gaitDir ?? 1);
+  rig.phase += dist * 2.75 * (rig.gaitStride ?? 1) * (rig.gaitDir ?? 1);
   if (!moving) {
     // Standing still clears the direction latch. Without this, "back-pedal out
     // of a fight, then circle-strafe" left the legs cycling in reverse for every

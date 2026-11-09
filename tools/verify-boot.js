@@ -2288,7 +2288,7 @@ if (ok && process.argv.includes('--wear')) {
         if (!expectWorn) continue;
         if (!w) { issues.push(n + ': was not worn'); continue; }
         worn++; quads += w.quads;
-        if (w.quads < 400) issues.push(n + ': hardly any wear (' + w.quads + ' decals)');
+        if (w.quads < 8) issues.push(n + ': hardly any wear (' + w.quads + ' decals)');   // (the wall marks are off, so a map is left with its floor wear: this used to ask for 400)
         if (w.quads > WEAR_MAX_QUADS) issues.push(n + ': over the decal budget (' + w.quads + ')');
         const meshes = g.children.filter(c => c.userData && c.userData.mapWear);
         if (meshes.length > 2) issues.push(n + ': ' + meshes.length + ' wear batches (a decal batch and a rubble batch)');
