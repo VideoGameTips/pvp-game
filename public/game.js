@@ -44053,8 +44053,9 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   const run = clamp01((rig.speedSmooth - 3.5) / 7.5);
 
   // Advance phase by distance travelled so stride length stays natural.
-  // ×2.75 (half of the old ×5.5) so the LEG GRAPHIC swings 2× slower than the
-  // distance covered — purely cosmetic, does not change actual move speed.
+  // ×1.6 (it was ×2.75, and ×5.5 before that) so the LEG GRAPHIC swings slower than the
+  // distance covered — purely cosmetic, does not change actual move speed. At a walk (about 7.3 m/s)
+  // that is 1.9 full strides a second; ×2.75 was 3.2, which read as legs spinning.
   // Which way is this body actually going, relative to the way it faces? `dist`
   // is a magnitude, so the cycle only ever ran forwards — someone back-pedalling
   // out of a fight walked at you while sliding away. Measured in a live duel
@@ -44065,7 +44066,7 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   // neither — holds the last direction instead of chattering between the two.
   const along = dist > 0 ? (dx * Math.sin(mesh.rotation.y) + dz * Math.cos(mesh.rotation.y)) / dist : 0;
   if (Math.abs(along) > 0.35) rig.gaitDir = along > 0 ? 1 : -1;
-  rig.phase += dist * 2.75 * (rig.gaitStride ?? 1) * (rig.gaitDir ?? 1);
+  rig.phase += dist * 1.6 * (rig.gaitStride ?? 1) * (rig.gaitDir ?? 1);
   if (!moving) {
     // Standing still clears the direction latch. Without this, "back-pedal out
     // of a fight, then circle-strafe" left the legs cycling in reverse for every
