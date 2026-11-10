@@ -2778,6 +2778,63 @@ if (ok && process.argv.includes('--gravityend')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+// HOUSE OF CARDS (the Throwing Knives skin): a legendary from the Gen 2 case: a fan of three cards and a floating ace that shuffle on every throw, the Impossible Shuffle on inspect (the deck is
+// thrown up, spirals, interleaves, four aces stop in the air, become one knife that lands in the hand), a card for a round, and the ace of spades behind what it kills.
+if (ok && process.argv.includes('--houseofcards')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const sk = MODEL_SKINS.find(s => s.id === 'throwing_knives_house_of_cards');
+    if (!sk || sk.weapon !== 'throwing_knives') return ['the House of Cards skin of the Throwing Knives is missing'];
+    if (!GEN2_MODEL_SKIN_IDS.has(sk.id)) issues.push('House of Cards is not dealt by the Gen 2 case (no skin is free)');
+    const fx = SKIN_FX[sk.id];
+    if (!fx || !fx.equip || !fx.inspect) issues.push('no entrance or inspect track');
+    if (_hitKindOfSkin(sk.id) !== 'card' || !HIT_STYLES.card) issues.push('the skin does not carry the card hit look');
+    const shot = SKIN_SHOT[sk.id];
+    if (!shot || shot.shot.shape !== 'card' || !BOOM_THEMES.cards) issues.push('the round is not a card');
+    else { const a = _skinShotMesh(shot.shot, 0.05); if (!a || a.children.length < 7 || !a._alignToDir) issues.push('the card round has too few parts'); }
+    const m = sk.build();
+    if (!m._cards || !m._parts || !m._parts.ammo || m._parts.ammo.children.length !== 3 || !m._tick || !m._calm || !m._steamShot) return issues.concat(['the model needs a fan of three ammo cards, a tick, a calm and a shot hook']);
+    const { ammo, extra, deck, knife } = m._cards;
+    const frame = (n, dt = 0.016) => { let t = performance.now() / 1000; for (let i = 0; i < n; i++) { t += dt; m._tick(dt, t, false); } };
+    const keepBeat = _itemInspectBeat, keepTo = setTimeout; _itemInspectBeat = () => {}; setTimeout = () => 0;
+    try {
+      frame(3);
+      const xs = () => ammo.children.map(c => +c.position.x.toFixed(3)).sort((a, b) => a - b).join();
+      const fan0 = xs(), slots0 = ammo.children.map(c => c.userData.slot).join();
+      m._steamShot(); frame(3);
+      if (ammo.children.map(c => c.userData.slot).join() === slots0) issues.push('a throw should shuffle the cards into new places');
+      frame(40);
+      if (xs() !== fan0) issues.push('after the shuffle the cards should sit in the fan again: ' + fan0 + ' vs ' + xs());
+      if (!extra.visible || deck.visible || knife.visible) issues.push('the floating ace should show, and the deck and the knife should not');
+      const at = t => { m._inspectMode = true; m._reloadStart = Date.now() - t * 2400; m._reloadDur = 2400; frame(1); };
+      at(0.30);
+      if (!deck.visible || ammo.children.some(c => c.visible) || extra.visible) issues.push('inspect: the whole deck is in the air, the fan is not');
+      if (!deck.children.some(c => Math.abs(c.position.z + 0.05) > 0.02)) issues.push('inspect: the streams should be spiralling');
+      at(0.70);
+      const aces = deck.children.slice(0, 4);
+      if (!aces.every(c => c.visible && Math.abs(c.rotation.x - Math.PI / 2) < 0.2)) issues.push('inspect: the four aces should be standing in the air facing you');
+      const gaps = aces.map(c => c.position.x).sort((a, b) => a - b);
+      if (!(gaps[3] - gaps[0] > 0.12)) issues.push('inspect: the four aces should be spread out in a row');
+      if (deck.children.slice(4).some(c => c.visible)) issues.push('inspect: the rest of the deck should have gone');
+      at(0.86);
+      if (!knife.visible) issues.push('inspect: the aces should be becoming a knife');
+      at(0.995);
+      if (!knife.visible) issues.push('inspect: the knife should be about to land in the hand');
+      m._inspectMode = false; m._reloadStart = 0; frame(3);
+      if (deck.visible || knife.visible || !extra.visible) issues.push('after the inspect everything should be back to the fan');
+    } finally { _itemInspectBeat = keepBeat; setTimeout = keepTo; }
+    const body = new THREE.Group(); body.add(new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.7, 0.3), new THREE.MeshBasicMaterial()));
+    body.visible = true; remoteMeshes.cx = body; players.cx = { dead: true };
+    const keepSound = playSoundEvent, keepFeed = pushFeedLine, keepRaf = typeof requestAnimationFrame !== 'undefined' ? requestAnimationFrame : null, keepTo2 = setTimeout;
+    playSoundEvent = () => {}; pushFeedLine = () => {}; requestAnimationFrame = () => 0; setTimeout = () => 0;
+    try { if (_playSkinFinisher('card', 'cx', 'someone') !== true) issues.push('the ace of spades kill does not play'); }
+    finally { playSoundEvent = keepSound; pushFeedLine = keepFeed; setTimeout = keepTo2; if (keepRaf) requestAnimationFrame = keepRaf; delete remoteMeshes.cx; delete players.cx; }
+    return issues;
+  })()`);
+  console.log('House of Cards checks: Gen 2, shuffle on throw, Impossible Shuffle, card round, ace of spades kill');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 // Bot strategy: on every map, ten random bot/enemy pairs 20-36 m apart each ask for a plan. A plan has to be a route a body can
 // walk (each step at most 0.65 m up and 2 m down, one cell at a time), end where it says it does (a perch is 2.4 m or higher
 // and sees the enemy), and most maps with a deck or a roof should have at least one.

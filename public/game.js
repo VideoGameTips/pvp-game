@@ -33581,6 +33581,141 @@ function buildGravitysEnd() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+// 🃏 Throwing Knives -> HOUSE OF CARDS. Razor-edged steel playing cards with silver borders and glowing red suits: a fan of three (your knives) with a fourth, the ace of spades, floating above them.
+// Each throw riffles the rest into new places like a deck being worked. The inspect is the Impossible Shuffle: the whole deck is thrown up, splits into two streams that spiral round each other and
+// interleave, four cards fly out and stop in the air as the four aces, snap together into one throwing knife, and the knife drops into your hand. CLACK.
+const _cardTexs = {};
+function _cardTex(kind) {                                                      // kind: 'back' or a suit letter S H C D; null where there is no canvas (the card is then plain steel)
+  if (_cardTexs[kind] !== undefined) return _cardTexs[kind];
+  let tex = null;
+  try {
+    const c = document.createElement('canvas'); c.width = 128; c.height = 192;
+    const x = c.getContext('2d');
+    const g = x.createLinearGradient(0, 0, 128, 192); g.addColorStop(0, '#1a1a24'); g.addColorStop(1, '#07070b');
+    x.fillStyle = g; x.fillRect(0, 0, 128, 192);
+    x.strokeStyle = '#b8bec8'; x.lineWidth = 7; x.strokeRect(5, 5, 118, 182);
+    x.strokeStyle = '#6a707a'; x.lineWidth = 2; x.strokeRect(14, 14, 100, 164);
+    if (kind === 'back') {
+      x.strokeStyle = '#a01824'; x.lineWidth = 3;
+      for (let i = -192; i < 192; i += 24) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i + 192, 192); x.stroke(); x.beginPath(); x.moveTo(i + 192, 0); x.lineTo(i, 192); x.stroke(); }
+      x.fillStyle = '#ff2a3a'; x.beginPath(); x.moveTo(64, 70); x.lineTo(84, 96); x.lineTo(64, 122); x.lineTo(44, 96); x.closePath(); x.fill();
+    } else {
+      const sym = { S: '♠', H: '♥', C: '♣', D: '♦' }[kind] || '♠';
+      x.shadowColor = '#ff2a3a'; x.shadowBlur = 14; x.fillStyle = '#ff3a48';
+      x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.font = 'bold 92px serif'; x.fillText(sym, 64, 100);
+      x.font = 'bold 30px serif'; x.fillText('A', 26, 34); x.fillText(sym, 26, 62);
+      x.save(); x.translate(102, 158); x.rotate(Math.PI); x.fillText('A', 0, 0); x.fillText(sym, 0, 28); x.restore();
+    }
+    tex = new THREE.CanvasTexture(c);
+  } catch (e) { tex = null; }
+  return (_cardTexs[kind] = tex);
+}
+const _cardMats = {};
+function _cardMaterials(kind) {                                                // +x -x +y(front) -y(back) +z -z
+  if (_cardMats[kind]) return _cardMats[kind];
+  const edge = new THREE.MeshPhongMaterial({ color: 0xc4cad4, shininess: 160, specular: 0xffffff });
+  const face = new THREE.MeshPhongMaterial(_cardTex(kind) ? { map: _cardTex(kind), shininess: 110, specular: 0x886666 } : { color: 0x14141c, shininess: 110, specular: 0x886666 });
+  const back = new THREE.MeshPhongMaterial(_cardTex('back') ? { map: _cardTex('back'), shininess: 90 } : { color: 0x14141c, shininess: 90 });
+  return (_cardMats[kind] = [edge, edge, face, back, edge, edge]);
+}
+const _cardGeo = () => _cardGeo.g || (_cardGeo.g = new THREE.BoxGeometry(0.040, 0.0018, 0.064));
+function _makeCard(kind) { return new THREE.Mesh(_cardGeo(), _cardMaterials(kind)); }
+function buildHouseOfCards() {
+  let ammo = null, extra = null, deck = null, knife = null;
+  const g = _throwableHolder(gg => {
+    ammo = new THREE.Group(); ammo._n = 3; gg.add(ammo);
+    ['S', 'H', 'C'].forEach((k, n) => { const c = _makeCard(k); c.userData.slot = n - 1; ammo.add(c); });
+    extra = _makeCard('S'); gg.add(extra);                                      // the ace that floats above the fan
+    deck = new THREE.Group(); deck.visible = false; gg.add(deck);               // the whole deck, only while you inspect
+    for (let i = 0; i < 12; i++) deck.add(_makeCard(i < 4 ? 'SHCD'[i] : 'back'));
+    knife = new THREE.Group(); knife.visible = false; gg.add(knife);            // what the four aces become
+    const steel = new THREE.MeshPhongMaterial({ color: 0xc4cad4, shininess: 160, specular: 0xffffff }), cord = new THREE.MeshPhongMaterial({ color: 0x23242a, shininess: 26 });
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.004, 0.130), steel); blade.position.z = -0.075; knife.add(blade);
+    const tip = new THREE.Mesh(new THREE.ConeGeometry(0.016, 0.052, 4), steel); tip.rotation.x = -Math.PI / 2; tip.rotation.z = Math.PI / 4; tip.scale.set(1, 1, 0.25); tip.position.z = -0.164; knife.add(tip);
+    const handle = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.014, 0.080), cord); handle.position.z = 0.038; knife.add(handle);
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.0056, 0.100), new THREE.MeshBasicMaterial({ color: 0xff2a3a })); stripe.position.z = -0.075; knife.add(stripe);
+  });
+  g._parts = Object.assign(g._parts || {}, { ammo });
+  g._greebled = true; g._handDetailed = true;
+  // ── Motion ───────────────────────────────────────────────────────────────
+  const slotPose = (k, lift = 0) => ({ x: k * 0.026, y: 0.040 - Math.abs(k) * 0.004 + lift, z: -0.030, ry: k * 0.36, rz: k * 0.10 });
+  const homeExtra = { x: 0, y: 0.078, z: -0.046 };
+  const ease = t => t * t * (3 - 2 * t), clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+  const win = (t, a, b) => clamp((t - a) / (b - a));
+  let shuf = { t: 9 }, inspRun = 0, beats = 0;
+  const CENTER = new THREE.Vector3(-0.14, 0.10, -0.08);                          // where the four aces hang, centred in your view
+  const place = (c, x, y, z, rx, ry, rz) => { c.position.set(x, y, z); c.rotation.set(rx, ry, rz); };
+  const layFan = (now) => {
+    ammo.children.forEach(c => {
+      let a = c.userData.slot, b = a, u = 1;
+      if (shuf.t < 0.30) { u = ease(shuf.t / 0.30); a = shuf.from[c.userData.slot + 1]; b = c.userData.slot; }
+      const pa = slotPose(a), pb = slotPose(b), lift = 0.036 * Math.sin(Math.PI * u) * (shuf.t < 0.30 ? 1 : 0);
+      const bob = 0.004 * Math.sin(now * 1.8 + c.userData.slot * 1.7);
+      place(c, pa.x + (pb.x - pa.x) * u, pa.y + (pb.y - pa.y) * u + lift + bob, pa.z, shuf.t < 0.30 ? Math.sin(Math.PI * u) * 1.2 : 0, pa.ry + (pb.ry - pa.ry) * u, pa.rz + (pb.rz - pa.rz) * u);
+    });
+    place(extra, homeExtra.x, homeExtra.y + 0.005 * Math.sin(now * 1.5), homeExtra.z, 0.18, 0, 0.04 * Math.sin(now * 1.1));
+  };
+  g._calm = () => { deck.visible = false; knife.visible = false; extra.visible = true; shuf = { t: 9 }; };
+  g._steamShot = () => {                                                         // a throw: the rest of the fan is shuffled into new places
+    const from = []; ammo.children.forEach(c => { from[c.userData.slot + 1] = c.userData.slot; });
+    ammo.children.forEach(c => { const old = c.userData.slot; c.userData.slot = old >= 1 ? -1 : old + 1; from[c.userData.slot + 1] = old; });
+    shuf = { t: 0, from };
+  };
+  g._cards = { ammo, extra, deck, knife };
+  g._tick = (dt, now, assembling) => {
+    if (assembling) { g._calm(); layFan(now); return; }
+    shuf.t += dt;
+    const inspecting = !!(g._inspectMode && g._reloadStart);
+    if (!inspecting) {
+      if (deck.visible || knife.visible) { deck.visible = false; knife.visible = false; extra.visible = true; }
+      inspRun = 0; layFan(now); return;
+    }
+    // ── The Impossible Shuffle ────────────────────────────────────────────────
+    const t = clamp((Date.now() - g._reloadStart) / (g._reloadDur || 2400));
+    if (inspRun !== g._reloadStart) { inspRun = g._reloadStart; beats = 0; }
+    ammo.children.forEach(c => { c.visible = false; }); extra.visible = false; deck.visible = true;
+    const toss = win(t, 0.00, 0.12), split = win(t, 0.12, 0.40), join = win(t, 0.40, 0.52), shoot = win(t, 0.52, 0.62), snap = win(t, 0.78, 0.88), land = win(t, 0.88, 1.00);
+    const X = CENTER.x, top = 0.14;
+    deck.children.forEach((c, i) => {
+      const s = i / 11, stream = i % 2, th = stream * Math.PI + 4 * s + 6.5 * split;
+      const r = 0.045 * split * (1 - join);
+      let x = X * ease(toss) + Math.cos(th) * r;
+      let y = top * ease(toss) + 0.02 * s + 0.025 * Math.sin(th * 0.5) * split * (1 - join);
+      let z = -0.05 * ease(toss) + Math.sin(th) * r;
+      let rx = 3 * toss * (1 - split) + 1.0 * split * (1 - join), ry = th * split * (1 - join), rz = 0.3 * Math.sin(th * 1.3) * split * (1 - join);
+      y += (top + i * 0.0022 - y) * join;                                        // interleaved: one stack
+      if (i < 4) {                                                                // an ace: it flies out of the deck and stays, facing you
+        const tx = CENTER.x + (i - 1.5) * 0.052, ty = CENTER.y, tz = CENTER.z;
+        const k = ease(shoot), hold = t >= 0.62 && t < 0.78 ? 0.004 * Math.sin(now * 3 + i) : 0;
+        x += (tx - x) * k; y += (ty - y) * k + hold; z += (tz - z) * k;
+        rx += (Math.PI / 2 - rx) * k; ry *= (1 - k); rz *= (1 - k);
+        const s2 = ease(snap);                                                    // then the four slide together and shrink into the knife
+        x += (CENTER.x - x) * s2; y += (CENTER.y - y) * s2; c.scale.setScalar(Math.max(0.001, 1 - s2 * 0.95));
+        c.visible = snap < 0.97;
+      } else {
+        c.scale.setScalar(Math.max(0.001, 1 - ease(shoot)));
+        c.visible = shoot < 0.98;
+      }
+      c.position.set(x, y, z); c.rotation.set(rx, ry, rz);
+    });
+    // the aces become one knife, which drops into your hand
+    knife.visible = snap > 0.4 && land < 1;
+    if (knife.visible) {
+      const k = ease(win(snap, 0.4, 1)), d = ease(land);
+      knife.position.set(CENTER.x * (1 - d), CENTER.y * (1 - d) + 0.02, CENTER.z * (1 - d));
+      knife.rotation.set(Math.PI / 2 * (1 - d), 0, 0);                            // upright in the air, level by the time it is in your hand
+      knife.scale.setScalar(Math.max(0.001, k));
+    }
+    if (beats < 1 && t >= 0.12) { beats = 1; _itemInspectBeat(900, 0.16); }
+    if (beats < 2 && t >= 0.52) { beats = 2; _itemInspectBeat(1100, 0.22); }
+    if (beats < 3 && t >= 0.80) { beats = 3; _itemInspectBeat(760, 0.34); setTimeout(() => _itemInspectBeat(1500, 0.14), 60); }     // snap
+    if (beats < 4 && t >= 0.985) { beats = 4; _itemInspectBeat(520, 0.40); }                                                   // CLACK
+  };
+  layFan(0);
+  return g;
+}
+
 function buildFishbowlCarbine() {
   // 🐠 Plasma Carbine -> Fishbowl Carbine. A clear tank on a grip, gravel on the
   // bottom, a nozzle out the front. Drawn, it fills with water from the bottom
@@ -46182,6 +46317,14 @@ const SKIN_SHAPES = (() => {
       [-0.9, 0.2, 1.3].forEach((y, i) => parts.push(part(new THREE.TorusGeometry(R * (0.9 + i * 0.35), R * 0.07, 4, 14), new THREE.MeshBasicMaterial({ color: i === 1 ? 0xd05aff : b, transparent: true, opacity: 0.85 }), [0, R * y, 0], [Math.PI / 2 + (i - 1) * 0.35, 0, i * 0.5])));
       return { parts, wake: b, wakeLen: 10, spin: { x: 0, y: 6, z: 0 } };
     },
+    card: (a, b, R) => {                                                        // a razor-edged playing card: dark steel, a silver border, a glowing red diamond; it spins about its line of flight
+      const w = R * 2.6, h = R * 3.6, t = R * 0.10;
+      const parts = [part(B(w, h, t), L(0x15151c))];
+      for (const sx of [-1, 1]) parts.push(part(B(R * 0.14, h, t * 1.4), L(0xc4cad4), [sx * (w / 2 - R * 0.07), 0, 0]));
+      for (const sy of [-1, 1]) parts.push(part(B(w, R * 0.14, t * 1.4), L(0xc4cad4), [0, sy * (h / 2 - R * 0.07), 0]));
+      parts.push(part(B(R * 0.9, R * 0.9, t * 1.6), K(b), [0, 0, 0], [0, 0, Math.PI / 4]));
+      return { parts, wake: b, wakeLen: 6, spin: { x: 0, y: 26, z: 0 } };
+    },
     pixeltrail: (a, b, R) => {                                                  // a neon block with a tail of smaller and smaller blocks, strewn a little, on a glowing streak
       const parts = [part(B(R * 1.3, R * 1.3, R * 1.3), K(a)), part(B(R * 0.6, R * 0.6, R * 0.6), K(0xffffff))];
       for (let i = 0; i < 8; i++) {
@@ -46226,6 +46369,7 @@ const BOOM_THEMES = {
   foam:     { fire: 0xf4f8ff, core: 0xffffff, smoke: 0xe0eaf4, bits: [0xffffff, 0xdbe8f5], bit: 'ball', ring: 0xdbe8f5, flash: [230, 240, 255] },
   ink:      { fire: 0x7a2a8a, core: 0xf0d0f8, smoke: 0x1a0a22, bits: [0x8a2f8f, 0xb04aa0, 0x2a1236, 0xf2c6e8], bit: 'drop', ring: 0xb04aa0, flash: [160, 70, 170] },
   gravity:  { fire: 0x6a2ac8, core: 0xf0e0ff, smoke: 0x120820, bits: [0x8a4aff, 0x1a0a2a, 0xd0b0ff, 0xd05aff], bit: 'shard', ring: 0x8a4aff, flash: [140, 80, 255] },
+  cards:    { fire: 0xff2a3a, core: 0xffffff, smoke: 0x15151c, bits: [0xff2a3a, 0xf0f2f8, 0x15151c, 0xc4cad4], bit: 'flake', ring: 0xff2a3a, flash: [255, 60, 70] },
   paint:    { fire: 0xff4fa8, core: 0xffffff, smoke: 0xaa44cc, bits: [0xff4fa8, 0x4ad8ff, 0xffe14a, 0x7aff7a], bit: 'drop', ring: 0xff4fa8, flash: [255, 90, 190] },
   cyber:    { fire: 0x00f0ff, core: 0xffffff, smoke: 0x2a1a5a, bits: [0x00f0ff, 0xff2bd6, 0xffffff], bit: 'cube', ring: 0xff2bd6, flash: [0, 220, 255] },
   pixel:    { fire: 0x58d85a, core: 0xffffff, smoke: 0x1a3a1a, bits: [0x58d85a, 0xffffff, 0x2a8a3a, 0xf0e050], bit: 'cube', ring: 0x58d85a, flash: [110, 255, 120] },
@@ -46296,6 +46440,7 @@ const SKIN_SHOT = {};
   G({ shape: 'bolt', c: [0x4aa8ff, 0xffffff] }, 'cyber', ['ak20_blueprint']);
   G({ shape: 'hackbullet', c: [0x0a0a0a, 0x2dff6a], k: 1.5 }, null, ['pistol_hacker', 'ak20_hacker']);
   G({ shape: 'pixeltrail', c: [0xff2bd6, 0x2bf0ff], min: 0.06 }, 'cyber', ['vector_glitch_exe']);
+  G({ shape: 'card', c: [0x15151c, 0xff2a3a], min: 0.05, k: 1.2 }, 'cards', ['throwing_knives_house_of_cards']);
   G({ shape: 'gravarrow', c: [0x0c0c12, 0x9a4aff], min: 0.07, k: 1.3 }, 'gravity', ['boombow_gravity_end']);
   G({ shape: 'tentacle', c: [0xa83a9f, 0xf2c6e8], min: 0.07, k: 1.2 }, 'ink', ['harpoon_octopus']);
   G({ shape: 'hackbullet', c: [0x0a0a0a, 0x2dff6a], k: 1.5 }, 'hacker', ['grenade_launcher_hacker']);   // a black round on a green trail that bursts in green code
@@ -46387,6 +46532,7 @@ const HIT_STYLES = {
   shatter: { shards: true,     glow: '#4aa8ff', fill: '#d8f0ff', hit: 0xd8f0ff, miss: 0x6ac4ff, screen: 'rgba(74,168,255,0.16)', num: '#7ac8ff', numShadow: '0 0 8px #2a7fff, 0 0 2px #04204f, -1px -1px 0 #04204f, 1px 1px 0 #04204f', scramble: null },
   pixel: { chars: '▓▒░█■',  glow: '#ff2bd6', fill: '#2bf0ff', hit: 0xffd0f6, miss: 0x2bf0ff, screen: 'rgba(255,43,214,0.16)', num: '#2bf0ff', numShadow: '0 0 8px #ff2bd6, 0 0 2px #2a0030, -1px -1px 0 #14001a, 1px 1px 0 #14001a', scramble: '▓▒░█■01' },
   web:   { chars: '╳✕+',   glow: '#ff2020', fill: '#ff8a8a', hit: 0xffc0c0, miss: 0xff4040, screen: 'rgba(255,30,30,0.16)', num: '#ff4040', numShadow: '0 0 8px #ff1010, 0 0 2px #3a0000, -1px -1px 0 #1a0000, 1px 1px 0 #1a0000', scramble: '╳✕+0123' },
+  card:  { chars: '♠♥♣♦', glow: '#ff2020', fill: '#ff8a8a', hit: 0xffd0d0, miss: 0xff6a78, screen: 'rgba(255,40,50,0.16)', num: '#ff4a56', numShadow: '0 0 8px #ff1010, 0 0 2px #3a0000, -1px -1px 0 #1a0000, 1px 1px 0 #1a0000', scramble: '♠♥♣♦A' },
 };
 const _hackGlyphs = {};
 function _hackGlyph(ch, style = 'hack') {
@@ -57561,6 +57707,9 @@ const MODEL_SKINS = [
   { id: 'boombow_gravity_end', weapon: 'boombow', name: "Gravity's End", rarity: 'legendary',
     sw: ['#0c0c12', '#9a4aff'], build: buildGravitysEnd,
     blurb: 'A bow that bends space. Two black crescents float round a tiny black hole with violet rings orbiting it; aim and they swing round into a ring, a shot flings them out and gravity pulls them back. Inspect it and it swallows itself, flashes, and rebuilds from a point. The arrow flies as the arrow always did.' },
+  { id: 'throwing_knives_house_of_cards', weapon: 'throwing_knives', name: 'House of Cards', rarity: 'legendary', look: { hit: 'card' },
+    sw: ['#15151c', '#ff2a3a'], build: buildHouseOfCards,
+    blurb: 'Razor playing cards: black steel, silver borders, glowing red suits. A fan of three with the ace of spades floating over it; every throw shuffles the rest. Inspect it for the Impossible Shuffle. Whoever it kills is shown the ace of spades. The cards throw exactly like the knives.' },
   { id: 'crossbow_widowmaker', weapon: 'crossbow', name: 'WIDOWMAKER', rarity: 'legendary', look: { hit: 'web' },
     sw: ['#0e0e12', '#ff2a2a'], build: buildWidowmaker,
     blurb: 'A mechanical spider that is also a crossbow. Eight legs fold along its sides; aim and they unfold into the bow arms. A shot snaps the front legs in, a reload sends a little spider crawling along the rail with the next bolt, and inspect stands it up and walks it across your view. Whoever it kills hangs in a giant red web that then shatters.' },
@@ -57780,7 +57929,7 @@ const GEN2_MODEL_SKIN_IDS = new Set([
   'revolver_midas', 'pistol_frost', 'ak20_xerror', 'revolver_shatterpoint', 'machine_pistol_overclocked', 'hand_cannon_iron_judge', 'sawed_off_double_trouble', 'sawed_off_classic_shorty', 'grenade_launcher_orbital', 'minigun_redline',            // the Gen 2 case's two new top rarities: EPIC and MYTHIC (server.js GEN2_EPIC_SKIN_IDS / GEN2_NEW_MYTHIC_SKIN_IDS)
   'ak20_rainbow', 'ak20_hyperspace', 'ak20_blueprint', 'sg8_portal', 'vector_portal',
   'railgun_portal_detector', 'p90_quantum_scanner', 'freeze_hyperslush', 'firework_showman',
-  'shorty_outlaw', 'snub_gunslinger', 'deagle_glitch', 'deagle_phantom', 'vector_glitch_exe', 'crossbow_widowmaker', 'boombow_gravity_end', 'harpoon_octopus',
+  'shorty_outlaw', 'snub_gunslinger', 'deagle_glitch', 'deagle_phantom', 'vector_glitch_exe', 'crossbow_widowmaker', 'throwing_knives_house_of_cards', 'boombow_gravity_end', 'harpoon_octopus',
   'burst_cannon_phantom', 'plasma_carbine_fishbowl', 'paintball_fishbowl', 'coilgun_clockwork',
   'rpd_clockwork_belt', 'smart_smg_neon', 'p90_neon_sign', 'portal_launcher_constellation',
   'railgun_constellation', 'pistol_origami', 'xm7_bricks', 'vector_brick_labeler',
@@ -63155,6 +63304,8 @@ const SKIN_FX = {
   harpoon_octopus: { equip: 'unfold', equipMs: 950, equipSfx: ['whoosh', 'squeak'] },
   boombow_gravity_end: { equip: 'blackhole', equipMs: 1200, equipSfx: ['singularity', 'chime'],
     inspect: [K(.10, { py: .02 }), K(.20, { py: .06, pz: -.04, rx: .10 }), K(.80, { py: .06, pz: -.04, rx: .10 }), K(.92, { py: .03 }), K(1, {})] },
+  throwing_knives_house_of_cards: { equip: 'unfold', equipMs: 900, equipSfx: ['fold', 'click'],
+    inspect: [K(.12, { py: .02 }), K(.9, { py: .02 }), K(1, {})] },
   crossbow_widowmaker: { equip: 'unfold', equipMs: 1000, equipSfx: ['fold', 'click'],
     inspect: [K(.14, { py: .012 }), K(.26, { py: .05 }), K(.34, { py: .05, px: -.02, ry: .9 }), K(.54, { py: .05, px: -.17, ry: .9 }), K(.62, { py: .05, px: -.17, ry: -.9 }),
               K(.80, { py: .05, px: -.01, ry: -.9 }), K(.90, { py: .012 }), K(1, {})] },
@@ -64342,6 +64493,62 @@ FINISHER_MOVES.gold = function (mesh, id, c) {
     playSoundEvent('hitmarker', { position: at, volume: 0.9, minGap: 40 });
   });
 };
+// 🃏 HOUSE OF CARDS: a giant translucent ace of spades appears behind the body, hangs there as the body turns to a flat steel card, then flutters apart into a burst of little cards.
+function _aceTexture() {
+  if (_aceTexture.t !== undefined) return _aceTexture.t;
+  let tex = null;
+  try {
+    const c = document.createElement('canvas'); c.width = 256; c.height = 368;
+    const x = c.getContext('2d');
+    x.fillStyle = 'rgba(14,14,22,0.78)'; x.fillRect(0, 0, 256, 368);
+    x.strokeStyle = '#d0d6e0'; x.lineWidth = 12; x.strokeRect(8, 8, 240, 352);
+    x.shadowColor = '#ff2a3a'; x.shadowBlur = 24; x.fillStyle = '#ff4a56'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.font = 'bold 190px serif'; x.fillText('♠', 128, 196);
+    x.font = 'bold 60px serif'; x.fillText('A', 52, 62); x.fillText('♠', 52, 118);
+    x.save(); x.translate(204, 306); x.rotate(Math.PI); x.fillText('A', 0, 0); x.fillText('♠', 0, 56); x.restore();
+    tex = new THREE.CanvasTexture(c);
+  } catch (e) { tex = null; }
+  return (_aceTexture.t = tex);
+}
+FINISHER_MOVES.ace = function (mesh, id, c, killerId) {
+  const body = _finisherMat('ace', 0x1c1c26); body.color.setHex(0x1c1c26); body.emissive.setHex(0x2a0508);
+  _finisherSwap(mesh, body);
+  playSoundEvent('hitmarker', { position: mesh.position, volume: 0.6, minGap: 80 });
+  const killer = killerId === myId ? camera.position : (remoteMeshes[killerId] && remoteMeshes[killerId].position);
+  const away = new THREE.Vector3(mesh.position.x - (killer ? killer.x : mesh.position.x), 0, mesh.position.z - (killer ? killer.z : mesh.position.z - 1));
+  if (away.lengthSq() < 0.01) away.set(0, 0, -1);
+  away.normalize();
+  const tex = _aceTexture();
+  const ace = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 2.45), new THREE.MeshBasicMaterial(tex ? { map: tex, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide } : { color: 0x20202c, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
+  ace.position.set(mesh.position.x + away.x * 0.9, mesh.position.y + 1.2, mesh.position.z + away.z * 0.9);
+  ace.lookAt(ace.position.x + away.x, ace.position.y, ace.position.z + away.z);
+  scene.add(ace);
+  let gone = false;
+  const cleanup = () => { if (gone) return; gone = true; scene.remove(ace); ace.geometry.dispose(); ace.material.dispose(); };
+  setTimeout(cleanup, 2400);
+  let burst = false;
+  _finisherDrive(mesh, id, 1500, (t, dt, st) => {
+    const now = performance.now();
+    mesh.position.copy(st.p); mesh.rotation.y = st.r.y; mesh.scale.set(st.s.x, st.s.y, st.s.z * Math.max(0.12, 1 - Math.min(1, t / 0.4) * 0.88));     // flat as a card
+    ace.material.opacity = t < 0.12 ? t / 0.12 * 0.6 : t < 0.7 ? 0.6 + 0.08 * Math.sin(now * 0.02) : Math.max(0, 0.6 * (1 - (t - 0.7) / 0.3));
+    ace.scale.setScalar(0.85 + 0.15 * Math.min(1, t / 0.15) + (t > 0.7 ? (t - 0.7) * 0.6 : 0));
+    if (t > 0.7 && !burst) {
+      burst = true;
+      const at = st.p.clone().setY(st.p.y + 1.0);
+      _finisherBurst(at, 0xff2a3a, 30, [0xff2a3a, 0xf0f2f8, 0x15151c, 0xc4cad4]); _spawnFinisherRing(st.p.clone(), 0xff2a3a, 2.0);
+      playSoundEvent('hitmarker', { position: at, volume: 0.8, minGap: 40 });
+    }
+  }, st => { cleanup(); });
+};
+function playAceFinisher(targetId, killerId) {
+  const mesh = remoteMeshes[targetId];
+  if (!mesh || !mesh.visible) return false;
+  if (mesh._finisher && performance.now() < mesh._finisher.until) return true;
+  mesh._finisher = { id: 'ace', until: performance.now() + 4200 };
+  FINISHER_MOVES.ace(mesh, targetId, 0xff2a3a, killerId);
+  pushFeedLine('THE ACE OF SPADES', players[targetId]?.name || 'Enemy', '#ff3a48');
+  return true;
+}
 // 🕷️ WIDOWMAKER: a giant red spiderweb snaps into being behind the body, which goes dark and still, hangs there a moment, then the web shatters and takes it with it.
 function _buildWeb(R, spokes, rings) {
   const group = new THREE.Group(), pieces = [];
@@ -64584,6 +64791,7 @@ function _playSkinFinisher(kind, targetId, killerId = null) {
   if (kind === 'shatter') return playShatterFinisher(targetId);
   if (kind === 'pixel') return playHologramFinisher(targetId);
   if (kind === 'web') return playWebFinisher(targetId, killerId);
+  if (kind === 'card') return playAceFinisher(targetId, killerId);
   return false;
 }
 // Plays the chosen finisher on a body. The seven classic ones run the classic effect (see _playClassicFinisher); the others have a move
