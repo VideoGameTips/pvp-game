@@ -33242,6 +33242,281 @@ function buildGlitchVector() {
   return g;
 }
 
+// ☠️ Vector -> NEON//ANARCHY. A compact prototype built by a rogue hacker in an underground megacity, low-poly and deliberately lopsided. The side that faces YOU is stripped bare:
+// circuit traces, chips and an electromagnetic coil with four rectangular blocks that shuttle along it. The far side is overlapping black and crimson armour with hazard labels.
+// Two armour panels cover the coil; aim and they slide back. A hologram of your ammunition floats over the receiver and corrupts the longer you hold the trigger (OVERRIDE, UNSTABLE,
+// SYSTEM ERROR). Neon pulses race along the deck, faster when you fire. Reload: the panels open, the magazine drops, a new one locks in and the circuits boot back up. Inspect is SYSTEM HIJACK:
+// it malfunctions, the panels split, a red skull rises over the receiver ("UNAUTHORIZED USER DETECTED"), glitches, the display flips to "ACCESS GRANTED", the whole gun snaps shut and every strip flashes crimson.
+const _naTexs = {};
+function _naLabelTex(kind) {                                                   // a hazard label (kind 'a' WARNING, 'b' HIGH VOLTAGE); null where there is no canvas
+  if (kind in _naTexs) return _naTexs[kind];
+  let t = null;
+  try {
+    const c = document.createElement('canvas'); c.width = 128; c.height = 64;
+    const x = c.getContext('2d');
+    if (x) {
+      x.fillStyle = '#0a0a0e'; x.fillRect(0, 0, 128, 64);
+      x.fillStyle = '#ffd21a';
+      for (let i = -1; i < 14; i++) for (const y0 of [0, 54]) { x.beginPath(); x.moveTo(i * 12, y0); x.lineTo(i * 12 + 7, y0); x.lineTo(i * 12 - 3, y0 + 10); x.lineTo(i * 12 - 10, y0 + 10); x.closePath(); x.fill(); }
+      x.textAlign = 'center'; x.textBaseline = 'middle';
+      if (kind === 'a') {
+        x.fillStyle = '#ff2040'; x.font = 'bold 20px monospace'; x.fillText('WARNING', 64, 24);
+        x.fillStyle = '#f2f2f2'; x.font = 'bold 9px monospace'; x.fillText('UNAUTHORIZED USERS', 64, 38); x.fillText('WILL BE TERMINATED', 64, 47);
+      } else {
+        x.fillStyle = '#ff2bd6'; x.font = 'bold 12px monospace'; x.fillText('HIGH VOLTAGE', 64, 20);
+        x.fillStyle = '#f2f2f2'; for (let i = 0; i < 30; i++) x.fillRect(14 + i * 3.4, 27, (i * 7 % 3) + 1, 12);
+        x.font = 'bold 8px monospace'; x.fillText('NO SAFETY // NO LAW', 64, 47);
+      }
+      x.strokeStyle = '#ff2040'; x.lineWidth = 2; x.strokeRect(1, 1, 126, 62);
+      t = new THREE.CanvasTexture(c); t.magFilter = THREE.NearestFilter; t.minFilter = THREE.LinearFilter; t.generateMipmaps = false;
+      if (THREE.SRGBColorSpace) t.colorSpace = THREE.SRGBColorSpace;
+    }
+  } catch (e) { t = null; }
+  return _naTexs[kind] = t;
+}
+
+function buildNeonAnarchy() {
+  const g = new THREE.Group();
+  const rig = new THREE.Group(); g.add(rig);                                    // everything but the hands, so the whole gun can shudder and snap
+  const blk = new THREE.MeshPhongMaterial({ color: 0x0b0b10, shininess: 40, specular: 0x2a2a3a, flatShading: true });
+  const blk2 = new THREE.MeshPhongMaterial({ color: 0x16161e, shininess: 70, specular: 0x4a4a60, flatShading: true });
+  const cr = new THREE.MeshPhongMaterial({ color: 0xb3102b, emissive: 0x2a0208, shininess: 110, specular: 0xff8a9a, flatShading: true });
+  const crD = new THREE.MeshPhongMaterial({ color: 0x6e0a1a, emissive: 0x1a0106, shininess: 80, specular: 0xc05a6a, flatShading: true });
+  const accent = new THREE.MeshBasicMaterial({ color: 0xff2bb0 });              // the neon that is not part of the chase: barrel ring, slits, butt strip
+  const traceM = new THREE.MeshBasicMaterial({ color: 0xff2bd6 });              // circuit traces
+  const nodeM = new THREE.MeshBasicMaterial({ color: 0xffd0f0 });
+  const coilM = new THREE.MeshBasicMaterial({ color: 0xff2bd6, transparent: true, opacity: 0.4 });
+  const addGlow = (c, o) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+  const segMats = Array.from({ length: 10 }, () => new THREE.MeshBasicMaterial({ color: 0x2a0412 }));
+  const magWinM = new THREE.MeshBasicMaterial({ color: 0xff2bd6 });
+  const box = (m, w, h, d, x, y, z, parent = rig, rx = 0, ry = 0, rz = 0) => gpBox(parent, m, w, h, d, x, y, z, rx, ry, rz);
+
+  // ── The chassis: the Vector's outline in a thin black core, so the two flanks can be different ──
+  gpPlate(rig, blk, [
+    [-0.170, 0.008], [-0.156, 0.030], [-0.030, 0.030], [-0.020, 0.040], [0.096, 0.040],
+    [0.108, 0.020], [0.150, 0.018], [0.150, -0.014], [0.104, -0.018], [0.096, -0.048],
+    [0.030, -0.052], [0.016, -0.020], [-0.030, -0.018], [-0.040, -0.006], [-0.164, -0.006],
+  ], 0.030, 0);
+  box(blk2, 0.038, 0.008, 0.230, 0, 0.040, -0.030);                              // the deck the neon runs along
+  box(blk2, 0.024, 0.008, 0.240, 0, 0.048, -0.028);                              // rail
+  for (let i = 0; i < 11; i++) box(crD, 0.026, 0.005, 0.006, 0, 0.052, -0.136 + i * 0.022);
+  segMats.forEach((m, i) => { for (const sd of [-1, 1]) box(m, 0.004, 0.003, 0.016, sd * 0.0175, 0.0443, -0.130 + i * 0.0225); });
+  box(cr, 0.022, 0.004, 0.030, 0, 0.0535, -0.150); box(cr, 0.022, 0.004, 0.030, 0, 0.0535, 0.060);       // armour bridging the rail
+  // ── The side that faces you: bare machinery ──
+  box(blk2, 0.006, 0.040, 0.240, -0.018, 0.016, -0.020);                         // the bed everything is bolted to
+  const H = [[0.030, -0.085, 0.100], [0.023, -0.070, 0.070], [0.013, -0.105, 0.060], [0.005, -0.058, 0.050], [0.028, -0.135, 0.020]];
+  const V = [[0.0265, -0.035, 0.012], [0.018, -0.120, 0.020], [0.009, -0.075, 0.016], [0.0235, -0.138, 0.012]];
+  for (const [y, z, len] of H) box(traceM, 0.0016, 0.0016, len, -0.0212, y, z);
+  for (const [y, z, len] of V) box(traceM, 0.0016, len, 0.0016, -0.0212, y, z);
+  for (const [y, z] of [[0.030, -0.035], [0.013, -0.075], [0.005, -0.033], [0.028, -0.145], [0.023, -0.035], [0.0295, -0.032]]) box(nodeM, 0.0026, 0.004, 0.004, -0.0214, y, z);
+  for (const z of [-0.118, -0.064]) { box(blk, 0.004, 0.012, 0.016, -0.0235, 0.018, z); for (let p = 0; p < 4; p++) box(nodeM, 0.0012, 0.002, 0.003, -0.0252, 0.0125 + p * 0.0033, z + 0.010); }   // chips with pins
+  const coil = new THREE.Group(); coil.position.set(-0.0235, 0.016, 0.040); rig.add(coil);                      // the electromagnetic mechanism
+  gpCyl(coil, coilM, 0.0068, 0.0068, 0.130, 8, 0, 0, 0);
+  for (let i = 0; i < 7; i++) gpCyl(coil, blk, 0.0092, 0.0092, 0.005, 8, 0, 0, -0.054 + i * 0.018);
+  const blocks = [0, 1, 2, 3].map(i => { const b = box(cr, 0.008, 0.013, 0.016, -0.0255, 0.0305, -0.002 + i * 0.030); b._z = b.position.z; return b; });
+  box(blk, 0.003, 0.003, 0.140, -0.0255, 0.0235, 0.040);                         // the guide the blocks ride on
+  for (let i = 0; i < 3; i++) gpCyl(rig, blk, 0.0030, 0.0030, 0.110, 5, -0.0225 + i * 0.0006, -0.016 + i * 0.004, -0.060 + i * 0.004);   // cable bundle
+  for (const z of [-0.100, -0.060]) box(cr, 0.007, 0.018, 0.004, -0.0235, -0.006, z);                                // cable sleeves
+  // ── The far side: overlapping armour ──
+  gpPlate(rig, blk2, [[-0.130, 0.030], [0.060, 0.034], [0.108, 0.020], [0.108, -0.010], [0.050, -0.016], [-0.130, -0.002]], 0.006, 0.0185);
+  gpPlate(rig, cr, [[-0.110, 0.026], [0.000, 0.030], [0.040, 0.020], [0.040, -0.012], [-0.060, -0.012], [-0.110, 0.004]], 0.005, 0.0235);
+  gpPlate(rig, blk, [[-0.050, 0.022], [0.050, 0.026], [0.092, 0.014], [0.090, -0.008], [-0.010, -0.010]], 0.005, 0.0275);
+  const labA = _naLabelTex('a'), labB = _naLabelTex('b');
+  const decal = (parent, tex, w, h, x, y, z, fallback) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex || null, color: tex ? 0xdddddd : fallback, side: THREE.DoubleSide }));
+    m.position.set(x, y, z); m.rotation.y = Math.PI / 2; parent.add(m); return m;
+  };
+  decal(rig, labB, 0.060, 0.026, 0.0266, 0.007, -0.062, 0xff2bd6);
+  // ── The two sliding panels, hinged at their rear edge so the inspect can swing them open like doors ──
+  const mkPanel = (x, zRear) => { const p = new THREE.Group(); p.position.set(x, 0, zRear); p._home = p.position.clone(); p._zr = zRear; rig.add(p); return p; };
+  const rel = (p, pts) => pts.map(([z, y]) => [z - p._zr, y]);
+  const panL = mkPanel(-0.0375, 0.105);
+  gpPlate(panL, cr, rel(panL, [[-0.015, 0.036], [0.085, 0.040], [0.105, 0.026], [0.105, -0.010], [0.060, -0.016], [-0.015, -0.004]]), 0.005, 0);
+  gpPlate(panL, blk, rel(panL, [[0.020, 0.030], [0.080, 0.033], [0.098, 0.022], [0.098, -0.006], [0.060, -0.010], [0.020, 0.000]]), 0.003, -0.0035);
+  for (const z of [0.030, 0.050, 0.070]) box(accent, 0.0012, 0.018, 0.004, -0.0056, 0.012, z - 0.105, panL);
+  const panR = mkPanel(0.0345, 0.062);
+  gpPlate(panR, cr, rel(panR, [[-0.105, 0.034], [0.020, 0.040], [0.062, 0.030], [0.062, -0.012], [-0.020, -0.018], [-0.105, 0.000]]), 0.005, 0);
+  gpPlate(panR, blk, rel(panR, [[-0.085, 0.027], [0.010, 0.031], [0.045, 0.022], [0.045, -0.004], [-0.020, -0.010], [-0.085, 0.002]]), 0.003, 0.0035);
+  decal(panR, labA, 0.066, 0.030, 0.0058, 0.012, -0.030 - 0.062, 0xffd21a);
+  // ── Grip, magazine, trigger ──
+  gpPlate(rig, blk2, [[0.078, -0.020], [0.100, -0.042], [0.102, -0.098], [0.078, -0.108], [0.058, -0.056], [0.056, -0.024]], 0.028, 0);
+  for (const sd of [-1, 1]) for (let i = 0; i < 3; i++) box(cr, 0.002, 0.006, 0.014, sd * 0.0148, -0.050 - i * 0.016, 0.082 + i * 0.002);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.0034, 4, 8, Math.PI * 1.05), blk2);
+  guard.rotation.set(0, Math.PI / 2, -0.4); guard.position.set(0, -0.032, 0.030); rig.add(guard);
+  box(cr, 0.005, 0.015, 0.005, 0, -0.024, 0.030, rig, 0.2);
+  box(cr, 0.012, 0.010, 0.014, 0.019, 0.004, 0.056);                              // charging handle
+  box(nodeM, 0.008, 0.008, 0.010, 0.019, -0.010, 0.020);                         // selector
+  box(blk, 0.026, 0.024, 0.038, 0, -0.026, -0.006);                              // magwell
+  const magG = new THREE.Group(); const magHome = new THREE.Vector3(0, -0.086, -0.006); magG.position.copy(magHome); rig.add(magG);
+  box(blk2, 0.022, 0.110, 0.034, 0, 0, 0, magG);
+  for (let i = 0; i < 4; i++) box(crD, 0.023, 0.004, 0.010, 0, 0.036 - i * 0.024, 0, magG);
+  box(cr, 0.024, 0.010, 0.036, 0, -0.060, 0, magG);
+  box(magWinM, 0.002, 0.060, 0.006, -0.0116, 0.002, 0, magG);                    // the ammo window
+  // ── Stock, barrel, muzzle ──
+  for (const x of [-0.014, 0.014]) box(blk2, 0.006, 0.006, 0.110, x, 0.010, 0.196);
+  box(blk, 0.040, 0.044, 0.012, 0, 0.006, 0.252, rig, 0.08);
+  box(cr, 0.040, 0.010, 0.014, 0, 0.026, 0.250, rig, 0.08);
+  box(accent, 0.004, 0.030, 0.002, 0, 0.004, 0.2595, rig, 0.08);
+  box(blk, 0.030, 0.008, 0.020, 0, 0.030, 0.150);                                 // hinge
+  gpCyl(rig, blk2, 0.0070, 0.0070, 0.090, 8, 0, 0.010, -0.200);
+  gpCyl(rig, cr, 0.0108, 0.0108, 0.030, 8, 0, 0.010, -0.176);                     // shroud
+  gpCyl(rig, blk, 0.0118, 0.0118, 0.020, 8, 0, 0.010, -0.238);
+  gpCyl(rig, accent, 0.0123, 0.0123, 0.003, 8, 0, 0.010, -0.222);
+  for (const sd of [-1, 1]) box(cr, 0.003, 0.012, 0.014, sd * 0.0130, 0.010, -0.240);
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.018, 5, 4), new THREE.MeshBasicMaterial({ color: 0xff2a6a }));
+  flash.visible = false; flash.position.set(0, 0.010, -0.262); rig.add(flash);
+  g._flash = flash; g._kickZ = 0.008; g._greebled = true; g._handDetailed = true;
+  // ── The hologram counter: a screen on a stalk, left of the sight line, turned to face you ──
+  box(blk, 0.003, 0.020, 0.003, -0.030, 0.060, 0.034); box(cr, 0.012, 0.003, 0.012, -0.030, 0.0485, 0.034);
+  const DW = 192, DH = 72;
+  let dc = null, dx = null, dtex = null;
+  try { dc = document.createElement('canvas'); dc.width = DW; dc.height = DH; dx = dc.getContext('2d'); if (dx) { dtex = new THREE.CanvasTexture(dc); dtex.minFilter = THREE.LinearFilter; dtex.generateMipmaps = false; if (THREE.SRGBColorSpace) dtex.colorSpace = THREE.SRGBColorSpace; } } catch (e) { dx = null; dtex = null; }
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.074, 0.0278), new THREE.MeshBasicMaterial({ map: dtex || null, color: dtex ? 0xffffff : 0xff2bd6, transparent: true, opacity: 0.95, depthWrite: false, side: THREE.DoubleSide }));
+  screen.rotation.order = 'YXZ'; screen.rotation.set(-0.33, -0.44, 0); screen._home = new THREE.Vector3(-0.042, 0.076, 0.036); screen.position.copy(screen._home); rig.add(screen);
+  const frame = (col, a) => { dx.strokeStyle = col; dx.lineWidth = 3; dx.strokeRect(2, 2, DW - 4, DH - 4); dx.fillStyle = col; for (const [px, py] of [[0, 0], [DW - 10, 0], [0, DH - 4], [DW - 10, DH - 4]]) dx.fillRect(px, py, 10, 4); };
+  let shown = '', lastPaint = -9;
+  const paint = (label, big, bar, col, glitch) => {                               // label, a big line, a 0..1 bar (or -1), a colour, and how torn it is
+    if (!dx) return;
+    dx.clearRect(0, 0, DW, DH);
+    dx.fillStyle = 'rgba(46,0,30,0.62)'; dx.fillRect(0, 0, DW, DH);
+    frame(col);
+    dx.textBaseline = 'top'; dx.textAlign = 'left'; dx.fillStyle = col;
+    dx.font = 'bold 15px monospace'; dx.fillText(label, 10, 8);
+    dx.font = 'bold 34px monospace'; dx.fillText(big, 10, 24);
+    if (bar >= 0) { for (let i = 0; i < 16; i++) { dx.fillStyle = i < Math.round(bar * 16) ? col : 'rgba(255,255,255,0.14)'; dx.fillRect(10 + i * 10.5, 62 - 6, 8, 6); } }
+    dx.fillStyle = 'rgba(0,0,0,0.28)'; for (let y = 0; y < DH; y += 4) dx.fillRect(0, y, DW, 1);
+    if (glitch > 0) for (let k = 0; k < 2 + Math.floor(glitch * 4); k++) { const y = Math.floor(Math.random() * (DH - 8)), h = 3 + Math.floor(Math.random() * 10), off = (Math.random() - 0.5) * 36 * glitch; dx.drawImage(dc, 0, y, DW, h, off, y, DW, h); }
+    dtex.needsUpdate = true;
+  };
+  const paintText = (l1, l2, col, tear) => {                                      // two centred lines (the inspect's messages)
+    if (!dx) return;
+    dx.clearRect(0, 0, DW, DH);
+    dx.fillStyle = 'rgba(46,0,18,0.7)'; dx.fillRect(0, 0, DW, DH);
+    frame(col);
+    dx.textBaseline = 'middle'; dx.textAlign = 'center'; dx.fillStyle = col; dx.font = 'bold 22px monospace';
+    dx.fillText(l1, DW / 2, 24); dx.fillText(l2, DW / 2, 48);
+    dx.fillStyle = 'rgba(0,0,0,0.28)'; for (let y = 0; y < DH; y += 4) dx.fillRect(0, y, DW, 1);
+    if (tear > 0) for (let k = 0; k < 3 + Math.floor(tear * 4); k++) { const y = Math.floor(Math.random() * (DH - 8)), h = 3 + Math.floor(Math.random() * 12); dx.drawImage(dc, 0, y, DW, h, (Math.random() - 0.5) * 50 * tear, y, DW, h); }
+    dtex.needsUpdate = true;
+  };
+  paintText('NEON//', 'ANARCHY', '#ff2bd6', 0);                                    // what a copy of the model (an opponent's) keeps showing
+  // ── The skull: red, low-poly, facing you, rising on a beam over the receiver ──
+  const skull = new THREE.Group(); skull.visible = false; skull.position.set(0, 0.06, 0.010); rig.add(skull);
+  const skM = new THREE.MeshBasicMaterial({ color: 0xff1030, transparent: true, opacity: 0.88 }), blkB = new THREE.MeshBasicMaterial({ color: 0x000000 });
+  const cran = new THREE.Mesh(new THREE.IcosahedronGeometry(0.026, 0), skM); cran.scale.set(1, 0.92, 1.05); cran.position.y = 0.020; skull.add(cran);
+  box(skM, 0.030, 0.014, 0.026, 0, -0.006, 0.004, skull);
+  for (let i = -2; i <= 2; i++) box(blkB, 0.0022, 0.007, 0.002, i * 0.0058, -0.012, 0.0175, skull);                  // teeth gaps
+  for (const sd of [-1, 1]) box(blkB, 0.010, 0.011, 0.008, sd * 0.0112, 0.018, 0.0225, skull);                        // eye sockets
+  box(blkB, 0.005, 0.008, 0.006, 0, 0.007, 0.0255, skull, 0, 0, Math.PI / 4);                                       // nose
+  const rings = [0.022, 0.032, 0.042].map((r, i) => { const t = new THREE.Mesh(new THREE.TorusGeometry(r, 0.0013, 4, 12), addGlow(0xff2040, 0.6 - i * 0.12)); t.rotation.x = Math.PI / 2; t.position.y = -0.012 - i * 0.010; skull.add(t); return t; });
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.030, 0.06, 6, 1, true), addGlow(0xff2040, 0.16)); beam.position.y = -0.045; skull.add(beam);
+  g.traverse(o => { if (o.isMesh) o.userData.noSmooth = true; });                // 100% low-poly: never rounded off
+  // ── Motion ──
+  const S = { aim: 0, heat: 0, shot: 0, rp: 0, chase: 0, open: 0, swing: 0, kick: 0, glow: 1, flashK: 0, skull: 0, mode: 'ammo' };
+  const smooth = (a, b, t) => { const x = Math.max(0, Math.min(1, (t - a) / (b - a))); return x * x * (3 - 2 * x); };
+  const dark = new THREE.Color(0x2a0412), hot = new THREE.Color(0xff2bb0), red = new THREE.Color(0xff1428), tmp = new THREE.Color();
+  const reset = () => {
+    Object.assign(S, { aim: 0, heat: 0, shot: 0, open: 0, swing: 0, kick: 0, glow: 1, flashK: 0, skull: 0, mode: 'ammo' });
+    panL.position.copy(panL._home); panR.position.copy(panR._home); panL.rotation.set(0, 0, 0); panR.rotation.set(0, 0, 0);
+    rig.position.set(0, 0, 0); rig.scale.set(1, 1, 1); magG.position.copy(magHome); magG.rotation.set(0, 0, 0); magG.visible = true;
+    skull.visible = false; screen.position.copy(screen._home); screen.scale.set(1, 1, 1);
+    blocks.forEach(b => { b.position.z = b._z; });
+    segMats.forEach(m => m.color.copy(dark)); traceM.color.setHex(0xff2bd6); magWinM.color.setHex(0xff2bd6); coilM.opacity = 0.4;
+    shown = '';
+  };
+  g._calm = reset;
+  g._steamShot = () => { S.shot = 1; S.heat = Math.min(1, S.heat + 0.065); };     // the muzzle-blast hook
+  g._S = S; g._panL = panL; g._panR = panR; g._skull = skull; g._mag = magG; g._screen = screen; g._blocks = blocks; g._segMats = segMats; g._coilM = coilM;
+  g._tick = (dt, now, assembling) => {
+    if (assembling) { reset(); return; }
+    const inspecting = !!(g._inspectMode && g._reloadStart), reloading = !!(g._reloadStart && !g._inspectMode);
+    const T = g._reloadStart ? Math.max(0, Math.min(1, (Date.now() - g._reloadStart) / (g._reloadDur || (inspecting ? 2600 : 1800)))) : 0;
+    S.aim += ((isADS && !inspecting && !reloading ? 1 : 0) - S.aim) * Math.min(1, dt * 9);
+    S.heat = Math.max(0, S.heat - dt * 0.33);
+    S.shot = Math.max(0, S.shot - dt / 0.10);
+    S.rp += dt * 85 * (0.2 + S.shot);
+    S.chase += dt * (7 + 55 * S.shot + 20 * S.heat);
+    let open = S.aim, swing = 0, kick = 0, glow = 1, flashK = 0, skullK = 0, jitter = 0, boot = 1, uiScale = 1;
+    let line = null;                                                             // an inspect message, if one is up
+    if (reloading) {                                                             // panels open, the magazine falls, a new one locks in, the circuits boot
+      open = Math.max(open, smooth(0.0, 0.14, T) * (1 - smooth(0.66, 0.80, T)));
+      boot = smooth(0.78, 1.0, T); glow = 0.12 + 0.88 * boot;
+      const d = smooth(0.14, 0.34, T), r = smooth(0.44, 0.62, T);
+      if (T < 0.44) { magG.position.set(magHome.x, magHome.y - 0.20 * d * d, magHome.z + 0.012 * d); magG.rotation.x = -0.5 * d; magG.visible = d < 0.97; }
+      else { magG.position.copy(magHome); magG.position.y -= 0.14 * (1 - r); magG.rotation.x = 0; magG.visible = true; }
+      if (T > 0.60 && T < 0.70) magWinM.color.setHex(0xffffff); else magWinM.color.setHex(0xff2bd6);
+    } else { magG.position.copy(magHome); magG.rotation.x = 0; magG.visible = true; magWinM.color.setHex(0xff2bd6); }
+    if (inspecting) {                                                            // SYSTEM HIJACK
+      const t = T;
+      jitter = smooth(0.0, 0.10, t) * (1 - smooth(0.14, 0.20, t)) + 0.5 * smooth(0.54, 0.58, t) * (1 - smooth(0.68, 0.72, t));       // it shudders, then once more as the skull tears
+      const split = smooth(0.10, 0.24, t) * (1 - smooth(0.80, 0.84, t));
+      open = Math.max(open, split); swing = split;
+      skullK = smooth(0.24, 0.38, t) * (1 - smooth(0.70, 0.78, t));
+      kick = smooth(0.80, 0.84, t) * (1 - smooth(0.84, 0.93, t));                // snaps shut
+      flashK = smooth(0.84, 0.86, t) * (1 - smooth(0.86, 0.98, t));
+      glow = 1 + 0.6 * split;
+      uiScale = 1 + 0.55 * smooth(0.10, 0.18, t) * (1 - smooth(0.86, 0.94, t));
+      if (t >= 0.14 && t < 0.54) line = ['UNAUTHORIZED', 'USER DETECTED', (Math.floor(now * 8) % 2) ? '#ff1030' : '#ff6a78', 0];
+      else if (t >= 0.54 && t < 0.60) line = ['UNAUTH0R1Z3D', 'US3R D3T3CT3D', '#2bf0ff', 1];
+      else if (t >= 0.60 && t < 0.84) line = ['ACCESS', 'GRANTED', '#39ff8a', t < 0.64 ? 0.8 : 0];
+    }
+    S.open += (open - S.open) * Math.min(1, dt * (inspecting && kick > 0 ? 40 : 14));
+    S.swing = swing; S.kick = kick; S.glow = glow; S.flashK = flashK; S.skull = skullK;
+    const so = inspecting && kick > 0 ? Math.min(1, open) : S.open;
+    panL.position.set(panL._home.x - 0.004 * so, 0, panL._home.z + 0.100 * so);
+    panR.position.set(panR._home.x + 0.004 * so, 0, panR._home.z + 0.100 * so);
+    panL.rotation.y = 0.80 * S.swing; panR.rotation.y = -0.80 * S.swing;
+    rig.position.set((Math.random() - 0.5) * 0.004 * jitter, (Math.random() - 0.5) * 0.004 * jitter, 0.022 * kick + (Math.random() - 0.5) * 0.004 * jitter);
+    rig.scale.setScalar(1 + 0.05 * Math.sin(kick * Math.PI));
+    // the blocks shuttle while firing; the coil glows when it is exposed or working
+    for (let i = 0; i < blocks.length; i++) blocks[i].position.z = blocks[i]._z + 0.011 * Math.sin(S.rp + i * Math.PI / 2) * Math.min(1, S.shot * 1.2);
+    coilM.opacity = Math.min(1, (0.28 + 0.35 * S.aim + 0.55 * S.shot + 0.3 * S.heat) * glow);
+    // neon pulses race along the deck
+    hot.setHex(0xff2bb0); if (S.heat > 0) hot.lerp(red, S.heat);
+    for (let i = 0; i < segMats.length; i++) {
+      const N = segMats.length, dd = ((S.chase - i) % N + N) % N;
+      let v = Math.max(0, 1 - Math.min(dd, N - dd) / 2.2);
+      v = (0.18 + 0.82 * v) * (reloading ? 0.15 + 0.85 * boot : 1);
+      if (inspecting) v = Math.max(v * (0.4 + 0.6 * Math.random()), flashK);
+      segMats[i].color.copy(dark).lerp(hot, v);
+      if (flashK > 0) segMats[i].color.lerp(tmp.setHex(0xff1030), flashK);
+    }
+    traceM.color.setHex(0xff2bd6).multiplyScalar((0.55 + 0.45 * Math.sin(now * 5)) * glow * (reloading ? 0.2 + 0.8 * boot : 1) + flashK);
+    accent.color.copy(hot).lerp(tmp.setHex(0xff1030), flashK);
+    // the skull
+    skull.visible = skullK > 0.02;
+    if (skull.visible) {
+      const gl = inspecting && T >= 0.54 && T < 0.72;
+      skull.position.set(gl ? (Math.random() - 0.5) * 0.008 : 0, 0.060 + 0.075 * skullK, 0.010);
+      skull.scale.set(skullK, skullK * (gl ? 0.6 + Math.random() * 0.6 : 1), skullK);
+      skM.color.setHex(gl && Math.random() < 0.5 ? 0x2bf0ff : 0xff1030);
+      rings.forEach((r, i) => { r.rotation.z = now * (1.2 + i); r.scale.setScalar(1 + 0.12 * Math.sin(now * 6 + i)); });
+    }
+    // the screen
+    screen.scale.setScalar(uiScale); screen.position.set(screen._home.x - 0.018 * (uiScale - 1), screen._home.y + 0.050 * (uiScale - 1), screen._home.z);
+    screen.material.opacity = 0.95 * (1 - 0.55 * S.aim);
+    if (!dx) return;
+    if (line) {
+      const key = line[0] + line[2] + (line[3] > 0 ? Math.floor(now * 20) : '');
+      if (key !== shown) { shown = key; paintText(line[0], line[1], line[2], line[3]); }
+      return;
+    }
+    const mag = (typeof currentWeapon !== 'undefined' && currentWeapon && currentWeapon.mag) || 25, am = (typeof ammo === 'number') ? ammo : mag;
+    let label = 'AMMO', col = am <= mag * 0.25 ? '#ff1030' : '#ff2bd6', big = String(Math.max(0, am)).padStart(2, '0'), bar = Math.max(0, Math.min(1, am / mag)), tear = 0;
+    if (reloading) { label = 'REBOOT'; big = T < 0.7 ? '--' : String(Math.round(boot * 99)).padStart(2, '0'); bar = T < 0.7 ? 0 : boot; col = '#2bf0ff'; }
+    else if (S.heat > 0.3) {
+      label = S.heat > 0.88 ? 'SYSTEM ERROR' : S.heat > 0.6 ? 'UNSTABLE' : 'OVERRIDE';
+      col = S.heat > 0.88 ? '#ff1030' : S.heat > 0.6 ? '#ff4a2a' : '#ffb020';
+      big = big.split('').map(c => Math.random() < S.heat * 0.7 ? '#@%&$X?!'[Math.floor(Math.random() * 8)] : c).join('');
+      tear = S.heat;
+    }
+    const key = label + '|' + big + '|' + Math.round(bar * 16) + col;
+    if (tear > 0 ? now - lastPaint > 0.06 : key !== shown) { shown = key; lastPaint = now; paint(label, big, bar, col, tear); }
+  };
+  reset();
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
 function buildWidowmaker() {
   // 🕷️ Crossbow -> WIDOWMAKER. A mechanical spider that is also a crossbow: eight jointed legs folded along its sides. Aim and the front four unfold into the bow
   // arms while the rear four spread; a shot snaps the front legs in and they reset; a reload sends a little spider crawling along the rail with the next bolt; inspect
@@ -46440,6 +46715,7 @@ const SKIN_SHOT = {};
   G({ shape: 'bolt', c: [0x4aa8ff, 0xffffff] }, 'cyber', ['ak20_blueprint']);
   G({ shape: 'hackbullet', c: [0x0a0a0a, 0x2dff6a], k: 1.5 }, null, ['pistol_hacker', 'ak20_hacker']);
   G({ shape: 'pixeltrail', c: [0xff2bd6, 0x2bf0ff], min: 0.06 }, 'cyber', ['vector_glitch_exe']);
+  G({ shape: 'bolt', c: [0xff1030, 0xff2bd6] }, 'cyber', ['vector_neon_anarchy']);
   G({ shape: 'card', c: [0x15151c, 0xff2a3a], min: 0.05, k: 1.2 }, 'cards', ['throwing_knives_house_of_cards']);
   G({ shape: 'gravarrow', c: [0x0c0c12, 0x9a4aff], min: 0.07, k: 1.3 }, 'gravity', ['boombow_gravity_end']);
   G({ shape: 'tentacle', c: [0xa83a9f, 0xf2c6e8], min: 0.07, k: 1.2 }, 'ink', ['harpoon_octopus']);
@@ -57713,6 +57989,9 @@ const MODEL_SKINS = [
   { id: 'vector_glitch_exe', weapon: 'vector', name: 'GLITCH.EXE', rarity: 'rare', look: { hit: 'pixel' },
     sw: ['#0a0a10', '#2bf0ff'], build: buildGlitchVector,
     blurb: 'A weapon that looks like reality failed to render. Parts of it flicker into fragments; its rounds leave neon pixel trails; the magazine breaks into 0s and 1s when you reload and reforms; what it kills turns into a pixelated hologram and glitches out of existence.' },
+  { id: 'vector_neon_anarchy', weapon: 'vector', name: 'NEON//ANARCHY', rarity: 'legendary', look: { hit: 'error' },
+    sw: ['#0b0b10', '#ff2bb0'], build: buildNeonAnarchy,
+    blurb: 'A rogue hacker\'s prototype, built lopsided on purpose: bare circuitry and a coil on the side you see, overlapping armour and hazard labels on the other. Aim and the side panels slide back; fire and the blocks shuttle and neon races along the deck while the hologram counter corrupts (OVERRIDE, UNSTABLE, SYSTEM ERROR). Inspect is SYSTEM HIJACK: a red skull, UNAUTHORIZED USER DETECTED, ACCESS GRANTED.' },
   { id: 'plasma_carbine_fishbowl', weapon: 'plasma_carbine', name: 'Fishbowl Carbine', rarity: 'rare',
     sw: ['#2a8ae8', '#ff7a1a'], build: buildFishbowlCarbine,
     blurb: 'Fills with water when drawn. Three fish live in it.' },
@@ -57926,7 +58205,7 @@ const GEN2_MODEL_SKIN_IDS = new Set([
   'revolver_midas', 'pistol_frost', 'ak20_xerror', 'revolver_shatterpoint', 'machine_pistol_overclocked', 'hand_cannon_iron_judge', 'sawed_off_double_trouble', 'sawed_off_classic_shorty', 'grenade_launcher_orbital', 'minigun_redline',            // the Gen 2 case's two new top rarities: EPIC and MYTHIC (server.js GEN2_EPIC_SKIN_IDS / GEN2_NEW_MYTHIC_SKIN_IDS)
   'ak20_rainbow', 'ak20_hyperspace', 'ak20_blueprint', 'sg8_portal', 'vector_portal',
   'railgun_portal_detector', 'p90_quantum_scanner', 'freeze_hyperslush', 'firework_showman',
-  'shorty_outlaw', 'snub_gunslinger', 'deagle_glitch', 'deagle_phantom', 'vector_glitch_exe', 'crossbow_widowmaker', 'throwing_knives_house_of_cards', 'boombow_gravity_end', 'harpoon_octopus',
+  'shorty_outlaw', 'snub_gunslinger', 'deagle_glitch', 'deagle_phantom', 'vector_glitch_exe', 'vector_neon_anarchy', 'crossbow_widowmaker', 'throwing_knives_house_of_cards', 'boombow_gravity_end', 'harpoon_octopus',
   'burst_cannon_phantom', 'plasma_carbine_fishbowl', 'paintball_fishbowl', 'coilgun_clockwork',
   'rpd_clockwork_belt', 'smart_smg_neon', 'p90_neon_sign', 'portal_launcher_constellation',
   'railgun_constellation', 'pistol_origami', 'xm7_bricks', 'vector_brick_labeler',
@@ -63299,6 +63578,8 @@ const SKIN_FX = {
   deagle_glitch: { sound: _fxS('glitch', .34, .10, 0, 0),
     equip: 'glitch', equipMs: 850, equipSfx: ['glitchsfx', 'snapin'] },
   harpoon_octopus: { equip: 'unfold', equipMs: 950, equipSfx: ['whoosh', 'squeak'] },
+  vector_neon_anarchy: { equip: 'glitch', equipMs: 950, equipSfx: ['glitchsfx', 'snapin'],
+    inspect: [K(.10, { py: .02 }), K(.20, { py: .06, pz: -.04, rx: .10 }), K(.80, { py: .06, pz: -.04, rx: .10 }), K(.84, { py: .06, pz: -.04, rx: .22 }), K(.92, { py: .03 }), K(1, {})] },
   boombow_gravity_end: { equip: 'blackhole', equipMs: 1200, equipSfx: ['singularity', 'chime'],
     inspect: [K(.10, { py: .02 }), K(.20, { py: .06, pz: -.04, rx: .10 }), K(.80, { py: .06, pz: -.04, rx: .10 }), K(.92, { py: .03 }), K(1, {})] },
   throwing_knives_house_of_cards: { equip: 'unfold', equipMs: 900, equipSfx: ['fold', 'click'],

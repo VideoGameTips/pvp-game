@@ -2778,6 +2778,63 @@ if (ok && process.argv.includes('--gravityend')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+// NEON//ANARCHY (the Vector skin): a legendary from the Gen 2 case. A lopsided hacker gun: panels that slide back on aim, blocks that shuttle and a hologram counter that corrupts under sustained fire,
+// a reload that drops the magazine and reboots the circuits, and SYSTEM HIJACK on inspect (a red skull, UNAUTHORIZED USER DETECTED, ACCESS GRANTED, a violent snap shut, every strip flashing crimson).
+if (ok && process.argv.includes('--neonanarchy')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const sk = MODEL_SKINS.find(s => s.id === 'vector_neon_anarchy');
+    if (!sk || sk.weapon !== 'vector') return ['the NEON//ANARCHY skin of the Vector is missing'];
+    if (!GEN2_MODEL_SKIN_IDS.has(sk.id)) issues.push('NEON//ANARCHY is not dealt by the Gen 2 case (no skin is free)');
+    const fx = SKIN_FX[sk.id];
+    if (!fx || !fx.equip || !fx.inspect) issues.push('no entrance or inspect track');
+    if (!SKIN_SHOT[sk.id]) issues.push('no round look');
+    const m = sk.build();
+    if (!m._S || !m._tick || !m._calm || !m._steamShot || !m._flash || !m._panL || !m._panR || !m._skull || !m._mag) return issues.concat(['the model is missing its state, tick, calm, shot hook, flash, panels, skull or magazine']);
+    const S = m._S, keep = isADS, keepAmmo = ammo;
+    const run = (n, dt = 0.016) => { let t = performance.now() / 1000; for (let i = 0; i < n; i++) { t += dt; m._tick(dt, t, false); } };
+    try {
+      run(3);
+      const z0 = m._panL.position.z, zr0 = m._panR.position.z, my0 = m._mag.position.y;
+      if (m._skull.visible) issues.push('idle: the skull should be hidden');
+      isADS = true; run(90);
+      if (!(m._panL.position.z > z0 + 0.08 && m._panR.position.z > zr0 + 0.08)) issues.push('aim: both panels should slide back: ' + [m._panL.position.z - z0, m._panR.position.z - zr0].map(n => n.toFixed(3)));
+      isADS = false; run(90);
+      if (!(Math.abs(m._panL.position.z - z0) < 0.004)) issues.push('aim: the panels should slide home again');
+      // sustained fire: the blocks shuttle, the counter degrades
+      const bz = m._blocks.map(b => b.position.z);
+      for (let i = 0; i < 40; i++) { m._steamShot(); run(1, 0.016); }
+      if (!(S.heat > 0.88)) issues.push('sustained fire: the display should reach SYSTEM ERROR: ' + S.heat.toFixed(2));
+      if (!m._blocks.some((b, i) => Math.abs(b.position.z - bz[i]) > 0.003)) issues.push('fire: the blocks should be moving');
+      run(200);
+      if (!(S.heat < 0.05)) issues.push('after fire: the display should recover: ' + S.heat.toFixed(2));
+      if (!m._blocks.every((b, i) => Math.abs(b.position.z - bz[i]) < 0.0005)) issues.push('after fire: the blocks should rest');
+      // reload: panels open, the magazine falls, comes back
+      const rl = f => { m._inspectMode = false; m._reloadStart = Date.now() - f * 1800; m._reloadDur = 1800; run(30); };
+      rl(0.22); if (!(m._panL.position.z > z0 + 0.04)) issues.push('reload: the panels should be open');
+      rl(0.28); if (!(m._mag.position.y < my0 - 0.01)) issues.push('reload: the magazine should be falling');
+      rl(0.40); if (m._mag.visible) issues.push('reload: the old magazine should be gone');
+      rl(0.56); if (!(m._mag.visible && m._mag.position.y < my0 && m._mag.position.y > my0 - 0.14)) issues.push('reload: the new magazine should be sliding in');
+      rl(0.97); if (!(Math.abs(m._mag.position.y - my0) < 0.002 && m._mag.visible)) issues.push('reload: the new magazine should be locked in');
+      m._reloadStart = 0; run(60);
+      if (!(Math.abs(m._panL.position.z - z0) < 0.004 && m._mag.visible && Math.abs(m._mag.position.y - my0) < 0.0001)) issues.push('after reload: everything should be where it was');
+      // inspect: SYSTEM HIJACK
+      const at = f => { m._inspectMode = true; m._reloadStart = Date.now() - f * 2600; m._reloadDur = 2600; run(20); };
+      at(0.20); if (!(m._panL.position.z > z0 + 0.05 && Math.abs(m._panL.rotation.y) > 0.3 && m._panR.rotation.y < -0.3)) issues.push('inspect: the panels should split open: ' + [m._panL.rotation.y, m._panR.rotation.y].map(n => n.toFixed(2)));
+      at(0.45); if (!(m._skull.visible && m._skull.position.y > 0.12)) issues.push('inspect: a skull should have risen over the receiver');
+      at(0.80); if (m._skull.visible) issues.push('inspect: the skull should be gone by the time the display says ACCESS GRANTED');
+      at(0.85); if (!(m._segMats.every(mt => mt.color.r > 0.6))) issues.push('inspect: every neon strip should flash');
+      at(0.99); if (!(Math.abs(m._panL.position.z - z0) < 0.004 && Math.abs(m._panL.rotation.y) < 0.01)) issues.push('inspect: the gun should be snapped shut by the end');
+      m._inspectMode = false; m._reloadStart = 0; run(60);
+      if (m._skull.visible || Math.abs(m._panL.rotation.y) > 0.01 || Math.abs(m._panL.position.z - z0) > 0.004) issues.push('after inspect: everything should be back');
+      m._calm();
+    } finally { isADS = keep; ammo = keepAmmo; }
+    return issues;
+  })()`);
+  console.log('NEON//ANARCHY checks: Gen 2, panels on aim, shuttle + corruption under fire, reload, SYSTEM HIJACK inspect');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 // HOUSE OF CARDS (the Throwing Knives skin): a legendary from the Gen 2 case: a fan of three cards and a floating ace that shuffle on every throw, the Impossible Shuffle on inspect (the deck is
 // thrown up, spirals, interleaves, four aces stop in the air, become one knife that lands in the hand), a card for a round, and the ace of spades behind what it kills.
 if (ok && process.argv.includes('--houseofcards')) {

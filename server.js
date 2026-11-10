@@ -474,6 +474,7 @@ GEN2_RARE_SKIN_IDS.push('ak20_cyberpunk', 'srx_cyberpunk', 'sg8_cyberpunk', 'vec
 GEN2_LEGENDARY_SKIN_IDS.push('pistol_electron');
 GEN2_LEGENDARY_SKIN_IDS.push('crossbow_widowmaker');   // Widowmaker: the spider crossbow, and the web that shatters   // Electron: the unstable pistol that bursts apart on reload
 GEN2_LEGENDARY_SKIN_IDS.push('throwing_knives_house_of_cards');   // House of Cards: razor playing cards, the Impossible Shuffle, the ace of spades
+GEN2_LEGENDARY_SKIN_IDS.push('vector_neon_anarchy');   // NEON//ANARCHY: the lopsided hacker Vector, SYSTEM HIJACK
 GEN2_LEGENDARY_SKIN_IDS.push('boombow_gravity_end');   // Gravity's End: the bow that bends space
 GEN2_RARE_SKIN_IDS.push('harpoon_octopus');   // Octopus: the speargun that shoots tentacles
 GEN2_LEGENDARY_SKIN_IDS.push('rpg_black_hole', 'hand_cannon_iron_judge', 'sawed_off_double_trouble', 'grenade_launcher_orbital', 'minigun_redline');
