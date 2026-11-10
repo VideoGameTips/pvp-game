@@ -33442,6 +33442,145 @@ function buildOctopusHarpoon() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+function buildGravitysEnd() {
+  // 🪐 Bow -> GRAVITY'S END. A bow that bends space instead of a string: two angular crescent arms of black metal float apart round a tiny black hole that sits just above your hand,
+  // violet rings orbiting it, a glowing tether running back from it. Aim and the arms swing round to face you as one great ring; a shot stretches the hole back along the tether, collapses
+  // it to a point and flashes while the arms are flung outward, and gravity pulls them in again. Inspect: the arms come off and orbit the hole as a disk, the hole swallows the whole bow,
+  // a white flash, BOOM, and every part is thrown back out into place. Nothing here touches the arrow's flight or its damage.
+  const g = new THREE.Group();
+  const metal = new THREE.MeshPhongMaterial({ color: 0x0c0c12, shininess: 150, specular: 0x6a4aa0, flatShading: true });
+  const edge = new THREE.MeshPhongMaterial({ color: 0x2a1c44, shininess: 90, specular: 0x9a7ad0, flatShading: true });
+  const violet = new THREE.MeshBasicMaterial({ color: 0x9a4aff });
+  const addGlow = (c, o) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+  const C = new THREE.Vector3(0, 0.050, 0.100);                                    // the black hole
+  // A low-poly riser and the same grip as the plain Bow, so the hands sit where they always did.
+  gpPlate(g, metal, [[0.052,0.034],[0.030,0.046],[0.008,0.016],[0.006,-0.016],[0.030,-0.046],[0.052,-0.034],[0.042,0.000]], 0.022, 0);
+  gpBox(g, edge, 0.020, 0.018, 0.070, 0, 0.000, -0.030);
+  gpPlate(g, metal, [[0.062,-0.006],[0.086,-0.020],[0.088,-0.084],[0.060,-0.096],[0.040,-0.046],[0.038,-0.010]], 0.030, 0);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.0034, 4, 8, Math.PI * 1.05), edge);
+  guard.rotation.set(0, Math.PI / 2, -0.4); guard.position.set(0, -0.016, 0.046); g.add(guard);
+  gpBox(g, violet, 0.005, 0.015, 0.005, 0, -0.008, 0.046, 0.2);
+  // The arrow: dark shaft, a dark head, violet rings round it and violet fins.
+  const arrow = new THREE.Group(); g.add(arrow);
+  gpCyl(arrow, metal, 0.0045, 0.0045, 0.300, 6, 0, 0, -0.056);
+  gpCyl(arrow, edge, 0.0150, 0.0020, 0.036, 6, 0, 0, -0.222);
+  for (const z of [-0.080, -0.120, -0.160]) { const r = new THREE.Mesh(new THREE.TorusGeometry(0.014, 0.0016, 4, 10), addGlow(0x9a4aff, 0.85)); r.position.z = z; arrow.add(r); }
+  for (let i = 0; i < 3; i++) { const a = i / 3 * Math.PI * 2; gpBox(arrow, violet, 0.003, 0.022, 0.026, Math.cos(a) * 0.010, Math.sin(a) * 0.010, 0.084, 0, 0, a); }
+  const pullables = g.children.slice();                                            // everything above is what the hole swallows in the inspect
+  // The two arms, as segments laid on a ring that stands in the plane of the bow (turned to face you when you aim).
+  const ring = new THREE.Group(); ring.position.copy(C); g.add(ring);
+  const N = 6, arms = [0, 1].map(a => {
+    const segs = [];
+    for (let i = 0; i < N; i++) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), i % 2 ? metal : edge); ring.add(m);
+      segs.push({ m, u: -1 + (2 * i + 1) / N });
+    }
+    const rune = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.012, 0.012), violet); ring.add(rune);
+    return { segs, rune };
+  });
+  // The black hole: a low-poly core, a faint shell, rings at different tilts, three flat lensing rings facing you, a flash.
+  const bh = new THREE.Group(); bh.position.copy(C); g.add(bh);
+  bh.add(new THREE.Mesh(new THREE.IcosahedronGeometry(0.026, 1), new THREE.MeshBasicMaterial({ color: 0x000000 })));
+  bh.add(new THREE.Mesh(new THREE.IcosahedronGeometry(0.038, 0), addGlow(0x7a3aff, 0.20)));
+  const orbit = [[0.052, 0x9a4aff, 0.2, 0.0], [0.068, 0xd05aff, -0.9, 1.1], [0.086, 0x6a3aff, 0.7, 2.0]].map(([r, c, tilt, ph]) => {
+    const t = new THREE.Mesh(new THREE.TorusGeometry(r, 0.0024, 4, 16), addGlow(c, 0.9)); t.userData = { tilt, ph, spd: 1.4 + r * 8 }; bh.add(t); return t;
+  });
+  const lens = [0.09, 0.125, 0.165].map(r => { const m = new THREE.Mesh(new THREE.RingGeometry(r, r + 0.003, 20), addGlow(0x9a4aff, 0.22)); m.position.copy(C); g.add(m); return m; });
+  const flare = new THREE.Mesh(new THREE.IcosahedronGeometry(0.02, 1), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false }));
+  flare.position.copy(C); flare.visible = false; g.add(flare);
+  const shock = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.004, 4, 18), addGlow(0xe8d0ff, 0)); shock.position.copy(C); shock.visible = false; g.add(shock);
+  const tether = new THREE.Mesh(new THREE.BoxGeometry(0.0036, 0.0036, 1), addGlow(0xb06aff, 0.85)); g.add(tether);
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.026, 6, 5), new THREE.MeshBasicMaterial({ color: 0xb06aff }));
+  flash.visible = false; flash.position.set(0, 0, -0.230); g.add(flash);
+  g._flash = flash; g._kickZ = 0.012; g._greebled = true; g._handDetailed = true;
+  // ── Motion ───────────────────────────────────────────────────────────────
+  const S = { aimK: 0, half: 0.85, R: 0.15, tilt: 0, spin: 0, pull: 0, bhz: 1, bhxy: 1, rc: 0, tether: 0.12 };
+  const homes = new Map();
+  const smooth = (a, b, t) => { const x = Math.max(0, Math.min(1, (t - a) / (b - a))); return x * x * (3 - 2 * x); };
+  let fireAge = 9, arrowOut = false, wasReloading = false, t0 = 0;
+  const layArms = () => {
+    ring.rotation.set(S.tiltX || 0, S.tilt, 0);
+    arms.forEach((arm, a) => {
+      const base = a * Math.PI + S.spin;
+      arm.segs.forEach(({ m, u }) => {
+        const phi = base + u * S.half, w = (0.034 * (1 - Math.pow(Math.abs(u), 1.6)) + 0.010) * (1 - S.pull * 0.9);
+        m.position.set(0, S.R * Math.cos(phi), S.R * Math.sin(phi)); m.rotation.set(phi, 0, 0);
+        m.scale.set(0.011, Math.max(0.001, w), Math.max(0.001, S.R * 2 * S.half / N * 1.12));
+      });
+      arm.rune.position.set(0.0, S.R * Math.cos(base) * 0.995, S.R * Math.sin(base) * 0.995); arm.rune.rotation.x = base; arm.rune.scale.setScalar(Math.max(0.001, 1 - S.pull));
+    });
+  };
+  const layBH = () => {
+    bh.scale.set(S.bhxy, S.bhxy, S.bhz);
+    tether.position.set(0, C.y - 0.020, C.z + S.tether / 2 + 0.01); tether.scale.z = Math.max(0.01, S.tether); tether.rotation.x = 0.16;
+  };
+  const reset = () => {
+    Object.assign(S, { half: 0.85, R: 0.15, tilt: 0, tiltX: 0, spin: 0, pull: 0, bhz: 1, bhxy: 1, rc: 0, tether: 0.12 });
+    for (const c of pullables) { const h = homes.get(c); if (h) { c.position.copy(h.p); c.scale.copy(h.s); c.visible = h.v; } }
+    flare.visible = false; shock.visible = false; fireAge = 9; if (!arrowOut) arrow.visible = true;
+    layArms(); layBH();
+  };
+  g._calm = () => { S.aimK = 0; arrowOut = false; arrow.visible = true; reset(); };
+  g._steamShot = () => { fireAge = 0; arrowOut = true; arrow.visible = false; };
+  g._arms = arms; g._S = S; g._pullables = pullables; g._bh = bh; g._flare = flare; g._arrow = arrow; g._ring = ring;
+  g._tick = (dt, now, assembling) => {
+    if (assembling) { g._calm(); return; }
+    if (!homes.size) for (const c of pullables) homes.set(c, { p: c.position.clone(), s: c.scale.clone(), v: c.visible });
+    const inspecting = !!(g._inspectMode && g._reloadStart), reloading = !!(g._reloadStart && !g._inspectMode);
+    S.aimK += ((isADS && !inspecting ? 1 : 0) - S.aimK) * Math.min(1, dt * 8);
+    fireAge += dt;
+    // aim: the arms swing round to face you and close into a ring; the hole swells (its core pulls in so it never sits in the crosshair)
+    const e = fireAge;
+    const rc = e < 0.08 ? e / 0.08 : Math.exp(-(e - 0.08) * 5.5);                  // the arms are flung out, then gravity brings them back
+    S.rc = e < 1.2 ? rc : 0;
+    let bhz = 1, bhxy = 1, tetherLen = 0.12;
+    if (e < 0.12) { const k = e / 0.12; bhz = 1 + 1.6 * k; bhxy = 1 - 0.25 * k; tetherLen = 0.12 + 0.12 * k; }              // the hole is drawn back along the tether
+    else if (e < 0.22) { const k = (e - 0.12) / 0.10; bhz = 2.6 * (1 - k) + 0.3 * k; bhxy = 0.75 * (1 - k) + 0.3 * k; tetherLen = 0.24 * (1 - k) + 0.12 * k; }   // and collapses to a point
+    else if (e < 0.6) { const k = smooth(0.22, 0.6, e); bhz = 0.3 + 0.7 * k; bhxy = 0.3 + 0.7 * k; }
+    const aimScale = 1 + 0.35 * S.aimK;
+    S.R = (0.15 + 0.02 * S.aimK) * (1 + 0.5 * S.rc);
+    S.half = (0.85 + 0.70 * S.aimK) + 0.25 * S.rc;
+    S.tilt = S.aimK * Math.PI / 2; S.tiltX = 0;
+    S.spin = 0; S.pull = 0;
+    S.bhz = bhz * aimScale * (1 - 0.35 * S.aimK); S.bhxy = bhxy * aimScale * (1 - 0.35 * S.aimK); S.tether = tetherLen;
+    if (inspecting) {
+      const t = Math.min(1, (Date.now() - g._reloadStart) / (g._reloadDur || 2400));
+      const detach = smooth(0.00, 0.10, t), orbitT = smooth(0.10, 0.50, t), swallow = smooth(0.50, 0.66, t), gone = smooth(0.66, 0.78, t);
+      const rebuild = smooth(0.84, 1.00, t);
+      S.pull = swallow * (1 - rebuild);                                          // drawn in, held as nothing, then thrown back out
+      S.R = 0.15 * (1 + 0.35 * detach) * (1 - 0.96 * S.pull);
+      S.spin = Math.PI * 2.6 * orbitT * (1 - S.pull);
+      S.half = 0.85 + 0.35 * orbitT;
+      S.tilt = Math.PI * 0.40 * orbitT * (1 - S.pull); S.tiltX = 0.9 * orbitT * (1 - S.pull);   // the arms lie down into a disk
+      S.bhz = S.bhxy = (1 + 1.6 * swallow * (1 - gone)) * (1 - 0.85 * gone * (1 - rebuild));      // it swells as it swallows, then shrinks to a point
+      flare.visible = t > 0.70 && t < 0.92;
+      if (flare.visible) { const k = smooth(0.70, 0.78, t) + 3.2 * smooth(0.78, 0.84, t); flare.scale.setScalar(0.4 + k * 1.4); flare.material.opacity = 1 - smooth(0.84, 0.92, t); }
+      shock.visible = t > 0.78 && t < 0.95;
+      if (shock.visible) { const k = smooth(0.78, 0.95, t); shock.scale.setScalar(0.5 + 4.5 * k); shock.material.opacity = 0.9 * (1 - k); }
+      for (const c of pullables) {                                              // everything on the bow is drawn into the hole, then thrown back out
+        const h = homes.get(c); if (!h) continue;
+        const k = S.pull, back = rebuild > 0 ? 1 + 0.12 * Math.sin(rebuild * Math.PI) : 1;
+        c.position.copy(h.p).lerp(C, k); c.scale.copy(h.s).multiplyScalar(Math.max(0.001, (1 - k) * back));
+        c.visible = h.v && k < 0.995;
+      }
+      tether.visible = S.pull < 0.6;
+    } else {
+      for (const c of pullables) { const h = homes.get(c); if (h) { c.position.copy(h.p); c.scale.copy(h.s); if (c !== arrow) c.visible = h.v; } }
+      flare.visible = e > 0.12 && e < 0.34;
+      if (flare.visible) { const k = (e - 0.12) / 0.22; flare.scale.setScalar(0.6 + 2.2 * Math.sin(Math.min(1, k * 1.4) * Math.PI)); flare.material.opacity = 1 - k; }
+      shock.visible = false; tether.visible = true;
+      if (reloading) { if (!wasReloading) wasReloading = true; const t = Math.min(1, (Date.now() - g._reloadStart) / (g._reloadDur || 525)); if (t > 0.55) { arrow.visible = true; arrowOut = false; } }
+      else if (wasReloading) { wasReloading = false; arrow.visible = true; arrowOut = false; }
+      if (!arrowOut) arrow.visible = true;
+    }
+    layArms(); layBH();
+    orbit.forEach((o, i) => { o.rotation.set(o.userData.tilt + Math.sin(now * 0.7 + i) * 0.15, now * o.userData.spd * 0.4, o.userData.ph + now * o.userData.spd); });
+    lens.forEach((m, i) => { const k = 1 + 0.10 * Math.sin(now * 1.6 + i * 1.3); m.scale.setScalar(k * (1 + 0.5 * S.aimK) * Math.max(0.05, 1 - S.pull)); m.material.opacity = (0.16 + 0.22 * S.aimK) * (1 - S.pull); });
+  };
+  reset();
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
 function buildFishbowlCarbine() {
   // 🐠 Plasma Carbine -> Fishbowl Carbine. A clear tank on a grip, gravel on the
   // bottom, a nozzle out the front. Drawn, it fills with water from the bottom
@@ -46038,6 +46177,11 @@ const SKIN_SHAPES = (() => {
       parts.push(part(new THREE.ConeGeometry(R * 0.5, R * 1.4, 8), L(a), [0, R * 2.0, 0]));
       return { parts, spin: { x: 0, y: 8, z: 0 } };
     },
+    gravarrow: (a, b, R) => {                                                   // a dark arrow in a nest of distorted violet rings, turning as it flies
+      const parts = [part(Cy(R * 0.22, R * 0.22, R * 3.6, 6), L(0x0c0c12)), part(new THREE.ConeGeometry(R * 0.4, R * 1.1, 6), L(0x2a1c44), [0, R * 2.2, 0])];
+      [-0.9, 0.2, 1.3].forEach((y, i) => parts.push(part(new THREE.TorusGeometry(R * (0.9 + i * 0.35), R * 0.07, 4, 14), new THREE.MeshBasicMaterial({ color: i === 1 ? 0xd05aff : b, transparent: true, opacity: 0.85 }), [0, R * y, 0], [Math.PI / 2 + (i - 1) * 0.35, 0, i * 0.5])));
+      return { parts, wake: b, wakeLen: 10, spin: { x: 0, y: 6, z: 0 } };
+    },
     pixeltrail: (a, b, R) => {                                                  // a neon block with a tail of smaller and smaller blocks, strewn a little, on a glowing streak
       const parts = [part(B(R * 1.3, R * 1.3, R * 1.3), K(a)), part(B(R * 0.6, R * 0.6, R * 0.6), K(0xffffff))];
       for (let i = 0; i < 8; i++) {
@@ -46081,6 +46225,7 @@ const BOOM_THEMES = {
   confetti: { fire: 0xff6ab8, core: 0xffffff, smoke: 0xfff0a0, bits: [0xff4fa8, 0x4ad8ff, 0xffe14a, 0x7aff7a, 0xff8a3a], bit: 'flake', ring: 0xffe14a, flash: [255, 230, 120] },
   foam:     { fire: 0xf4f8ff, core: 0xffffff, smoke: 0xe0eaf4, bits: [0xffffff, 0xdbe8f5], bit: 'ball', ring: 0xdbe8f5, flash: [230, 240, 255] },
   ink:      { fire: 0x7a2a8a, core: 0xf0d0f8, smoke: 0x1a0a22, bits: [0x8a2f8f, 0xb04aa0, 0x2a1236, 0xf2c6e8], bit: 'drop', ring: 0xb04aa0, flash: [160, 70, 170] },
+  gravity:  { fire: 0x6a2ac8, core: 0xf0e0ff, smoke: 0x120820, bits: [0x8a4aff, 0x1a0a2a, 0xd0b0ff, 0xd05aff], bit: 'shard', ring: 0x8a4aff, flash: [140, 80, 255] },
   paint:    { fire: 0xff4fa8, core: 0xffffff, smoke: 0xaa44cc, bits: [0xff4fa8, 0x4ad8ff, 0xffe14a, 0x7aff7a], bit: 'drop', ring: 0xff4fa8, flash: [255, 90, 190] },
   cyber:    { fire: 0x00f0ff, core: 0xffffff, smoke: 0x2a1a5a, bits: [0x00f0ff, 0xff2bd6, 0xffffff], bit: 'cube', ring: 0xff2bd6, flash: [0, 220, 255] },
   pixel:    { fire: 0x58d85a, core: 0xffffff, smoke: 0x1a3a1a, bits: [0x58d85a, 0xffffff, 0x2a8a3a, 0xf0e050], bit: 'cube', ring: 0x58d85a, flash: [110, 255, 120] },
@@ -46151,6 +46296,7 @@ const SKIN_SHOT = {};
   G({ shape: 'bolt', c: [0x4aa8ff, 0xffffff] }, 'cyber', ['ak20_blueprint']);
   G({ shape: 'hackbullet', c: [0x0a0a0a, 0x2dff6a], k: 1.5 }, null, ['pistol_hacker', 'ak20_hacker']);
   G({ shape: 'pixeltrail', c: [0xff2bd6, 0x2bf0ff], min: 0.06 }, 'cyber', ['vector_glitch_exe']);
+  G({ shape: 'gravarrow', c: [0x0c0c12, 0x9a4aff], min: 0.07, k: 1.3 }, 'gravity', ['boombow_gravity_end']);
   G({ shape: 'tentacle', c: [0xa83a9f, 0xf2c6e8], min: 0.07, k: 1.2 }, 'ink', ['harpoon_octopus']);
   G({ shape: 'hackbullet', c: [0x0a0a0a, 0x2dff6a], k: 1.5 }, 'hacker', ['grenade_launcher_hacker']);   // a black round on a green trail that bursts in green code
   G(null, 'nuke', ['rpg_nuke'], 0xff8a2a);                                                                 // the ordinary rocket, and a mushroom cloud where it lands   // the Hacker Pistol and AK: a black round on a green glowing trail
@@ -57412,6 +57558,9 @@ const MODEL_SKINS = [
   { id: 'harpoon_octopus', weapon: 'harpoon_gun', name: 'Octopus', rarity: 'rare',
     sw: ['#8a2f8f', '#f2c6e8'], build: buildOctopusHarpoon,
     blurb: 'An octopus for a speargun. Its tentacles sway while you hold it, it shoots tentacles, and the line that holds a hit is a tentacle too. It bursts into ink where it lands.' },
+  { id: 'boombow_gravity_end', weapon: 'boombow', name: "Gravity's End", rarity: 'legendary',
+    sw: ['#0c0c12', '#9a4aff'], build: buildGravitysEnd,
+    blurb: 'A bow that bends space. Two black crescents float round a tiny black hole with violet rings orbiting it; aim and they swing round into a ring, a shot flings them out and gravity pulls them back. Inspect it and it swallows itself, flashes, and rebuilds from a point. The arrow flies as the arrow always did.' },
   { id: 'crossbow_widowmaker', weapon: 'crossbow', name: 'WIDOWMAKER', rarity: 'legendary', look: { hit: 'web' },
     sw: ['#0e0e12', '#ff2a2a'], build: buildWidowmaker,
     blurb: 'A mechanical spider that is also a crossbow. Eight legs fold along its sides; aim and they unfold into the bow arms. A shot snaps the front legs in, a reload sends a little spider crawling along the rail with the next bolt, and inspect stands it up and walks it across your view. Whoever it kills hangs in a giant red web that then shatters.' },
@@ -57631,7 +57780,7 @@ const GEN2_MODEL_SKIN_IDS = new Set([
   'revolver_midas', 'pistol_frost', 'ak20_xerror', 'revolver_shatterpoint', 'machine_pistol_overclocked', 'hand_cannon_iron_judge', 'sawed_off_double_trouble', 'sawed_off_classic_shorty', 'grenade_launcher_orbital', 'minigun_redline',            // the Gen 2 case's two new top rarities: EPIC and MYTHIC (server.js GEN2_EPIC_SKIN_IDS / GEN2_NEW_MYTHIC_SKIN_IDS)
   'ak20_rainbow', 'ak20_hyperspace', 'ak20_blueprint', 'sg8_portal', 'vector_portal',
   'railgun_portal_detector', 'p90_quantum_scanner', 'freeze_hyperslush', 'firework_showman',
-  'shorty_outlaw', 'snub_gunslinger', 'deagle_glitch', 'deagle_phantom', 'vector_glitch_exe', 'crossbow_widowmaker', 'harpoon_octopus',
+  'shorty_outlaw', 'snub_gunslinger', 'deagle_glitch', 'deagle_phantom', 'vector_glitch_exe', 'crossbow_widowmaker', 'boombow_gravity_end', 'harpoon_octopus',
   'burst_cannon_phantom', 'plasma_carbine_fishbowl', 'paintball_fishbowl', 'coilgun_clockwork',
   'rpd_clockwork_belt', 'smart_smg_neon', 'p90_neon_sign', 'portal_launcher_constellation',
   'railgun_constellation', 'pistol_origami', 'xm7_bricks', 'vector_brick_labeler',
@@ -63004,6 +63153,8 @@ const SKIN_FX = {
   deagle_glitch: { sound: _fxS('glitch', .34, .10, 0, 0),
     equip: 'glitch', equipMs: 850, equipSfx: ['glitchsfx', 'snapin'] },
   harpoon_octopus: { equip: 'unfold', equipMs: 950, equipSfx: ['whoosh', 'squeak'] },
+  boombow_gravity_end: { equip: 'blackhole', equipMs: 1200, equipSfx: ['singularity', 'chime'],
+    inspect: [K(.10, { py: .02 }), K(.20, { py: .06, pz: -.04, rx: .10 }), K(.80, { py: .06, pz: -.04, rx: .10 }), K(.92, { py: .03 }), K(1, {})] },
   crossbow_widowmaker: { equip: 'unfold', equipMs: 1000, equipSfx: ['fold', 'click'],
     inspect: [K(.14, { py: .012 }), K(.26, { py: .05 }), K(.34, { py: .05, px: -.02, ry: .9 }), K(.54, { py: .05, px: -.17, ry: .9 }), K(.62, { py: .05, px: -.17, ry: -.9 }),
               K(.80, { py: .05, px: -.01, ry: -.9 }), K(.90, { py: .012 }), K(1, {})] },

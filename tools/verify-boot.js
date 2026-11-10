@@ -2719,6 +2719,65 @@ if (ok && process.argv.includes('--octopus')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+// GRAVITY'S END (the Bow skin): a legendary from the Gen 2 case whose arms ring up when aimed, are flung out by a shot while the hole stretches and collapses, and whose inspect swallows
+// the whole bow, flashes, and throws every part back into place.
+if (ok && process.argv.includes('--gravityend')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const sk = MODEL_SKINS.find(s => s.id === 'boombow_gravity_end');
+    if (!sk || sk.weapon !== 'boombow') return ['the Gravity\\'s End skin of the Bow is missing'];
+    if (!GEN2_MODEL_SKIN_IDS.has(sk.id)) issues.push('Gravity\\'s End is not dealt by the Gen 2 case (no skin is free)');
+    const fx = SKIN_FX[sk.id];
+    if (!fx || !fx.equip || !fx.inspect) issues.push('no entrance or inspect track');
+    if (!SKIN_SHOT[sk.id] || SKIN_SHOT[sk.id].shot.shape !== 'gravarrow' || !BOOM_THEMES.gravity) issues.push('the arrow is not the dark arrow in violet rings');
+    else { const a = _skinShotMesh(SKIN_SHOT[sk.id].shot, 0.1); if (!a || a.children.length < 5) issues.push('the arrow has too few parts'); }
+    const m = sk.build();
+    if (!m._S || !m._tick || !m._calm || !m._steamShot || !m._flash || !m._arrow || !m._pullables) return issues.concat(['the model is missing its state, tick, calm, shot hook, flash, arrow or parts']);
+    const S = m._S, keep = isADS;
+    const frame = (n, dt = 0.016) => { let t = performance.now() / 1000; for (let i = 0; i < n; i++) { t += dt; m._tick(dt, t, false); } };
+    try {
+      frame(3);
+      const ring0 = m._ring.rotation.y, half0 = S.half, R0 = S.R;
+      if (!(Math.abs(ring0) < 0.05)) issues.push('idle: the arms should stand in the plane of the bow');
+      isADS = true; frame(90);
+      if (!(m._ring.rotation.y > 1.4 && S.half > half0 + 0.5)) issues.push('aim: the arms should swing round into a ring: ' + [m._ring.rotation.y, S.half].map(n => n.toFixed(2)));
+      isADS = false; frame(90);
+      if (!(Math.abs(S.half - half0) < 0.05)) issues.push('aim: the arms should settle back');
+      m._steamShot(); frame(1, 0.1);
+      if (m._arrow.visible) issues.push('fire: the arrow should be gone');
+      if (!(S.bhz > 1.8)) issues.push('fire: the hole should be drawn back along the tether: ' + S.bhz.toFixed(2));
+      if (!(S.R > R0 * 1.2)) issues.push('fire: the arms should be flung outward: ' + S.R.toFixed(3) + ' vs ' + R0.toFixed(3));
+      frame(1, 0.12);
+      if (!m._flare.visible) issues.push('fire: a flash as the hole collapses');
+      if (!(S.bhz < 0.7)) issues.push('fire: the hole should have collapsed to a point: ' + S.bhz.toFixed(2));
+      frame(90);
+      if (!(Math.abs(S.R - R0) < 0.01 && Math.abs(S.bhz - 1) < 0.05)) issues.push('fire: gravity should have pulled it all back: ' + [S.R, S.bhz].map(n => n.toFixed(3)));
+      m._reloadStart = Date.now() - 400; m._reloadDur = 525; frame(1);
+      if (!m._arrow.visible) issues.push('reload: the next arrow should be on the bow');
+      m._reloadStart = 0; frame(2);
+      // inspect
+      const scales0 = m._pullables.map(c => c.scale.x);
+      const at = t => { m._inspectMode = true; m._reloadStart = Date.now() - t * 2400; m._reloadDur = 2400; frame(1); };
+      at(0.30);
+      if (!(S.spin > 1 && m._ring.rotation.y > 0.3)) issues.push('inspect: the arms should orbit the hole as a disk: ' + [S.spin, m._ring.rotation.y].map(n => n.toFixed(2)));
+      at(0.60);
+      if (!(S.pull > 0.5)) issues.push('inspect: the hole should be drawing the bow in: ' + S.pull.toFixed(2));
+      at(0.72);
+      if (!(m._pullables.every(c => c.scale.x < scales0[m._pullables.indexOf(c)] * 0.1 + 1e-6 || !c.visible))) issues.push('inspect: for a moment the whole weapon should be gone');
+      if (!m._flare.visible) issues.push('inspect: a white flash');
+      at(0.99);
+      if (!(S.pull < 0.1)) issues.push('inspect: the parts should be back by the end: ' + S.pull.toFixed(2));
+      m._inspectMode = false; m._reloadStart = 0; frame(3);
+      const back = m._pullables.every((c, i) => Math.abs(c.scale.x - scales0[i]) < 1e-6 && c.visible);
+      if (!back || S.pull !== 0 || Math.abs(m._ring.rotation.y) > 0.05) issues.push('inspect: everything should be exactly where it was');
+      m._calm();
+    } finally { isADS = keep; }
+    return issues;
+  })()`);
+  console.log("Gravity's End checks: Gen 2, ring on aim, fling and collapse on fire, swallow-flash-rebuild on inspect");
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 // Bot strategy: on every map, ten random bot/enemy pairs 20-36 m apart each ask for a plan. A plan has to be a route a body can
 // walk (each step at most 0.65 m up and 2 m down, one cell at a time), end where it says it does (a perch is 2.4 m or higher
 // and sees the enemy), and most maps with a deck or a roof should have at least one.
