@@ -50765,6 +50765,7 @@ function startMatchFinale(winner) {
     f.victim = finaleActor(clip.victim, f.replay, false);
     const hitGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(.85, 1.85, .65));
     f.hitbox = new THREE.LineSegments(hitGeo, new THREE.LineBasicMaterial({ color: 0xff5555, transparent: true, opacity: .75 }));
+    f.hitbox.visible = false;                                        // the hitbox is not for players to see
     f.replay.add(f.hitbox);
     f.trail = new THREE.Group(); f.replay.add(f.trail);
     // One shared cylinder shape, a white core and a deliberately excessive light sleeve.
