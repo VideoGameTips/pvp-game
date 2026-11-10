@@ -30578,6 +30578,180 @@ function buildRedlineMinigun() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+// 🌑 Moon Mine -> Eclipse Engine. A little cratered moon cut into six crust plates over a red core, with a thin black ring round its equator. Thrown, it keeps the Moon Mine's own
+// flight, fuse, proximity trigger and damage (none of that is touched); only what it LOOKS like changes as the fuse burns down:
+//   · three mechanical legs unfold from under it,
+//   · the six crust plates slide apart and show the red core,
+//   · two big orbital rings unfold and turn in opposite directions,
+//   · the rings line up, the core goes nearly black and a crimson corona comes up round it: a miniature solar eclipse,
+//   · and when it goes the rings snap in, the crust breaks apart and a black disc and a red corona flash out across the blast.
+// TOTALITY (the inspect): it cracks open in your palm, the rings unfold, a tiny sun appears behind it and the moon slides across until it blocks the sun completely. For a
+// second everything goes dark except the red corona. Then it snaps shut.
+let _eclipseCoronaTex = null;
+function _eclipseCorona() {
+  if (_eclipseCoronaTex) return _eclipseCoronaTex;
+  const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
+  const gr = x.createRadialGradient(64, 64, 20, 64, 64, 63);
+  gr.addColorStop(0, 'rgba(255,40,50,0)'); gr.addColorStop(0.50, 'rgba(255,60,70,0.95)'); gr.addColorStop(0.72, 'rgba(255,40,60,0.35)'); gr.addColorStop(1, 'rgba(255,30,50,0)');
+  x.fillStyle = gr; x.fillRect(0, 0, 128, 128);
+  return _eclipseCoronaTex = new THREE.CanvasTexture(c);
+}
+let _eclipseSunTex = null;
+function _eclipseSun() {
+  if (_eclipseSunTex) return _eclipseSunTex;
+  const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
+  const gr = x.createRadialGradient(64, 64, 4, 64, 64, 63);
+  gr.addColorStop(0, 'rgba(255,250,220,1)'); gr.addColorStop(0.3, 'rgba(255,190,70,0.8)'); gr.addColorStop(1, 'rgba(255,120,30,0)');
+  x.fillStyle = gr; x.fillRect(0, 0, 128, 128);
+  return _eclipseSunTex = new THREE.CanvasTexture(c);
+}
+function _eclipseParts(host) {
+  const nm = o => { o.userData.noSmooth = true; return o; };
+  const crustM = new THREE.MeshPhongMaterial({ color: 0x8c9096, shininess: 25, specular: 0x333333, flatShading: true, side: THREE.DoubleSide });
+  const craterM = new THREE.MeshPhongMaterial({ color: 0x5a5e64, flatShading: true });
+  const darkM = new THREE.MeshPhongMaterial({ color: 0x0c0c0e, shininess: 80, specular: 0x667080 });
+  const steelM = new THREE.MeshPhongMaterial({ color: 0x4a515c, shininess: 140, specular: 0xc0cad8 });
+  const crimson = new THREE.MeshBasicMaterial({ color: 0xff2030 });
+  const coreM = new THREE.MeshBasicMaterial({ color: 0xff2a30 });
+  const R = 0.052, TAU = Math.PI * 2;
+  const moon = new THREE.Group(); host.add(moon);
+  const slices = [];
+  for (let i = 0; i < 6; i++) {                                                                   // six crust plates, each a sixth of the sphere, cut low-poly
+    const phi0 = i * Math.PI / 3, mid = phi0 + Math.PI / 6;
+    const m = nm(new THREE.Mesh(new THREE.SphereGeometry(R, 3, 5, phi0, Math.PI / 3), crustM)); moon.add(m);
+    for (const [dphi, th, rr] of [[-0.18, 1.0, 0.0085], [0.20, 1.9, 0.0065]]) {                  // a crater or two on each, flat discs set into the surface
+      const ph = mid + dphi, n = new THREE.Vector3(-Math.cos(ph) * Math.sin(th), Math.cos(th), Math.sin(ph) * Math.sin(th));
+      const c = nm(new THREE.Mesh(new THREE.CylinderGeometry(rr, rr * 1.2, 0.003, 6), craterM)); c.position.copy(n).multiplyScalar(R * 0.995); c.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), n); m.add(c);
+    }
+    slices.push({ m, dir: new THREE.Vector3(-Math.cos(mid), 0, Math.sin(mid)), mid });
+  }
+  const seams = [];
+  for (let i = 0; i < 6; i++) {                                                                   // the crimson cracks between the plates
+    const arc = nm(new THREE.Mesh(new THREE.TorusGeometry(R * 0.994, 0.0016, 4, 10, Math.PI), crimson));
+    const pivot = new THREE.Group(); arc.rotation.z = -Math.PI / 2; pivot.add(arc); pivot.rotation.y = Math.PI + i * Math.PI / 3; moon.add(pivot); seams.push(pivot);
+  }
+  const equator = nm(new THREE.Mesh(new THREE.TorusGeometry(R * 1.035, 0.0024, 5, 24), darkM)); equator.rotation.x = Math.PI / 2; moon.add(equator);
+  const core = nm(new THREE.Mesh(new THREE.SphereGeometry(0.024, 8, 6), coreM)); moon.add(core);
+  const mkRing = (radius, segs, lit) => {                                                         // an orbital ring: a hoop of separate angular blocks
+    const tilt = new THREE.Group(), spin = new THREE.Group(); tilt.add(spin); host.add(tilt);
+    for (let k = 0; k < segs; k++) {
+      const a = k / segs * TAU, seg = nm(new THREE.Mesh(new THREE.BoxGeometry(TAU * radius / segs * 0.82, 0.008, 0.014), k % 2 ? steelM : darkM));
+      seg.position.set(Math.cos(a) * radius, 0, Math.sin(a) * radius); seg.rotation.y = -a; spin.add(seg);
+      if (lit && k % 3 === 0) { const l = nm(new THREE.Mesh(new THREE.BoxGeometry(TAU * radius / segs * 0.5, 0.003, 0.003), crimson)); l.position.set(Math.cos(a) * radius, 0.0055, Math.sin(a) * radius); l.rotation.y = -a; spin.add(l); }
+    }
+    return { tilt, spin };
+  };
+  const ringA = mkRing(0.088, 12, false), ringB = mkRing(0.122, 16, true);
+  const legs = [];
+  for (let i = 0; i < 3; i++) {                                                                   // three mechanical legs under it
+    const a = i * TAU / 3 + Math.PI / 6, root = new THREE.Group(); root.position.set(Math.cos(a) * 0.030, -0.040, Math.sin(a) * 0.030); root.rotation.y = -a; host.add(root);
+    const knee = new THREE.Group(); root.add(knee);
+    const up = nm(new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.050, 0.010), steelM)); up.position.y = -0.025; knee.add(up);
+    const lo = new THREE.Group(); lo.position.y = -0.050; lo.rotation.z = -0.55; knee.add(lo);
+    const lb = nm(new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.040, 0.008), darkM)); lb.position.y = -0.020; lo.add(lb);
+    const ft = nm(new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.005, 0.018), steelM)); ft.position.y = -0.042; lo.add(ft);
+    legs.push({ root, knee });
+  }
+  const corona = new THREE.Sprite(new THREE.SpriteMaterial({ map: _eclipseCorona(), color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false })); corona.scale.setScalar(0.30); host.add(corona);
+  const sunG = new THREE.Group(); sunG.visible = false; sunG.userData.eqFx = true; sunG.position.set(0, 0, -0.10); host.add(sunG);
+  sunG.add(nm(new THREE.Mesh(new THREE.SphereGeometry(0.030, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffd060 }))));
+  const sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: _eclipseSun(), color: 0xffffff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false })); sunGlow.scale.setScalar(0.26); sunG.add(sunGlow);
+  const sm = u => { u = Math.max(0, Math.min(1, u)); return u * u * (3 - 2 * u); };
+  const grey = new THREE.Color(0x8c9096), black = new THREE.Color(0x040405), red = new THREE.Color(0xff2a30), dead = new THREE.Color(0x120204);
+  // o: { open, legs, rings, align, dark (core), corona, spin, dim (totality), sun, moonX }, everything 0..1 but spin (radians) and moonX (metres)
+  const pose = o => {
+    const op = sm(o.open || 0);
+    for (const s of slices) { s.m.position.copy(s.dir).multiplyScalar(0.034 * op); s.m.position.y = 0.008 * op; s.m.rotation.set(0, 0, 0); }
+    core.visible = op > 0.02; core.scale.setScalar(0.7 + 0.3 * op); coreM.color.copy(red).lerp(dead, o.dark || 0);
+    crustM.color.copy(grey).lerp(black, o.dim || 0); craterM.color.setHex((o.dim || 0) > 0.5 ? 0x050506 : 0x5a5e64);
+    for (const p of seams) p.visible = !(o.dim > 0.5);
+    const lg = sm(o.legs || 0);
+    for (const L of legs) { L.root.visible = lg > 0.01 && !(o.dim > 0.5); L.knee.rotation.z = THREE.MathUtils.lerp(-1.40, 0.62, lg); }
+    const rg = sm(o.rings || 0), al = sm(o.align || 0), vis = rg > 0.01 && !(o.dim > 0.5);
+    ringA.tilt.visible = ringB.tilt.visible = vis;
+    ringA.tilt.scale.setScalar(Math.max(0.001, rg)); ringB.tilt.scale.setScalar(Math.max(0.001, rg));
+    ringA.tilt.rotation.set(THREE.MathUtils.lerp(0.95, 0, al), 0, 0); ringB.tilt.rotation.set(0, 0, THREE.MathUtils.lerp(-0.80, 0, al));
+    ringA.spin.rotation.y = o.spin || 0; ringB.spin.rotation.y = -(o.spin || 0) * 0.7;
+    corona.visible = (o.corona || 0) > 0.01; corona.material.opacity = Math.min(1, o.corona || 0); corona.scale.setScalar(0.27 + 0.10 * (o.corona || 0));
+    sunG.visible = (o.sun || 0) > 0.01 && !(o.dim > 0.5); sunG.scale.setScalar(Math.max(0.001, sm(o.sun || 0)));
+    moon.position.x = o.moonX || 0;
+  };
+  const rest = { open: 0, legs: 0, rings: 0, align: 0, dark: 0, corona: 0, spin: 0, dim: 0, sun: 0, moonX: 0 };
+  pose(rest);
+  return { moon, pose, rest, slices, ringA, ringB, legs };
+}
+function buildEclipseEngine() {
+  const g = new THREE.Group();
+  const E = _eclipseParts(g), sm = u => { u = Math.max(0, Math.min(1, u)); return u * u * (3 - 2 * u); };
+  g._eclipseApi = E;
+  g._tick = (dt, now, assembling) => {
+    if (assembling || (typeof itemInspect !== 'undefined' && itemInspect && itemInspect.model === g)) return;
+    E.moon.rotation.y = now * 0.35; E.pose(E.rest); E.moon.rotation.y = now * 0.35;                // held: closed, craters and the thin black ring, turning slowly
+  };
+  g._itemInspectKind = 'totality';
+  g._itemInspectFrame = t => {
+    const open = sm((t - 0.06) / 0.10) * (1 - sm((t - 0.88) / 0.07));
+    const rings = sm((t - 0.14) / 0.14) * (1 - sm((t - 0.85) / 0.05));
+    const moonX = t < 0.30 ? 0 : t < 0.40 ? 0.085 * sm((t - 0.30) / 0.10) : t < 0.66 ? 0.085 * (1 - sm((t - 0.40) / 0.26)) : 0;
+    const tot = sm((t - 0.66) / 0.02) * (1 - sm((t - 0.83) / 0.02));                                // TOTALITY: about a second of black with only the corona
+    const sun = sm((t - 0.30) / 0.08) * (1 - sm((t - 0.83) / 0.03));
+    const approach = sm((t - 0.52) / 0.14) * (1 - sm((t - 0.83) / 0.05));
+    E.pose({ open, legs: 0, rings, align: sm((t - 0.50) / 0.16) * (1 - sm((t - 0.86) / 0.06)), dark: Math.max(tot, approach * 0.6), corona: Math.max(tot, 0.35 * approach), spin: t * 16, dim: tot, sun, moonX });
+    E.moon.rotation.y = t * 1.5;
+  };
+  g._itemInspectEnd = () => { E.pose(E.rest); };
+  g._calm = g._itemInspectEnd;
+  g._greebled = true; g._handDetailed = true;
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+// The mine in the air: the same body as in your hand, driven off the fuse. (The flight, the fuse, the proximity trigger and the damage are the Moon Mine's own.)
+function _eclipseWorld() { const g = new THREE.Group(); g._eclipse = _eclipseParts(g); return g; }
+function _eclipseGrenadeTick(g, dt, now) {
+  const E = g.mesh._eclipse; if (!E) return;
+  const sm = u => { u = Math.max(0, Math.min(1, u)); return u * u * (3 - 2 * u); };
+  const p = g.explodeAt ? 1 - Math.max(0, g.explodeAt - now) / 4200 : 0;
+  g.mesh.rotation.x = g.mesh.rotation.z = 0;                                                       // it floats upright, legs down
+  E.pose({ legs: sm((p - 0.06) / 0.12), open: sm((p - 0.22) / 0.16), rings: sm((p - 0.40) / 0.26), align: sm((p - 0.78) / 0.14), dark: sm((p - 0.80) / 0.12), corona: sm((p - 0.82) / 0.12), spin: now / 1000 * 3.2, dim: 0, sun: 0, moonX: 0 });
+  E.moon.rotation.y += dt * 0.9;
+}
+function _eclipseBurst(pos) {                                                                      // the crust breaks apart and the rings snap in
+  const mats = [new THREE.MeshLambertMaterial({ color: 0x8c9096 }), new THREE.MeshLambertMaterial({ color: 0x0c0c0e }), new THREE.MeshBasicMaterial({ color: 0xff2030 })];
+  const geo = new THREE.BoxGeometry(0.22, 0.05, 0.12), fr = [], epoch = matchEpoch;
+  for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2, m = new THREE.Mesh(geo, mats[0]); m.position.copy(pos); scene.add(m); fr.push({ m, v: new THREE.Vector3(Math.cos(a) * 6, 3 + Math.random() * 3, Math.sin(a) * 6), s: new THREE.Vector3((Math.random() - 0.5) * 18, (Math.random() - 0.5) * 18, (Math.random() - 0.5) * 18) }); }
+  for (let k = 0; k < 10; k++) { const a = k / 10 * Math.PI * 2, m = new THREE.Mesh(geo, mats[k % 3 ? 1 : 2]); m.scale.set(0.6, 0.3, 0.3); m.position.copy(pos).add(new THREE.Vector3(Math.cos(a) * 0.35, 0, Math.sin(a) * 0.35)); scene.add(m); fr.push({ m, v: new THREE.Vector3(-Math.cos(a) * 4, 2 + Math.random() * 2, -Math.sin(a) * 4), s: new THREE.Vector3((Math.random() - 0.5) * 22, (Math.random() - 0.5) * 22, (Math.random() - 0.5) * 22) }); }   // the rings snap inward
+  const t0 = performance.now();
+  const tick = () => {
+    const t = (performance.now() - t0) / 1000;
+    for (const f of fr) { f.v.y -= 16 * 0.016; f.m.position.addScaledVector(f.v, 0.016); if (f.m.position.y < 0.03) { f.m.position.y = 0.03; f.v.y *= -0.3; f.v.x *= 0.7; f.v.z *= 0.7; f.s.multiplyScalar(0.6); } f.m.rotation.x += f.s.x * 0.016; f.m.rotation.y += f.s.y * 0.016; f.m.rotation.z += f.s.z * 0.016; }
+    if (t > 1.6 || epoch !== matchEpoch) { for (const f of fr) scene.remove(f.m); geo.dispose(); mats.forEach(m => m.dispose()); return; }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+function spawnEclipseFlash(pos) {                                                                  // the blast: a black disc with a crimson corona and rays, and a red flash over the screen
+  const root = new THREE.Group(); root.position.copy(pos).add(new THREE.Vector3(0, 1.2, 0)); scene.add(root);
+  const add = (color, op) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity: op, depthWrite: false, depthTest: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending });
+  const discM = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 1, depthWrite: false, depthTest: false });
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(1, 28), discM); disc.renderOrder = 998; root.add(disc);
+  const corona = new THREE.Sprite(new THREE.SpriteMaterial({ map: _eclipseCorona(), color: 0xffffff, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false })); corona.renderOrder = 997; root.add(corona);
+  const rayM = add(0xff3040, 0.9), rays = [];
+  for (let i = 0; i < 12; i++) { const r = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 1), rayM); r.renderOrder = 997; root.add(r); rays.push(r); }
+  try { const d = camera.position.distanceTo(root.position); if (d < 40) flashScreen('rgba(255,30,50,0.30)', 320); } catch (e) {}
+  const t0 = performance.now(), epoch = matchEpoch;
+  const tick = () => {
+    const t = (performance.now() - t0) / 1000;
+    if (t > 1.0 || epoch !== matchEpoch) { scene.remove(root); disc.geometry.dispose(); discM.dispose(); corona.material.dispose(); rayM.dispose(); rays.forEach(r => r.geometry.dispose()); return; }
+    root.quaternion.copy(camera.quaternion);
+    const grow = 1 - Math.pow(1 - Math.min(1, t / 0.28), 3), fade = Math.max(0, 1 - Math.max(0, t - 0.25) / 0.75);
+    disc.scale.setScalar(0.4 + 2.6 * grow); discM.opacity = Math.max(0, 1 - Math.max(0, t - 0.35) / 0.4);
+    corona.scale.setScalar(2 + 11 * grow); corona.material.opacity = fade;
+    rays.forEach((r, i) => { const a = i / 12 * Math.PI * 2 + t * 0.6; r.rotation.z = a; r.scale.set(1, 1.5 + 6 * grow * (0.6 + 0.4 * ((i * 7) % 5) / 4), 1); r.position.set(-Math.sin(a) * (1.6 + 3.2 * grow) * 0.5, Math.cos(a) * (1.6 + 3.2 * grow) * 0.5, 0); });
+    rayM.opacity = 0.9 * fade;
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
 function buildHackerAK() {
   // 🟩 AK-20 -> Hacker AK. The stock rifle's own shape with every part turned to the void and outlined in green (_hackerize), and the hacker's fittings on it: a screen of running
   // 1s and 0s down the receiver that flashes bright when it fires, circuit traces on the handguard, a lit line down the magazine, edge lights along the top cover, a green front sight.
@@ -46784,6 +46958,7 @@ const BOOM_THEMES = {
   ice:      { fire: 0xbdf3ff, core: 0xffffff, smoke: 0xe8fbff, bits: [0xbdf3ff, 0xffffff], bit: 'shard', ring: 0x9ae8ff, flash: [170, 235, 255] },
   cash:     { fire: 0xe0303a, core: 0xffe8e8, smoke: 0xb87074, bits: [0xe0303a, 0xf08a92, 0xe6d27a, 0xffffff], bit: 'flake', ring: 0xff6666, flash: [255, 90, 90] },
   orbital:  { fire: 0xff7a1a, core: 0xfff0d0, smoke: 0x34363c, bits: [0xff7a1a, 0xffffff, 0x2a2c32], bit: 'chunk', ring: 0xff9a2a, flash: [255, 150, 60], orbital: true },   // the Orbital Strike launcher: a beam from the sky and a target ring
+  eclipse:  { fire: 0xff2030, core: 0xffd0d4, smoke: 0x0a0406, bits: [0x8c9096, 0x0c0c0e, 0xff2030], bit: 'chunk', ring: 0xff3040, flash: [255, 40, 60], eclipse: true },   // the Eclipse Engine: a black disc and a crimson corona
   nuke:     { fire: 0xff7a1a, core: 0xfff4c8, smoke: 0x4a4540, bits: [0xff8a2a, 0xffd24a, 0x555048, 0xffffff], bit: 'chunk', ring: 0xff9a2a, flash: [255, 170, 70], mushroom: true },
   star:     { fire: 0xfff0a0, core: 0xffffff, smoke: 0x4a5a9a, bits: [0xfff0a0, 0x8ab4ff, 0xffffff], bit: 'shard', ring: 0x8ab4ff, flash: [255, 245, 170] },
 };
@@ -56252,6 +56427,7 @@ function throwSupportItem(item) {
     mesh = _buildSputnikFlight();                                                          // the Sputnik skin: a satellite in flight, antennas trailing
     mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), aimDir.clone().negate());
   }
+  if (item.id === 'moon_mine' && equippedSupportModelSkins.moon_mine === 'moon_mine_eclipse' && ownsSkin('moon_mine_eclipse')) { mesh = _eclipseWorld(); mesh.scale.setScalar(2.6); }   // the Eclipse Engine
   mesh.position.copy(origin);
   scene.add(mesh);
 
@@ -56273,6 +56449,7 @@ function throwSupportItem(item) {
     explodeOnImpact,
     maxBounces,
     bounceCount: 0,
+    eclipse: !!mesh._eclipse,
     explodeAt: fuseDur ? Date.now() + fuseDur : null,
   });
 }
@@ -58353,6 +58530,7 @@ const GEN2_MELEE_MODEL_SKIN_IDS = new Set([
 ]);
 // 🎬 Utility skins that make an entrance come out of Gen 2 too (no skin is free).
 const GEN2_SUPPORT_MODEL_SKIN_IDS = new Set(['frag_stopwatch', 'black_hole_sputnik', 'frag_spider']);
+GEN2_SUPPORT_MODEL_SKIN_IDS.add('moon_mine_eclipse');   // (no skin is free: server.js GEN2_LEGENDARY_SKIN_IDS)
 // 🧟 Earned, never bought or pulled: the server hands this over the first time you call for the way out of the Zombie Tower
 // (socket 'zombieTowerWin', mirrored by ZOMBIE_TOWER_SKIN_IDS in server.js). It is in no case and no bundle.
 const TOWER_MODEL_SKIN_IDS = new Set(['ak20_field_radio']);
@@ -61004,6 +61182,9 @@ const SUPPORT_MODEL_SKINS = [
     blurb: 'Tissue paper, a bow, a handle. Do not open it; press the button.' },
   { id: 'grapple_fishing_rod', support: 'grapple_hook', name: 'Fishing Rod',   rarity: 'good', sw: ['#23282e', '#8a1c2a'], build: buildFishingRod,   // (it was the Lever Rifle's; a rod and reel is a grapple)
     blurb: 'Cast it at a wall and reel yourself in. There is a float on the line.' },
+  { id: 'moon_mine_eclipse', support: 'moon_mine', name: 'Eclipse Engine', rarity: 'legendary', sw: ['#8c9096', '#ff2030'], build: buildEclipseEngine,
+    blurb: 'A little cratered moon cut into six crust plates over a red core. Thrown, it grows three legs, the plates slide apart, two orbital rings unfold and turn against each other, then line up as the core goes black and a crimson corona rises: a miniature solar eclipse. It goes off as the Moon Mine does. Inspect: Totality.',
+    equip: 'unfold', equipMs: 950, equipSfx: ['fold', 'click'] },
 ];
 const SUPPORT_MODEL_SKINS_BY_BASE = {};
 for (const ms of SUPPORT_MODEL_SKINS) (SUPPORT_MODEL_SKINS_BY_BASE[ms.support] ||= []).push(ms);
@@ -70147,6 +70328,7 @@ function updateGrenades(dt) {
       g.mesh.rotation.z += dt * 3;
     }
 
+    if (g.eclipse) _eclipseGrenadeTick(g, dt, now);
     // Fuse blink (frag and moon_mine)
     if (g.explodeAt) {
       const timeLeft = g.explodeAt - now;
@@ -70264,7 +70446,8 @@ function explodeSupport(g) {
     spawnAbilityAOEFX(pos, getSupportRadius(item), color);
     if (item.id === 'black_hole_seed') playSoundEvent('blackhole_collapse', { position: pos, volume: 1.15 });
     else if (item.id === 'air_grenade') playSoundEvent('air_burst', { position: pos, volume: 1.15 });
-    spawnExplosion(pos);
+    spawnExplosion(pos, g.eclipse ? BOOM_THEMES.eclipse : null);
+    if (g.eclipse) _eclipseBurst(pos);
   }
 
   if (!item.damage) return;
@@ -70826,6 +71009,7 @@ function spawnExplosion(pos, boom = null) {
   requestAnimationFrame(tick);
   if (boom && boom.mushroom) spawnMushroomCloud(pos);
   if (boom && boom.orbital) spawnOrbitalBeam(pos);
+  if (boom && boom.eclipse) spawnEclipseFlash(pos);
   if (boom && boom.splash) spawnWaterSplash(pos);
 
   // ── Debris chunks ──
@@ -71256,6 +71440,8 @@ function hammerSickleInspectEnd(s) {
   h.sickle.visible = !h.form; h.hammer.visible = !!h.form;
   m.position.copy(s.base);
 }
+ITEM_INSPECT.totality = { ms: 6200, beats: [[.08, 620, .14], [.18, 900, .12], [.34, 1400, .10], [.67, 160, .30], [.84, 520, .30]], keys: [
+  _MS(.10, [-.10, .09, -.18], [.30, 0, 0]), _MS(.90, [-.10, .09, -.18], [.30, 0, 0]), _MS(.9995, [0, 0, 0], [0, 0, 0])] };
 function startItemInspect() {
   if (isDead || reloading) return false;
   if (itemInspect) { cancelItemInspect(); return false; }     // T again puts it away
