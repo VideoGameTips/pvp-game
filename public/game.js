@@ -54931,7 +54931,7 @@ function tryMelee() {
     return;
   }
   const struck = meleeStrikeScan(item, soundId, sawDry, now);
-  spawnHitParticle(struck || camera.position.clone().addScaledVector(forward, Math.min(item.range, 1.6)));
+  if (struck) spawnHitParticle(struck);   // a miss leaves no flash at the end of your reach
 }
 
 // The part of a melee swing that finds and hurts the target. Returns where it landed, or null for a miss.
@@ -55054,11 +55054,7 @@ function updateMeleeStrike() {
   if (now < st.at) return;
   const hit = meleeStrikeScan(st.item, st.soundId, st.sawDry, now);
   if (hit) { spawnHitParticle(hit); meleeStrike = null; }
-  else if (now >= st.until) {
-    meleeStrike = null;
-    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
-    spawnHitParticle(camera.position.clone().addScaledVector(fwd, Math.min(st.item.range, 1.6)));
-  }
+  else if (now >= st.until) meleeStrike = null;   // nothing was struck: no flash marking the reach
 }
 
 // Items that use arc (grenade) physics instead of straight bullets
