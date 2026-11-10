@@ -2596,13 +2596,17 @@ if (ok && process.argv.includes('--widowmaker')) {
     try {
       frame(2);
       const folded = fr.root.rotation.y, rearFolded = rr.root.rotation.y;
-      if (!(folded < -1.2)) issues.push('idle: the legs should be folded back along the body, front-right yaw ' + folded.toFixed(2));
+      if (!(folded > 0 && fr.j3.rotation.y > 0.6)) issues.push('idle: the front legs should already be the bow limbs, front-right yaw ' + folded.toFixed(2));
+      if (!(rearFolded < -1.2)) issues.push('idle: the other legs should be folded back along the body, rear-right yaw ' + rearFolded.toFixed(2));
+      if (!m._string || m._string.length !== 2 || !(m._string[0].scale.z > 0.12)) issues.push('idle: a crossbow needs its string from limb tip to latch');
+      const stringYaw0 = m._string && m._string[0].rotation.y;
       isADS = true; frame(80);
-      if (!(fr.root.rotation.y > 0 && fr.j3.rotation.y > 0.7)) issues.push('aim: the front legs should unfold into bow arms: ' + [fr.root.rotation.y, fr.j3.rotation.y].map(n => n.toFixed(2)));
-      if (!(rr.root.rotation.y < -0.5)) issues.push('aim: the rear legs should spread backward: ' + rr.root.rotation.y.toFixed(2));
+      if (!(fr.root.rotation.y > 0 && fr.j3.rotation.y > 0.7)) issues.push('aim: the front legs should stay bow limbs: ' + [fr.root.rotation.y, fr.j3.rotation.y].map(n => n.toFixed(2)));
+      if (!(rr.root.rotation.y > rearFolded + 0.4 && rr.root.rotation.y < -0.5)) issues.push('aim: the rear legs should unfold and spread backward: ' + rr.root.rotation.y.toFixed(2));
       if (!(Math.abs(fl.root.rotation.y - (Math.PI - fr.root.rotation.y)) < 1e-6)) issues.push('the left legs should mirror the right');
       const aimJ3 = fr.j3.rotation.y;
       m._steamShot(); frame(1, 0.016);
+      if (!(Math.abs(m._string[0].rotation.y - stringYaw0) > 0.02)) issues.push('fire: the string should snap');
       if (!(fr.j3.rotation.y > aimJ3 + 0.3)) issues.push('fire: the front legs should snap in: ' + fr.j3.rotation.y.toFixed(2) + ' vs ' + aimJ3.toFixed(2));
       if (m._bolt.visible) issues.push('fire: the bolt should be gone until the reload brings the next');
       frame(40);

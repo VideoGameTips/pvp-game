@@ -33280,31 +33280,52 @@ function buildWidowmaker() {
   const flash = makeMuzzleFlash(); flash.position.set(0, 0.034, -0.272); g.add(flash);
   g._flash = flash; g._kickZ = 0.006; g._greebled = true; g._handDetailed = true;
   // The eight legs. Each is three segments on hinges: root (yaw + lift), j2, j3. Angles are for the right side; the left side mirrors them.
-  const LEN = [0.075, 0.080, 0.072], ATTACH = [-0.240, -0.214, -0.112, -0.062];
+  const LEN = [0.075, 0.080, 0.072], LEN_BOW = [0.092, 0.094, 0.084], ATTACH = [-0.240, -0.214, -0.112, -0.062];     // (the front pair are longer and heavier: they are the bow's limbs)
   const legs = [];
   const seg = (parent, len, w) => { const m = new THREE.Mesh(new THREE.BoxGeometry(len, w, w), blk); m.position.x = len / 2; parent.add(m); return m; };
   const knob = (parent, r) => { const k = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6), red); parent.add(k); return k; };
   for (const sd of [1, -1]) for (let row = 0; row < 4; row++) {
     const root = new THREE.Group(), j2 = new THREE.Group(), j3 = new THREE.Group();
     root.position.set(sd * 0.030, 0.016, ATTACH[row]);
-    seg(root, LEN[0], 0.013); knob(root, 0.0105);
-    j2.position.x = LEN[0]; root.add(j2); seg(j2, LEN[1], 0.011); knob(j2, 0.0085);
-    j3.position.x = LEN[1]; j2.add(j3); seg(j3, LEN[2], 0.0085); knob(j3, 0.007);
-    const tip = new THREE.Mesh(new THREE.ConeGeometry(0.0055, 0.022, 6), red); tip.rotation.z = -Math.PI / 2; tip.position.x = LEN[2] + 0.008; j3.add(tip);
-    g.add(root); legs.push({ root, j2, j3, sd, row });
+    const LR = row === 0 ? LEN_BOW : LEN, thick = row === 0 ? 1.4 : 1;
+    seg(root, LR[0], 0.013 * thick); knob(root, 0.0105);
+    j2.position.x = LR[0]; root.add(j2); seg(j2, LR[1], 0.011 * thick); knob(j2, 0.0085);
+    j3.position.x = LR[1]; j2.add(j3); seg(j3, LR[2], 0.0085 * thick); knob(j3, 0.007);
+    const tip = new THREE.Mesh(new THREE.ConeGeometry(0.0055, 0.022, 6), red); tip.rotation.z = -Math.PI / 2; tip.position.x = LR[2] + 0.008; j3.add(tip);
+    g.add(root); legs.push({ root, j2, j3, sd, row, LR, p: null });
   }
   //            yaw    turn2  turn3  lift1  lift2  lift3
-  const FOLD = [[-1.45, 2.9, -2.9, 0.04, 0.35, -0.35], [-1.50, 2.9, -2.9, 0.10, 0.40, -0.40], [-1.55, 2.9, -2.9, 0.04, 0.35, -0.35], [-1.60, 2.9, -2.9, 0.10, 0.40, -0.40]];
+  const FOLD = [[0.12, 0.46, 0.88, 0.00, 0.00, 0.00], [-1.50, 2.9, -2.9, 0.10, 0.40, -0.40], [-1.55, 2.9, -2.9, 0.04, 0.35, -0.35], [-1.60, 2.9, -2.9, 0.10, 0.40, -0.40]];
   const AIM  = [[0.10, 0.50, 0.95, 0.00, 0.00, 0.00], [0.00, 0.58, 0.85, 0.12, 0.00, 0.00], [-0.55, -0.45, 0.80, 0.12, 0.25, -0.85], [-0.85, -0.40, 0.75, 0.16, 0.25, -0.85]];
   const CRAWL = [[0.50, 0.45, 0.70, 0.25, 0.20, -0.90], [0.10, 0.45, 0.60, 0.25, 0.20, -0.90], [-0.40, -0.35, 0.60, 0.25, 0.20, -0.90], [-0.80, -0.40, 0.60, 0.25, 0.20, -0.90]];
   const apply = (L, p) => {
     L.root.rotation.set(0, L.sd > 0 ? p[0] : Math.PI - p[0], p[3]);
     L.j2.rotation.set(0, L.sd > 0 ? p[1] : -p[1], p[4]);
     L.j3.rotation.set(0, L.sd > 0 ? p[2] : -p[2], p[5]);
+    L.p = p;
   };
   const mix = (a, b, k) => a.map((v, i) => v + (b[i] - v) * k);
   const smooth = (a, b, t) => { const x = Math.max(0, Math.min(1, (t - a) / (b - a))); return x * x * (3 - 2 * x); };
   legs.forEach(L => apply(L, FOLD[L.row]));
+  // The string: from the tip of each front limb back to the latch -- a V that goes straight, snapping forward, when the bolt leaves. This and the limbs are what make it a crossbow.
+  const stringMat = new THREE.MeshBasicMaterial({ color: 0xff3a3a });
+  const strings = [0, 1].map(() => { const m = new THREE.Mesh(new THREE.BoxGeometry(0.0035, 0.0035, 1), stringMat); g.add(m); return m; });
+  const NOCK = new THREE.Vector3(0, 0.034, -0.045);
+  const tipOf = L => {
+    const p = L.p, lr = L.LR, a1 = p[0], a2 = p[0] + p[1], a3 = a2 + p[2];
+    const dx = lr[0] * Math.cos(a1) + lr[1] * Math.cos(a2) + lr[2] * Math.cos(a3);
+    const dz = -(lr[0] * Math.sin(a1) + lr[1] * Math.sin(a2) + lr[2] * Math.sin(a3));
+    return new THREE.Vector3(L.root.position.x + L.sd * dx, 0.026, L.root.position.z + dz);
+  };
+  const frontLegs = legs.filter(L => L.row === 0);
+  const placeString = snap => {
+    frontLegs.forEach((L, i) => {
+      const a = tipOf(L), b = new THREE.Vector3(0, NOCK.y, NOCK.z + (a.z - NOCK.z) * Math.min(1, snap * 1.5)), d = b.clone().sub(a);
+      strings[i].position.copy(a).addScaledVector(d, 0.5); strings[i].scale.z = Math.max(0.001, d.length());
+      strings[i].rotation.set(0, Math.atan2(d.x, d.z), 0);
+    });
+  };
+  placeString(0);
   // The little spider that brings the next bolt.
   const crawler = new THREE.Group(); crawler.visible = false; g.add(crawler);
   const cBody = new THREE.Mesh(new THREE.SphereGeometry(0.010, 8, 6), blk); cBody.scale.set(1, 0.7, 1.4); crawler.add(cBody);
@@ -33318,10 +33339,10 @@ function buildWidowmaker() {
   gpCyl(cBolt, dark, 0.0030, 0.0030, 0.130, 6, 0, 0, 0); gpCyl(cBolt, red, 0.0055, 0.0022, 0.020, 6, 0, 0, -0.075);
   let aimK = 0, fireK = 0, boltOut = false, wasReloading = false;
   const calm = () => {
-    legs.forEach(L => apply(L, FOLD[L.row]));
+    legs.forEach(L => apply(L, FOLD[L.row])); placeString(0);
     crawler.visible = false; bolt.visible = true; aimK = 0; fireK = 0; boltOut = false; wasReloading = false;
   };
-  g._calm = calm; g._legs = legs; g._crawler = crawler;
+  g._calm = calm; g._legs = legs; g._crawler = crawler; g._string = strings;
   g._steamShot = () => { fireK = 1; boltOut = true; bolt.visible = false; };     // the muzzle-blast hook: the front legs snap in as the bolt goes
   g._tick = (dt, now, assembling) => {
     if (assembling) { calm(); return; }
@@ -33338,9 +33359,10 @@ function buildWidowmaker() {
         const w = Math.sin(phase + (L.row + (L.sd > 0 ? 0 : 2)) * 1.6);       // a walk: alternate legs lift and swing
         p = p.slice(); p[0] += 0.20 * w * crawl; p[4] += 0.22 * Math.max(0, w) * crawl;
       }
-      if (L.row < 2 && snap > 0) { p = p.slice(); p[0] -= 0.30 * snap; p[2] += 0.90 * snap; }     // the front legs snap in
+      if (L.row === 0 && snap > 0) { p = p.slice(); p[0] -= 0.30 * snap; p[2] += 0.90 * snap; }     // the limbs snap in
       apply(L, p);
     }
+    placeString(snap);
     if (reloading) {                                                            // the crawler walks the bolt along the rail
       if (!wasReloading) { wasReloading = true; bolt.visible = false; }
       const t = Math.min(1, (Date.now() - g._reloadStart) / (g._reloadDur || 1200));
