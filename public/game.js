@@ -32760,6 +32760,136 @@ function buildSiegebreaker() {
   return g;
 }
 
+// 🕷️ Frag Grenade -> Spider Mine. A chunky black-and-orange grenade with eight legs folded tight round its body and one red eye. Held, the eye
+// blinks slowly; with the pin pulled it burns bright and clicks. Thrown, it tumbles as a grenade. On landing the legs unfold with a clack, it plants its
+// feet and rises, and the eye flashes faster and faster; at the end the legs spring outward in the blast. It never moves after landing: the fuse, the
+// physics, the damage and the radius are the Frag Grenade's. Inspect: it sprouts legs in your hand, crawls up onto your wrist, stares and beeps, you
+// shake it off, it jumps back into your palm and folds up again.
+function _spiderParts(host) {
+  const blk = _skM(0x15181c, 120, 0x667080), orange = _skM(0xff7a1a, 140, 0xffc890), steel = _skM(0x4a515c, 140, 0xc0cad8);
+  const eyeM = new THREE.MeshBasicMaterial({ color: 0x7a0a0a });
+  const parts = [], rise = [];
+  const add = (o, risesWithBody) => { host.add(o); parts.push(o); o.userData.base = o.position.clone(); if (risesWithBody) rise.push(o); return o; };
+  const body = add(new THREE.Mesh(new THREE.SphereGeometry(0.060, 14, 10), blk), true);
+  const band = new THREE.Mesh(new THREE.TorusGeometry(0.0605, 0.0085, 6, 22), orange); band.rotation.x = Math.PI / 2; add(band, true);
+  const plate = new THREE.Mesh(new THREE.BoxGeometry(0.060, 0.012, 0.044), orange); plate.position.y = 0.054; add(plate, true);
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.016, 0.018, 8), steel); cap.position.y = 0.068; add(cap, true);
+  const eye = new THREE.Mesh(new THREE.SphereGeometry(0.0125, 10, 8), eyeM); eye.position.set(0, 0.012, 0.056); add(eye, true);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.0155, 0.0032, 6, 14), steel); ring.position.set(0, 0.012, 0.0585); add(ring, true);
+  const R0 = 0.064, Lu = 0.065, Ll = 0.175, legs = [];
+  for (let k = 0; k < 8; k++) {
+    const th = k / 8 * Math.PI * 2 + Math.PI / 8;
+    const lg = new THREE.Group(); lg.position.set(Math.cos(th) * R0, -0.005, Math.sin(th) * R0); lg.rotation.y = -th; add(lg, true);
+    const up = new THREE.Group(); lg.add(up);
+    const ub = new THREE.Mesh(new THREE.BoxGeometry(Lu, 0.013, 0.015), k % 2 ? orange : blk); ub.position.x = Lu / 2; up.add(ub);
+    const lo = new THREE.Group(); lo.position.x = Lu; up.add(lo);
+    const knee = new THREE.Mesh(new THREE.SphereGeometry(0.0095, 8, 6), steel); up.add(knee); knee.position.x = Lu;
+    const lb = new THREE.Mesh(new THREE.BoxGeometry(Ll, 0.011, 0.013), blk); lb.position.x = Ll / 2; lo.add(lb);
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.020, 0.012, 0.020), orange); foot.position.x = Ll; lo.add(foot);
+    legs.push({ lg, up, lo, k });
+  }
+  const clamp01 = u => Math.max(0, Math.min(1, u)), ease = u => u * u * (3 - 2 * u);
+  // u: 0 folded .. 1 planted; r: how far the body is raised (0..0.025); walk: 0..1 how hard the legs are going; t: seconds; off: where the whole spider is
+  const pose = (u, r, walk, t, off) => {
+    const e = ease(clamp01(u));
+    for (const o of parts) { o.position.copy(o.userData.base); if (off) o.position.add(off); }
+    for (const o of rise) o.position.y += r;
+    for (const L of legs) {
+      const hingeY = -0.005 + r, auP = 0.75;
+      const absP = -Math.asin(Math.max(-1, Math.min(1, (0.10 + hingeY + Lu * Math.sin(auP)) / Ll)));        // the lower leg that puts the foot on the floor
+      let au = THREE.MathUtils.lerp(1.42, auP, e), ab = THREE.MathUtils.lerp(-1.53, absP, e);
+      if (walk > 0) { const ph = Math.sin(t * 11 + (L.k % 2) * Math.PI); au += 0.30 * Math.max(0, ph) * walk; ab += 0.22 * ph * walk; }
+      L.up.rotation.z = au; L.lo.rotation.z = ab - au;
+    }
+  };
+  pose(0, 0, 0, 0, null);
+  return { parts, legs, eyeM, eye, pose, body };
+}
+function buildSpiderMine() {
+  const g = new THREE.Group();
+  const S = _spiderParts(g);
+  const off = new THREE.Vector3(), tmp = new THREE.Vector3();
+  const sm = x => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
+  let nextClick = 0;
+  g._spiderApi = S;
+  g._tick = (dt, now, assembling) => {
+    if (assembling || (typeof itemInspect !== 'undefined' && itemInspect && itemInspect.model === g)) return;
+    const winding = typeof grenadeWindupT !== 'undefined' && grenadeWindupT < 1;                          // the pin is out
+    S.eyeM.color.setHex(winding ? 0xff2a1a : (Math.sin(now * 3) > 0.35 ? 0xff3a2a : 0x4a0a08));
+    if (winding && now > nextClick) { nextClick = now + 0.09; try { _itemInspectBeat(2300, 0.05); } catch (e) {} }
+    S.pose(0, 0, 0, now, null);
+  };
+  // the inspect: the grenade sprouts legs, crawls onto the wrist, stares, beeps, is shaken off and jumps back into the palm
+  g._itemInspectKind = 'spiderMine';
+  g._itemInspectFrame = t => {
+    const unfold = t < 0.12 ? 0 : t < 0.22 ? sm((t - 0.12) / 0.10) : t < 0.84 ? 1 : 1 - sm((t - 0.84) / 0.10);
+    const crawl = sm((t - 0.24) / 0.26) * (1 - sm((t - 0.80) / 0.08));                                    // 0 in the palm, 1 on the wrist
+    const walking = (t > 0.24 && t < 0.50) ? 1 : 0;
+    off.set(0.075 * crawl, -0.030 * crawl, 0.115 * crawl);
+    if (t > 0.80 && t < 0.88) off.y += 0.07 * Math.sin((t - 0.80) / 0.08 * Math.PI);                    // the jump back
+    const stare = sm((t - 0.50) / 0.04) * (1 - sm((t - 0.68) / 0.04));
+    S.eyeM.color.setHex(t > 0.50 && t < 0.70 ? (Math.floor(t * 40) % 2 ? 0xff5a3a : 0xff1a0a) : 0xff3a2a);
+    S.pose(unfold, 0.022 * stare, walking, t * 1.0, off);
+    if (t > 0.66 && t < 0.80) {                                                                            // the player panics and shakes their hand
+      const k = Math.sin((t - 0.66) / 0.14 * Math.PI), m = itemInspect && itemInspect.model;
+      if (m) { m.position.x += (Math.random() - 0.5) * 0.045 * k; m.position.y += (Math.random() - 0.5) * 0.035 * k; m.rotation.z += (Math.random() - 0.5) * 0.5 * k; }
+    }
+  };
+  g._itemInspectEnd = () => { S.pose(0, 0, 0, 0, null); };
+  g._calm = g._itemInspectEnd;
+  g._greebled = true; g._handDetailed = true;
+  g.position.set(0.10, -0.12, -0.20); return g;
+}
+// The spider in the air and on the ground. One model, the same body as in your hand; the animation is driven off the grenade's own state.
+function _spiderWorld() { const g = new THREE.Group(); g._spider = _spiderParts(g); return g; }
+function spawnSpiderGrenade(origin, dir, id, isOwn) {
+  const mesh = _spiderWorld(); mesh.position.copy(origin); scene.add(mesh);
+  activeGrenades.push({ mesh, id, isOwn, spider: true, visualOnly: !isOwn,
+    velX: dir.x * 20, velY: dir.y * 20, velZ: dir.z * 20, explodeAt: Date.now() + GRENADE_FUSE });
+}
+function _spiderGrenadeTick(g, dt, now) {
+  const S = g.mesh._spider; if (!S) return;
+  if (g.landedAt === undefined && (g.bounceCount || 0) >= 1) {                                          // CLACK: the legs unfold
+    g.landedAt = now; g.restFor = 0;
+    try { playSoundEvent('melee_heavy', { position: g.mesh.position, volume: 0.5, pitch: 1.7, minGap: 0 }); } catch (e) {}
+  }
+  const landed = g.landedAt !== undefined, speed = Math.hypot(g.velX, g.velY, g.velZ);
+  let u = 0, r = 0;
+  if (!landed) { g.mesh.rotation.x += dt * 5; g.mesh.rotation.z += dt * 3; }
+  else {
+    u = Math.min(1, (now - g.landedAt) / 200);
+    const k = Math.min(1, dt * 8); g.mesh.rotation.x *= 1 - k; g.mesh.rotation.z *= 1 - k;                // it rights itself and stands on its feet
+    if (speed < 0.5) g.restFor += dt;
+    const x = Math.max(0, Math.min(1, (g.restFor - 0.15) / 0.35)); r = 0.025 * x * x * (3 - 2 * x);       // then it rises on its legs
+  }
+  const frac = 1 - Math.max(0, g.explodeAt - now) / GRENADE_FUSE, rate = 2.5 + 20 * frac * frac;          // the eye flashes faster and faster
+  g._ph = (g._ph || 0) + dt * rate * Math.PI * 2;
+  const on = Math.sin(g._ph) > 0;
+  S.eyeM.color.setHex(on ? 0xff2a1a : 0x4a0a08);
+  if (on && !g._was && g.isOwn && !g.visualOnly) { try { playSoundEvent('dry_fire', { position: g.mesh.position, volume: 0.16, minGap: 0 }); } catch (e) {} }
+  g._was = on;
+  S.pose(u, r, 0, now / 1000, null);
+}
+// The blast: the legs spring outward and fall.
+function _spiderBurst(pos) {
+  const geo = new THREE.BoxGeometry(0.17, 0.014, 0.014), mats = [new THREE.MeshLambertMaterial({ color: 0x15181c }), new THREE.MeshLambertMaterial({ color: 0xff7a1a })];
+  const fr = [];
+  for (let k = 0; k < 8; k++) {
+    const a = k / 8 * Math.PI * 2 + 0.3, m = new THREE.Mesh(geo, mats[k % 2]); m.position.copy(pos); scene.add(m);
+    fr.push({ m, v: new THREE.Vector3(Math.cos(a) * 5.5, 4 + Math.random() * 3, Math.sin(a) * 5.5), s: new THREE.Vector3((Math.random() - 0.5) * 24, (Math.random() - 0.5) * 24, (Math.random() - 0.5) * 24) });
+  }
+  const t0 = performance.now();
+  const iv = setInterval(() => {
+    const t = (performance.now() - t0) / 1000;
+    for (const f of fr) {
+      f.v.y -= 16 * 0.016; f.m.position.addScaledVector(f.v, 0.016);
+      if (f.m.position.y < 0.02) { f.m.position.y = 0.02; f.v.y *= -0.3; f.v.x *= 0.7; f.v.z *= 0.7; f.s.multiplyScalar(0.6); }
+      f.m.rotation.x += f.s.x * 0.016; f.m.rotation.y += f.s.y * 0.016; f.m.rotation.z += f.s.z * 0.016;
+    }
+    if (t > 1.6) { clearInterval(iv); for (const f of fr) scene.remove(f.m); geo.dispose(); mats.forEach(m => m.dispose()); }
+  }, 16);
+}
+
 // 🪽 Minigun -> Stormwing. Grey metallic with blue light: one real minigun (the cluster spins up as ever) and a pair of folded wings.
 // Fire a lot and the back goes red-hot and blasts flame out like a jet. Aim (or brace with E) and the wings snap open and four more barrels slide out of them and fire along with the main gun. Same damage:
 // the four extra barrels are for show, the stats are the minigun's.
@@ -58222,7 +58352,7 @@ const GEN2_MELEE_MODEL_SKIN_IDS = new Set([
   'sabre_balloon', 'katana_tidal_fang', 'knife_twin', 'chainsaw_newspaper', 'knife_hammer_sickle', 'katana_tape_measure',
 ]);
 // 🎬 Utility skins that make an entrance come out of Gen 2 too (no skin is free).
-const GEN2_SUPPORT_MODEL_SKIN_IDS = new Set(['frag_stopwatch', 'black_hole_sputnik']);
+const GEN2_SUPPORT_MODEL_SKIN_IDS = new Set(['frag_stopwatch', 'black_hole_sputnik', 'frag_spider']);
 // 🧟 Earned, never bought or pulled: the server hands this over the first time you call for the way out of the Zombie Tower
 // (socket 'zombieTowerWin', mirrored by ZOMBIE_TOWER_SKIN_IDS in server.js). It is in no case and no bundle.
 const TOWER_MODEL_SKIN_IDS = new Set(['ak20_field_radio']);
@@ -60846,6 +60976,9 @@ const SUPPORT_MODEL_SKINS = [
   { id: 'black_hole_sputnik', support: 'black_hole_seed', name: 'Sputnik', rarity: 'rare', sw: ['#dfe4ea', '#d6281f'], build: buildSputnik,
     blurb: 'A little silver satellite. Thrown, its four long antennas unfold, and a red radio pulse goes out as the black hole swells open.',
     equip: 'unfold', equipMs: 850, equipSfx: ['fold', 'click'] },
+  { id: 'frag_spider', support: 'frag', name: 'Spider Mine', rarity: 'legendary', sw: ['#15181c', '#ff7a1a'], build: buildSpiderMine,
+    blurb: 'A black-and-orange grenade with eight legs folded round it and one red eye. Thrown, it lands and grows legs, plants its feet and flashes faster and faster; the legs spring out in the blast. It never moves: the fuse and the damage are the Frag Grenade\'s.',
+    equip: 'unfold', equipMs: 900, equipSfx: ['fold', 'click'] },
   { id: 'frag_stopwatch', support: 'frag', name: 'Stopwatch', rarity: 'rare', sw: ['#cfd6de', '#e0281e'], build: buildStopwatch,
     blurb: 'A sports stopwatch in grenade rubber. The red hand ticks round to nothing in particular. It is wound and clicked on piece by piece when you draw it.',
     equip: 'windup', equipMs: 900, equipSfx: ['windup', 'ding'] },
@@ -69111,6 +69244,10 @@ socket.on('bulletFired', b => {
   if (b.ownerId===myId) return;
   const w = projectileWeaponSpec(b.weapon) || WEAPONS[0];
   const origin = new THREE.Vector3(b.x,b.y,b.z);
+  if(b.weapon==='frag'&&b.skin==='frag_spider'){
+    spawnSpiderGrenade(origin,new THREE.Vector3(b.dx,b.dy,b.dz),b.id,false);
+    return;
+  }
   if(b.weapon==='hellfire'){
     fireHellfireBeam(origin,new THREE.Vector3(b.dx,b.dy,b.dz));
     playWeaponSound('hellfire',{baseWeapon:w,remote:true,position:origin});return;
@@ -69877,6 +70014,11 @@ function doThrowGrenade() {
   // Aim slightly upward from look direction for a natural arc
   const aimDir = new THREE.Vector3(0, 0.18, -1).applyQuaternion(camera.quaternion).normalize();
 
+  if(equippedSupportModelSkins.frag==='frag_spider'&&ownsSkin('frag_spider')){
+    spawnSpiderGrenade(origin,aimDir,id,true);
+    socket.emit('shoot',{x:origin.x,y:origin.y,z:origin.z,dx:aimDir.x,dy:aimDir.y,dz:aimDir.z,weapon:'frag',skin:'frag_spider'});
+    return;
+  }
   const hack = _hackerHit('frag');                                           // the Hacker Grenade: a black ball that flies trailing code
   const mesh = hack ? makeHackerWorldGrenade() : makeWorldGrenadeMesh();
   mesh.position.copy(origin);
@@ -69998,14 +70140,17 @@ function updateGrenades(dt) {
       if (now - (g._trailAt || 0) > 45) { g._trailAt = now; _hackDigits(g.mesh.position, 1, 0.5, 0.2, 520, 0.15); }
       if (g.mesh._lamp) g.mesh._lamp.material.color.setHex(Math.floor(now / 110) % 2 ? 0xd4ffe0 : 0x14a043);
     }
-    // Tumble spin
-    g.mesh.rotation.x += dt * 5;
-    g.mesh.rotation.z += dt * 3;
+    // Tumble spin (the Spider Mine keeps its own: it stops tumbling when it lands and plants its feet)
+    if (g.spider) _spiderGrenadeTick(g, dt, now);
+    else {
+      g.mesh.rotation.x += dt * 5;
+      g.mesh.rotation.z += dt * 3;
+    }
 
     // Fuse blink (frag and moon_mine)
     if (g.explodeAt) {
       const timeLeft = g.explodeAt - now;
-      if (timeLeft < 1200 && !g.isSupport) {
+      if (timeLeft < 1200 && !g.isSupport && !g.spider) {
         // Only blink cap for frag (which has structured children)
         const blink = Math.floor(timeLeft / 180) % 2 === 0;
         const cap = g.mesh.children[4];
@@ -70032,6 +70177,10 @@ function damageStructuresInBlast(pos,weaponId,radius) {
 }
 function explodeGrenade(g) {
   const pos = g.mesh.position.clone();
+  if (g.spider) {                                                        // the Spider Mine: the legs spring outward; somebody else's is only drawn (its thrower's client does the damage)
+    _spiderBurst(pos);
+    if (g.visualOnly) { playSoundEvent('explosion', { position: pos, remote: true, volume: 1.1, minGap: 80 }); spawnExplosion(pos, null); return; }
+  }
   spawnExplosion(pos, g.hack ? BOOM_THEMES.hacker : null);
   if (g.hack) { skinHitFX('hack', pos, false); _hackDigits(pos, 34, 7.5, 4, 820, 0.32); }   // the Hacker Grenade bursts in green and throws code
   const RADIUS = 5.5;
@@ -70962,6 +71111,8 @@ function _meleeSwingId(idx) {
 // roll at 2 pi, since a track's end is the rest pose and would otherwise unwind it.
 const _TAU = Math.PI * 2;
 const ITEM_INSPECT = {
+  spiderMine: { ms: 4200, beats: [[.14, 900, .12], [.60, 1900, .22], [.84, 700, .16]], keys: [
+    _MS(.12, [-.10, .10, -.18], [.30, 0, 0]), _MS(.88, [-.10, .10, -.18], [.30, 0, 0]), _MS(.9995, [0, 0, 0], [0, 0, 0])] },
   blade: { ms: 2700, beats: [[.30, 700, .16], [.64, 540, .14], [.80, 760, .12]], keys: [
     _MS(.14, [-.06, .06, .06], [.35, 0, .10]), _MS(.30, [-.12, .10, .08], [.60, -.25, .35]),
     _MS(.46, [-.12, .10, .08], [.55, -1.15, .35]), _MS(.64, [-.12, .09, .07], [.45, -1.15, 3.30]),
