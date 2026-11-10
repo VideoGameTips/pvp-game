@@ -2835,6 +2835,60 @@ if (ok && process.argv.includes('--neonanarchy')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+// DISCO INFERNO (the Flamethrower skin): a rare from the Gen 2 case. A disco ball that spins and flashes, speakers that pulse and confetti that flies with the flames, four spotlights that unfold
+// under sustained fire, a reload that stops the ball and swaps the tank, and DISCO FEVER on inspect (the ball rises over a flashing dance floor, the speakers bounce twice, it drops back).
+if (ok && process.argv.includes('--discoinferno')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const sk = MODEL_SKINS.find(s => s.id === 'flamethrower_disco_inferno');
+    if (!sk || sk.weapon !== 'flamethrower') return ['the DISCO INFERNO skin of the Flamethrower is missing'];
+    if (!GEN2_MODEL_SKIN_IDS.has(sk.id)) issues.push('DISCO INFERNO is not dealt by the Gen 2 case (no skin is free)');
+    const fx = SKIN_FX[sk.id];
+    if (!fx || !fx.equip || !fx.inspect) issues.push('no entrance or inspect track');
+    const m = sk.build();
+    if (!m._S || !m._tick || !m._calm || !m._steamShot || !m._flash || !m._ball || !m._tank || !m._spots || !m._floor) return issues.concat(['the model is missing its state, tick, calm, shot hook, flash, ball, tank, spotlights or floor']);
+    const S = m._S; let clk = performance.now() / 1000; const run = (n, dt = 0.016) => { for (let i = 0; i < n; i++) { clk += dt; m._tick(dt, clk, false); } };
+    const home = m._tank._home.clone(), y0 = m._ball.position.y, sp0 = m._speakers[0].home.y;
+    const reload = f => { m._inspectMode = false; m._reloadStart = Date.now() - f * 3200; m._reloadDur = 3200; run(20); };
+    const insp = f => { m._inspectMode = true; m._reloadStart = Date.now() - f * 2600; m._reloadDur = 2600; run(20); };
+    try {
+      run(3);
+      const r0 = m._ball.rotation.y; run(30);
+      if (!(m._ball.rotation.y > r0 + 0.3)) issues.push('idle: the ball should be turning');
+      if (m._floor.visible || m._spots.some(s => s.beam.visible)) issues.push('idle: no dance floor or spotlights yet');
+      // firing
+      for (let i = 0; i < 6; i++) { m._steamShot(); run(1, 0.035); }
+      if (!m._confetti.some(c => c.c.visible)) issues.push('fire: confetti should fly out');
+      if (!(m._speakers[0].cones[0].scale.x > 1.01 || S.pulse > 0.05)) issues.push('fire: the speakers should pulse');
+      for (let i = 0; i < 70; i++) { m._steamShot(); run(1, 0.035); }
+      if (!m._spots.every(s => s.beam.visible && s.arm.rotation.x > 0.5)) issues.push('sustained fire: the four spotlights should have unfolded: ' + m._spots.map(s => s.arm.rotation.x.toFixed(2)));
+      const rz = m._ring.rotation.z; run(10);
+      if (!(m._ring.rotation.z > rz + 0.02)) issues.push('sustained fire: the spotlights should sweep round the barrel');
+      run(150);
+      if (m._spots.some(s => s.beam.visible || s.arm.rotation.x > 0.05)) issues.push('after fire: the spotlights should fold away again');
+      // reload
+      reload(0.15); if (!(S.lights < 0.2 && m._tiles.filter(t => t.t.material === m._off).length > m._tiles.length * 0.9)) issues.push('reload: the lights should be out: ' + S.lights.toFixed(2));
+      reload(0.30); if (!(m._tank.position.x > home.x + 0.04)) issues.push('reload: the tank should be sliding off: ' + (m._tank.position.x - home.x).toFixed(3));
+      reload(0.45); if (!(m._tank.position.z > home.z + 0.08 && m._tank.position.x === home.x)) issues.push('reload: the new tank should be coming in from behind');
+      reload(0.99); if (!(Math.abs(m._tank.position.z - home.z) < 0.005 && S.lights > 0.9)) issues.push('reload: the tank should be seated and the lights back by the end');
+      m._reloadStart = 0; run(60);
+      if (!(m._tank.position.distanceTo(home) < 1e-6 && m._tank.visible && m._tank.rotation.z === 0)) issues.push('after reload: the tank should be exactly home');
+      // inspect: DISCO FEVER
+      insp(0.30); if (!(m._ball.position.y > y0 + 0.04 && m._floor.visible)) issues.push('inspect: the ball should have risen over a dance floor: ' + (m._ball.position.y - y0).toFixed(3));
+      const r1 = m._ball.rotation.y; run(10); if (!(m._ball.rotation.y - r1 > 0.8)) issues.push('inspect: the ball should be spinning hard');
+      insp(0.53); if (!(m._speakers[0].sp.position.y > sp0 + 0.006)) issues.push('inspect: the speakers should be bouncing');
+      insp(0.67); if (!(m._speakers[1].sp.position.y > sp0 + 0.006)) issues.push('inspect: the speakers should bounce a second time');
+      insp(0.99); if (!(Math.abs(m._ball.position.y - y0) < 0.002 && !m._floor.visible)) issues.push('inspect: the ball should be back in place and the floor gone');
+      m._inspectMode = false; m._reloadStart = 0; run(60);
+      if (m._floor.visible || Math.abs(m._ball.position.y - y0) > 0.0005 || Math.abs(m._speakers[0].sp.position.y - sp0) > 0.0005) issues.push('after inspect: everything should be back');
+      m._calm();
+    } catch (e) { issues.push('threw: ' + (e && e.stack || e)); }
+    return issues;
+  })()`);
+  console.log('DISCO INFERNO checks: Gen 2, ball + confetti + speakers, spotlights under sustained fire, tank swap on reload, DISCO FEVER inspect');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 // HOUSE OF CARDS (the Throwing Knives skin): a legendary from the Gen 2 case: a fan of three cards and a floating ace that shuffle on every throw, the Impossible Shuffle on inspect (the deck is
 // thrown up, spirals, interleaves, four aces stop in the air, become one knife that lands in the hand), a card for a round, and the ace of spades behind what it kills.
 if (ok && process.argv.includes('--houseofcards')) {

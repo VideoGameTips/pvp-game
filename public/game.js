@@ -33821,6 +33821,193 @@ function buildNeonAnarchy() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+// 🪩 Flamethrower -> DISCO INFERNO. A portable nightclub: a chrome wand with purple and pink trim, a low-poly disco ball on a stem over the barrel (square mirror tiles that flash colours), a speaker box on each
+// side, and a clear fuel tank of glowing liquid with bubbles in it. The flames are the ordinary flames (their glow is pink); the muzzle throws confetti squares and the speakers pulse. Hold the trigger
+// and four spotlights unfold round the nozzle and sweep. Reload: the ball stops, the lights go out, the tank slides off and a new one slides in, and the club boots back up. Inspect is DISCO FEVER: the
+// gun tips up, the ball rises and spins hard over a floor of flashing squares, the speakers bounce twice, and the ball drops back with a CLUNK. Nothing here touches the flames' damage or range.
+function buildDiscoInferno() {
+  const g = new THREE.Group();
+  const chrome = new THREE.MeshPhongMaterial({ color: 0xe4e8f4, shininess: 240, specular: 0xffffff, flatShading: true });
+  const chromeD = new THREE.MeshPhongMaterial({ color: 0x8a90aa, shininess: 160, specular: 0xdde4ff, flatShading: true });
+  const purple = new THREE.MeshPhongMaterial({ color: 0x7a2aff, emissive: 0x24085a, shininess: 140, specular: 0xd0a0ff, flatShading: true });
+  const pink = new THREE.MeshPhongMaterial({ color: 0xff2bb0, emissive: 0x501038, shininess: 140, specular: 0xffa0e0, flatShading: true });
+  const blk = new THREE.MeshPhongMaterial({ color: 0x14101c, shininess: 60, specular: 0x5a4a7a, flatShading: true });
+  const glass = new THREE.MeshPhongMaterial({ color: 0xcdeeff, transparent: true, opacity: 0.30, shininess: 220, specular: 0xffffff, depthWrite: false, flatShading: true });
+  const PAL = [0xff2bb0, 0x2bf0ff, 0xffe24a, 0x9a4aff, 0xffffff, 0x4aff9a].map(c => new THREE.MeshBasicMaterial({ color: c }));
+  const OFF = new THREE.MeshBasicMaterial({ color: 0x2a2438 });
+  const addGlow = (c, o) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+  // ── The wand: the Flamethrower's, in chrome ──
+  gpCyl(g, chrome, 0.021, 0.021, 0.300, 10, 0, 0.014, -0.070);
+  for (let i = 0; i < 5; i++) gpCyl(g, purple, 0.0218, 0.0218, 0.006, 10, 0, 0.014, -0.150 + i * 0.038);
+  gpCyl(g, chromeD, 0.028, 0.028, 0.050, 10, 0, 0.014, -0.244);                    // burner head
+  for (let i = 0; i < 6; i++) gpBox(g, pink, 0.008, 0.008, 0.048, Math.cos(i / 6 * Math.PI * 2) * 0.026, 0.014 + Math.sin(i / 6 * Math.PI * 2) * 0.026, -0.244);
+  gpCyl(g, chrome, 0.020, 0.020, 0.012, 10, 0, 0.014, -0.272);
+  gpCyl(g, blk, 0.0145, 0.0145, 0.014, 8, 0, 0.014, -0.276);
+  const pilotMat = new THREE.MeshBasicMaterial({ color: 0xff7ad8, transparent: true, opacity: 0.9 });
+  const pilot = new THREE.Mesh(new THREE.ConeGeometry(0.007, 0.030, 6), pilotMat); pilot.rotation.x = -Math.PI / 2; pilot.position.set(0.020, 0.030, -0.286); g.add(pilot);
+  gpCyl(g, chromeD, 0.0032, 0.0032, 0.100, 5, 0.020, 0.030, -0.230);
+  gpPlate(g, blk, [[0.040, -0.008], [0.070, -0.022], [0.074, -0.096], [0.044, -0.110], [0.020, -0.048], [0.018, -0.012]], 0.036, 0);   // pistol grip
+  for (let i = 0; i < 3; i++) gpBox(g, pink, 0.038, 0.004, 0.030, 0, -0.050 - i * 0.015, 0.058 + i * 0.002 , 0.0, 0, 0);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.0036, 4, 8, Math.PI * 1.05), chromeD);
+  guard.rotation.set(0, Math.PI / 2, -0.4); guard.position.set(0, -0.018, 0.022); g.add(guard);
+  gpBox(g, pink, 0.005, 0.016, 0.005, 0, -0.008, 0.022, 0.2);
+  gpBox(g, blk, 0.022, 0.052, 0.026, 0, -0.028, -0.120, -0.24);                    // forward handle
+  for (let i = 0; i < 3; i++) gpBox(g, purple, 0.023, 0.005, 0.024, 0, -0.016 - i * 0.014, -0.116 - i * 0.004, -0.24);
+  // ── The disco ball on its stem ──
+  const BALL_Y = 0.088, BALL_Z = -0.140, BR = 0.024;
+  const stem = new THREE.Group(); stem.position.set(0, 0.040, BALL_Z); g.add(stem);
+  gpCyl(stem, chromeD, 0.0035, 0.0035, 0.036, 5, 0, 0.018, 0, 0, 0);
+  gpCyl(g, purple, 0.009, 0.011, 0.010, 8, 0, 0.040, BALL_Z, 0, 0);                // the mount
+  const ball = new THREE.Group(); ball.position.set(0, BALL_Y, BALL_Z); g.add(ball);
+  ball.add(new THREE.Mesh(new THREE.IcosahedronGeometry(BR * 0.97, 1), chromeD));
+  const tiles = [], up = new THREE.Vector3(0, 0, 1);
+  const addTile = (d, p) => {
+    const t = new THREE.Mesh(new THREE.BoxGeometry(0.0115, 0.0115, 0.003), PAL[p % 6]);
+    t.position.copy(d).multiplyScalar(BR); t.quaternion.setFromUnitVectors(up, d); ball.add(t); tiles.push({ t, p });
+  };
+  addTile(new THREE.Vector3(0, 1, 0), 0); addTile(new THREE.Vector3(0, -1, 0), 3);
+  for (let k = 1; k <= 4; k++) {
+    const th = Math.PI * k / 5, n = Math.max(4, Math.round(9 * Math.sin(th)));
+    for (let j = 0; j < n; j++) { const ph = (j + (k % 2) * 0.5) / n * Math.PI * 2; addTile(new THREE.Vector3(Math.sin(th) * Math.cos(ph), Math.cos(th), Math.sin(th) * Math.sin(ph)), k * 2 + j); }
+  }
+  // ── The speakers ──
+  const speakers = [-1, 1].map(sd => {
+    const sp = new THREE.Group(); sp.position.set(sd * 0.037, 0.016, -0.185); g.add(sp);
+    gpBox(sp, chrome, 0.018, 0.040, 0.054, 0, 0, 0);
+    gpBox(sp, blk, 0.0192, 0.034, 0.048, 0, 0, 0);
+    gpBox(g, chromeD, 0.014, 0.006, 0.020, sd * 0.0275, 0.004, -0.185);                // arm to the barrel
+    const cones = [];
+    cones.push(gpCyl(sp, pink, 0.0125, 0.0095, 0.004, 8, sd * 0.0100, -0.007, 0, 0, Math.PI / 2));
+    cones.push(gpCyl(sp, PAL[1], 0.0050, 0.0040, 0.004, 6, sd * 0.0100, 0.0125, 0, 0, Math.PI / 2));
+    gpBox(sp, purple, 0.019, 0.003, 0.054, 0, 0.0215, 0);
+    return { sp, cones, home: sp.position.clone(), sd };
+  });
+  // ── The fuel tank: glass, glowing liquid, bubbles ──
+  const tank = new THREE.Group(); tank._home = new THREE.Vector3(0.040, 0.034, 0.060); tank.position.copy(tank._home); g.add(tank);
+  gpCyl(tank, glass, 0.019, 0.019, 0.130, 8, 0, 0, 0);
+  const liquidM = new THREE.MeshBasicMaterial({ color: 0xff2bb0, transparent: true, opacity: 0.85 });
+  gpCyl(tank, liquidM, 0.0148, 0.0148, 0.118, 8, 0, 0, 0);
+  for (const z of [-0.066, 0.066]) gpCyl(tank, chrome, 0.021, 0.021, 0.012, 8, 0, 0, z);
+  for (const z of [-0.030, 0.030]) gpCyl(tank, purple, 0.0205, 0.0205, 0.006, 8, 0, 0, z);
+  gpCyl(tank, pink, 0.006, 0.006, 0.010, 6, 0, 0.0225, 0.040, 0, 0);               // the filler cap
+  const bubbles = [0, 1, 2, 3, 4].map(i => { const b = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.004, 0.004), PAL[4]); b.position.set((i % 2 - 0.5) * 0.008, 0, -0.045 + i * 0.022); tank.add(b); return b; });
+  gpBox(g, chromeD, 0.020, 0.006, 0.018, 0.031, 0.012, 0.060);                      // bracket
+  gpBox(g, chromeD, 0.018, 0.006, 0.012, 0.030, 0.026, -0.010); gpCyl(g, chromeD, 0.0045, 0.0045, 0.020, 5, 0.026, 0.020, -0.010, 0, Math.PI / 2);   // feed line to the wand
+  // ── Four spotlights round the nozzle ──
+  const ring = new THREE.Group(); ring.position.set(0, 0.014, -0.236); g.add(ring);
+  const spots = [0, 1, 2, 3].map(i => {
+    const a = i * Math.PI / 2 + Math.PI / 4, hinge = new THREE.Group(); hinge.position.set(Math.cos(a) * 0.031, Math.sin(a) * 0.031, 0); hinge.rotation.z = a - Math.PI / 2; ring.add(hinge);
+    const arm = new THREE.Group(); hinge.add(arm);
+    gpCyl(arm, chromeD, 0.0035, 0.0085, 0.024, 6, 0, 0, -0.012);
+    gpCyl(arm, PAL[i + 1], 0.0075, 0.0075, 0.002, 6, 0, 0, -0.0245);
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.020, 0.13, 8, 1, true), addGlow([0xff2bb0, 0x2bf0ff, 0xffe24a, 0x4aff9a][i], 0.24));
+    beam.rotation.x = Math.PI / 2; beam.position.z = -0.0245 - 0.065; beam.visible = false; arm.add(beam);
+    return { hinge, arm, beam };
+  });
+  // ── The dance floor the inspect throws down ──
+  const floor = new THREE.Group(); floor.position.set(0, -0.075, -0.170); floor.visible = false; g.add(floor);
+  const fl = [];
+  for (let i = 0; i < 6; i++) for (let j = 0; j < 6; j++) {
+    const m = new THREE.MeshBasicMaterial({ color: 0xff2bb0, transparent: true, opacity: 0.9 });
+    const t = new THREE.Mesh(new THREE.BoxGeometry(0.043, 0.002, 0.043), m); t.position.set((i - 2.5) * 0.048, 0, (j - 2.5) * 0.048); floor.add(t); fl.push({ t, m, i, j });
+  }
+  // ── Confetti the muzzle throws ──
+  const confetti = [];
+  for (let i = 0; i < 24; i++) { const c = new THREE.Mesh(new THREE.BoxGeometry(0.007, 0.007, 0.002), PAL[i % 6]); c.visible = false; g.add(c); confetti.push({ c, v: new THREE.Vector3(), life: 0 }); }
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.038, 6, 5), new THREE.MeshBasicMaterial({ color: 0xff2bb0 }));
+  flash.visible = false; flash.position.set(0, 0.014, -0.300); g.add(flash);
+  g._flash = flash; g._kickZ = 0.004; g._greebled = true; g._handDetailed = true;
+  g.traverse(o => { if (o.isMesh) o.userData.noSmooth = true; });
+  // ── Motion ──
+  const S = { shot: 0, fireT: 0, sus: 0, spin: 0, rise: 0, lights: 1, floorK: 0, hop: 0, pulse: 0, ringA: 0, queued: 0 };
+  const smooth = (a, b, t) => { const x = Math.max(0, Math.min(1, (t - a) / (b - a))); return x * x * (3 - 2 * x); };
+  const col = new THREE.Color();
+  let nextShimmer = 0, clunked = false, ci = 0;
+  const reset = () => {
+    Object.assign(S, { shot: 0, fireT: 0, sus: 0, rise: 0, lights: 1, floorK: 0, hop: 0, pulse: 0, queued: 0 });
+    ball.position.y = BALL_Y; stem.scale.y = (BALL_Y - BR - 0.040) / 0.036; floor.visible = false;
+    tank.position.copy(tank._home); tank.rotation.set(0, 0, 0); tank.visible = true;
+    speakers.forEach(s => { s.sp.position.copy(s.home); s.cones.forEach(c => c.scale.setScalar(1)); });
+    spots.forEach(s => { s.arm.rotation.x = 0; s.beam.visible = false; });
+    confetti.forEach(c => { c.life = 0; c.c.visible = false; });
+    tiles.forEach(t => { t.t.material = PAL[t.p % 6]; });
+    liquidM.color.setHex(0xff2bb0); liquidM.opacity = 0.85; clunked = false;
+  };
+  g._calm = reset;
+  g._steamShot = () => {                                                         // the muzzle-blast hook: one per flame
+    S.shot = 1; flash.material.color.copy(PAL[(ci++) % 6].color);
+    if ((ci & 1) === 0) S.queued = Math.min(6, S.queued + 1);
+  };
+  g._S = S; g._ball = ball; g._stem = stem; g._tank = tank; g._speakers = speakers; g._spots = spots; g._ring = ring; g._floor = floor; g._tiles = tiles; g._liquid = liquidM; g._confetti = confetti; g._off = OFF;
+  g._tick = (dt, now, assembling) => {
+    if (assembling) { reset(); return; }
+    const inspecting = !!(g._inspectMode && g._reloadStart), reloading = !!(g._reloadStart && !g._inspectMode);
+    const T = g._reloadStart ? Math.max(0, Math.min(1, (Date.now() - g._reloadStart) / (g._reloadDur || (inspecting ? 2600 : 3200)))) : 0;
+    S.shot = Math.max(0, S.shot - dt / 0.12);
+    if (S.shot > 0) S.fireT += dt; else S.fireT = Math.max(0, S.fireT - dt * 1.5);
+    S.sus = smooth(0.7, 1.5, S.fireT);
+    let lights = 1, rise = 0, floorK = 0, hop = 0, spin = 1.2 + 3.0 * S.sus * (S.shot > 0 ? 1 : 0);
+    if (reloading) {                                                             // lights out, tank off, tank on, boot
+      lights = T < 0.72 ? 1 - smooth(0.0, 0.12, T) : smooth(0.72, 0.92, T);
+      const out = smooth(0.14, 0.42, T), inn = smooth(0.46, 0.74, T);
+      if (T < 0.44) { tank.position.set(tank._home.x + 0.14 * out, tank._home.y - 0.09 * out, tank._home.z + 0.02 * out); tank.rotation.z = -0.5 * out; tank.visible = out < 0.98; }
+      else { tank.position.set(tank._home.x, tank._home.y, tank._home.z + 0.12 * (1 - inn)); tank.rotation.z = 0; tank.visible = true; }
+      spin = 1.2 * lights;
+    } else { tank.position.copy(tank._home); tank.rotation.z = 0; tank.visible = true; }
+    if (inspecting) {                                                            // DISCO FEVER
+      const t = T;
+      rise = smooth(0.14, 0.26, t) * (1 - smooth(0.78, 0.86, t));
+      floorK = smooth(0.24, 0.36, t) * (1 - smooth(0.76, 0.84, t));
+      spin = 1.2 + 16 * smooth(0.18, 0.30, t) * (1 - smooth(0.80, 0.88, t));
+      const h1 = t > 0.48 && t < 0.58 ? Math.sin((t - 0.48) / 0.10 * Math.PI) : 0, h2 = t > 0.62 && t < 0.72 ? Math.sin((t - 0.62) / 0.10 * Math.PI) : 0;
+      hop = Math.max(h1, h2);
+      if (t >= 0.86 && !clunked) { clunked = true; try { playSoundEvent('foundry_clang', { volume: 0.5, pitch: 0.8, minGap: 100 }); } catch (e) {} }
+    } else if (T === 0) clunked = false;
+    S.lights = lights; S.rise = rise; S.floorK = floorK; S.hop = hop;
+    S.pulse = Math.max(S.shot * (0.5 + 0.5 * Math.sin(now * 25)), hop);
+    // the ball: it rises on its stem, spins, and every few frames its tiles take new colours
+    ball.position.y = BALL_Y + 0.055 * rise; stem.scale.y = Math.max(0.05, (ball.position.y - BR - 0.040) / 0.036);
+    ball.rotation.y += dt * spin; ball.rotation.x = 0.12 * Math.sin(now * 1.3);
+    if (now >= nextShimmer) {
+      nextShimmer = now + 0.11;
+      const step = Math.floor(now * 9), flashWhite = inspecting && T >= 0.86 && T < 0.90;
+      for (const t of tiles) t.t.material = flashWhite ? PAL[4] : (lights < 0.2 || (lights < 0.9 && (t.p + step) % 3 === 0) ? OFF : PAL[(t.p + step) % 6]);
+    }
+    // speakers
+    for (const s of speakers) {
+      s.sp.position.y = s.home.y + 0.014 * hop;
+      const k = 1 + 0.35 * S.pulse * lights; s.cones.forEach(c => c.scale.setScalar(k));
+    }
+    // the tank
+    col.setHSL((now * 0.15) % 1, 1, 0.55).multiplyScalar(0.12 + 0.88 * lights); liquidM.color.copy(col); liquidM.opacity = 0.35 + 0.5 * lights;
+    bubbles.forEach((b, i) => { b.position.y = (((now * 0.35 * (0.6 + i * 0.25) + i * 0.37) % 1) - 0.5) * 0.024; b.visible = lights > 0.3; });
+    // the spotlights unfold and sweep
+    const unfold = S.sus * lights;
+    ring.rotation.z += dt * 2.6 * unfold;
+    spots.forEach((s, i) => { s.arm.rotation.x = 0.75 * unfold; s.beam.visible = unfold > 0.15; if (s.beam.visible) s.beam.material.opacity = 0.26 * unfold * (0.75 + 0.25 * Math.sin(now * 14 + i * 1.7)); });
+    pilot.scale.setScalar(0.85 + 0.25 * Math.sin(now * 17)); pilotMat.color.setHSL((now * 0.3) % 1, 1, 0.65);
+    // the dance floor
+    floor.visible = floorK > 0.02;
+    if (floor.visible) {
+      floor.scale.set(floorK, 1, floorK);
+      for (const f of fl) { col.setHSL((now * 0.5 + (f.i + f.j) * 0.09) % 1, 1, 0.55); f.m.color.copy(col); f.m.opacity = 0.9 * floorK * (0.35 + 0.65 * Math.max(0, Math.sin(now * 9 + (f.i * 7 + f.j * 3)))); }
+    }
+    // confetti out of the muzzle
+    while (S.queued > 0) {
+      S.queued--;
+      const c = confetti.find(q => q.life <= 0); if (!c) break;
+      c.life = 0.45 + Math.random() * 0.2; c.c.visible = true; c.c.position.set((Math.random() - 0.5) * 0.01, 0.014 + (Math.random() - 0.5) * 0.01, -0.292);
+      c.v.set((Math.random() - 0.5) * 0.35, (Math.random() - 0.3) * 0.30, -0.9 - Math.random() * 0.6);
+    }
+    for (const c of confetti) if (c.life > 0) {
+      c.life -= dt; if (c.life <= 0) { c.c.visible = false; continue; }
+      c.c.position.addScaledVector(c.v, dt); c.c.rotation.x += dt * 9; c.c.rotation.y += dt * 7; c.c.scale.setScalar(Math.min(1, c.life / 0.2));
+    }
+  };
+  reset();
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
 function buildWidowmaker() {
   // 🕷️ Crossbow -> WIDOWMAKER. A mechanical spider that is also a crossbow: eight jointed legs folded along its sides. Aim and the front four unfold into the bow
   // arms while the rear four spread; a shot snaps the front legs in and they reset; a reload sends a little spider crawling along the rail with the next bolt; inspect
@@ -47021,6 +47208,7 @@ const SKIN_SHOT = {};
   G({ shape: 'hackbullet', c: [0x0a0a0a, 0x2dff6a], k: 1.5 }, null, ['pistol_hacker', 'ak20_hacker']);
   G({ shape: 'pixeltrail', c: [0xff2bd6, 0x2bf0ff], min: 0.06 }, 'cyber', ['vector_glitch_exe']);
   G({ shape: 'bolt', c: [0xff1030, 0xff2bd6] }, 'cyber', ['vector_neon_anarchy']);
+  G(null, null, ['flamethrower_disco_inferno'], 0xff4fd8);   // the ordinary flames, with a pink glow round the yellow
   G({ shape: 'card', c: [0x15151c, 0xff2a3a], min: 0.05, k: 1.2 }, 'cards', ['throwing_knives_house_of_cards']);
   G({ shape: 'gravarrow', c: [0x0c0c12, 0x9a4aff], min: 0.07, k: 1.3 }, 'gravity', ['boombow_gravity_end']);
   G({ shape: 'tentacle', c: [0xa83a9f, 0xf2c6e8], min: 0.07, k: 1.2 }, 'ink', ['harpoon_octopus']);
@@ -58299,6 +58487,9 @@ const MODEL_SKINS = [
   { id: 'vector_neon_anarchy', weapon: 'vector', name: 'NEON//ANARCHY', rarity: 'legendary', look: { hit: 'error' },
     sw: ['#0b0b10', '#ff2bb0'], build: buildNeonAnarchy,
     blurb: 'A rogue hacker\'s prototype, built lopsided on purpose: bare circuitry and a coil on the side you see, overlapping armour and hazard labels on the other. Aim and the side panels slide back; fire and the blocks shuttle and neon races along the deck while the hologram counter corrupts (OVERRIDE, UNSTABLE, SYSTEM ERROR). Inspect is SYSTEM HIJACK: a red skull, UNAUTHORIZED USER DETECTED, ACCESS GRANTED.' },
+  { id: 'flamethrower_disco_inferno', weapon: 'flamethrower', name: 'DISCO INFERNO', rarity: 'rare',
+    sw: ['#e4e8f4', '#ff2bb0'], build: buildDiscoInferno,
+    blurb: 'A nightclub with a pilot light. A disco ball spins over the barrel, the speakers pulse, confetti flies out with the flames, and hold the trigger and four spotlights unfold and sweep. Reload swaps the glowing tank; inspect is DISCO FEVER.' },
   { id: 'plasma_carbine_fishbowl', weapon: 'plasma_carbine', name: 'Fishbowl Carbine', rarity: 'rare',
     sw: ['#2a8ae8', '#ff7a1a'], build: buildFishbowlCarbine,
     blurb: 'Fills with water when drawn. Three fish live in it.' },
@@ -58512,7 +58703,7 @@ const GEN2_MODEL_SKIN_IDS = new Set([
   'revolver_midas', 'pistol_frost', 'ak20_xerror', 'revolver_shatterpoint', 'machine_pistol_overclocked', 'hand_cannon_iron_judge', 'sawed_off_double_trouble', 'sawed_off_classic_shorty', 'grenade_launcher_orbital', 'minigun_redline',            // the Gen 2 case's two new top rarities: EPIC and MYTHIC (server.js GEN2_EPIC_SKIN_IDS / GEN2_NEW_MYTHIC_SKIN_IDS)
   'ak20_rainbow', 'ak20_hyperspace', 'ak20_blueprint', 'sg8_portal', 'vector_portal',
   'railgun_portal_detector', 'p90_quantum_scanner', 'freeze_hyperslush', 'firework_showman',
-  'shorty_outlaw', 'snub_gunslinger', 'deagle_glitch', 'deagle_phantom', 'vector_glitch_exe', 'vector_neon_anarchy', 'crossbow_widowmaker', 'throwing_knives_house_of_cards', 'boombow_gravity_end', 'harpoon_octopus',
+  'shorty_outlaw', 'snub_gunslinger', 'deagle_glitch', 'deagle_phantom', 'vector_glitch_exe', 'vector_neon_anarchy', 'flamethrower_disco_inferno', 'crossbow_widowmaker', 'throwing_knives_house_of_cards', 'boombow_gravity_end', 'harpoon_octopus',
   'burst_cannon_phantom', 'plasma_carbine_fishbowl', 'paintball_fishbowl', 'coilgun_clockwork',
   'rpd_clockwork_belt', 'smart_smg_neon', 'p90_neon_sign', 'portal_launcher_constellation',
   'railgun_constellation', 'pistol_origami', 'xm7_bricks', 'vector_brick_labeler',
@@ -63892,6 +64083,8 @@ const SKIN_FX = {
   deagle_glitch: { sound: _fxS('glitch', .34, .10, 0, 0),
     equip: 'glitch', equipMs: 850, equipSfx: ['glitchsfx', 'snapin'] },
   harpoon_octopus: { equip: 'unfold', equipMs: 950, equipSfx: ['whoosh', 'squeak'] },
+  flamethrower_disco_inferno: { equip: 'flip', equipMs: 950, equipSfx: ['whoosh', 'chime'],
+    inspect: [K(.12, { py: .02, rx: -.15 }), K(.26, { py: .05, pz: -.02, rx: -.50 }), K(.80, { py: .05, pz: -.02, rx: -.50 }), K(.88, { py: .03, rx: -.30 }), K(.94, { py: .015, rx: -.08 }), K(1, {})] },
   vector_neon_anarchy: { equip: 'glitch', equipMs: 950, equipSfx: ['glitchsfx', 'snapin'],
     inspect: [K(.10, { py: .02 }), K(.20, { py: .06, pz: -.04, rx: .10 }), K(.80, { py: .06, pz: -.04, rx: .10 }), K(.84, { py: .06, pz: -.04, rx: .22 }), K(.92, { py: .03 }), K(1, {})] },
   boombow_gravity_end: { equip: 'blackhole', equipMs: 1200, equipSfx: ['singularity', 'chime'],
