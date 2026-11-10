@@ -1567,7 +1567,7 @@
     <footer class="lh-footer"><button id="loadout-prev" type="button" aria-label="Previous slot">&#8592;</button><button id="loadout-ready-btn" disabled>READY</button><button id="loadout-next" type="button">Next: Secondary &#8594;</button></footer>
   </div>
 
-  <div id="err" style="display:none;position:fixed;top:0;left:0;width:100%;background:#c00;color:#fff;padding:16px;font-size:14px;z-index:9999;word-break:break-all;white-space:pre-wrap;"></div>
+  <div id="err" style="display:none;position:fixed;top:0;left:0;width:100%;background:#c00;color:#fff;padding:10px 12px;font-size:12px;z-index:9999;word-break:break-all;white-space:pre-wrap;pointer-events:none;max-height:24vh;overflow:hidden;"></div>
 
   <script>
     window.onerror = function(msg, src, line, col, err) {
@@ -1578,14 +1578,19 @@
       var el = document.getElementById('err');
       el.style.display = 'block';
       el.textContent = 'JS ERROR:\n' + msg + '\n' + src + ':' + line + (col ? ':' + col : '') + (err && err.stack ? '\n' + err.stack : '');
+      // The banner never takes a touch (the look pad and buttons sit under it) and goes away by itself once the game has had time to show it.
+      clearTimeout(window.__errHide); window.__errHide = setTimeout(function () { el.style.display = 'none'; }, 12000);
       return false;
     };
     window.addEventListener('unhandledrejection', function(e) {
-      var msg = String(e.reason);
+      var msg = String(e.reason), nm = e.reason && e.reason.name;
       if (msg.indexOf('pointer lock') !== -1 || msg.indexOf('pointerlock') !== -1) return;
+      // Browser refusals nobody can act on (a blocked autoplay or fullscreen, an interrupted play(), a locked screen orientation) are not game errors.
+      if (nm === 'NotAllowedError' || nm === 'AbortError' || nm === 'NotSupportedError' || nm === 'SecurityError' || /play\(\) request|fullscreen|orientation|user gesture|AudioContext/i.test(msg)) { console.warn('Ignored browser refusal:', msg); return; }
       var el = document.getElementById('err');
       el.style.display = 'block';
       el.textContent += '\nPromise: ' + e.reason;
+      clearTimeout(window.__errHide); window.__errHide = setTimeout(function () { el.style.display = 'none'; }, 12000);
     });
   </script>
 
