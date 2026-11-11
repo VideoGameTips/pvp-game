@@ -1294,6 +1294,11 @@ app.post('/shop/buy-skin-case', (req, res) => {
   ensureShopFields(u);
   const skinCase = SKIN_CASES[caseId];
   if (!skinCase) return res.status(404).json({ error: 'unknown skin case' });
+  // A case never deals a skin you already own, so never sell one that could not give you anything new:
+  // none left to win, or already as many unopened cases as skins still missing.
+  const missingNow = skinCase.pool.filter(id => !u.skinInventory.includes(id)).length;
+  if (!missingNow) return res.status(409).json({ error: 'You already own every skin in this case.', skinCasePacks: u.skinCasePacks, skinInventory: u.skinInventory });
+  if ((u.skinCasePacks[caseId] || 0) >= missingNow) return res.status(409).json({ error: 'You already have a case for every skin you are still missing.', skinCasePacks: u.skinCasePacks, skinInventory: u.skinInventory });
   if ((u.credits || 0) < skinCase.cost) {
     return res.status(402).json({ error: 'not enough donuts', credits: u.credits, cost: skinCase.cost });
   }
@@ -1313,12 +1318,14 @@ app.post('/shop/open-skin-case', (req, res) => {
   if ((u.skinCasePacks[caseId] || 0) <= 0) {
     return res.status(402).json({ error: 'no unopened cases', skinCasePacks: u.skinCasePacks, skinInventory: u.skinInventory });
   }
-  u.skinCasePacks[caseId]--;
   const missing = skinCase.pool.filter(id => !u.skinInventory.includes(id));
-  const pool = missing.length ? missing : skinCase.pool;
-  const skinId = pickWeighted(pool, skinCase.weights);
-  const duplicate = u.skinInventory.includes(skinId);
-  if (!duplicate) u.skinInventory.push(skinId);
+  if (!missing.length) {                                   // nothing new left: never deal a duplicate, and keep the case
+    return res.status(409).json({ error: 'You already own every skin in this case, so it has nothing left to give you. Your case is kept.', skinCasePacks: u.skinCasePacks, skinInventory: u.skinInventory });
+  }
+  u.skinCasePacks[caseId]--;
+  const skinId = pickWeighted(missing, skinCase.weights);
+  const duplicate = false;
+  u.skinInventory.push(skinId);
   saveUsers();
   res.json({ ok: true, caseId, skinId, duplicate, skinCasePacks: u.skinCasePacks, skinInventory: u.skinInventory });
 });

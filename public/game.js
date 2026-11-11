@@ -83341,6 +83341,11 @@ function skinDefById(skinId) {
 async function buySkinCase(caseId = 'gen1_basic') {
   if (!currentUser) { alert('Log in first.'); return false; }
   const c = skinCaseDef(caseId);
+  if (!currentUser.isAdmin) {                              // a case never deals a skin you already have, so never sell one you cannot use
+    const defs = c.defs(), owned = ownedSkinIds(), missing = defs.filter(s => !owned.has(s.id)).length;
+    if (defs.length && !missing) { alert(`You already own every skin in this ${c.name}.`); return false; }
+    if (defs.length && (currentUser.skinCasePacks?.[caseId] || 0) >= missing) { alert(`You already have ${missing} unopened ${c.name}${missing > 1 ? 's' : ''}, one for each skin you are still missing.`); return false; }
+  }
   if ((currentUser.credits ?? 0) < c.cost) {
     alert(`Not enough donuts.\nNeed ${money(c.cost)} · You have ${currentUser.credits ?? 0}`);
     return false;
@@ -83365,6 +83370,7 @@ async function openSkinCase(caseId = 'gen1_basic') {
   const defs = c.defs();
   const count = currentUser.isAdmin ? 99 : (currentUser.skinCasePacks?.[caseId] || 0);
   if (count <= 0) { alert(`No unopened ${c.name}s. Buy one for ${money(c.cost)}.`); return false; }
+  if (!currentUser.isAdmin && defs.length && defs.every(s => ownedSkinIds().has(s.id))) { alert(`You already own every skin in this ${c.name}, so it has nothing left to give you. Your case is kept.`); return false; }
   skinCaseRequestPending = true;
   try {
   const r = currentUser.isAdmin
