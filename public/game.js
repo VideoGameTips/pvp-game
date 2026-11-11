@@ -4014,13 +4014,25 @@ function getAudioCtx() {
 }
 function unlockAudio() {
   const ctx = getAudioCtx();
-  if (ctx && ctx.state === 'suspended') {
+  // iPhones play web audio on the "ringer" channel, which the silent switch mutes: ask for the "playback" one (Safari 17+).
+  try { if (navigator.audioSession && navigator.audioSession.type !== 'playback') navigator.audioSession.type = 'playback'; } catch (e) {}
+  if (ctx && ctx.state !== 'running') {                       // 'suspended' before the first tap, 'interrupted' after a call or a lock screen
     const resume = ctx.resume();
     if (resume && resume.catch) resume.catch(() => {});
   }
+  // iOS only counts a sound that is STARTED inside a tap: play one silent sample once.
+  try {
+    if (ctx && !unlockAudio._primed) {
+      const s = ctx.createBufferSource(); s.buffer = ctx.createBuffer(1, 1, 22050); s.connect(ctx.destination); s.start(0);
+      unlockAudio._primed = true;
+    }
+  } catch (e) {}
 }
-['pointerdown', 'keydown', 'touchstart'].forEach(evt => {
-  window.addEventListener(evt, unlockAudio, { once: true, passive: true });
+// Every kind of tap, press and key, for as long as the sound is not running. This used to be `touchstart` / `pointerdown` once: iOS does not
+// treat a touchstart as a gesture that may start audio (only touchend / click do), so the first one was used up for nothing, the context
+// stayed suspended and the whole game was silent on a phone. Capture phase, so the touch buttons that stopPropagation still count.
+['pointerdown', 'pointerup', 'touchstart', 'touchend', 'click', 'keydown'].forEach(evt => {
+  window.addEventListener(evt, () => { if (!audioCtx || audioCtx.state !== 'running' || !unlockAudio._primed) unlockAudio(); }, { passive: true, capture: true });
 });
 function soundDistanceGain(pos, remote) {
   if (!remote) return 1;
