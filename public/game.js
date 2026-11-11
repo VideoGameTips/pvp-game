@@ -43637,7 +43637,7 @@ function dressRemoteGun(mesh) {
 // A body used to hold one of four stand-in shapes (a rifle, a shotgun, a sniper, an LMG) tinted by the weapon's bullet
 // colour, so whatever you carried, everyone saw the same gun. It now holds the weapon's own model, hands removed, at
 // world size; a body that has no model to copy, or past the budget (heavy models, a crowded match), keeps the stand-in.
-const REAL_GUN_BUDGET = 10;
+const REAL_GUN_BUDGET = 40;                 // bots only: a real player's gun (and your own body's) is always the real model
 function _realGunsInUse() {
   let n = 0;
   for (const m of Object.values(remoteMeshes)) if (m && m._gun && m._gun.userData && m._gun.userData.realGun) n++;
@@ -70277,7 +70277,8 @@ function armRemoteMesh(mesh, weaponId, skinId) {
   // The weapon's own model if there is one and there is room for it (real people first: they are few); the
   // stand-in otherwise.
   let gun = null;
-  try { if (_realGunsInUse() < REAL_GUN_BUDGET) gun = makeRealWorldGun(weaponId, skinId); } catch (e) { gun = null; }
+  const _person = !!mesh._selfWrapFn || !!(mesh._ownerId && players[mesh._ownerId] && !players[mesh._ownerId].isBot);
+  try { if (_person || _realGunsInUse() < REAL_GUN_BUDGET) gun = makeRealWorldGun(weaponId, skinId); } catch (e) { gun = null; }
   if (!gun) gun = makeBotWeaponProp(weaponId);
   if (gun.userData.gripCentered) gun.position.set(0, 0, 0);
   else gun.position.set(0, -0.02, 0.055);
