@@ -50785,7 +50785,9 @@ function applyObbyKit() {
   updateAmmoHUD(); updateWeaponHUD(); updateWeaponSelector(); updateAbilityHUD();
 }
 
+function adminHpSetting() { try { return currentUser?.isAdmin && adminSettings.hp > 0 ? adminSettings.hp : 0; } catch (e) { return 0; } }   // (the admin panel's health slider; 0 = off)
 function matchMaxHp() {
+  const _adm = adminHpSetting(); if (_adm) return _adm;
   if (match && match.jugg && match.jugg.id === myId) return match.cfg.juggHp;   // 🛡️ the juggernaut's health is a boss's
   return match?.cfg?.playerHp || 300;
 }
@@ -52279,7 +52281,7 @@ function updateMovement(dt, socialBlocked = false) {
   // Frost slow: 100 = normal, 0 = frozen. Linear scale.
   const frostMult = Math.max(0, playerFrostSlow) / 100 * (Date.now() < playerChillUntil ? CHILL_MULT : 1);
   // ⚡ Admin speed boost: 3× speed
-  const adminSpeedMult = (adminCheats.speed && currentUser?.isAdmin) ? 3 : 1;
+  const adminSpeedMult = ((adminCheats.speed && currentUser?.isAdmin) ? adminSettings.speed : 1) * (adminFlyActive() ? adminSettings.flyForward : 1);
   // 🏃 Sprint (Shift): +50% speed.  🦆 Crouch (Ctrl/C): -45% speed.
   // Mobile mirrors via mobileSprintHeld / mobileCrouchHeld toggles.
   const crouchHeld = !!(keys['ControlLeft'] || keys['ControlRight'] || keys['KeyC'] || window._mobileCrouch);
@@ -52379,7 +52381,10 @@ function updateMovement(dt, socialBlocked = false) {
   window._crouchEye += (targetEye - window._crouchEye) * Math.min(1, dt * easeRate);
   // 🦘 Jump physics — Space (or mobile button). Skip in slam/heli/mortar states.
   // ✨ Some weapons grant a mid-air double jump (sci-fi / gravity / jedi).
-  if (!aquatic && !slamState && !pilotedVehicle && !pilotedMortar) {
+  // 🪂 Admin fly: no gravity (not the growing air pull, a slam, a launch or a well either); the panel's sliders say how fast you go
+  const _adminFly = adminFlyActive();
+  if (_adminFly) { slamState = null; playerYVel = 0; airTime = 0; airGroundT = 0; window._pvpGrounded = false; }
+  if (!_adminFly && !aquatic && !slamState && !pilotedVehicle && !pilotedMortar) {
     const groundEyeY = getGroundEyeY() + (window._crouchEye - PLAYER_EYE_HEIGHT);
     const isGrounded = camera.position.y <= groundEyeY + 0.05 && playerYVel <= 0;
     window._pvpGrounded = isGrounded;   // (the portal speed boost reads this: it ends if you are back on the ground)
@@ -52476,7 +52481,7 @@ function updateMovement(dt, socialBlocked = false) {
   // A grounded or just-walked-off player within reach of the ramp surface at the
   // new spot is put back on it, going up or down. A jump (slamState 'jump', or
   // any upward speed) is left alone.
-  if (playerYVel <= 0.01 && (!slamState || slamState.type === 'fall')) {
+  if (!_adminFly && playerYVel <= 0.01 && (!slamState || slamState.type === 'fall')) {
     for (const r of MAP_RAMPS[activeMapName] || []) {
       const sfc = rampSurfaceAt(r, camera.position.x, camera.position.z);
       if (sfc == null) continue;
@@ -52572,7 +52577,7 @@ function updateMovement(dt, socialBlocked = false) {
       }
       slamState = null;
     }
-  } else if (!aquatic) {
+  } else if (!aquatic && !_adminFly) {
     // Crouch / slide eye-height delta. window._crouchEye is the *target* eye
     // height (1.65 standing, 1.10 crouched, 0.95 sliding); subtract from
     // 1.65 to get the y offset to apply on top of the ground.
@@ -53971,7 +53976,7 @@ function activateMeleeAbility() {
   else if (ab.type === 'melee_eat') {
     socket.emit('healSelf', { amount: ab.heal || 40 });
     const me = players[myId];
-    if (me) { me.hp = Math.min(300, (me.hp || 0) + (ab.heal || 40)); updateHealthHUD(me.hp); }
+    if (me) { me.hp = Math.min(Math.max(300, adminHpSetting()), (me.hp || 0) + (ab.heal || 40)); updateHealthHUD(me.hp); }
     spawnHitParticle(camera.position.clone().setY(1.3));
     startUseAnim('melee', item, 'eat');             // lifted to the mouth, bitten down
     flashAbilityName(ab.name);
@@ -55333,19 +55338,10 @@ function tryShoot() {
   const muzzleWorld = new THREE.Vector3();
   model._flash.getWorldPosition(muzzleWorld);
   let baseDir = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion).normalize();
-  // ⚡ Admin aimbot: snap aim direction to nearest enemy
+  // ⚡ Admin aimbot: a shot fired anywhere inside the red ring, with an enemy inside it, goes to that enemy
   if (adminCheats.aimbot && currentUser?.isAdmin) {
-    let best = null, bestDist = Infinity;
-    for (const bot of gameBots) {
-      if (bot.dead || bot.team === 'ally') continue;
-      const d = Math.hypot(bot.x - camera.position.x, bot.z - camera.position.z);
-      if (d < bestDist && d < 50) { bestDist = d; best = bot; }
-    }
-    if (best) {
-      const mesh = remoteMeshes[best.id];
-      const targetPos = mesh ? mesh.position.clone().setY(mesh.position.y + 1.0) : new THREE.Vector3(best.x, 1, best.z);
-      baseDir = targetPos.clone().sub(camera.position).normalize();
-    }
+    const lock = adminAimbotTarget();
+    if (lock) baseDir = lock.pos.clone().sub(camera.position).normalize();
   }
   let trickShotTarget = null;
 
@@ -55753,7 +55749,7 @@ function meleeStrikeScan(item, soundId, sawDry, now) {
       const healAmt = healPerHit * mult;
       socket.emit('healSelf', { amount: healAmt });
       const me = players[myId];
-      if (me) { me.hp = Math.min(300, (me.hp || 300) + healAmt); updateHealthHUD(me.hp); }
+      if (me) { me.hp = Math.min(Math.max(300, adminHpSetting()), (me.hp || 300) + healAmt); updateHealthHUD(me.hp); }
       flashScreen('rgba(136,0,34,0.18)', 200);
     }
     // 🔥 Burn DOT (fire_poker) — drop a small burn zone at target
@@ -56112,7 +56108,7 @@ function _trySupportEffect(item, now) {
     socket.emit('healSelf', { amount: item.heal });
     const me = players[myId];
     if (me) {
-      me.hp = Math.max(1, Math.min(300, me.hp + item.heal - (item.selfDamage || 0)));
+      me.hp = Math.max(1, Math.min(Math.max(300, adminHpSetting()), me.hp + item.heal - (item.selfDamage || 0)));
       updateHealthHUD(me.hp);
     }
     spawnHitParticle(camera.position.clone().setY(1.4));
@@ -66687,8 +66683,8 @@ function updateBullets(dt) {
         // 🚀💣 Rockets AND grenades detonate on terrain impact. Keyed off the
         // projectile kind rather than two hardcoded ids, so every launcher in
         // the roster explodes instead of only the two rockets.
-        if (EXPLOSIVE_KINDS.has(projectileKind(b.weaponId, WEAPONS.find(w => w.id === b.weaponId)))) {
-          rocketExplode(wallHitPt, b.weaponId, null, { damagePlayer: false, skinLook: b.skinLook });
+        if (EXPLOSIVE_KINDS.has(projectileKind(b.weaponId, WEAPONS.find(w => w.id === b.weaponId))) || adminExplosiveShot(b)) {
+          rocketExplode(wallHitPt, adminBoomId(b), null, { damagePlayer: false, skinLook: b.skinLook });
           removeBullet(); continue;
         }
         // Bouncing weapons (prism, pulse disc, pinball): reflect off wall and speed up
@@ -66768,8 +66764,8 @@ function updateBullets(dt) {
           spawnBurnZone(_bpos.clone(), 3, 3, 10000);
         }
         // 🚀💣 Direct target took the main hit; splash everyone else nearby.
-        if (EXPLOSIVE_KINDS.has(projectileKind(b.weaponId, WEAPONS.find(w => w.id === b.weaponId)))) {
-          rocketExplode(_bpos.clone(), b.weaponId, bestHit.pid, { damagePlayer: false, skinLook: b.skinLook });
+        if (EXPLOSIVE_KINDS.has(projectileKind(b.weaponId, WEAPONS.find(w => w.id === b.weaponId))) || adminExplosiveShot(b)) {
+          rocketExplode(_bpos.clone(), adminBoomId(b), bestHit.pid, { damagePlayer: false, skinLook: b.skinLook });
         }
         if (b.plantsSpear) landThrownSpear(b, bestHit.mesh.position, null);                   // it drops and stands at their feet
         removeBullet();
@@ -67669,7 +67665,7 @@ function updateP2WSystems(dt) {
       if (!_nanoTickAt || now >= _nanoTickAt) {
         _nanoTickAt = now + 250;
         const heal = 5;
-        me.hp = Math.min(300, me.hp + heal);
+        me.hp = Math.min(Math.max(300, adminHpSetting()), me.hp + heal);
         updateHealthHUD(me.hp);
         socket.emit('healSelf', { amount: heal });
       }
@@ -68703,7 +68699,7 @@ function updateDamageDirections(now = performance.now()) {
 }
 function updateHealthHUD(hp) {
   // The bar is a share of THIS mode's health: the Towers are 100 HP, and a full bar there read as a third.
-  const maxHp = (typeof match !== 'undefined' && match && match.jugg && match.jugg.id === myId) ? match.cfg.juggHp : ((typeof match !== 'undefined' && match && match.cfg && match.cfg.playerHp) || 300);
+  const maxHp = matchMaxHp();
   document.getElementById('health-fill').style.width = `${Math.min(100, hp / maxHp * 100).toFixed(1)}%`;
   document.getElementById('health-num').textContent = hp;
   // Under 30%: the edges stay red until you heal, respawn or die (#36).
@@ -80846,7 +80842,15 @@ const adminCheats = {
   aimbot: false,
   speed: false,
   freezeBots: false,
+  explosive: false,
+  octoMode: false,
 };
+// How strong each hack is: the sliders in the admin panel (hp 0 = the mode's own health).
+const ADMIN_DEFAULTS = { flyUp: 6, flyForward: 1, speed: 3, hp: 0, ring: 25 };
+const adminSettings = Object.assign({}, ADMIN_DEFAULTS);
+try { const sv = JSON.parse(localStorage.getItem('pvp_admin_settings') || 'null'); if (sv) for (const k in ADMIN_DEFAULTS) if (Number.isFinite(sv[k])) adminSettings[k] = sv[k]; } catch (e) {}
+function saveAdminSettings() { try { localStorage.setItem('pvp_admin_settings', JSON.stringify(adminSettings)); } catch (e) {} }
+function adminFlyActive() { return !!(adminCheats.fly && currentUser?.isAdmin && !isDead); }
 const ADMIN_CHEAT_COMMANDS = {
   fly: 'fly',
   flight: 'fly',
@@ -80867,6 +80871,10 @@ const ADMIN_CHEAT_COMMANDS = {
   fast: 'speed',
   freeze: 'freezeBots',
   freezebots: 'freezeBots',
+  explosive: 'explosive',
+  boom: 'explosive',
+  octo: 'octoMode',
+  octomode: 'octoMode',
 };
 const ADMIN_CHEAT_LABELS = {
   fly: 'Fly mode',
@@ -80877,8 +80885,10 @@ const ADMIN_CHEAT_LABELS = {
   aimbot: 'Aimbot',
   speed: 'Speed boost',
   freezeBots: 'Freeze bots',
+  explosive: 'Explosive bullets',
+  octoMode: 'Octo mode',
 };
-const ADMIN_COMMAND_HELP = ';fly ;god ;ammo ;untime ;aura ;aimbot ;speed ;freeze ;panel ;nuke ;heal ;refill ;win ;builder';
+const ADMIN_COMMAND_HELP = ';fly ;god ;ammo ;untime ;aura ;aimbot ;speed ;freeze ;explosive ;octo ;panel ;nuke ;heal ;refill ;win ;builder ;flyspeed N ;flyforward N ;speedmult N ;hp N ;ring N';
 let serverUnlimitedMatchTime = false;
 function adminInfiniteAmmoActive() { return !!(currentUser?.isAdmin && adminCheats.infiniteAmmo); }
 function matchTimeUnlimited() { return serverUnlimitedMatchTime || !!(currentUser?.isAdmin && adminCheats.unlimitedTime); }
@@ -80901,6 +80911,7 @@ function setAdminCheat(key, next, source) {
     syncAdminTestSettings();
     if (gameStarted && loadoutReady()) { updateAmmoHUD(); if (match) updateMatchHUD(); }
   }
+  if (key === 'octoMode' && adminCheats.octoMode) octoEnable();
   const label = ADMIN_CHEAT_LABELS[key] || key;
   showAnnouncement(
     adminCheats[key] ? `⚡ ${label} ON` : `${label} OFF`,
@@ -80925,6 +80936,13 @@ function handleAdminChatCommand(raw) {
   if (cmd === 'help' || cmd === '?' || cmd === 'commands') {
     pushChatLine(`Admin commands: ${ADMIN_COMMAND_HELP}`, '#ff8888');
     pushChatLine('Tip: add on/off, like ;aimbot off or ;fly on.', '#ffaaaa');
+    return true;
+  }
+  const NUM_CMDS = { flyspeed: 'flyUp', flyup: 'flyUp', flyforward: 'flyForward', speedmult: 'speed', hp: 'hp', health: 'hp', ring: 'ring' };
+  if (NUM_CMDS[cmd]) {
+    const k = NUM_CMDS[cmd], v = parseFloat(arg);
+    if (setAdminSetting(k, v)) showAnnouncement('⚡ ' + k, adminSettingText(k), '#ff4444', 1000);
+    else pushChatLine(`Usage: ;${cmd} <number>  (now ${adminSettingText(k)})`, '#ffaaaa');
     return true;
   }
   const cheatKey = ADMIN_CHEAT_COMMANDS[cmd];
@@ -83913,7 +83931,7 @@ function openAdminPanel() {
   if (!panel) {
     panel = document.createElement('div');
     panel.id = 'admin-panel';
-    panel.style.cssText = 'position:fixed;top:80px;right:20px;width:280px;z-index:9700;'
+    panel.style.cssText = 'position:fixed;top:80px;right:20px;width:300px;max-height:calc(100vh - 100px);overflow-y:auto;z-index:9700;'
       + 'background:rgba(15,0,0,0.94);border:2px solid #ff4444;border-radius:8px;padding:14px;'
       + 'font-family:"Courier New",monospace;color:#fff;font-size:12px;'
       + 'box-shadow:0 6px 20px rgba(255,0,0,0.4);';
@@ -83931,14 +83949,30 @@ function openAdminPanel() {
       ['unlimitedTime','Unlimited time',       ';untime'],
       ['killAura',     '☠️ Kill aura (8m)',     ';aura'],
       ['aimbot',       '🎯 Aimbot',             ';aimbot'],
-      ['speed',        '⚡ Speed boost (3×)',   ';speed'],
+      ['speed',        '⚡ Speed boost',        ';speed'],
       ['freezeBots',   '🧊 Freeze all bots',    ';freeze'],
+      ['explosive',    '💥 Explosive bullets',  ';explosive'],
+      ['octoMode',     '🐙 Octo mode (all guns)', ';octo'],
     ].map(([key, label, command]) =>
       `<label style="display:flex;align-items:center;gap:8px;padding:5px;cursor:pointer;background:rgba(50,20,20,0.5);border-radius:4px;margin-bottom:3px;">
         <input type="checkbox" data-cheat="${key}" ${adminCheats[key] ? 'checked' : ''} style="cursor:pointer;">
         <span style="flex:1;">${label}</span>
         <span style="color:#888;font-size:10px;">${command}</span>
       </label>`
+    ).join('')}
+    <div style="border-bottom:1px solid #444;margin:10px 0 6px;"></div>
+    <div style="font-size:10px;color:#888;letter-spacing:2px;margin-bottom:6px;">HOW STRONG (drag)</div>
+    ${[
+      ['flyUp',      '🪂 Fly up / down speed', 1, 100, 1],
+      ['flyForward', '✈️ Fly forward speed',   0.5, 30, 0.5],
+      ['speed',      '⚡ Speed boost',          1, 30, 0.5],
+      ['hp',         '❤️ Health',               0, 10000, 50],
+      ['ring',       '🎯 Aimbot ring size',     5, 60, 1],
+    ].map(([key, label, lo, hi, step]) =>
+      `<div style="padding:5px;background:rgba(50,20,20,0.5);border-radius:4px;margin-bottom:3px;">
+        <div style="display:flex;justify-content:space-between;"><span>${label}</span><span id="adm-val-${key}" style="color:#ffcc66;">${adminSettingText(key)}</span></div>
+        <input type="range" data-setting="${key}" min="${lo}" max="${hi}" step="${step}" value="${adminSettings[key]}" style="width:100%;cursor:pointer;">
+      </div>`
     ).join('')}
     <div style="border-bottom:1px solid #444;margin:10px 0 6px;"></div>
     <div style="font-size:10px;color:#888;letter-spacing:2px;margin-bottom:6px;">INSTANT ACTIONS</div>
@@ -83953,11 +83987,14 @@ function openAdminPanel() {
   panel.style.display = 'block';
   // Bind checkboxes
   panel.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-    cb.addEventListener('change', () => { adminCheats[cb.dataset.cheat] = cb.checked; });
+    cb.addEventListener('change', () => { setAdminCheat(cb.dataset.cheat, cb.checked, 'panel'); });
   });
   // Bind action buttons
   panel.querySelectorAll('button[data-action]').forEach(btn => {
     btn.addEventListener('click', () => adminAction(btn.dataset.action));
+  });
+  panel.querySelectorAll('input[data-setting]').forEach(r => {
+    r.addEventListener('input', () => setAdminSetting(r.dataset.setting, parseFloat(r.value)));
   });
   adminPanelOpen = true;
 }
@@ -83985,7 +84022,7 @@ function adminAction(act) {
     }
     case 'heal': {
       const me = players[myId];
-      if (me) { me.hp = 300; updateHealthHUD(300); }
+      if (me) { me.hp = Math.max(300, adminSettings.hp); updateHealthHUD(me.hp); }
       isDead = false;
       flashScreen('rgba(68,255,68,0.3)', 500);
       showAnnouncement('❤️ FULL HEAL', '', '#44ff44', 1200);
@@ -84018,17 +84055,158 @@ function adminAction(act) {
     }
   }
 }
+// ── ⚡ How strong each admin hack is (the sliders), the aimbot ring, explosive bullets and Octo mode ──
+const ADMIN_LIMITS = { flyUp: [1, 100], flyForward: [0.5, 30], speed: [1, 30], hp: [0, 10000], ring: [5, 60] };
+function adminSettingText(key) {
+  const v = adminSettings[key];
+  if (key === 'hp') return v > 0 ? v + ' HP' : 'mode default';
+  if (key === 'flyUp') return v + ' m/s';
+  if (key === 'ring') return v + '% of the screen';
+  return v + '×';
+}
+function setAdminSetting(key, val) {
+  const lim = ADMIN_LIMITS[key];
+  if (!lim || !Number.isFinite(val)) return false;
+  adminSettings[key] = Math.max(lim[0], Math.min(lim[1], val));
+  saveAdminSettings();
+  if (key === 'hp') adminApplyHealth();
+  const out = document.getElementById('adm-val-' + key);
+  if (out) out.textContent = adminSettingText(key);
+  return true;
+}
+function adminApplyHealth() {                                                  // the health slider: you have exactly that much now (0 puts it back to the mode's own)
+  const me = players[myId];
+  if (!me || isDead || !currentUser?.isAdmin) return;
+  me.hp = adminSettings.hp > 0 ? adminSettings.hp : Math.min(me.hp || 0, matchMaxHp());
+  updateHealthHUD(me.hp);
+}
+// The red ring: a shot fired anywhere inside it, with an enemy inside it too, goes to that enemy.
+function adminEnemies() {
+  const out = [], botIds = new Set(gameBots.map(b => b.id));
+  for (const bot of gameBots) {
+    if (bot.dead || bot.team === 'ally') continue;
+    const mesh = remoteMeshes[bot.id];
+    out.push({ id: bot.id, feet: mesh ? mesh.position.clone() : new THREE.Vector3(bot.x, 0, bot.z) });
+  }
+  for (const [pid, mesh] of Object.entries(remoteMeshes)) {
+    if (pid === myId || botIds.has(pid) || !mesh.visible || players[pid]?.dead) continue;
+    let ff = false; try { ff = friendlyFireBlocked(pid, myId); } catch (e) {}
+    if (!ff) out.push({ id: pid, feet: mesh.position.clone() });
+  }
+  return out;
+}
+const _admP = new THREE.Vector3();
+function adminScreenPoint(p) {
+  _admP.copy(p).project(camera);
+  if (!(_admP.z < 1) || !(_admP.z > -1)) return null;                          // behind you
+  return { x: (_admP.x * 0.5 + 0.5) * (window.innerWidth || 1920), y: (-_admP.y * 0.5 + 0.5) * (window.innerHeight || 1080) };
+}
+function adminRingRadius() { return adminSettings.ring / 100 * (window.innerHeight || 1080); }
+function adminAimbotTarget() {
+  const cx = (window.innerWidth || 1920) / 2, cy = (window.innerHeight || 1080) / 2, R = adminRingRadius();
+  let best = null, bestD = Infinity;
+  for (const e of adminEnemies()) {
+    const chest = e.feet.clone(); chest.y += 1.15;
+    const s = adminScreenPoint(chest);
+    if (!s) continue;
+    const d = Math.hypot(s.x - cx, s.y - cy);
+    if (d <= R && d < bestD) { bestD = d; best = { id: e.id, pos: chest }; }
+  }
+  return best;
+}
+let _admCv = null, _admCx = null, _admShown = false;
+function updateAdminAimOverlay() {
+  const on = !!(adminCheats.aimbot && currentUser?.isAdmin && gameStarted && !isDead);
+  if (!on) { if (_admCv && _admShown) { _admCv.style.display = 'none'; _admShown = false; } return; }
+  if (!_admCv) {
+    _admCv = document.createElement('canvas'); _admCv.id = 'admin-aim';
+    _admCv.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:40;';
+    document.body.appendChild(_admCv); _admCx = _admCv.getContext('2d');
+  }
+  const W = window.innerWidth || 1920, H = window.innerHeight || 1080;
+  if (_admCv.width !== W || _admCv.height !== H) { _admCv.width = W; _admCv.height = H; }
+  _admCv.style.display = 'block'; _admShown = true;
+  const c = _admCx, cx = W / 2, cy = H / 2, R = adminRingRadius();
+  c.clearRect(0, 0, W, H);
+  c.save(); c.shadowColor = '#ff0000'; c.shadowBlur = 18; c.lineWidth = 4; c.strokeStyle = 'rgba(255,40,40,0.95)'; c.fillStyle = 'rgba(255,0,0,0.05)';
+  c.beginPath(); c.arc(cx, cy, R, 0, Math.PI * 2); c.fill(); c.stroke(); c.restore();
+  const lock = adminAimbotTarget();
+  let n = 0;
+  for (const e of adminEnemies()) {
+    if (++n > 60) break;
+    const head = e.feet.clone(); head.y += 1.9;
+    const a = adminScreenPoint(e.feet), b = adminScreenPoint(head);
+    if (!a || !b) continue;
+    const h = a.y - b.y, w = h * 0.46, x = (a.x + b.x) / 2 - w / 2;
+    if (!(h > 4)) continue;
+    const inside = lock && lock.id === e.id, near = Math.hypot((a.x + b.x) / 2 - cx, (a.y + b.y) / 2 - cy) <= R;
+    c.save();
+    c.strokeStyle = inside ? '#ff1c1c' : near ? 'rgba(255,70,70,0.85)' : 'rgba(255,60,60,0.45)';
+    c.lineWidth = inside ? 3.5 : 1.5; c.shadowColor = '#ff0000'; c.shadowBlur = inside ? 14 : 4;
+    c.strokeRect(x, b.y, w, h);
+    if (inside) {                                                              // corner ticks and a line from your crosshair: this one is locked
+      const t = Math.min(w, h) * 0.25;
+      c.lineWidth = 5;
+      for (const [px, py, dx, dy] of [[x, b.y, 1, 1], [x + w, b.y, -1, 1], [x, b.y + h, 1, -1], [x + w, b.y + h, -1, -1]]) {
+        c.beginPath(); c.moveTo(px + dx * t, py); c.lineTo(px, py); c.lineTo(px, py + dy * t); c.stroke();
+      }
+      c.lineWidth = 1.5; c.beginPath(); c.moveTo(cx, cy); c.lineTo((a.x + b.x) / 2, (a.y + b.y) / 2); c.stroke();
+    }
+    c.restore();
+  }
+}
+// 💥 Explosive bullets: every round I fire bursts like a rocket where it lands
+function adminExplosiveShot(b) { return !!(b && b.isOwn && adminCheats.explosive && currentUser?.isAdmin); }
+function adminBoomId(b) { return EXPLOSIVE_KINDS.has(projectileKind(b.weaponId, WEAPONS.find(w => w.id === b.weaponId))) ? b.weaponId : 'rpg'; }
+// 🐙 Octo mode: every gun, melee weapon and utility in the game is in your hands, one key away
+function octoRefill() {
+  weaponAmmo.forEach((_, idx) => { const w = WEAPONS[idx]; if (w) weaponAmmo[idx] = { ammo: w.mag, reserve: w.reserve === 0 ? 99999 : w.reserve }; });
+  supportUses.forEach((_, i) => { supportUses[i] = SUPPORT_ITEMS[i]?.uses || 1; });
+}
+function octoEnable() {
+  octoRefill();
+  if (gameStarted && loadoutReady()) updateAmmoHUD();
+  showAnnouncement('🐙 OCTO MODE', '[ ] every gun · - = every melee · Shift+[ ] every utility', '#ffaa33', 2600);
+}
+function octoStep(slot, dir) {
+  if (!(adminCheats.octoMode && currentUser?.isAdmin) || isDead || !gameStarted) return false;
+  const n = slot === 'melee' ? MELEE_ITEMS.length : slot === 'support' ? SUPPORT_ITEMS.length : WEAPONS.length;
+  if (!n) return false;
+  let i = slot === 'melee' ? (selectedMeleeIdx ?? -1) : slot === 'support' ? (selectedSupportIdx ?? -1)
+        : ((activeSlot === 'primary' || activeSlot === 'secondary') ? currentWeaponIdx : (selectedPrimaryIdx ?? 0));
+  for (let tries = 0; tries < n; tries++) {
+    i = (i + dir + n) % n;
+    if (slot === 'melee' ? meleeModels[i] : slot === 'support' ? supportModels[i] : weaponModels[i]) break;
+  }
+  if (slot === 'melee') { selectedMeleeIdx = i; activeSlot = 'melee'; }
+  else if (slot === 'support') { selectedSupportIdx = i; supportUses[i] = SUPPORT_ITEMS[i]?.uses || 1; activeSlot = 'support'; }
+  else { const w = WEAPONS[i]; weaponAmmo[i] = { ammo: w.mag, reserve: w.reserve === 0 ? 99999 : w.reserve }; selectedPrimaryIdx = i; activeSlot = 'primary'; }
+  equipActiveSlot();
+  const item = slot === 'melee' ? MELEE_ITEMS[i] : slot === 'support' ? SUPPORT_ITEMS[i] : WEAPONS[i];
+  showAnnouncement(`🐙 ${i + 1} / ${n}`, item?.name || item?.id || '', '#ffaa33', 700);
+  return true;
+}
+document.addEventListener('keydown', e => {
+  if (!adminCheats.octoMode || !currentUser?.isAdmin) return;
+  const tag = document.activeElement?.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  const dir = (e.code === 'BracketRight' || e.code === 'Equal') ? 1 : (e.code === 'BracketLeft' || e.code === 'Minus') ? -1 : 0;
+  if (!dir) return;
+  const slot = (e.code === 'Equal' || e.code === 'Minus') ? 'melee' : e.shiftKey ? 'support' : 'primary';
+  if (octoStep(slot, dir)) e.preventDefault();
+});
+
 // Per-frame: apply active admin cheats
 function updateAdminCheats(dt) {
   if (!currentUser?.isAdmin) return;
   // Fly mode: spacebar = up, ctrl = down, no gravity
-  if (adminCheats.fly && !isDead) {
-    const flySpeed = 6 * dt;
+  if (adminFlyActive()) {
+    const flySpeed = adminSettings.flyUp * dt;
     if (keys['Space']) camera.position.y += flySpeed;
     if (keys['ControlLeft'] || keys['ControlRight'] || keys['ShiftLeft']) camera.position.y -= flySpeed;
-    camera.position.y = Math.max(0.5, Math.min(40, camera.position.y));
-    // Override slamState gravity
-    if (slamState) slamState.vel = 0;
+    camera.position.y = Math.max(0.5, Math.min(400, camera.position.y));
+    // No gravity at all while flying (updateMovement leaves the air alone too)
+    slamState = null; playerYVel = 0; airTime = 0; airGroundT = 0;
   }
   // Kill aura: every 200ms, damage all enemies within 8m
   if (adminCheats.killAura && !isDead) {
@@ -84050,6 +84228,7 @@ function updateAdminCheats(dt) {
   // Infinite ammo: handled in tryShoot
   // Speed: handled in updateMovement
   // God mode: handled in applyBotDamageToPlayer
+  updateAdminAimOverlay();                                  // the red ring and the outlines
 }
 // Mode / difficulty / map cards are click-only on purpose. The mode screen only shows with
 // gameStarted === false, when a tap still produces a click; a touchstart handler here fired

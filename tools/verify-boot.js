@@ -2889,6 +2889,65 @@ if (ok && process.argv.includes('--discoinferno')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+// ADMIN POWER: the sliders (fly up/forward, speed boost, health), no gravity while flying, the aimbot ring, explosive bullets and Octo mode.
+if (ok && process.argv.includes('--adminpower')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const keepUser = currentUser, keepCheats = Object.assign({}, adminCheats), keepSet = Object.assign({}, adminSettings);
+    try {
+      currentUser = { username: 'a', isAdmin: true };
+      // health slider
+      const base = matchMaxHp();
+      setAdminSetting('hp', 5000);
+      if (matchMaxHp() !== 5000) issues.push('health: the slider should set the maximum: ' + matchMaxHp());
+      setAdminSetting('hp', 0);
+      if (matchMaxHp() !== base) issues.push('health: 0 should put the mode back: ' + matchMaxHp());
+      setAdminSetting('flyUp', 40); setAdminSetting('speed', 9);
+      if (adminSettings.flyUp !== 40 || adminSettings.speed !== 9) issues.push('sliders: values should stick');
+      setAdminSetting('flyUp', 9999); if (adminSettings.flyUp !== 100) issues.push('sliders: values are clamped');
+      // fly: no gravity
+      adminCheats.fly = true; isDead = false;
+      if (!adminFlyActive()) issues.push('fly: should be active');
+      camera.position.set(0, 12, 0); playerYVel = -30; airTime = 9; slamState = { vel: -40, type: 'fall' };
+      try { for (let i = 0; i < 20; i++) updateMovement(0.05); } catch (e) { issues.push('fly: updateMovement threw ' + e.message); }
+      if (Math.abs(camera.position.y - 12) > 0.01 || playerYVel !== 0 || airTime !== 0 || slamState) issues.push('fly: gravity should do nothing: y=' + camera.position.y.toFixed(2) + ' vy=' + playerYVel + ' airTime=' + airTime);
+      // fly speed: space goes up at the slider's speed
+      adminSettings.flyUp = 20; keys['Space'] = true; const y0 = camera.position.y; updateAdminCheats(0.1); keys['Space'] = false;
+      if (Math.abs(camera.position.y - y0 - 2) > 0.01) issues.push('fly: Space should climb flyUp * dt: ' + (camera.position.y - y0));
+      adminCheats.fly = false;
+      // explosive bullets
+      adminCheats.explosive = true;
+      if (!adminExplosiveShot({ isOwn: true }) || adminExplosiveShot({ isOwn: false })) issues.push('explosive: my rounds only');
+      adminCheats.explosive = false; if (adminExplosiveShot({ isOwn: true })) issues.push('explosive: off means off');
+      // aimbot ring
+      camera.position.set(0, 1.65, 0); camera.rotation.set(0, 0, 0); camera.updateMatrixWorld(true); camera.updateProjectionMatrix();
+      window.innerWidth = 1600; window.innerHeight = 900;
+      const bots0 = gameBots.length, mesh = { position: new THREE.Vector3(2, 0, -10), visible: true };
+      gameBots.push({ id: 'zz_test', team: 'enemy', dead: false, x: 2, z: -10 }); remoteMeshes['zz_test'] = mesh;
+      adminSettings.ring = 30; let t = adminAimbotTarget();
+      if (!t || t.id !== 'zz_test') issues.push('aimbot: an enemy inside the ring should be found');
+      adminSettings.ring = 5; t = adminAimbotTarget();
+      if (t) issues.push('aimbot: a small ring should not reach an enemy that far off the crosshair');
+      adminSettings.ring = 30; gameBots[gameBots.length - 1].team = 'ally';
+      if (adminAimbotTarget()) issues.push('aimbot: allies are never targets');
+      gameBots.pop(); delete remoteMeshes['zz_test'];
+      // octo
+      adminCheats.octoMode = true; gameStarted = true; isDead = false;
+      const i0 = currentWeaponIdx;
+      try { octoStep('primary', 1); } catch (e) { issues.push('octo: threw ' + e.message); }
+      if (currentWeaponIdx === i0 || activeSlot !== 'primary') issues.push('octo: ] should move to the next gun: ' + i0 + ' -> ' + currentWeaponIdx);
+      const mi = selectedMeleeIdx; try { octoStep('melee', 1); } catch (e) { issues.push('octo: melee threw ' + e.message); }
+      if (activeSlot !== 'melee' || selectedMeleeIdx === mi) issues.push('octo: = should move to the next melee weapon');
+      try { octoStep('support', 1); } catch (e) { issues.push('octo: support threw ' + e.message); }
+      if (activeSlot !== 'support') issues.push('octo: shift+] should move to a utility');
+    } catch (e) { issues.push('threw: ' + (e && e.stack || e)); }
+    finally { Object.assign(adminCheats, keepCheats); Object.assign(adminSettings, keepSet); currentUser = keepUser; keys['Space'] = false; }
+    return issues;
+  })()`);
+  console.log('ADMIN POWER checks: sliders, no gravity in flight, flight speed, the aimbot ring, explosive bullets, Octo mode');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 // HOUSE OF CARDS (the Throwing Knives skin): a legendary from the Gen 2 case: a fan of three cards and a floating ace that shuffle on every throw, the Impossible Shuffle on inspect (the deck is
 // thrown up, spirals, interleaves, four aces stop in the air, become one knife that lands in the hand), a card for a round, and the ace of spades behind what it kills.
 if (ok && process.argv.includes('--houseofcards')) {
