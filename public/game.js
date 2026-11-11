@@ -66949,7 +66949,9 @@ function updateBullets(dt) {
         }
         // 🚀💣 Direct target took the main hit; splash everyone else nearby.
         if (EXPLOSIVE_KINDS.has(projectileKind(b.weaponId, WEAPONS.find(w => w.id === b.weaponId))) || adminExplosiveShot(b)) {
-          rocketExplode(_bpos.clone(), adminBoomId(b), bestHit.pid, { damagePlayer: false, skinLook: b.skinLook });
+          // an admin's explosive round blasts the one it hit as well (a real launcher's direct hit already did its damage)
+          const _adminOnly = adminExplosiveShot(b) && !EXPLOSIVE_KINDS.has(projectileKind(b.weaponId, WEAPONS.find(w => w.id === b.weaponId)));
+          rocketExplode(_bpos.clone(), adminBoomId(b), _adminOnly ? null : bestHit.pid, { damagePlayer: false, skinLook: b.skinLook });
         }
         if (b.plantsSpear) landThrownSpear(b, bestHit.mesh.position, null);                   // it drops and stands at their feet
         removeBullet();
