@@ -6206,7 +6206,7 @@
    "screenKick": 0.624,
    "ability": {
     "name": "Skystrike",
-    "desc": "E: vertical volley · climbs 12 studs, then seeks enemies automatically"
+    "desc": "E: vertical volley · climbs 12 studs, then YOU steer all six with your crosshair — no lock-on"
    },
    "traits": [
     "Lobbed: the shot arcs and drops"

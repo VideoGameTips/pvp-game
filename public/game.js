@@ -874,14 +874,14 @@ const WEAPONS = [
     trickShot: { lockTime: 90, range: 72, radius: 0.95, lift: 0.42, delay: 380, stagger: 70, accuracy: 0.45 },
   },
   {
-    // E launches vertically; seekers acquire enemies only after clearing launch altitude.
+    // E launches vertically; after the climb the missiles are steered by the player's crosshair (no seeking).
     // Strictly P2W: see P2W_ITEM_IDS and the WEAPON_PRICE_MULT tier in WEAPON_COSTS.
     id: 'javelin_launcher', name: 'Javelin Launcher', type: 'Guided Launcher', slot: 'primary',
     mag: 6, reserve: 36, damage: 30, fireRate: 1400, reloadTime: 3200,
     auto: false, pellets: 1, spread: 0, adsZoom: 40, bulletSpeed: 55, noReload: false,
     bulletColor: 0xffaa33, bulletSize: 0.12, arcShot: true,
-    lockOn: { lockRange: 60, climbHeight: 12, homingSpeed: 55, turnRate: 2.6, hitRadius: 1.6 },
-    ability: { name: 'Skystrike', cd: 500, desc: 'E: vertical volley · climbs 12 studs, then seeks enemies automatically', type: 'javelin_volley', noADS: true },
+    lockOn: { climbHeight: 12, homingSpeed: 55, turnRate: 1.5, turnAccel: 5, hitRadius: 1.6 },   // turnRate is now a hard cap in rad/s (about 86 deg/s: a ~37 m turning circle at 55 m/s), turnAccel how fast it can swing into a turn
+    ability: { name: 'Skystrike', cd: 500, desc: 'E: vertical volley · climbs 12 studs, then YOU steer all six with your crosshair — no lock-on', type: 'javelin_volley', noADS: true },
   },
   {
     // 🔫🔫 Akimbo: two pistols, one in each hand, firing in turn. A sidearm, so it is lean on damage and heavy on
@@ -54684,7 +54684,7 @@ function fireJavelin(origin, shotIdx) {
       id, mesh, x: origin.x, y: origin.y, z: origin.z,
       vx: launchDir.x * spec.homingSpeed, vy: launchDir.y * spec.homingSpeed, vz: launchDir.z * spec.homingSpeed,
       targetId: null, launchX:origin.x, launchY:origin.y, launchZ:origin.z, epoch:matchEpoch, map:activeMapName,
-      bornAt: Date.now(), homing: false, searchIn:0,
+      bornAt: Date.now(), homing: false, dir: new THREE.Vector3(0, 1, 0), omega: new THREE.Vector3(), slot: (shotIdx || 0) % 6,
     });
     playWeaponSound('javelin_launcher', { baseWeapon: currentWeapon, volume: 1.2 });
 }
@@ -54730,48 +54730,111 @@ function javelinEnemyPosition(pid) {
   if(pid===myId || !mesh?.visible || players[pid]?.dead || bot?.dead || friendlyFireBlocked(pid,myId))return null;
   return mesh.position.clone().add(new THREE.Vector3(0,1,0));
 }
-function acquireJavelinEnemy(j,range) {
-  let target=null,best=range*range;
-  for(const pid of Object.keys(remoteMeshes)) {
-    const pos=javelinEnemyPosition(pid);if(!pos)continue;
-    const distance=(pos.x-j.launchX)**2+(pos.z-j.launchZ)**2;
-    if(distance<best){best=distance;target=pid;}
-  }
-  return target;
-}
+// 🎮 The Javelin is steered by hand. Once a missile has climbed clear of the launcher it flies toward wherever YOUR crosshair points -- the first wall or floor under it, or a far
+// point down the line of sight -- and nothing else: no lock, no seeking, no correcting a miss. It always flies forward at the same speed and can only turn so fast (an angular
+// velocity limit plus an acceleration limit, so it has weight: it leans into a turn, overshoots, and once it is past something it takes a wide loop to come back). Six missiles
+// share the one aim point but each is offset a little around it, so they fly as a loose bunch instead of one overlapping stack. Die, or put the launcher away, and what is in the
+// air flies on straight. A missile that touches any enemy (or a wall, or the floor) bursts there.
+const JAVELIN_AIM_RANGE = 150;     // m: how far down the line of sight the steering point sits when the crosshair is on open sky
+const JAVELIN_SPREAD = 0.9;        // m: how far from the aim point each of the six steers (the loose bunch)
+const _jvAimPt = new THREE.Vector3(), _jvCamDir = new THREE.Vector3(), _jvCamRight = new THREE.Vector3(), _jvCamUp = new THREE.Vector3();
+const _jvWant = new THREE.Vector3(), _jvAxis = new THREE.Vector3(), _jvTmp = new THREE.Vector3(), _jvQ = new THREE.Quaternion(), _jvFwd = new THREE.Vector3(0, 0, -1);
+const _jvA = new THREE.Vector3(), _jvB = new THREE.Vector3(), _jvC = new THREE.Vector3();
+let _jvGuideEl = null, _jvAimEl = null;
 function removeJavelin(index) {
   const j=javelins[index];scene.remove(j.mesh);
   const geometries=new Set(),materials=new Set();j.mesh.traverse(o=>{if(o.geometry)geometries.add(o.geometry);if(o.material)materials.add(o.material);});
   geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());javelins.splice(index,1);
 }
-// A true altitude gate; looking down or launching from a high platform cannot skip it.
+// where the crosshair is pointing in the world: the nearest wall or floor along the line of sight, or a far point
+function _javelinAimPoint(out) {
+  camera.getWorldDirection(_jvCamDir);
+  _javelinRay.origin.copy(camera.position); _javelinRay.direction.copy(_jvCamDir);
+  let best = JAVELIN_AIM_RANGE;
+  for (const box of wallColliders) {
+    if (_javelinRay.intersectBox(box, _javelinHitPt)) { const d = _javelinHitPt.distanceTo(camera.position); if (d < best && d > 0.3) best = d; }
+  }
+  if (_jvCamDir.y < -0.001) { const d = (camera.position.y - 0.05) / -_jvCamDir.y; if (d > 0.3 && d < best) best = d; }
+  return out.copy(camera.position).addScaledVector(_jvCamDir, best);
+}
+// turn j.dir toward `want` with inertia: ask for an angular velocity that eases in as the angle closes, but let the real one change only so fast, and never exceed the cap
+function _javelinSteer(j, want, dt, spec) {
+  const d = j.dir, w = j.omega;
+  const dot = Math.max(-1, Math.min(1, d.dot(want)));
+  const ang = Math.acos(dot);
+  _jvAxis.crossVectors(d, want);
+  let len = _jvAxis.length();
+  if (len < 1e-5) { if (dot < 0) _jvAxis.set(d.y, -d.x, 0).normalize(); else _jvAxis.set(0, 0, 0); } else _jvAxis.divideScalar(len);
+  _jvTmp.copy(_jvAxis).multiplyScalar(Math.min(spec.turnRate, ang * 2.2));              // the turn rate it would like
+  _jvTmp.sub(w); const dl = _jvTmp.length(), cap = spec.turnAccel * dt;                   // ...and how fast it can actually change
+  if (dl > cap) _jvTmp.multiplyScalar(cap / dl);
+  w.add(_jvTmp);
+}
+function _javelinSpin(j, dt, spec) {
+  const w = j.omega;
+  w.addScaledVector(j.dir, -w.dot(j.dir));                                                // only turning that bends the flight path counts
+  const rate = w.length();
+  if (rate > spec.turnRate) { w.multiplyScalar(spec.turnRate / rate); }
+  const a = Math.min(rate, spec.turnRate) * dt;
+  if (a > 1e-6) { _jvTmp.copy(w).normalize(); j.dir.applyAxisAngle(_jvTmp, a).normalize(); }
+}
+// tiny exhaust puffs from one shared pool: they outlive the missile, so a flight leaves a trail you can read
+const _jvPuffs = []; let _jvPuffI = 0, _jvPuffGeo = null;
+function _javelinPuff(x, y, z, now) {
+  if (!_jvPuffGeo) _jvPuffGeo = new THREE.SphereGeometry(1, 6, 5);
+  if (_jvPuffs.length < 260) {
+    const m = new THREE.Mesh(_jvPuffGeo, new THREE.MeshBasicMaterial({ color: 0xffb040, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+    m.visible = false; scene.add(m); _jvPuffs.push({ m, t: -9 });
+  }
+  const p = _jvPuffs[_jvPuffI++ % _jvPuffs.length]; p.t = now; p.m.position.set(x, y, z); p.m.visible = true;
+}
+function _javelinTrailTick(now) {
+  for (const p of _jvPuffs) {
+    if (!p.m.visible) continue;
+    const a = (now - p.t) / 650;
+    if (a >= 1) { p.m.visible = false; continue; }
+    p.m.scale.setScalar(0.07 + a * 0.28); p.m.material.opacity = (1 - a) * (1 - a) * 0.75;
+    p.m.material.color.setHex(a < 0.25 ? 0xffd070 : a < 0.55 ? 0xff7a20 : 0x7a5a44);
+  }
+}
+// the little read-out: where the missiles are being steered, and how many are still under your hand
+function _javelinHud(guided, aimPt, active) {
+  if (!_jvGuideEl) {
+    _jvGuideEl = document.createElement('div');
+    _jvGuideEl.style.cssText = 'position:fixed;left:50%;top:calc(50% + 46px);transform:translateX(-50%);z-index:9000;pointer-events:none;font:700 12px Arial,sans-serif;letter-spacing:2px;color:#ffaa33;text-shadow:0 0 6px #000,0 0 3px #000;display:none';
+    _jvAimEl = document.createElement('div');
+    _jvAimEl.style.cssText = 'position:fixed;width:18px;height:18px;margin:-9px 0 0 -9px;border:2px solid #ffaa33;border-radius:50%;box-shadow:0 0 6px #ffaa33;z-index:9000;pointer-events:none;display:none';
+    document.body.appendChild(_jvGuideEl); document.body.appendChild(_jvAimEl);
+  }
+  if (!active || guided <= 0) { _jvGuideEl.style.display = 'none'; _jvAimEl.style.display = 'none'; return; }
+  _jvGuideEl.style.display = 'block'; _jvGuideEl.textContent = '◎ GUIDING ' + guided;
+  const sc = worldToScreen(aimPt);
+  if (sc && sc.x > 0 && sc.x < window.innerWidth && sc.y > 0 && sc.y < window.innerHeight) { _jvAimEl.style.display = 'block'; _jvAimEl.style.left = sc.x + 'px'; _jvAimEl.style.top = sc.y + 'px'; } else _jvAimEl.style.display = 'none';
+}
 function updateJavelins(dt) {
-  if (!javelins.length) return;
+  const now = Date.now();
+  if (!javelins.length) { if (_jvGuideEl && _jvGuideEl.style.display !== 'none') _javelinHud(0, _jvAimPt, false); _javelinTrailTick(now); return; }
   const spec = WEAPONS.find(w => w.id === 'javelin_launcher')?.lockOn;
   if (!spec) return;
-  const now = Date.now();
+  dt = Math.min(dt, 0.05);
+  // guidance needs a living hand on the launcher; otherwise the missiles keep flying the way they are going
+  const steering = !isDead && gameStarted && currentWeapon?.id === 'javelin_launcher' && (activeSlot === 'primary' || activeSlot === 'secondary');
+  if (steering) { _javelinAimPoint(_jvAimPt); camera.getWorldDirection(_jvCamDir); _jvCamRight.set(1, 0, 0).applyQuaternion(camera.quaternion); _jvCamUp.set(0, 1, 0).applyQuaternion(camera.quaternion); }
+  let guided = 0;
   for (let i = javelins.length - 1; i >= 0; i--) {
     const j = javelins[i];
     if (now - j.bornAt > 8000 || j.epoch!==matchEpoch || j.map!==activeMapName) { removeJavelin(i); continue; }
-    if (!j.homing && j.y-j.launchY >= spec.climbHeight) j.homing = true;
-    let target=j.homing && j.targetId ? javelinEnemyPosition(j.targetId) : null;
-    j.searchIn-=dt;
-    if(j.homing && !target && j.searchIn<=0) {
-      j.targetId=acquireJavelinEnemy(j,spec.lockRange);j.searchIn=.2;
-      target=j.targetId?javelinEnemyPosition(j.targetId):null;
-    }
-    const alive=!!target;
-    if (alive) {
-      const tx=target.x,ty=target.y,tz=target.z;
-      const dx = tx - j.x, dy = ty - j.y, dz = tz - j.z;
-      const dist = Math.hypot(dx, dy, dz) || 0.001;
-      const turn = Math.min(1, spec.turnRate * dt);
-      j.vx += ((dx / dist) * spec.homingSpeed - j.vx) * turn;
-      j.vy += ((dy / dist) * spec.homingSpeed - j.vy) * turn;
-      j.vz += ((dz / dist) * spec.homingSpeed - j.vz) * turn;
-    } else if(j.homing) {
-      j.vy -= 18 * dt; // No enemy in range: falls and expires, never invents a target.
-    }
+    if (!j.homing && j.y - j.launchY >= spec.climbHeight) j.homing = true;       // (the name stays: it now means "past the climb, free to be steered")
+    if (j.homing && steering) {
+      const a = j.slot / 6 * Math.PI * 2, ox = Math.cos(a) * JAVELIN_SPREAD, oy = Math.sin(a) * JAVELIN_SPREAD;
+      _jvWant.copy(_jvAimPt).addScaledVector(_jvCamRight, ox).addScaledVector(_jvCamUp, oy).sub(_jvTmp.set(j.x, j.y, j.z));
+      if (_jvWant.lengthSq() > 1e-4) { _jvWant.normalize(); _javelinSteer(j, _jvWant, dt, spec); }
+      guided++;
+    } else if (j.homing) j.omega.multiplyScalar(Math.max(0, 1 - dt * 4));      // let go: it stops turning and flies straight on
+    else j.omega.set(0, 0, 0);                                                     // still climbing: dead straight up
+    if (j.homing) _javelinSpin(j, dt, spec);
+    const sp = spec.homingSpeed;
+    j.vx = j.dir.x * sp; j.vy = j.dir.y * sp; j.vz = j.dir.z * sp;
     const nx = j.x + j.vx * dt, ny = j.y + j.vy * dt, nz = j.z + j.vz * dt;
     if (_javelinBlockedByWall(j.x, j.y, j.z, nx, ny, nz) || ny <= 0.05) {
       const stopPos = new THREE.Vector3(nx, Math.max(0.05, ny), nz);
@@ -54780,26 +54843,33 @@ function updateJavelins(dt) {
       removeJavelin(i);
       continue;
     }
-    const before=new THREE.Vector3(j.x,j.y,j.z);
+    // anything it passes close to on the way takes it: the nearest enemy along this step
+    let hitPid = null, hitAt = null, hitD = 1e9;
+    _jvA.set(j.x, j.y, j.z); _jvB.set(nx, ny, nz);
+    for (const pid of Object.keys(remoteMeshes)) {
+      const pos = javelinEnemyPosition(pid); if (!pos) continue;
+      const seg = _jvB.clone().sub(_jvA), l2 = seg.lengthSq();
+      const t = l2 > 0 ? Math.max(0, Math.min(1, pos.clone().sub(_jvA).dot(seg) / l2)) : 0;
+      const closest = _jvC.copy(_jvA).addScaledVector(seg, t);
+      if (closest.distanceTo(pos) < (spec.hitRadius || 1.6) && t < hitD) { hitD = t; hitPid = pid; hitAt = pos; }
+    }
     j.x = nx; j.y = ny; j.z = nz;
     j.mesh.position.set(j.x, j.y, j.z);
-    const vel = new THREE.Vector3(j.vx, j.vy, j.vz);
-    if (vel.lengthSq() > 1e-6) j.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), vel.normalize());
-    if (alive) {
-      const mesh = remoteMeshes[j.targetId];
-      const closest=new THREE.Line3(before,j.mesh.position).closestPointToPoint(target,true,new THREE.Vector3());
-      const dHit=closest.distanceTo(target);
-      if (dHit < (spec.hitRadius || 1.6)) {
-        const hitPos = target.clone();
-        const dummy = TRAINING_DUMMIES.find(d => d.id === j.targetId);
-        if (dummy) handleDummyHit(dummy, mesh, { weaponId: 'javelin_launcher' }, hitPos);
-        else emitHit(j.targetId, j.id, 'javelin_launcher', hitPos);
-        spawnAbilityAOEFX(hitPos, 1.3, 0xffaa33);
-        playSoundEvent('explosion', { position: hitPos, volume: 0.9 });
-        removeJavelin(i);
-      }
+    _jvQ.setFromUnitVectors(_jvFwd, j.dir); j.mesh.quaternion.slerp(_jvQ, Math.min(1, dt * 18));     // the body follows the flight path smoothly
+    j.puffAcc = (j.puffAcc || 0) + dt;
+    if (j.puffAcc >= 0.02) { j.puffAcc = 0; _javelinPuff(j.x - j.dir.x * 0.3, j.y - j.dir.y * 0.3, j.z - j.dir.z * 0.3, now); }
+    if (hitPid) {
+      const mesh = remoteMeshes[hitPid], hitPos = hitAt.clone();
+      const dummy = TRAINING_DUMMIES.find(d => d.id === hitPid);
+      if (dummy) handleDummyHit(dummy, mesh, { weaponId: 'javelin_launcher' }, hitPos);
+      else emitHit(hitPid, j.id, 'javelin_launcher', hitPos);
+      spawnAbilityAOEFX(hitPos, 1.3, 0xffaa33);
+      playSoundEvent('explosion', { position: hitPos, volume: 0.9 });
+      removeJavelin(i);
     }
   }
+  _javelinHud(guided, _jvAimPt, steering);
+  _javelinTrailTick(now);
 }
 // ⚫ The Oblivion Railgun's shot (a skin's look.beam = 'void'): the beam is a tube of pure black, normal blending, so it blots out whatever it crosses instead of lighting it, and it
 // hangs there and thins away for a second and a half. A hair of white runs down the middle of it for the first instant: that is the only light in it.
