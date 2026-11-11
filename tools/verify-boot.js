@@ -2948,6 +2948,56 @@ if (ok && process.argv.includes('--adminpower')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+// MISSILE CAM (the Javelin Launcher): Q rides a missile in the air; the mouse points it, W flies it faster, S slower; it ends when the missile is gone.
+if (ok && process.argv.includes('--missilecam')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const keepStarted = gameStarted, keepDead = isDead, ex = euler.x, ey = euler.y;
+    try {
+      gameStarted = true; isDead = false; javelins.length = 0;
+      if (missileCamStart()) issues.push('no missile in the air: the camera should not start');
+      const mk = (id, y) => ({ id, mesh: makeJavelinMesh(), x: 0, y, z: 0, vx: 0, vy: 0, vz: -55, targetId: null, launchX: 0, launchY: 0, launchZ: 0, epoch: matchEpoch, map: activeMapName,
+        bornAt: Date.now(), homing: true, dir: new THREE.Vector3(0, 0, -1), omega: new THREE.Vector3(), slot: 0 });
+      const a = mk('t1', 120), b = mk('t2', 140);
+      javelins.push(a, b); scene.add(a.mesh); scene.add(b.mesh);
+      euler.x = 0; euler.y = 0;
+      if (!missileCamStart() || !MISSILE_CAM.active || MISSILE_CAM.id !== 't1') issues.push('Q should ride the oldest missile');
+      // the mouse: turn left (yaw +90 deg) -> the missile turns to face -x
+      euler.y = Math.PI / 2; camera.quaternion.setFromEuler(euler);
+      for (let i = 0; i < 40; i++) updateJavelins(0.05);
+      if (!(a.dir.x < -0.7)) issues.push('mouse: the missile should turn where the mouse points: dir=' + a.dir.toArray().map(n => n.toFixed(2)));
+      if (!(MISSILE_CAM.camera.position.distanceTo(new THREE.Vector3(a.x, a.y, a.z)) < 1)) issues.push('camera: should sit on the missile');
+      // the other missile is not steered by the mouse while I ride the first
+      if (!(Math.abs(b.dir.x) < 0.05)) issues.push('the other missile should fly straight on: dir=' + b.dir.toArray().map(n => n.toFixed(2)));
+      // W faster, S slower
+      keys['KeyW'] = true; for (let i = 0; i < 40; i++) updateJavelins(0.05);
+      if (!(MISSILE_CAM.speed > 1.5)) issues.push('W: should speed up: ' + MISSILE_CAM.speed.toFixed(2));
+      keys['KeyW'] = false; keys['KeyS'] = true; for (let i = 0; i < 40; i++) updateJavelins(0.05);
+      if (!(MISSILE_CAM.speed < 0.6)) issues.push('S: should slow down: ' + MISSILE_CAM.speed.toFixed(2));
+      keys['KeyS'] = false;
+      // my hands are busy: no shooting
+      // it is gone: the camera moves on to the next missile, and after the last one holds a moment, then ends
+      const ia = javelins.indexOf(a); javelins.splice(ia, 1); scene.remove(a.mesh);
+      updateJavelins(0.05);
+      if (!(MISSILE_CAM.active && MISSILE_CAM.id === 't2')) issues.push('when the missile is gone the camera should move to the next one');
+      javelins.length = 0; scene.remove(b.mesh);
+      updateJavelins(0.05);
+      if (!MISSILE_CAM.active) issues.push('the last picture should be held for a moment');
+      MISSILE_CAM.endAt = 1; updateJavelins(0.05);
+      if (MISSILE_CAM.active) issues.push('then the camera should end');
+      if (Math.abs(euler.x - 0) > 1e-9 || Math.abs(euler.y - 0) > 1e-9) issues.push('ending should give me back my own aim: ' + [euler.x, euler.y]);
+      // toggle with Q while riding
+      const c = mk('t3', 120); javelins.push(c); scene.add(c.mesh);
+      missileCamStart(); missileCamEnd(); if (MISSILE_CAM.active) issues.push('Q again should end it');
+      javelins.length = 0; scene.remove(c.mesh);
+    } catch (e) { issues.push('threw: ' + (e && e.stack || e)); }
+    finally { missileCamEnd(); javelins.length = 0; gameStarted = keepStarted; isDead = keepDead; euler.x = ex; euler.y = ey; keys['KeyW'] = false; keys['KeyS'] = false; }
+    return issues;
+  })()`);
+  console.log('MISSILE CAM checks: Q rides a missile, the mouse steers it, W/S set the speed, it moves on and ends cleanly');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 // HOUSE OF CARDS (the Throwing Knives skin): a legendary from the Gen 2 case: a fan of three cards and a floating ace that shuffle on every throw, the Impossible Shuffle on inspect (the deck is
 // thrown up, spirals, interleaves, four aces stop in the air, become one knife that lands in the hand), a card for a round, and the ace of spades behind what it kills.
 if (ok && process.argv.includes('--houseofcards')) {

@@ -49126,7 +49126,7 @@ const KEY_ACTIONS = [
   ['forward', 'Move forward', 'KeyW'], ['back', 'Move back', 'KeyS'],
   ['left', 'Move left', 'KeyA'], ['right', 'Move right', 'KeyD'],
   ['jump', 'Jump', 'Space'], ['slide', 'Slide', 'ShiftLeft'], ['crouch', 'Crouch', 'ControlLeft'],
-  ['reload', 'Reload', 'KeyR'], ['ability', 'Ability / aim', 'KeyE'], ['interact', 'Interact / swap gear', 'KeyF'],
+  ['reload', 'Reload', 'KeyR'], ['ability', 'Ability / aim', 'KeyE'], ['interact', 'Interact / swap gear', 'KeyF'], ['missilecam', 'Missile camera (Javelin)', 'KeyQ'],
   ...(EMOTES_ARCHIVED ? [] : [['emotes', 'Emotes', 'KeyQ']]), ['freecam', 'Free camera', 'Digit0'], ['slot1', 'Primary weapon', 'Digit1'], ['slot2', 'Secondary weapon', 'Digit2'],
   ['perspective', 'Camera perspective', 'Digit9'],
   ['slot3', 'Melee', 'Digit3'], ['slot4', 'Support item', 'Digit4'],
@@ -53157,7 +53157,7 @@ function updateGrappleRide(dt) {
 function updateMovement(dt, socialBlocked = false) {
   if (window.PVP_LOBBY_CASE?.active) return;
   if (window.PVP_RAGDOLL?.controlling) return;
-  if ((SOCIAL_VIEW.mode || liveLoadoutOpen()) && !socialBlocked) {
+  if ((SOCIAL_VIEW.mode || liveLoadoutOpen() || MISSILE_CAM.active) && !socialBlocked) {
     const held = { ...keys };
     for (const k of Object.keys(keys)) keys[k] = false;
     const joystick = joyDir;
@@ -55320,7 +55320,7 @@ function fireJavelinVolley(w) {
   pool.ammo = 0; ammo = 0;
   syncHeldAmmoModelForIndex(currentWeaponIdx);
   updateAmmoHUD();
-  flashAbilityName(`SKYSTRIKE · ${shots} VERTICAL LAUNCHES`);
+  flashAbilityName(`SKYSTRIKE · ${shots} VERTICAL LAUNCHES · Q = MISSILE CAM`);
   const idx = currentWeaponIdx;
   setTimeout(() => {
     if (epoch===matchEpoch && map===activeMapName && !isDead && !reloading && currentWeaponIdx === idx && weaponAmmo[idx]?.ammo <= 0 && weaponAmmo[idx]?.reserve > 0) startReload();
@@ -55427,29 +55427,110 @@ function _javelinHud(guided, aimPt, active) {
   const sc = worldToScreen(aimPt);
   if (sc && sc.x > 0 && sc.x < window.innerWidth && sc.y > 0 && sc.y < window.innerHeight) { _jvAimEl.style.display = 'block'; _jvAimEl.style.left = sc.x + 'px'; _jvAimEl.style.top = sc.y + 'px'; } else _jvAimEl.style.display = 'none';
 }
+// 🎥 Missile cam: Q rides a Javelin you have in the air. The mouse points it, W flies it faster and S slower; Q again (or the missile hitting something) brings you back.
+// It uses its own camera (the loop already renders whichever camera the view asks for), so your body, your aim and your position are untouched underneath.
+const MISSILE_CAM = { active: false, id: null, speed: 1, pos: new THREE.Vector3(), yaw: 0, pitch: 0, endAt: 0, saved: null, xhair: null, hudEl: null, camera: new THREE.PerspectiveCamera(82, 16 / 9, 0.05, 1500) };
+const MISSILE_CAM_SPEC = { turnRate: 3.4, turnAccel: 16 };            // a piloted missile turns much faster than one steered by a crosshair (1.5 rad/s)
+const _mcE = new THREE.Euler(0, 0, 0, 'YXZ');
+function _missileCamHeading(dir) {                                      // face the look direction along the missile's heading, so the mouse starts where it points
+  MISSILE_CAM.yaw = Math.atan2(-dir.x, -dir.z);
+  MISSILE_CAM.pitch = Math.asin(Math.max(-1, Math.min(1, dir.y)));
+  euler.y = MISSILE_CAM.yaw; euler.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, MISSILE_CAM.pitch));
+  camera.quaternion.setFromEuler(euler);
+}
+function missileCamStart() {
+  if (MISSILE_CAM.active || isDead || !gameStarted) return false;
+  const j = javelins.find(q => q.epoch === matchEpoch && q.map === activeMapName);
+  if (!j) { showAnnouncement('NO MISSILE IN THE AIR', 'Fire the Javelin first (E), then press Q', '#ffaa33', 1400); return false; }
+  MISSILE_CAM.active = true; MISSILE_CAM.id = j.id; MISSILE_CAM.speed = 1; MISSILE_CAM.endAt = 0;
+  MISSILE_CAM.saved = { x: euler.x, y: euler.y };
+  _missileCamHeading(j.dir);
+  MISSILE_CAM.pos.set(j.x, j.y, j.z).addScaledVector(j.dir, 0.4);
+  MISSILE_CAM.camera.position.copy(MISSILE_CAM.pos);
+  const ch = document.getElementById('crosshair'); if (ch) { MISSILE_CAM.xhair = ch.style.display; ch.style.display = 'none'; }
+  try { playSoundEvent('click', { volume: 0.4, pitch: 0.8, minGap: 40 }); } catch (e) {}
+  return true;
+}
+function missileCamEnd() {
+  if (!MISSILE_CAM.active) return;
+  MISSILE_CAM.active = false; MISSILE_CAM.id = null; MISSILE_CAM.endAt = 0;
+  if (MISSILE_CAM.saved) { euler.x = MISSILE_CAM.saved.x; euler.y = MISSILE_CAM.saved.y; camera.quaternion.setFromEuler(euler); MISSILE_CAM.saved = null; }
+  const ch = document.getElementById('crosshair'); if (ch) ch.style.display = MISSILE_CAM.xhair || 'block';
+  if (MISSILE_CAM.hudEl) MISSILE_CAM.hudEl.style.display = 'none';
+}
+function _missileCamPick(now) {                                         // which missile I am riding; the next one if it is gone, and out again once none is left
+  if (!MISSILE_CAM.active) return null;
+  if (isDead || !gameStarted) { missileCamEnd(); return null; }
+  const mine = javelins.find(q => q.id === MISSILE_CAM.id);
+  if (mine) return mine;
+  const next = javelins.find(q => q.epoch === matchEpoch && q.map === activeMapName);
+  if (next) { MISSILE_CAM.id = next.id; MISSILE_CAM.speed = 1; MISSILE_CAM.endAt = 0; _missileCamHeading(next.dir); showAnnouncement('NEXT MISSILE', '', '#ffaa33', 700); return next; }
+  if (!MISSILE_CAM.endAt) MISSILE_CAM.endAt = now + 800;                 // hold the last picture for a moment: that was the blast
+  if (now >= MISSILE_CAM.endAt) missileCamEnd();
+  return null;
+}
+function _missileCamFollow(j, dt) {
+  const want = keys['KeyW'] ? 1.7 : keys['KeyS'] ? 0.45 : 1;
+  MISSILE_CAM.speed += (want - MISSILE_CAM.speed) * Math.min(1, dt * 3);
+  MISSILE_CAM.pos.set(j.x, j.y, j.z).addScaledVector(j.dir, 0.4);
+  const ty = Math.atan2(-j.dir.x, -j.dir.z), tp = Math.asin(Math.max(-1, Math.min(1, j.dir.y)));
+  let dy = ty - MISSILE_CAM.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+  const k = Math.min(1, dt * 14);
+  MISSILE_CAM.yaw += dy * k; MISSILE_CAM.pitch += (tp - MISSILE_CAM.pitch) * k;
+  _mcE.set(Math.max(-1.52, Math.min(1.52, MISSILE_CAM.pitch)), MISSILE_CAM.yaw, 0, 'YXZ');
+  const c = MISSILE_CAM.camera;
+  c.position.copy(MISSILE_CAM.pos); c.quaternion.setFromEuler(_mcE);
+  const aspect = (window.innerWidth || 1920) / (window.innerHeight || 1080), fov = 82 + 14 * Math.max(-0.5, MISSILE_CAM.speed - 1);
+  if (Math.abs(c.aspect - aspect) > 1e-3 || Math.abs(c.fov - fov) > 0.05) { c.aspect = aspect; c.fov = fov; c.updateProjectionMatrix(); }
+}
+function _missileCamHud(j, baseSpeed) {
+  let el = MISSILE_CAM.hudEl;
+  if (!MISSILE_CAM.active) { if (el) el.style.display = 'none'; return; }
+  if (!el) {
+    el = MISSILE_CAM.hudEl = document.createElement('div'); el.id = 'missile-cam-hud';
+    el.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:8990;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 52%,rgba(0,0,0,0.62) 100%);font:700 13px "Courier New",monospace;letter-spacing:2px;color:#ffaa33;text-shadow:0 0 6px #000;';
+    el.innerHTML = '<div class="mc-top" style="position:absolute;top:18px;left:0;right:0;text-align:center"></div>'
+      + '<div style="position:absolute;left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;border:2px solid #ffaa33;border-radius:50%;box-shadow:0 0 8px #ffaa33"></div>'
+      + '<div style="position:absolute;bottom:26px;left:0;right:0;text-align:center;color:#ffd9a0">MOUSE steer · W faster · S slower · Q back</div>';
+    document.body.appendChild(el);
+  }
+  el.style.display = 'block';
+  el.querySelector('.mc-top').textContent = j ? `◎ MISSILE CAM · ${Math.round(baseSpeed * MISSILE_CAM.speed)} m/s · ALT ${Math.max(0, Math.round(j.y))} m` : '◎ SIGNAL LOST';
+}
+document.addEventListener('keydown', e => {
+  if (e.code !== 'KeyQ' || e.repeat) return;
+  const tag = document.activeElement?.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  if (MISSILE_CAM.active) { missileCamEnd(); return; }
+  if (!gameStarted || isDead || SOCIAL_VIEW.mode) return;
+  missileCamStart();
+});
 function updateJavelins(dt) {
   const now = Date.now();
-  if (!javelins.length) { if (_jvGuideEl && _jvGuideEl.style.display !== 'none') _javelinHud(0, _jvAimPt, false); _javelinTrailTick(now); return; }
+  if (!javelins.length) { _missileCamPick(now); _missileCamHud(null, 0); if (_jvGuideEl && _jvGuideEl.style.display !== 'none') _javelinHud(0, _jvAimPt, false); _javelinTrailTick(now); return; }
   const spec = WEAPONS.find(w => w.id === 'javelin_launcher')?.lockOn;
   if (!spec) return;
   dt = Math.min(dt, 0.05);
   // guidance needs a living hand on the launcher; otherwise the missiles keep flying the way they are going
   const steering = !isDead && gameStarted && currentWeapon?.id === 'javelin_launcher' && (activeSlot === 'primary' || activeSlot === 'secondary');
+  const camJ = _missileCamPick(now);                                   // the missile I am riding, if I am
   if (steering) { _javelinAimPoint(_jvAimPt); camera.getWorldDirection(_jvCamDir); _jvCamRight.set(1, 0, 0).applyQuaternion(camera.quaternion); _jvCamUp.set(0, 1, 0).applyQuaternion(camera.quaternion); }
   let guided = 0;
   for (let i = javelins.length - 1; i >= 0; i--) {
     const j = javelins[i];
     if (now - j.bornAt > 8000 || j.epoch!==matchEpoch || j.map!==activeMapName) { removeJavelin(i); continue; }
     if (!j.homing && j.y - j.launchY >= spec.climbHeight) j.homing = true;       // (the name stays: it now means "past the climb, free to be steered")
-    if (j.homing && steering) {
+    const camMine = camJ === j;
+    if (j.homing && camMine) { camera.getWorldDirection(_jvWant); _javelinSteer(j, _jvWant, dt, MISSILE_CAM_SPEC); guided++; }   // piloted: it goes where the mouse points
+    else if (j.homing && steering && !camJ) {
       const a = j.slot / 6 * Math.PI * 2, ox = Math.cos(a) * JAVELIN_SPREAD, oy = Math.sin(a) * JAVELIN_SPREAD;
       _jvWant.copy(_jvAimPt).addScaledVector(_jvCamRight, ox).addScaledVector(_jvCamUp, oy).sub(_jvTmp.set(j.x, j.y, j.z));
       if (_jvWant.lengthSq() > 1e-4) { _jvWant.normalize(); _javelinSteer(j, _jvWant, dt, spec); }
       guided++;
     } else if (j.homing) j.omega.multiplyScalar(Math.max(0, 1 - dt * 4));      // let go: it stops turning and flies straight on
     else j.omega.set(0, 0, 0);                                                     // still climbing: dead straight up
-    if (j.homing) _javelinSpin(j, dt, spec);
-    const sp = spec.homingSpeed;
+    if (j.homing) _javelinSpin(j, dt, camMine ? MISSILE_CAM_SPEC : spec);
+    const sp = spec.homingSpeed * (camMine ? MISSILE_CAM.speed : 1);
     j.vx = j.dir.x * sp; j.vy = j.dir.y * sp; j.vz = j.dir.z * sp;
     const nx = j.x + j.vx * dt, ny = j.y + j.vy * dt, nz = j.z + j.vz * dt;
     if (_javelinBlockedByWall(j.x, j.y, j.z, nx, ny, nz) || ny <= 0.05) {
@@ -55472,6 +55553,7 @@ function updateJavelins(dt) {
     j.x = nx; j.y = ny; j.z = nz;
     j.mesh.position.set(j.x, j.y, j.z);
     _jvQ.setFromUnitVectors(_jvFwd, j.dir); j.mesh.quaternion.slerp(_jvQ, Math.min(1, dt * 18));     // the body follows the flight path smoothly
+    if (camMine) _missileCamFollow(j, dt);
     j.puffAcc = (j.puffAcc || 0) + dt;
     if (j.puffAcc >= 0.02) { j.puffAcc = 0; _javelinPuff(j.x - j.dir.x * 0.3, j.y - j.dir.y * 0.3, j.z - j.dir.z * 0.3, now); }
     if (hitPid) {
@@ -55484,7 +55566,8 @@ function updateJavelins(dt) {
       removeJavelin(i);
     }
   }
-  _javelinHud(guided, _jvAimPt, steering);
+  _javelinHud(guided, _jvAimPt, steering && !camJ);
+  _missileCamHud(camJ, spec.homingSpeed);
   _javelinTrailTick(now);
 }
 // ⚫ The Oblivion Railgun's shot (a skin's look.beam = 'void'): the beam is a tube of pure black, normal blending, so it blots out whatever it crosses instead of lighting it, and it
@@ -56216,6 +56299,7 @@ function tryShoot() {
   if (!equipReady()) { if (shooting) equipNudge(); return; }                   // ⏱️ it is still coming up
   if(currentWeapon?.prototype && !currentUser?.isAdmin)return;
   if (SOCIAL_VIEW.mode) return;
+  if (MISSILE_CAM.active) return;                                                // your hands are on the missile
   if ((!pointerLocked && !gameStarted) || isDead) return;
   if (currentWeapon?.id==='harpoon_gun' && window.PVP_TETHER_WEAPONS?.full) { dryFire();return; }
   weaponReadyUntil = performance.now()+220;
@@ -80220,6 +80304,7 @@ function loop() {
   });
   viewCamera = window.PVP_RAGDOLL?.viewCamera() || viewCamera;
   if (SOCIAL_VIEW.mode) viewCamera = SOCIAL_VIEW.camera;
+  if (MISSILE_CAM.active) viewCamera = MISSILE_CAM.camera;                       // riding a Javelin
   safeLoopStep('lobby-case', () => { if (window.PVP_LOBBY_CASE?.tick(dt)) viewCamera = camera; });
   safeLoopStep('stealth-laser', () => window.PVE_STEALTH?.update(weaponModels[currentWeaponIdx], viewCamera === camera && !SOCIAL_VIEW.mode && !THEATER.active));
   if (!THEATER.active) {
