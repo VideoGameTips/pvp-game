@@ -30391,6 +30391,161 @@ function buildBroadside() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+function buildDeadlock() {
+  // ☠️ Vector -> DEADLOCK. A classified corporate SMG with its own cooling department: two armoured heat-exchanger housings above and below the barrel that slide outward as
+  // you hold the trigger, showing six glowing heat sinks, with steam venting from the sides. Same compact silhouette, grip, magazine and stock as the Vector.
+  //   equip    LOCKDOWN RELEASE: the receiver covers slide back, the housings part a little and the screen flashes DEADLOCK // READY
+  //   fire     THERMAL OVERLOAD: the longer you hold the trigger the further the housings extend, the hotter the sinks glow, with a pulse every few shots and steam when it is hot
+  //   reload   PURGE CYCLE: the magazine drops, both housings open right out on six red-hot sinks, steam blasts sideways, the new magazine locks in, the sinks dim and the housings slam shut
+  //   inspect  EMERGENCY SHUTDOWN: it turns on its side, an alarm sounds, the housings spring open and the barrel goes orange; four clamps clank shut round it, a steam cloud, the barrel cools, they let go and it gives a shake
+  const g = new THREE.Group();
+  const rig = new THREE.Group(); g.add(rig);
+  const blk = new THREE.MeshPhongMaterial({ color: 0x15161a, shininess: 50, specular: 0x4a4e58, flatShading: true });
+  const gun = new THREE.MeshPhongMaterial({ color: 0x3a3e46, shininess: 110, specular: 0xa8b0bc, flatShading: true });
+  const steel = new THREE.MeshPhongMaterial({ color: 0x8a909a, shininess: 150, specular: 0xe8eef6, flatShading: true });
+  const warn = new THREE.MeshPhongMaterial({ color: 0xb01c14, shininess: 90, specular: 0xff9a8a, flatShading: true });
+  const barrelM = new THREE.MeshPhongMaterial({ color: 0x3a3e46, shininess: 120, specular: 0xc0c8d4, emissive: 0x000000 });
+  const sinkMats = Array.from({ length: 6 }, () => new THREE.MeshBasicMaterial({ color: 0x2a0a08 }));
+  const box = (m, w, h, d, x, y, z, parent = rig, rx = 0, ry = 0, rz = 0) => gpBox(parent, m, w, h, d, x, y, z, rx, ry, rz);
+  const Y0 = 0.010;                                                              // the barrel's height
+  // ── the Vector's chassis, grip, magazine and stock ──
+  gpPlate(rig, blk, [
+    [-0.170, 0.008], [-0.156, 0.030], [-0.030, 0.030], [-0.020, 0.040], [0.096, 0.040],
+    [0.108, 0.020], [0.150, 0.018], [0.150, -0.014], [0.104, -0.018], [0.096, -0.048],
+    [0.030, -0.052], [0.016, -0.020], [-0.030, -0.018], [-0.040, -0.006], [-0.164, -0.006],
+  ], 0.030, 0);
+  box(gun, 0.034, 0.008, 0.230, 0, 0.040, -0.030); box(steel, 0.020, 0.004, 0.236, 0, 0.0465, -0.028);
+  for (let i = 0; i < 9; i++) box(blk, 0.022, 0.003, 0.006, 0, 0.0495, -0.130 + i * 0.026);                  // rail teeth
+  gpPlate(rig, gun, [[-0.130, 0.030], [0.060, 0.034], [0.108, 0.020], [0.108, -0.010], [0.050, -0.016], [-0.130, -0.002]], 0.004, 0.0172);
+  gpPlate(rig, gun, [[-0.130, 0.030], [0.060, 0.034], [0.108, 0.020], [0.108, -0.010], [0.050, -0.016], [-0.130, -0.002]], 0.004, -0.0172);
+  gpPlate(rig, blk, [[0.078, -0.020], [0.100, -0.042], [0.102, -0.098], [0.078, -0.108], [0.058, -0.056], [0.056, -0.024]], 0.028, 0);
+  for (const sd of [-1, 1]) for (let i = 0; i < 3; i++) box(gun, 0.002, 0.006, 0.014, sd * 0.0148, -0.050 - i * 0.016, 0.082 + i * 0.002);
+  { const gd = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.0034, 4, 8, Math.PI * 1.05), gun); gd.rotation.set(0, Math.PI / 2, -0.4); gd.position.set(0, -0.032, 0.030); rig.add(gd); }
+  box(warn, 0.005, 0.015, 0.005, 0, -0.024, 0.030, rig, 0.2);
+  box(blk, 0.026, 0.024, 0.038, 0, -0.026, -0.006);
+  const magG = new THREE.Group(); const magHome = new THREE.Vector3(0, -0.086, -0.006); magG.position.copy(magHome); rig.add(magG);
+  box(gun, 0.022, 0.110, 0.034, 0, 0, 0, magG); box(warn, 0.024, 0.010, 0.036, 0, -0.060, 0, magG);
+  for (let i = 0; i < 3; i++) box(blk, 0.023, 0.004, 0.010, 0, 0.034 - i * 0.026, 0, magG);
+  for (const x of [-0.014, 0.014]) box(gun, 0.006, 0.006, 0.110, x, 0.010, 0.196);
+  box(blk, 0.040, 0.044, 0.012, 0, 0.006, 0.252, rig, 0.08); box(warn, 0.040, 0.008, 0.014, 0, 0.026, 0.250, rig, 0.08);
+  // ── the barrel and the muzzle ──
+  const barrel = gpCyl(rig, barrelM, 0.0078, 0.0078, 0.150, 10, 0, Y0, -0.190);
+  gpCyl(rig, gun, 0.0120, 0.0120, 0.016, 10, 0, Y0, -0.262); gpCyl(rig, blk, 0.0128, 0.0128, 0.010, 10, 0, Y0, -0.274);
+  box(steel, 0.004, 0.010, 0.006, 0, 0.0235, -0.255);                            // the front sight
+  // ── the heat exchanger: two housings, each a cover and a rack of three fins, above and below the barrel ──
+  const sinks = [], covers = [];
+  for (const up of [1, -1]) {
+    const cover = new THREE.Group(); rig.add(cover); cover.userData.up = up; covers.push(cover);
+    box(gun, 0.034, 0.004, 0.100, 0, up * 0.0285, -0.150, cover);                                            // the lid
+    for (const sd of [-1, 1]) { box(blk, 0.003, 0.016, 0.100, sd * 0.0155, up * 0.0215, -0.150, cover); }       // the skirts that hide the fins
+    box(steel, 0.036, 0.003, 0.006, 0, up * 0.0285, -0.098, cover); box(steel, 0.036, 0.003, 0.006, 0, up * 0.0285, -0.202, cover);
+    for (let k = 0; k < 3; k++) {                                                                              // three glowing fins under it, on the barrel itself
+      const m = sinkMats[(up > 0 ? 0 : 3) + k];
+      box(m, 0.022, 0.012, 0.0032, 0, up * 0.0165, -0.118 - k * 0.032);
+      box(blk, 0.026, 0.012, 0.0040, 0, up * 0.0165, -0.1315 - k * 0.032);
+      sinks.push(m);
+    }
+  }
+  // four clamps: each a pair of half-rings hinged at one side, open until they lock round the barrel
+  const clamps = [];
+  for (let i = 0; i < 4; i++) {
+    const z = -0.126 - i * 0.034, pair = [];
+    for (const half of [1, -1]) {
+      const hinge = new THREE.Group(); hinge.position.set(0.0150, Y0, z); rig.add(hinge);
+      const arc = new THREE.Mesh(new THREE.TorusGeometry(0.0150, 0.0030, 5, 10, Math.PI), steel); arc.position.set(-0.0150, 0, 0);
+      if (half < 0) arc.rotation.z = Math.PI; hinge.add(arc);
+      hinge.rotation.z = half * 1.35; hinge.visible = false; pair.push({ hinge, half });
+    }
+    clamps.push(pair);
+  }
+  // the readout on the receiver
+  const DW = 160, DH = 48; let dc = null, dx = null, dtex = null;
+  try { dc = document.createElement('canvas'); dc.width = DW; dc.height = DH; dx = dc.getContext('2d'); if (dx) { dtex = new THREE.CanvasTexture(dc); dtex.minFilter = THREE.LinearFilter; dtex.generateMipmaps = false; } } catch (e) {}
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.056, 0.0168), new THREE.MeshBasicMaterial({ map: dtex || null, color: dtex ? 0xffffff : 0xff3a1a, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+  screen.rotation.order = 'YXZ'; screen.rotation.set(-0.35, 0, 0); screen.position.set(0, 0.0545, 0.040); rig.add(screen);
+  let shown = '';
+  const paint = (l1, l2, col, bg) => {
+    if (!dx || shown === l1 + l2 + col) return; shown = l1 + l2 + col;
+    dx.clearRect(0, 0, DW, DH); dx.fillStyle = bg || 'rgba(20,0,0,0.78)'; dx.fillRect(0, 0, DW, DH);
+    dx.strokeStyle = col; dx.lineWidth = 2; dx.strokeRect(1, 1, DW - 2, DH - 2);
+    dx.fillStyle = col; dx.textAlign = 'center'; dx.textBaseline = 'middle';
+    dx.font = 'bold 18px monospace'; dx.fillText(l1, DW / 2, l2 ? 15 : 24); if (l2) dx.fillText(l2, DW / 2, 35);
+    dtex.needsUpdate = true;
+  };
+  paint('DEADLOCK', '', '#ff3a1a');
+  // receiver covers that slide back at the equip
+  const lids = [-1, 1].map(s => { const l = new THREE.Group(); rig.add(l); box(warn, 0.003, 0.020, 0.070, s * 0.0185, 0.018, -0.040, l); box(blk, 0.0034, 0.004, 0.070, s * 0.0185, 0.030, -0.040, l); return l; });
+  // steam, pooled
+  const steamM = () => new THREE.MeshBasicMaterial({ color: 0xe4e8ee, transparent: true, opacity: 0, depthWrite: false });
+  const puffs = []; for (let i = 0; i < 28; i++) { const m = new THREE.Mesh(new THREE.SphereGeometry(0.008, 7, 5), steamM()); m.userData.eqFx = true; m.visible = false; g.add(m); puffs.push({ m, t: -9, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, big: 1 }); }
+  let pi = 0;
+  const puff = (x, y, z, vx, vy, vz, big, now) => { const q = puffs[pi++ % puffs.length]; q.t = now; q.x = x; q.y = y; q.z = z; q.vx = vx; q.vy = vy; q.vz = vz; q.big = big; };
+  const flash = makeMuzzleFlash(); flash.position.set(0, Y0, -0.300); _hackFlash(flash, 0xff6a2a); g.add(flash);
+  g.traverse(o => { if (o.isMesh) o.userData.noSmooth = true; });
+  const clamp01 = u => Math.max(0, Math.min(1, u)), sm = (a, b, t) => { const x = clamp01((t - a) / (b - a)); return x * x * (3 - 2 * x); };
+  const cCold = new THREE.Color(0x2a0a08), cRed = new THREE.Color(0xff2a10), cHot = new THREE.Color(0xffa840), tmp = new THREE.Color(), orange = new THREE.Color(0xff6a10);
+  let heat = 0, ext = 0, was = false, shots = 0, pulse = 0, steamAt = 0, readyAt = -9, wasAssembling = true, tPrev = -1, ev = {}, shake = 0;
+  const reset = () => { heat = 0; ext = 0; pulse = 0; shots = 0; ev = {}; shake = 0; puffs.forEach(p => { p.t = -9; p.m.visible = false; }); clamps.forEach(c => c.forEach(h => { h.hinge.visible = false; })); rig.rotation.set(0, 0, 0); rig.position.set(0, 0, 0); magG.position.copy(magHome); magG.rotation.set(0, 0, 0); magG.visible = true; barrelM.emissive.setHex(0x000000); };
+  const alarm = () => { try { const ctx = getAudioCtx(); if (!ctx) return; for (let i = 0; i < 3; i++) playTone(ctx, ctx.currentTime + i * 0.2, 0.15, ctx.destination, 900, 640, 0.05, 'square'); } catch (e) {} };
+  g._calm = reset;
+  g._tick = (dt, now, assembling) => {
+    if (assembling) { reset(); wasAssembling = true; return; }
+    if (wasAssembling) { wasAssembling = false; readyAt = now; paint('DEADLOCK', '// READY', '#ff3a1a'); }
+    const fired = !!(g._flash && g._flash.visible);
+    if (fired && !was) { shots++; heat = Math.min(1, heat + 0.07); if (shots % 3 === 0) pulse = 1; }
+    was = fired; heat = Math.max(0, heat - dt * 0.30); pulse = Math.max(0, pulse - dt * 4);
+    const t0 = g._reloadStart && g._reloadDur ? (Date.now() - g._reloadStart) / g._reloadDur : -1;
+    const inspecting = !!g._inspectMode && t0 >= 0 && t0 < 1, reloading = !g._inspectMode && t0 >= 0 && t0 < 1;
+    // ready: the lids slide back and the housings part a touch
+    const rk = now - readyAt, ready = rk >= 0 && rk < 1.4 ? Math.sin(Math.min(1, rk / 1.4) * Math.PI) : 0;
+    if (rk >= 1.4 && !inspecting) paint('DEADLOCK', '', '#ff3a1a');
+    lids.forEach((l, i) => { l.position.z = 0.030 * ready; });
+    let extT = heat > 0.02 ? 0.15 + 0.85 * heat : 0.3 * ready, glow = heat * 0.8 + pulse * 0.3 + ready * 0.25, barrelHeat = Math.max(0, heat - 0.3) * 0.5;
+    let roll = 0, pitch = 0;
+    shake = 0;
+    if (reloading) {
+      extT = sm(0.04, 0.20, t0) * (1 - sm(0.80, 0.88, t0)); glow = sm(0.04, 0.20, t0) * (1 - sm(0.62, 0.84, t0));
+      if (!ev.rvent && t0 > 0.16) { ev.rvent = 1; try { playEquipSound('whoosh'); } catch (e) {} for (let k = 0; k < 8; k++) puff((k % 2 ? 1 : -1) * 0.022, Y0 + (k % 4 - 1.5) * 0.010, -0.120 - (k >> 1) * 0.025, (k % 2 ? 1 : -1) * 0.07, 0.01, -0.01, 1.4, now); }
+      if (!ev.rlock && t0 > 0.58) { ev.rlock = 1; try { playEquipSound('snapin'); } catch (e) {} }
+      if (!ev.rshut && t0 > 0.86) { ev.rshut = 1; try { playEquipSound('slam'); } catch (e) {} }
+      const d = sm(0.10, 0.30, t0), r = sm(0.44, 0.62, t0);
+      if (t0 < 0.44) { magG.position.set(magHome.x, magHome.y - 0.20 * d * d, magHome.z + 0.012 * d); magG.rotation.x = -0.5 * d; magG.visible = d < 0.97; }
+      else { magG.position.copy(magHome); magG.position.y -= 0.14 * (1 - r); magG.rotation.x = 0; magG.visible = true; }
+    } else if (!inspecting) { magG.position.copy(magHome); magG.rotation.x = 0; magG.visible = true; if (t0 < 0) { ev = {}; } }
+    if (inspecting) {
+      const t = t0;
+      roll = 1.25 * sm(0.0, 0.10, t) * (1 - sm(0.88, 0.95, t)); pitch = 0.15 * sm(0, 0.10, t) * (1 - sm(0.88, 0.95, t));
+      if (!ev.alarm && t > 0.10) { ev.alarm = 1; alarm(); }
+      if (t > 0.10 && t < 0.58) paint('WARNING:', 'THERMAL FAILURE', (Math.floor(now * 6) % 2) ? '#ff2a1a' : '#ffb0a0');
+      extT = sm(0.14, 0.19, t) * (1 - sm(0.84, 0.92, t));
+      glow = 0.4 + 0.6 * sm(0.14, 0.26, t) * (1 - sm(0.60, 0.84, t));
+      barrelHeat = sm(0.14, 0.30, t) * (1 - sm(0.60, 0.82, t));
+      clamps.forEach((pair, i) => {
+        const closeAt = 0.30 + i * 0.065, openAt = 0.82 + i * 0.012;
+        const c = sm(closeAt, closeAt + 0.04, t) * (1 - sm(openAt, openAt + 0.05, t));
+        pair.forEach(h => { h.hinge.visible = t > 0.28 && t < 0.92; h.hinge.rotation.z = h.half * 1.35 * (1 - c); });
+        if (!ev['c' + i] && t > closeAt + 0.03) { ev['c' + i] = 1; try { playEquipSound('slam'); } catch (e) {} }
+      });
+      if (!ev.cloud && t > 0.58) { ev.cloud = 1; try { playEquipSound('whoosh'); } catch (e) {} for (let k = 0; k < 14; k++) puff((Math.random() - 0.5) * 0.05, Y0 + Math.random() * 0.03, -0.120 - Math.random() * 0.12, (Math.random() - 0.5) * 0.05, 0.03 + Math.random() * 0.03, (Math.random() - 0.5) * 0.04, 2.2, now); }
+      if (t > 0.58 && t < 0.88) paint('CORE TEMPERATURE:', 'STABLE', '#39ff8a');
+      shake = sm(0.90, 0.93, t) * (1 - sm(0.95, 0.98, t));
+      if (!ev.last && t > 0.96) { ev.last = 1; puff(0, Y0 + 0.01, -0.282, 0, 0.02, -0.02, 0.9, now); }
+    } else clamps.forEach(c => c.forEach(h => { h.hinge.visible = false; }));
+    ext += (extT - ext) * Math.min(1, dt * (extT > ext ? (reloading || inspecting ? 20 : 3.2) : (reloading || inspecting ? 16 : 0.9)));
+    covers.forEach(c => { c.position.y = c.userData.up * 0.020 * ext; });
+    // glow: the six sinks run cold -> red -> hot orange; the barrel goes orange when it is truly hot
+    const gk = clamp01(glow);
+    sinkMats.forEach((m, i) => { const k = clamp01(gk * (0.85 + 0.15 * Math.sin(now * 9 + i))); if (k < 0.5) m.color.copy(cCold).lerp(cRed, k * 2); else m.color.copy(cRed).lerp(cHot, (k - 0.5) * 2); });
+    tmp.copy(orange).multiplyScalar(clamp01(barrelHeat)); barrelM.emissive.copy(tmp);
+    // steam when it is running hot
+    if (!inspecting && !reloading && heat > 0.5 && now > steamAt) { steamAt = now + 0.11; const sd = Math.random() < 0.5 ? -1 : 1; puff(sd * 0.020, Y0 + (Math.random() - 0.5) * 0.04, -0.140 - Math.random() * 0.05, sd * 0.05, 0.02, -0.01, 0.9, now); }
+    puffs.forEach(p => { const a = now - p.t; if (a < 0 || a > 0.9) { p.m.visible = false; return; } const k = a / 0.9; p.m.visible = true; p.m.position.set(p.x + p.vx * a, p.y + p.vy * a + k * 0.03, p.z + p.vz * a); p.m.scale.setScalar((0.6 + k * 2.4) * p.big); p.m.material.opacity = (1 - k) * 0.6; });
+    rig.rotation.z = -roll + shake * Math.sin(now * 42) * 0.07; rig.rotation.x = -pitch + shake * Math.sin(now * 37) * 0.04;
+  };
+  g._flash = flash; g._kickZ = 0.008; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
 function buildDoubleTrouble() {
   // 💥 Sawed-Off -> Double Trouble. A short, chunky double-barrel built out of rectangles and ridges: matte black, brushed steel and bright orange. Two massive barrel
   // housings float a little apart from the central frame, with four armour plates standing off them. Fourteen separate pieces.
@@ -47383,6 +47538,7 @@ const SKIN_SHOT = {};
   G({ shape: 'hackbullet', c: [0x0a0a0a, 0x2dff6a], k: 1.5 }, null, ['pistol_hacker', 'ak20_hacker']);
   G({ shape: 'pixeltrail', c: [0xff2bd6, 0x2bf0ff], min: 0.06 }, 'cyber', ['vector_glitch_exe']);
   G({ shape: 'bolt', c: [0xff1030, 0xff2bd6] }, 'cyber', ['vector_neon_anarchy']);
+  G({ shape: 'bolt', c: [0xff3a1a, 0xffb060], k: 1.2 }, null, ['vector_deadlock']);                                       // DEADLOCK: a red-hot round
   G(null, null, ['flamethrower_disco_inferno'], 0xff4fd8);   // the ordinary flames, with a pink glow round the yellow
   G({ shape: 'card', c: [0x15151c, 0xff2a3a], min: 0.05, k: 1.2 }, 'cards', ['throwing_knives_house_of_cards']);
   G({ shape: 'gravarrow', c: [0x0c0c12, 0x9a4aff], min: 0.07, k: 1.3 }, 'gravity', ['boombow_gravity_end']);
@@ -58876,6 +59032,9 @@ const MODEL_SKINS = [
   { id: 'vector_neon_anarchy', weapon: 'vector', name: 'NEON//ANARCHY', rarity: 'legendary', look: { hit: 'error' },
     sw: ['#0b0b10', '#ff2bb0'], build: buildNeonAnarchy,
     blurb: 'A rogue hacker\'s prototype, built lopsided on purpose: bare circuitry and a coil on the side you see, overlapping armour and hazard labels on the other. Aim and the side panels slide back; fire and the blocks shuttle and neon races along the deck while the hologram counter corrupts (OVERRIDE, UNSTABLE, SYSTEM ERROR). Inspect is SYSTEM HIJACK: a red skull, UNAUTHORIZED USER DETECTED, ACCESS GRANTED.' },
+  { id: 'vector_deadlock', weapon: 'vector', name: 'DEADLOCK', rarity: 'legendary',
+    sw: ['#3a3e46', '#ff3a1a'], build: buildDeadlock,
+    blurb: 'A classified corporate Vector with its own cooling department: two armoured heat-exchanger housings above and below the barrel that slide outward the longer you hold the trigger, showing six glowing heat sinks and venting steam when it runs hot. The receiver covers slide back on equip and the screen flashes DEADLOCK // READY. Reload is a PURGE CYCLE: the housings fling open and steam blasts sideways before they slam shut on the new magazine. Inspect is an EMERGENCY SHUTDOWN: an alarm, an orange barrel, four clamps clanking round it, a steam cloud, and a little shake.' },
   { id: 'flamethrower_disco_inferno', weapon: 'flamethrower', name: 'DISCO INFERNO', rarity: 'rare',
     sw: ['#e4e8f4', '#ff2bb0'], build: buildDiscoInferno,
     blurb: 'A nightclub with a pilot light. A disco ball spins over the barrel, the speakers pulse, confetti flies out with the flames, and hold the trigger and four spotlights unfold and sweep. Reload swaps the glowing tank; inspect is DISCO FEVER.' },
@@ -59092,7 +59251,7 @@ const GEN2_MODEL_SKIN_IDS = new Set([
   'revolver_midas', 'pistol_frost', 'ak20_xerror', 'revolver_shatterpoint', 'machine_pistol_overclocked', 'hand_cannon_iron_judge', 'hand_cannon_broadside', 'sawed_off_double_trouble', 'sawed_off_classic_shorty', 'grenade_launcher_orbital', 'minigun_redline',            // the Gen 2 case's two new top rarities: EPIC and MYTHIC (server.js GEN2_EPIC_SKIN_IDS / GEN2_NEW_MYTHIC_SKIN_IDS)
   'ak20_rainbow', 'ak20_hyperspace', 'ak20_blueprint', 'sg8_portal', 'vector_portal',
   'railgun_portal_detector', 'p90_quantum_scanner', 'freeze_hyperslush', 'firework_showman',
-  'shorty_outlaw', 'snub_gunslinger', 'deagle_glitch', 'deagle_phantom', 'vector_glitch_exe', 'vector_neon_anarchy', 'flamethrower_disco_inferno', 'crossbow_widowmaker', 'throwing_knives_house_of_cards', 'boombow_gravity_end', 'harpoon_octopus',
+  'shorty_outlaw', 'snub_gunslinger', 'deagle_glitch', 'deagle_phantom', 'vector_glitch_exe', 'vector_neon_anarchy', 'vector_deadlock', 'flamethrower_disco_inferno', 'crossbow_widowmaker', 'throwing_knives_house_of_cards', 'boombow_gravity_end', 'harpoon_octopus',
   'burst_cannon_phantom', 'plasma_carbine_fishbowl', 'paintball_fishbowl', 'coilgun_clockwork',
   'rpd_clockwork_belt', 'smart_smg_neon', 'p90_neon_sign', 'portal_launcher_constellation',
   'railgun_constellation', 'pistol_origami', 'xm7_bricks', 'vector_brick_labeler',
@@ -64475,6 +64634,7 @@ const SKIN_FX = {
   harpoon_octopus: { equip: 'unfold', equipMs: 950, equipSfx: ['whoosh', 'squeak'] },
   flamethrower_disco_inferno: { equip: 'flip', equipMs: 950, equipSfx: ['whoosh', 'chime'],
     inspect: [K(.12, { py: .02, rx: -.15 }), K(.26, { py: .05, pz: -.02, rx: -.50 }), K(.80, { py: .05, pz: -.02, rx: -.50 }), K(.88, { py: .03, rx: -.30 }), K(.94, { py: .015, rx: -.08 }), K(1, {})] },
+  vector_deadlock: { equip: 'unfold', equipMs: 950, equipSfx: ['whoosh', 'snapin'] },
   vector_neon_anarchy: { equip: 'glitch', equipMs: 950, equipSfx: ['glitchsfx', 'snapin'],
     inspect: [K(.10, { py: .02 }), K(.20, { py: .06, pz: -.04, rx: .10 }), K(.80, { py: .06, pz: -.04, rx: .10 }), K(.84, { py: .06, pz: -.04, rx: .22 }), K(.92, { py: .03 }), K(1, {})] },
   boombow_gravity_end: { equip: 'blackhole', equipMs: 1200, equipSfx: ['singularity', 'chime'],
