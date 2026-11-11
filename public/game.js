@@ -37291,6 +37291,81 @@ function buildLeverRifle() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+// 🌺 Lever Rifle -> Lest We Forget. A Remembrance Day skin that keeps the Lever Rifle exactly as it is: dark brown wood, charcoal metal and
+// a muted bronze band, a flat five-petal poppy on each side of the receiver, LEST WE FORGET along the stock and 11 · 11 by the barrel.
+// Inspect: the rifle tilts to show the poppy, three petals drift up off it and fade, and the rifle comes back. Looks only.
+function buildRemembranceLever() {
+  const g = buildLeverRifle();
+  g.traverse(o => {                                              // re-colour the stock rifle's parts (clone first: the finishes are shared)
+    if (!o.isMesh || !o.material || o === g._flash) return;
+    for (let p = o; p; p = p.parent) if (p === g._flash) return;
+    const tint = m => {
+      if (!m || m.isMeshBasicMaterial || !m.color) return m;
+      const c = m.clone(), k = c.color;
+      if (k.r > k.b * 1.25 && k.r > 0.12) k.setHex(0x3b2515);   // the walnut -> dark brown
+      else k.setHex(((k.r + k.g + k.b) / 3) > 0.3 ? 0x4a4e54 : 0x2a2d32);   // blued / steel -> charcoal (the bright fittings a shade lighter)
+      return c;
+    };
+    o.material = Array.isArray(o.material) ? o.material.map(tint) : tint(o.material);
+  });
+  const bronze = new THREE.MeshPhongMaterial({ color: 0x8a6a32, shininess: 70, specular: 0xc9a766 });
+  const red = new THREE.MeshBasicMaterial({ color: 0xd01c24, side: THREE.DoubleSide });
+  const black = new THREE.MeshBasicMaterial({ color: 0x0a0a0a, side: THREE.DoubleSide });
+  const ease = u => u * u * (3 - 2 * u), clamp01 = u => Math.max(0, Math.min(1, u));
+  const lettering = (text, w, h, px) => {
+    let tex = null;
+    try {
+      const c = document.createElement('canvas'); c.width = 512; c.height = Math.max(16, Math.round(512 * h / w));
+      const x = c.getContext('2d');
+      x.fillStyle = '#b08a48'; x.font = 'bold ' + px + 'px Georgia, "Times New Roman", serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.fillText(text, c.width / 2, c.height / 2 + 1);
+      tex = new THREE.CanvasTexture(c);
+    } catch (e) { tex = null; }
+    return new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, color: tex ? 0xffffff : 0xb08a48, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+  };
+  // a flat five-petal poppy facing sideways (sd = -1 the left of the rifle, 1 the right)
+  const petalGeo = new THREE.CircleGeometry(0.0058, 14); petalGeo.scale(1, 1.35, 1);
+  const poppy = sd => {
+    const f = new THREE.Group();
+    for (let i = 0; i < 5; i++) {
+      const a = i / 5 * Math.PI * 2, p = new THREE.Mesh(petalGeo, red);
+      p.position.set(Math.sin(a) * 0.0068, Math.cos(a) * 0.0068, 0); p.rotation.z = -a; f.add(p);
+    }
+    const c = new THREE.Mesh(new THREE.CircleGeometry(0.0033, 12), black); c.position.z = sd * 0.0002 + 0.0002; f.add(c);
+    f.rotation.y = sd * Math.PI / 2;
+    return f;
+  };
+  for (const sd of [-1, 1]) {
+    const p = poppy(sd); p.position.set(sd * 0.0158, 0.012, 0.084); g.add(p);
+    const t = lettering('LEST WE FORGET', 0.118, 0.013, 54); t.position.set(sd * 0.0213, -0.026, 0.203); t.rotation.y = sd * Math.PI / 2; g.add(t);
+    const d = lettering('11 · 11', 0.054, 0.0105, 52); d.position.set(sd * 0.0113, 0.014, -0.220); d.rotation.y = sd * Math.PI / 2; g.add(d);
+  }
+  gpBox(g, bronze, 0.043, 0.051, 0.008, 0, 0.001, -0.112);        // the narrow bronze band round the handguard
+  gpBox(g, bronze, 0.043, 0.051, 0.003, 0, 0.001, -0.103);
+  // three loose petals for the inspect
+  const loose = [];
+  for (let i = 0; i < 3; i++) {
+    const m = new THREE.Mesh(petalGeo, new THREE.MeshBasicMaterial({ color: 0xd01c24, transparent: true, opacity: 1, depthWrite: false, side: THREE.DoubleSide }));
+    m.visible = false; m.userData.eqFx = true; g.add(m); loose.push(m);
+  }
+  g._calm = () => { for (const m of loose) m.visible = false; };
+  g._tick = (dt, now, assembling) => {
+    if (assembling) { for (const m of loose) m.visible = false; return; }
+    const t0 = g._reloadStart && g._reloadDur ? (Date.now() - g._reloadStart) / g._reloadDur : -1;
+    const inspecting = !!g._inspectMode && t0 >= 0 && t0 < 1;
+    loose.forEach((m, i) => {
+      const k = inspecting ? (t0 - (0.30 + i * 0.07)) / 0.34 : -1;
+      m.visible = k > 0 && k < 1;
+      if (!m.visible) return;
+      m.position.set(-0.0185 - 0.012 * k + Math.sin(now * 3 + i * 2) * 0.004, 0.014 + 0.075 * ease(k), 0.084 + (i - 1) * 0.012 + Math.cos(now * 2.4 + i) * 0.004);
+      m.rotation.set(k * 2 + i, Math.PI / 2 + Math.sin(now * 2 + i) * 0.5, k * 3 - i);
+      m.material.opacity = k < 0.7 ? 1 : 1 - (k - 0.7) / 0.3;
+      m.scale.setScalar(0.8 + 0.2 * Math.sin(now * 5 + i));
+    });
+  };
+  return g;
+}
+
 function buildAutoShotgun() {
   // Auto shotgun with large drum mag, dark
   const g = new THREE.Group();
@@ -58976,6 +59051,9 @@ const MODEL_SKINS = [
   { id: 'rpd_m249', weapon: 'rpd', name: 'M249 SAW', rarity: 'rare',
     sw: ['#2b2f35', '#3a3f30'], build: buildM249,
     blurb: 'Bipod, carry handle, 200-round box slung underneath. Belt-fed in spirit.' },
+  { id: 'lever_remembrance', weapon: 'lever', name: 'Lest We Forget', rarity: 'rare',
+    sw: ['#3b2515', '#d01c24'], build: buildRemembranceLever,
+    blurb: 'A Remembrance Day skin: dark wood, charcoal metal, a bronze band, and a red poppy on the receiver. LEST WE FORGET along the stock, 11 \u00b7 11 by the barrel. Inspect it and the poppy drops a few petals.' },
   { id: 'lever_winchester94', weapon: 'lever', name: 'Winchester 94', rarity: 'rare',
     sw: ['#6b4a2c', '#454b53'], build: buildWinchester94,
     blurb: 'Full wood stock, tube magazine, the loop lever it is named for.' },
@@ -59463,6 +59541,7 @@ const GEN2_MODEL_SKIN_IDS = new Set([
   'rpg_siegebreaker', 'javelin_katyusha', 'p90_ppsh41',                                  // (no skin is free: server.js GEN2_LEGENDARY / GEN2_RARE_SKIN_IDS)
   'minigun_stormwing',                                          // (no skin is free: server.js GEN2_RARE_SKIN_IDS)
   'ak20_breach_protocol',                                       // (no skin is free: server.js GEN2_LEGENDARY_SKIN_IDS)
+  'lever_remembrance',                                          // (no skin is free: server.js GEN2_RARE_SKIN_IDS)
   'revolver_final_notice','vector_crimson',
   'revolver_donut', 'ak20_donut', 'rpg_donut', 'machine_pistol_donut', 'pistol_donut',
   'sg8_donut', 'srx_donut', 'vector_donut', 'grenade_launcher_donut', 'minigun_donut',
@@ -64767,6 +64846,9 @@ const SKIN_FX = {
   p90_ppsh41: { equip: 'slam', equipMs: 900, equipSfx: ['whoosh', null], equipBeats: [[.55, 'slam']] },
   minigun_stormwing: { equip: 'unfold', equipMs: 950, equipSfx: ['fold', 'click'], equipBeats: [[.55, 'click'], [.82, 'chime']] },
   ak20_breach_protocol: { equip: 'draw', equipMs: 850, equipSfx: ['whoosh', null], inspectMs: 5200 },
+  lever_remembrance: { equip: 'draw', equipMs: 800, equipSfx: ['whoosh', null], inspectMs: 4400,
+    inspect: [K(.20, { px: -.085, py: .05, pz: -.26, rx: .10, ry: 1.0, rz: -.18 }),
+      K(.84, { px: -.085, py: .05, pz: -.26, rx: .10, ry: 1.05, rz: -.18 }), K(1, {})] },
   minigun_ceiling_fan: { sound: _fxS('whirr', .28, .07, 700, 380),
     equip: 'spin', equipMs: 900, equipSfx: ['whoosh', 'ding'],
     // the light kit unscrewed, a fresh bulb dropped in, screwed back on, and two tugs on the pull chain
