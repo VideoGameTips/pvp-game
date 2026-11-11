@@ -2668,6 +2668,16 @@ io.on('connection', (socket) => {
     emitToMatch(p.matchId, 'playerWrap', { id: socket.id, wrap: p.wrap });
   });
 
+  // 👁 How this player is looking (first / second / third person), so whoever they kill can watch through the same view.
+  socket.on('setView', (data) => {
+    const p = players[socket.id];
+    if (!p) return;
+    const mode = data && (data.mode === 'third' || data.mode === 'second') ? data.mode : 'first';
+    if (p.view === mode) return;
+    p.view = mode;
+    emitToMatch(p.matchId, 'playerView', { id: socket.id, view: mode });
+  });
+
   // The wraps that are approved, for everybody, and this account's own submissions.
   socket.on('getWraps', () => {
     const p = players[socket.id];

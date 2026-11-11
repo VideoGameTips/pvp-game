@@ -43576,17 +43576,45 @@ function emitMyWrap() {
   _sentWrapId = id;
   try { socket.emit('setWrap', { wrap: id }); } catch (e) {}
 }
+let _sentViewMode;
+function emitMyView() {
+  const mode = SOCIAL_VIEW.mode === 'free' ? 'third' : (PLAYER_VIEW.mode || 'first');
+  if (mode === _sentViewMode) return;
+  _sentViewMode = mode;
+  try { socket.emit('setView', { mode }); } catch (e) {}
+}
+socket.on('playerView', ({ id, view }) => {
+  if (id === myId) return;
+  if (players[id]) players[id].view = view === 'third' || view === 'second' ? view : 'first';
+});
 socket.on('playerWrap', ({ id, wrap }) => {
   if (id === myId) return;
   if (players[id]) players[id].wrap = wrap || null;
   const m = remoteMeshes[id];
   if (m) dressRemoteGun(m);
 });
+// 🪞 Your own body in third person, second person and the free camera holds what you hold, in your skin and your wrap.
+function _selfWrapId() {
+  let id = 'default', held = null;
+  try { held = heldItemId(); } catch (e) {}
+  try { const want = wrapIdFor(held); if (wrapUnlocked(want)) id = want; } catch (e) {}
+  const sk = WEAPON_SKINS_BY_ID[id];
+  if (sk && sk.custom && !sk.approvedBy) id = 'default';
+  return id === 'default' ? null : id;
+}
+function armSelfActor(actor) {
+  if (!actor) return;
+  actor._selfWrapFn = _selfWrapId;
+  let id = null;
+  try { id = heldItemId() || null; } catch (e) {}
+  armRemoteMesh(actor, id, id ? heldSkinId(id) : null);
+  try { dressRemoteGun(actor); } catch (e) {}                    // (a no-op unless the wrap changed since the last frame)
+}
 // Put the owner's wrap on the gun a body is holding.
 function dressRemoteGun(mesh) {
   const gun = mesh && mesh._gun;
   if (!gun) return;
-  const wrapId = mesh._ownerId && players[mesh._ownerId] && players[mesh._ownerId].wrap;
+  const wrapId = mesh._selfWrapFn ? mesh._selfWrapFn() : (mesh._ownerId && players[mesh._ownerId] && players[mesh._ownerId].wrap);
   const skin = (wrapId && WEAPON_SKINS_BY_ID[wrapId]) || WEAPON_SKINS_BY_ID.default;
   if ((gun._wrapKey || 'default') === skin.id) return;
   gun._wrapKey = skin.id;
@@ -48604,7 +48632,7 @@ function updatePlayerView(dt) {
   actor.visible = true;
   actor.position.copy(camera.position); actor.position.y -= window._crouchEye ?? 1.65;
   actor.rotation.y = euler.y + Math.PI;
-  armRemoteMesh(actor, (activeSlot === 'primary' || activeSlot === 'secondary') ? currentWeapon?.id : null);
+  armSelfActor(actor);
   const crouch = THREE.MathUtils.clamp((1.65 - (window._crouchEye ?? 1.65)) / .95, 0, 1);
   const sliding = !!(window._slideUntil && Date.now() < window._slideUntil);
   if (lastShot !== PLAYER_VIEW.lastShot) {
@@ -48662,7 +48690,7 @@ function beginSocialView(mode) {
   SOCIAL_VIEW.mode = mode;
   SOCIAL_VIEW.camera = new THREE.PerspectiveCamera(70, camera.aspect, camera.near, camera.far);
   SOCIAL_VIEW.actor = makePlayerMesh(currentUser?.username || 'You', false, 'ally', mySkin || 'default', {hair:myHair});
-  if (mode === 'free' && (activeSlot === 'primary' || activeSlot === 'secondary')) armRemoteMesh(SOCIAL_VIEW.actor, currentWeapon?.id);
+  if (mode === 'free') armSelfActor(SOCIAL_VIEW.actor);
   scene.add(SOCIAL_VIEW.actor);
   const yaw = euler.y;
   SOCIAL_VIEW.camera.position.copy(camera.position).add(new THREE.Vector3(-Math.sin(yaw) * 4, 1.2, -Math.cos(yaw) * 4));
@@ -48767,6 +48795,7 @@ function updateSocialView(dt) {
   actor.rotation.y = euler.y + Math.PI;
   animateCharacterMesh(actor, dt, 0);
   if (SOCIAL_VIEW.mode === 'free') {
+    armSelfActor(actor);
     SOCIAL_VIEW.look.y += ((keys.ArrowLeft ? 1 : 0) - (keys.ArrowRight ? 1 : 0)) * dt * 1.8;
     SOCIAL_VIEW.look.x = THREE.MathUtils.clamp(SOCIAL_VIEW.look.x + ((keys.ArrowUp ? 1 : 0) - (keys.ArrowDown ? 1 : 0)) * dt * 1.8, -1.5, 1.5);
     c.quaternion.setFromEuler(SOCIAL_VIEW.look);
@@ -51218,6 +51247,149 @@ function currentEquippedId() {
   return null;
 }
 
+// 👁 KILLER VIEW. The moment you die to somebody, your view becomes theirs: through their eyes, with the gun they are holding in their hands (their skin and
+// their wrap on it), doing whatever they do. If they play in third person you see them from behind, in second person from in front (their view mode is sent by
+// the 'setView' event). It ends when you respawn, when they die, or after a few seconds, and what the death held back (the loadout, the waiting screen) comes
+// up then. The death replay (KILLCAM) is archived; this is what takes its place.
+const KILLER_VIEW = { active: false, id: null, mode: 'first', until: 0, gun: null, gunKey: '', kick: 0, hidden: new Set(), hid: null, ui: null, pitch: 0, savedPos: null, savedQuat: null };
+const KILLER_VIEW_MS = 7000;
+function _viewGunSource(weaponId, skinId) {
+  let src = null;
+  try { src = remoteSkinModel(weaponId, skinId); } catch (e) { src = null; }
+  if (src) return src;
+  const wi = WEAPONS.findIndex(w => w.id === weaponId);
+  if (wi >= 0) return (typeof _baseWeaponModels !== 'undefined' && _baseWeaponModels[wi]) || weaponModels[wi];
+  if (!weaponId || weaponId === 'fists') return null;
+  const mi = MELEE_ITEMS.findIndex(m => m.id === weaponId);
+  if (mi >= 0) return (typeof _baseMeleeModels !== 'undefined' && _baseMeleeModels[mi]) || meleeModels[mi];
+  const si = SUPPORT_ITEMS.findIndex(s => s.id === weaponId);
+  if (si >= 0) return (typeof _baseSupportModels !== 'undefined' && _baseSupportModels[si]) || supportModels[si];
+  return null;
+}
+// The gun in somebody else's first-person hands: the weapon's own model (their skin if they wear one) at viewmodel size, with their wrap painted on it.
+function makeKillerViewGun(weaponId, skinId, wrapId) {
+  const src = _viewGunSource(weaponId, skinId);
+  if (!src || !src.traverse) return null;
+  src.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy((src._heldItem || src).matrixWorld).invert();
+  const undressed = new Map();                                   // (my own wrap must not ride along: go back to each part's original material)
+  if (src._skinClones) for (const [orig, c] of src._skinClones) if (orig !== c) undressed.set(c, orig);
+  const baseMat = m => undressed.get(m) || m;
+  const root = new THREE.Group();
+  let parts = 0;
+  src.traverse(o => {
+    if (!o.isMesh || !o.geometry || !o.material) return;
+    for (let p = o; p; p = p.parent) if (p.userData && (p.userData.vmHand || p.userData.noWorld)) return;
+    if (o.visible === false) return;
+    for (let p = o.parent; p && p !== src; p = p.parent) if (p.visible === false) return;
+    const mat = Array.isArray(o.material) ? o.material.map(m => baseMat(m).clone()) : baseMat(o.material).clone();
+    const m = new THREE.Mesh(o.geometry, mat);
+    m.matrix.copy(inv).multiply(o.matrixWorld); m.matrix.decompose(m.position, m.quaternion, m.scale);
+    m.castShadow = false; root.add(m); parts++;
+  });
+  if (!parts || parts > 220) return null;
+  const skin = wrapId && WEAPON_SKINS_BY_ID[wrapId];
+  if (skin) { try { applyWeaponSkin(root, skin); } catch (e) { console.warn('[killer view] wrap', e); } }
+  const holder = new THREE.Group();
+  holder.add(root); holder.position.set(0.12, -0.10, -0.25); holder.userData.killerGun = true;
+  return holder;
+}
+function _disposeViewGun(h) {
+  if (!h) return;
+  if (h.parent) h.parent.remove(h);
+  h.traverse(o => {                                              // (the geometry is the weapon's own, shared: only the painted materials are ours)
+    const ms = Array.isArray(o.material) ? o.material : (o.material ? [o.material] : []);
+    for (const m of ms) { try { m.dispose(); } catch (e) {} }
+  });
+  const root = h.children[0];
+  if (root && root._skinClones) for (const c of root._skinClones.values()) { try { c.dispose(); } catch (e) {} }
+}
+function killerViewUI() {
+  if (KILLER_VIEW.ui) return KILLER_VIEW.ui;
+  const ui = document.createElement('div');
+  ui.id = 'killer-view-ui'; ui.setAttribute('data-no-i18n', '');
+  ui.style.cssText = 'position:fixed;top:14%;left:50%;transform:translateX(-50%);z-index:9000;padding:8px 18px;background:rgba(10,12,18,0.72);border:1px solid #ff5a5a;border-radius:6px;color:#fff;font-family:"Courier New",monospace;font-size:14px;letter-spacing:2px;pointer-events:none;display:none;text-align:center;';
+  document.body.appendChild(ui);
+  return (KILLER_VIEW.ui = ui);
+}
+function _killerSnapshot(id) {
+  const mesh = remoteMeshes[id];
+  if (!mesh) return null;
+  const p = players[id] || {};
+  return { mesh, p, x: mesh.position.x, y: mesh.position.y + PLAYER_EYE_HEIGHT, z: mesh.position.z, yaw: mesh.rotation.y - Math.PI, pitch: Number.isFinite(p.rotX) ? p.rotX : 0 };
+}
+function startKillerView(killerId, weaponId) {
+  if (KILLER_VIEW.active || !killerId || killerId === myId || isDead === false) return;
+  if (match && match.over) return;
+  const snap = _killerSnapshot(killerId);
+  if (!snap || players[killerId]?.dead) return;
+  const K = KILLER_VIEW;
+  K.active = true; K.id = killerId; K.until = performance.now() + KILLER_VIEW_MS; K.gun = null; K.gunKey = ''; K.kick = 0; K.pitch = snap.pitch;
+  K.savedPos = camera.position.clone(); K.savedQuat = camera.quaternion.clone();
+  K.mode = snap.p.view === 'third' || snap.p.view === 'second' ? snap.p.view : 'first';
+  K.hidden = new Set();
+  window.PVP_KILLER_VIEW = true;                                   // the ragdoll's falling-head camera gives way to this one
+  for (const c of camera.children) if (c.visible && !c.isLight) { c.visible = false; K.hidden.add(c); }   // my own gun and its lights ride on the camera
+  const ui = killerViewUI();
+  const name = snap.p.name || 'an enemy', wname = weaponDisplayName(weaponId || snap.p.weaponId);
+  ui.textContent = '👁 WATCHING ' + String(name).toUpperCase() + (wname ? ' · ' + wname : '');
+  ui.style.display = 'block';
+}
+function stopKillerView() {
+  const K = KILLER_VIEW;
+  if (!K.active) return;
+  K.active = false; window.PVP_KILLER_VIEW = false;
+  _disposeViewGun(K.gun); K.gun = null; K.gunKey = '';
+  if (K.ui) K.ui.style.display = 'none';
+  for (const c of K.hidden) c.visible = true;
+  K.hidden = new Set();
+  const m = remoteMeshes[K.id];
+  if (m && K.hid && players[K.id]?.dead !== true) m.visible = true;
+  K.hid = null;
+  if (K.savedPos) camera.position.copy(K.savedPos);
+  if (K.savedQuat) camera.quaternion.copy(K.savedQuat);
+  camera.fov = targetFOV || 75; camera.updateProjectionMatrix();
+  if (isDead && !isLoadoutOpen()) { const ds = document.getElementById('death-screen'); if (ds && match?.type !== 'elim') ds.style.display = 'flex'; }
+  for (const fn of _afterKillcam.splice(0)) { try { fn(); } catch (e) { console.warn('[killer view] held job', e); } }   // what the death held back: loadout, waiting screen, spectating
+  for (const job of [..._pendingDeathJobs]) { try { job(); } catch (e) { console.warn('[killer view] death job', e); } }
+}
+function updateKillerView(dt) {
+  const K = KILLER_VIEW;
+  if (!K.active) return;
+  if (!isDead || performance.now() > K.until || (match && match.over) || MATCH_FINALE.active) { stopKillerView(); return; }
+  const snap = _killerSnapshot(K.id);
+  if (!snap || snap.p.dead === true) { stopKillerView(); return; }
+  const view = snap.p.view === 'third' || snap.p.view === 'second' ? snap.p.view : 'first';
+  K.mode = view;
+  K.pitch += (snap.pitch - K.pitch) * Math.min(1, dt * 18);
+  for (const c of camera.children) if (c.visible && !c.isLight && c !== K.gun) { c.visible = false; K.hidden.add(c); }   // whatever the game turned back on
+  const f = new THREE.Vector3(-Math.sin(snap.yaw), 0, -Math.cos(snap.yaw));
+  if (view === 'first') {
+    if (!K.hid) K.hid = true;
+    snap.mesh.visible = false;                                       // their body stays out of their own eyes
+    camera.position.set(snap.x, snap.y, snap.z);
+    camera.rotation.set(K.pitch, snap.yaw, 0, 'YXZ');
+    // the gun in their hands, rebuilt whenever they change weapon, skin or wrap
+    const key = [snap.p.weaponId || '', snap.p.weaponSkin || '', snap.p.wrap || ''].join('|');
+    if (key !== K.gunKey) {
+      K.gunKey = key; _disposeViewGun(K.gun); K.gun = null;
+      try { K.gun = snap.p.weaponId ? makeKillerViewGun(snap.p.weaponId, snap.p.weaponSkin || null, snap.p.wrap || null) : null; } catch (e) { K.gun = null; console.warn('[killer view] gun', e); }
+      if (K.gun) camera.add(K.gun);
+    }
+    if (K.gun) { K.kick = Math.max(0, K.kick - dt * 6); K.gun.visible = true; K.gun.position.z = -0.25 + 0.035 * K.kick; K.gun.rotation.x = 0.05 * K.kick; }
+  } else {
+    if (K.gun) { _disposeViewGun(K.gun); K.gun = null; K.gunKey = ''; }
+    snap.mesh.visible = true;                                        // third person: there they are, with the gun, the skin and the wrap on them
+    if (view === 'third') {
+      camera.position.set(snap.x - f.x * 3.0, snap.y + 0.45, snap.z - f.z * 3.0);
+      camera.rotation.set(K.pitch * 0.6 - 0.1, snap.yaw, 0, 'YXZ');
+    } else {                                                          // second person: from in front of them, looking back at them
+      camera.position.set(snap.x + f.x * 2.6, snap.y + 0.1, snap.z + f.z * 2.6);
+      camera.rotation.set(-0.08, snap.yaw + Math.PI, 0, 'YXZ');
+    }
+  }
+}
+
 // ── 🎬 KILLCAM — record positions of all entities, play back your death (#42) ──
 // It used to squeeze the last 3 s into 2.2 s at 10 frames a second from one camera behind the
 // killer, with everyone left where they stand NOW — and the death loadout covered it after 1.5 s
@@ -51249,7 +51421,7 @@ const KILLCAM_SHOTS = [
   { from: 0.76, to: 1.01, r0: 0.8, r1: 1,    label: 'SLOW MOTION' },
 ];
 const _afterKillcam = [];
-function runAfterKillcam(fn) { if (KILLCAM.active) _afterKillcam.push(fn); else fn(); }
+function runAfterKillcam(fn) { if (KILLCAM.active || KILLER_VIEW.active) _afterKillcam.push(fn); else fn(); }
 
 function killcamSample(now) {
   if (now - KILLCAM.lastSampleAt < 100) return;
@@ -51308,7 +51480,7 @@ function killcamUI() {
   return (KILLCAM.ui = ui);
 }
 function startKillcam(killerId, weaponId) {
-  if (KILLCAM.archived) return;
+  if (KILLCAM.archived) { try { startKillerView(killerId, weaponId); } catch (e) { console.warn('[killer view]', e); } return; }   // the replay is archived: you watch your killer live instead
   if (KILLCAM.active) return;
   if (!killerId || killerId === myId) return; // no self-kill killcam
   if (match && match.over) return;             // the end screen is already up
@@ -69612,6 +69784,7 @@ socket.on('skinChanged', ({ id, skin, isAdmin, skinData, hair, finisher }) => {
 });
 socket.on('bulletFired', b => {
   if (b.ownerId===myId) return;
+  if (KILLER_VIEW.active && b.ownerId === KILLER_VIEW.id) KILLER_VIEW.kick = 1;
   const w = projectileWeaponSpec(b.weapon) || WEAPONS[0];
   const origin = new THREE.Vector3(b.x,b.y,b.z);
   if(b.weapon==='frag'&&b.skin==='frag_spider'){
@@ -79062,6 +79235,8 @@ function loop() {
   safeLoopStep('cylinders', () => updateCylinders(dt));      // revolving cylinders index round as they fire
   safeLoopStep('switchblade-hud', () => updateSwitchbladeHUD()); // shows only when switchblade is active
   safeLoopStep('spectator-camera', () => updateSpectatorCamera(dt)); // follow teammates while dead
+  safeLoopStep('killer-view', () => updateKillerView(dt));           // ...or, first of all, whoever just killed you
+  safeLoopStep('view-sync', () => emitMyView());                      // and how I am looking, for whoever I kill
   if (spectatorState) safeLoopStep('spectator-hud', () => updateSpectatorHUD()); // refresh HUD
   if (match?.type === 'range') safeLoopStep('range', () => updateRange(dt));
 
@@ -80830,6 +81005,7 @@ function emitMySkin() {
   syncAdminTestSettings();
   _sentWeaponId = null; broadcastHeldWeapon();   // a reconnect or room change clears what the server knew
   _sentWrapId = undefined; try { emitMyWrap(); } catch (e) {}
+  _sentViewMode = undefined;
   try { socket.emit('getWraps'); } catch (e) {}
 }
 // Admin cheat toggles — only active when currentUser.isAdmin

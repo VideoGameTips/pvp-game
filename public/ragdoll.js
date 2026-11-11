@@ -170,6 +170,7 @@
     head.node.visible=false;followCamera.aspect=camera.aspect;followCamera.fov=camera.fov;followCamera.updateProjectionMatrix();return followCamera;
   }
   function localCameraEntry(){
+    if(window.PVP_KILLER_VIEW)return null;                           // watching whoever killed you: no falling-head camera
     const entry=active.find(e=>e.id===myId);if(!entry)return null;
     if(entry.dead && entry.age>=3 && match?.type==='elim' && match.roundActive && !match.over && getLiveAllies().length)return null;
     return entry;
