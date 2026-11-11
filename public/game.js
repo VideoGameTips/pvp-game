@@ -30547,6 +30547,257 @@ function buildDeadlock() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+function buildDeathsHead() {
+  // 🦋💀 Scythe -> DEATH'S HEAD. The blade is the folded wings of a mechanical death's-head moth: a sharp outer wing with angular silver edges and a second, smaller wing folded against it
+  // to thicken the cut, on a small moth chassis (thorax, abdomen, head, two antennae, and the skull on its back) at the base of the blade. Rigid hinged plates only: nothing organic to rig.
+  //   equip    WING UNFOLDING: the wings come up folded against the shaft, spread, and lock together into the crescent with a click and a purple flash
+  //   idle     tiny purple lights pulse between the wing joints
+  //   swing    the wings part during the cut and snap back together at the end of it
+  //   inspect  THE LAST FLIGHT: the blade folds in, the wings open right out face-on to show the geometric pattern, flutter, fold back and lock. CLICK.
+  const g = new THREE.Group();
+  const iron = gpFinish(0x16171d, 0.38, 0.70, 'steel'), wingM = gpFinish(0x353949, 0.32, 0.55, 'steel'), wingM2 = gpFinish(0x262938, 0.38, 0.50, 'steel');
+  const silver = gpFinish(0xd8dfea, 0.28, 0.55, 'steel'), wrap = GUN_MATS.grip();
+  const purple = new THREE.MeshBasicMaterial({ color: 0xa65bff, toneMapped: false });
+  const jointMats = [0, 1, 2].map(() => new THREE.MeshBasicMaterial({ color: 0x6a2bb8, toneMapped: false }));
+  // ── the shaft: blackened steel with silver engraved bands, a wrapped grip behind ──
+  gpCyl(g, iron, 0.010, 0.013, 0.469, 14, 0, 0, -0.044);
+  gpCyl(g, wrap, 0.014, 0.014, 0.110, 12, 0, 0, 0.139);
+  for (let i = 0; i < 5; i++) gpCyl(g, silver, 0.0145, 0.0145, 0.003, 14, 0, 0, 0.091 + i * 0.018);
+  for (let i = 0; i < 3; i++) gpCyl(g, silver, 0.0112, 0.0112, 0.0025, 14, 0, 0, -0.100 - i * 0.050);
+  gpCyl(g, iron, 0.021, 0.021, 0.045, 12, 0, 0.005, -0.262);
+  // ── the head: the blade's plane is the head group's local XY (x runs forward along the shaft, y runs up) ──
+  const head = new THREE.Group(); head.position.z = -0.266; head.rotation.y = Math.PI / 2; g.add(head);
+  const outline = s => [[-0.015, -0.016], [-0.040, 0.030], [-0.058, 0.090], [-0.050, 0.150], [-0.010, 0.205], [0.045, 0.229], [0.111, 0.248], [0.164, 0.217], [0.186, 0.169],
+                        [0.122, 0.199], [0.060, 0.164], [0.034, 0.102], [0.018, 0.045], [0.015, -0.015]].map(p => [p[0] * s, p[1] * s]);   // an angular crescent
+  const shapeOf = s => { const sh = new THREE.Shape(); outline(s).forEach((p, i) => (i ? sh.lineTo(p[0], p[1]) : sh.moveTo(p[0], p[1]))); sh.closePath(); return sh; };
+  const rod = (parent, mat, a, b, r) => {                                              // a thin cylinder between two points: edges, pattern lines
+    const A = new THREE.Vector3(a[0], a[1], a[2] || 0), B = new THREE.Vector3(b[0], b[1], b[2] || 0), d = B.clone().sub(A), len = d.length();
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 5), mat); m.position.copy(A).addScaledVector(d, 0.5);
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); parent.add(m); return m;
+  };
+  const makeWing = (s, mat, zOff) => {
+    const w = new THREE.Group(); w.rotation.order = 'YXZ'; w.position.z = zOff; head.add(w);
+    const plate = new THREE.Mesh(new THREE.ExtrudeGeometry(shapeOf(s), { depth: 0.0040, bevelEnabled: false }), mat); plate.position.z = -0.0020; plate.castShadow = true; w.add(plate);
+    const pts = outline(s);
+    for (let i = 0; i < pts.length; i++) rod(w, silver, pts[i], pts[(i + 1) % pts.length], 0.0017);                                  // the angular silver edge
+    for (const face of [-1, 1]) {                                                                                                  // the geometric pattern, both faces
+      const z = face * 0.0027, k = a => outline(s * a);
+      for (const a of [0.74, 0.50]) { const q = k(a); for (let i = 0; i < q.length; i++) rod(w, purple, [q[i][0], q[i][1], z], [q[(i + 1) % q.length][0], q[(i + 1) % q.length][1], z], 0.0007); }
+      const o = k(1); for (const idx of [3, 5, 8, 10]) rod(w, purple, [0.008 * s, 0.020 * s, z], [o[idx][0] * 0.86, o[idx][1] * 0.86, z], 0.0006);
+      for (const idx of [4, 6]) rod(w, purple, [k(0.74)[idx][0], k(0.74)[idx][1], z], [k(0.5)[idx][0], k(0.5)[idx][1], z], 0.0006);
+    }
+    return w;
+  };
+  const wingA = makeWing(1.0, wingM, -0.0036), wingB = makeWing(0.90, wingM2, 0.0036);   // the outer wing, and the smaller one folded against it
+  // ── the moth chassis at the base of the blade, on the spine (local y) ──
+  const bodyM = gpFinish(0x20222c, 0.40, 0.75, 'steel');
+  const cyl = (r1, r2, h, x, y, z, m = bodyM) => { const c = new THREE.Mesh(new THREE.CylinderGeometry(r1, r2, h, 10), m); c.position.set(x, y, z); head.add(c); return c; };
+  cyl(0.0150, 0.0120, 0.050, 0, 0.060, 0);                                                    // thorax
+  for (let i = 0; i < 4; i++) cyl(0.0125 - i * 0.0016, 0.0112 - i * 0.0016, 0.012, 0, 0.022 - i * 0.012, 0, i % 2 ? wingM : bodyM);   // the abdomen, ringed
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.0072, 10, 8), silver); skull.scale.set(1, 1.1, 0.5); skull.position.set(0, 0.066, -0.0138); head.add(skull);
+  const eyeM = gpFinish(0x0a0a10, 0.8, 0.1, 'steel');
+  for (const sx of [-0.0030, 0.0030]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.0022, 6, 5), eyeM); e.position.set(sx, 0.0675, -0.0168); head.add(e); }
+  const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.0062, 0.0030, 0.0030), silver); jaw.position.set(0, 0.0568, -0.0158); head.add(jaw);   // the skull marking
+  const moth = cyl(0.0105, 0.0105, 0.016, 0, 0.098, 0);                                       // the moth's head, with two glowing eyes
+  for (const sz of [-0.006, 0.006]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.0036, 7, 5), purple); e.position.set(0.004, 0.100, sz); head.add(e); }
+  for (const sz of [-1, 1]) {                                                                 // two short antennae, swept forward and up
+    rod(head, silver, [0.004, 0.106, sz * 0.004], [0.040, 0.138, sz * 0.012], 0.0011);
+    const bead = new THREE.Mesh(new THREE.SphereGeometry(0.0020, 6, 5), purple); bead.position.set(0.040, 0.138, sz * 0.012); head.add(bead);
+  }
+  jointMats.forEach((m, i) => { const l = new THREE.Mesh(new THREE.SphereGeometry(0.0036, 7, 5), m); l.position.set(0, 0.024 + i * 0.036, 0); l.scale.set(1, 1, 1.5); head.add(l); });   // the lights between the joints
+  const flashM = new THREE.MeshBasicMaterial({ color: 0xd9b0ff, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
+  const flashRing = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), flashM); flashRing.position.set(0.05, 0.09, 0); flashRing.userData.eqFx = true; head.add(flashRing);
+  g.traverse(o => { if (o.isMesh) o.userData.noSmooth = true; });
+  // ── motion ──
+  const clamp01 = u => Math.max(0, Math.min(1, u)), sm = (a, b, t) => { const x = clamp01((t - a) / (b - a)); return x * x * (3 - 2 * x); };
+  let wasAssembling = true, unfoldAt = -9, locked = true, swingWas = false, sep = 0, flash = 0, ev = {}, lastSwingFlash = -9;
+  const apply = (curl, spread, glow) => {
+    wingA.rotation.set(0, spread, curl); wingB.rotation.set(0, -spread, curl);
+    jointMats.forEach((m, i) => { const k = clamp01(glow * (0.8 + 0.2 * Math.sin(performance.now() * 0.006 + i * 2.1))); m.color.setRGB(0.20 + 0.60 * k, 0.07 + 0.22 * k, 0.45 + 0.55 * k); });
+  };
+  const click = n => { try { playEquipSound(n); } catch (e) {} };
+  g._calm = () => { wasAssembling = true; unfoldAt = -9; locked = true; sep = 0; flash = 0; swingWas = false; ev = {}; apply(1.5, 0, 0.25); flashM.opacity = 0; };
+  g._tick = (dt, now, assembling) => {
+    if (itemInspect && itemInspect.model === g) return;                       // the inspect drives the wings
+    if (assembling || isDead) { wasAssembling = true; swingWas = false; sep = 0; flashM.opacity = 0; apply(1.5, 0, 0.25); return; }
+    if (wasAssembling) { wasAssembling = false; unfoldAt = now; locked = false; click('whoosh'); }
+    let curl = 0, spread = 0;
+    const u = (now - unfoldAt) / 0.62;
+    if (u < 1) { curl = 1.5 * (1 - sm(0, 0.85, u)); spread = 0.55 * Math.sin(Math.PI * clamp01(u / 0.85)); }                      // up from the shaft, flaring, then in
+    else if (!locked) { locked = true; flash = 1; click('snapin'); }
+    const swinging = meleeSwingT < 1;                                         // the cut: the wings part, then snap back at the end of it
+    if (swinging) { const w = meleeSwingT, tgt = w < 0.16 ? 0 : w < 0.84 ? 0.46 * sm(0.16, 0.34, w) : 0.46 * (1 - sm(0.84, 0.95, w)); sep += (tgt - sep) * Math.min(1, dt * 28); }
+    else sep += (0 - sep) * Math.min(1, dt * 40);
+    if (swingWas && !swinging && now - lastSwingFlash > 0.2) { lastSwingFlash = now; flash = Math.max(flash, 0.55); click('click'); }
+    swingWas = swinging;
+    flash = Math.max(0, flash - dt * 4);
+    apply(curl, spread + sep, 0.40 + 0.25 * Math.sin(now * 2.6) + flash * 0.6);
+    flashM.opacity = flash * 0.45;
+  };
+  g._itemInspectKind = 'deathsHead';
+  g._itemInspectFrame = t => {
+    if (t < 0.08) ev = {};
+    const now = performance.now() / 1000;
+    const fold = sm(0.12, 0.28, t) * (1 - sm(0.46, 0.62, t));                  // the blade folds inward (the wings curl back toward the shaft)
+    const open = sm(0.30, 0.46, t) * (1 - sm(0.76, 0.88, t));                  // then the wings open right out, face-on
+    const flutter = t > 0.46 && t < 0.76 ? Math.sin((t - 0.46) * 520) * 0.20 * Math.sin(Math.PI * (t - 0.46) / 0.30) : 0;
+    if (!ev.open && t > 0.32) { ev.open = 1; click('whoosh'); }
+    apply(1.25 * fold - 0.60 * open * (1 - fold), 1.78 * open + flutter, 0.7 + 0.3 * Math.sin(now * 18) * open);
+    if (!ev.lock && t > 0.88) { ev.lock = 1; flash = 1; click('click'); setTimeout(() => click('clink'), 70); }                    // CLICK.
+    flash = Math.max(0, flash - 0.03); flashM.opacity = (t > 0.88 ? flash : 0) * 0.55;
+  };
+  g._itemInspectEnd = () => { ev = {}; flashM.opacity = 0; flash = 0; apply(0, 0, 0.4); };
+  g._calm(); apply(0, 0, 0.4);
+  g.position.set(0.14, -0.12, -0.30); return g;
+}
+
+function buildPhantomCircuit() {
+  // ⚡👻 Mauser C96 -> PHANTOM CIRCUIT. The broomhandle silhouette is all still there, but the upper receiver is wrapped in interlocking graphite plates and six narrow armour strips ring the
+  // barrel, with a cyan cloaking core underneath. Transparency and sliding plates only: it is never actually invisible.
+  //   equip    PHASE SHIFT: the six strips slide into place along the barrel, one after another, clicking home
+  //   idle     a digital distortion runs along the barrel every few seconds
+  //   fire     a cyan pulse runs backward along the strips
+  //   reload   the strips separate, showing the glowing inner frame, then close as the magazine goes in
+  //   inspect  NOW YOU SEE ME: held sideways, the strips part, a cyan scan runs grip to muzzle, the gun vanishes to a faint outline, and it comes back grip first: CLICK-CLICK-CLICK-CLACK. PHANTOM CIRCUIT // ONLINE
+  const g = new THREE.Group();
+  const rig = new THREE.Group(); g.add(rig);
+  const gr = gpFinish(0x2a2d33, 0.42, 0.60, 'steel'), dk = gpFinish(0x15171b, 0.50, 0.55, 'steel'), grip = gpFinish(0x1b1d21, 0.60, 0.25, 'steel');
+  const steel = GUN_MATS.steel(), bright = GUN_MATS.bright(), inner = GUN_MATS.inner();
+  const cyanDim = new THREE.Color(0x07323a), cyanHot = new THREE.Color(0x40f0ff);
+  const coreM = new THREE.MeshBasicMaterial({ color: 0x07323a, toneMapped: false });
+  const segMats = [0, 1, 2, 3].map(() => new THREE.MeshBasicMaterial({ color: 0x0b5560, toneMapped: false }));
+  const inlayM = new THREE.MeshBasicMaterial({ color: 0x1fc8d8, toneMapped: false });
+  const BY = 0.024, BZ = -0.172;                                                                   // the barrel's height, and the middle of the stretch the strips ring
+  // ── the C96: frame, bolt housing, integral magazine ahead of the trigger, stepped barrel, tangent sight, broomhandle grip ──
+  gpBox(rig, dk, 0.028, 0.044, 0.140, 0, 0.018, -0.030);
+  gpBox(rig, gr, 0.032, 0.034, 0.090, 0, 0.024, 0.036);
+  gpBox(rig, inner, 0.033, 0.006, 0.076, 0, 0.040, 0.036);
+  for (let i = 0; i < 6; i++) gpBox(rig, inner, 0.034, 0.024, 0.004, 0, 0.024, 0.052 + i * 0.008);
+  gpBox(rig, bright, 0.014, 0.016, 0.014, 0, 0.024, 0.088);
+  gpBox(rig, dk, 0.026, 0.056, 0.056, 0, -0.024, -0.056);
+  for (let i = 0; i < 4; i++) gpBox(rig, inner, 0.027, 0.004, 0.048, 0, -0.006 - i * 0.014, -0.056);
+  gpBox(rig, gr, 0.028, 0.010, 0.058, 0, -0.056, -0.056);
+  gpCyl(rig, dk, 0.0130, 0.0130, 0.050, 14, 0, BY, -0.122);
+  gpCyl(rig, dk, 0.0098, 0.0098, 0.100, 14, 0, BY, -0.196);
+  gpCyl(rig, gr, 0.0115, 0.0115, 0.012, 14, 0, BY, -0.242);
+  gpCyl(rig, inner, 0.0058, 0.0058, 0.010, 12, 0, BY, -0.248);
+  gpBox(rig, bright, 0.004, 0.012, 0.006, 0, 0.040, -0.238);
+  gpBox(rig, gr, 0.018, 0.012, 0.040, 0, 0.046, -0.062);
+  gpBox(rig, gr, 0.010, 0.026, 0.008, 0, 0.062, -0.048);
+  for (let i = 0; i < 3; i++) gpBox(rig, inner, 0.012, 0.004, 0.010, 0, 0.054 + i * 0.010, -0.048);
+  gpPlate(rig, grip, [[0.040, -0.006], [0.070, -0.020], [0.074, -0.092], [0.044, -0.106], [0.020, -0.048], [0.018, -0.010]], 0.036, 0);
+  for (let i = 0; i < 5; i++) gpBox(rig, inner, 0.038, 0.004, 0.026, 0, -0.024 - i * 0.016, 0.036 + i * 0.006, 0.28);
+  gpBox(rig, inlayM, 0.0385, 0.0025, 0.018, 0, -0.092, 0.044, 0.28);                                // a cyan inlay in the grip
+  gpBox(rig, gr, 0.024, 0.012, 0.028, 0, -0.104, 0.058, 0.24);
+  gpBox(rig, bright, 0.012, 0.020, 0.014, 0, 0.048, 0.086, -0.40);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.017, 0.0032, 6, 12, Math.PI * 1.05), gr); guard.rotation.set(0, Math.PI / 2, -0.4); guard.position.set(0, -0.016, 0.006); rig.add(guard);
+  gpBox(rig, bright, 0.005, 0.014, 0.005, 0, -0.008, 0.006, 0.2);
+  // ── the interlocking graphite plates over the upper receiver ──
+  for (let i = 0; i < 4; i++) gpBox(rig, gr, 0.035, 0.0045, 0.030, 0, 0.0425 + (i % 2) * 0.0016, 0.014 + i * 0.026, 0.05 * (i % 2 ? 1 : -1));
+  for (const s of [-1, 1]) { gpBox(rig, gr, 0.0035, 0.030, 0.052, s * 0.0178, 0.024, 0.026); gpBox(rig, gr, 0.0035, 0.026, 0.040, s * 0.0178, 0.022, 0.070, 0, 0, s * 0.06); gpBox(rig, inlayM, 0.0038, 0.0025, 0.030, s * 0.0180, 0.034, 0.048); }
+  // ── the cloaking core inside the strips, and the six strips round it ──
+  const core = new THREE.Mesh(new THREE.CylinderGeometry(0.0108, 0.0108, 0.104, 12), coreM); core.rotation.x = Math.PI / 2; core.position.set(0, BY, BZ); rig.add(core);
+  const strips = new THREE.Group(); strips.position.set(0, BY, BZ); rig.add(strips);
+  const stripList = [];
+  for (let k = 0; k < 6; k++) {
+    const arm = new THREE.Group(); arm.rotation.z = k * Math.PI / 3 + Math.PI / 6; strips.add(arm);
+    const plate = gpBox(arm, k % 2 ? dk : gr, 0.0085, 0.0034, 0.108, 0, 0.0142, 0);
+    for (let i = 0; i < 4; i++) gpBox(arm, segMats[i], 0.0042, 0.0010, 0.018, 0, 0.0162, -0.040 + i * 0.027);                      // four cyan segments, muzzle first
+    gpBox(arm, bright, 0.0092, 0.0018, 0.004, 0, 0.0160, -0.052);
+    stripList.push({ arm, plate, k });
+  }
+  // ── the readout, a ring that carries the idle distortion, and the scan wave ──
+  const DW = 192, DH = 40; let dc = null, dx = null, dtex = null;
+  try { dc = document.createElement('canvas'); dc.width = DW; dc.height = DH; dx = dc.getContext('2d'); if (dx) { dtex = new THREE.CanvasTexture(dc); dtex.minFilter = THREE.LinearFilter; dtex.generateMipmaps = false; } } catch (e) {}
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.060, 0.0125), new THREE.MeshBasicMaterial({ map: dtex || null, color: dtex ? 0xffffff : 0x40f0ff, transparent: true, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
+  screen.rotation.order = 'YXZ'; screen.rotation.set(-0.45, 0, 0); screen.position.set(0, 0.083, 0.010); screen.visible = false; screen.userData.eqFx = true; g.add(screen);
+  let shown = '';
+  const paint = (text, col) => {
+    if (!dx || shown === text + col) return; shown = text + col;
+    dx.clearRect(0, 0, DW, DH); dx.fillStyle = 'rgba(0,18,24,0.80)'; dx.fillRect(0, 0, DW, DH);
+    dx.strokeStyle = col; dx.lineWidth = 2; dx.strokeRect(1, 1, DW - 2, DH - 2);
+    dx.fillStyle = col; dx.textAlign = 'center'; dx.textBaseline = 'middle'; dx.font = 'bold 15px monospace'; dx.fillText(text, DW / 2, DH / 2 + 1); dtex.needsUpdate = true;
+  };
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.0158, 0.0007, 5, 18), new THREE.MeshBasicMaterial({ color: 0x70f6ff, transparent: true, opacity: 0, depthWrite: false, toneMapped: false }));
+  ring.position.set(0, BY, -0.10); ring.userData.eqFx = true; ring.visible = false; g.add(ring);
+  const wave = new THREE.Mesh(new THREE.BoxGeometry(0.060, 0.070, 0.0022), new THREE.MeshBasicMaterial({ color: 0x70f6ff, transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, side: THREE.DoubleSide }));
+  wave.userData.eqFx = true; wave.visible = false; g.add(wave);
+  // ── the ghost: every solid piece gets a faint cyan outline for the moment it is not there ──
+  const solids = [];
+  rig.traverse(o => { if (o.isMesh && o !== core) solids.push(o); });
+  const ghosts = solids.map(m => {
+    const l = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry, 35), new THREE.LineBasicMaterial({ color: 0x40f0ff, transparent: true, opacity: 0.55, depthWrite: false, toneMapped: false }));
+    l.position.copy(m.position); l.quaternion.copy(m.quaternion); l.scale.copy(m.scale); l.visible = false; l.userData.eqFx = true; m.parent.add(l); return l;
+  });
+  const order = solids.map((m, i) => ({ i, z: m.position.z + (m.parent !== rig ? m.parent.position.z : 0) })).sort((a, b) => b.z - a.z);      // grip first, muzzle last
+  const rank = new Array(solids.length); order.forEach((o, r) => { rank[o.i] = r / Math.max(1, solids.length - 1); });
+  const flash = makeMuzzleFlash(); flash.position.set(0, BY, -0.264); _hackFlash(flash, 0x40f0ff); g.add(flash);
+  g.traverse(o => { if (o.isMesh) o.userData.noSmooth = true; });
+  // ── motion ──
+  const clamp01 = u => Math.max(0, Math.min(1, u)), sm = (a, b, t) => { const x = clamp01((t - a) / (b - a)); return x * x * (3 - 2 * x); };
+  const tmp = new THREE.Color();
+  let wasAssembling = true, readyAt = -9, was = false, pulseAt = -9, ringAt = -9, nextRing = 0, glitchUntil = 0, ev = {}, wasVanished = false;
+  const click = n => { try { playEquipSound(n); } catch (e) {} };
+  const showAll = () => { solids.forEach(m => { m.visible = true; }); ghosts.forEach(l => { l.visible = false; }); wave.visible = false; };
+  const reset = () => { ev = {}; wasVanished = false; showAll(); rig.rotation.set(0, 0, 0); screen.visible = false; ring.visible = false; strips.visible = true; stripList.forEach(s => { s.arm.position.set(0, 0, 0); s.plate.position.y = 0.0142; }); coreM.color.copy(cyanDim); segMats.forEach(m => m.color.setHex(0x0b5560)); };
+  g._calm = reset;
+  g._tick = (dt, now, assembling) => {
+    if (assembling) { reset(); strips.visible = false; wasAssembling = true; return; }
+    if (wasAssembling) { wasAssembling = false; readyAt = now; ev = {}; strips.visible = true; click('whoosh'); nextRing = now + 2.5; }
+    const fired = !!(g._flash && g._flash.visible);
+    if (fired && !was) pulseAt = now;
+    was = fired;
+    const t0 = g._reloadStart && g._reloadDur ? (Date.now() - g._reloadStart) / g._reloadDur : -1;
+    const inspecting = !!g._inspectMode && t0 >= 0 && t0 < 1, reloading = !g._inspectMode && t0 >= 0 && t0 < 1;
+    let open = 0, scan = -1, core2 = 0.18, roll = 0, vanish = false;
+    // equip: the strips slide in from out ahead of the barrel, one after another, each clicking home
+    const rk = now - readyAt;
+    const slide = i => 1 - sm(0.05 * i, 0.05 * i + 0.34, rk / 0.9);
+    if (rk >= 0 && rk < 1.4) { stripList.forEach((s, i) => { s.arm.position.z = -0.085 * slide(i); if (!ev['s' + i] && rk / 0.9 > 0.05 * i + 0.34) { ev['s' + i] = 1; click(i === 5 ? 'clack' : 'click'); } }); core2 = 0.18 + 0.5 * (1 - sm(0.3, 1.1, rk)); }
+    else stripList.forEach(s => { s.arm.position.z = 0; });
+    if (reloading) {
+      open = sm(0.06, 0.22, t0) * (1 - sm(0.60, 0.78, t0)); core2 = 0.2 + 0.8 * open;
+      stripList.forEach((s, i) => { if (!ev['r' + i] && t0 > 0.64 + i * 0.02) { ev['r' + i] = 1; click('click'); } });
+    } else if (!inspecting && t0 < 0) { for (const k in ev) if (k[0] === 'r') delete ev[k]; }
+    if (inspecting) {
+      const t = t0;
+      roll = 1.30 * sm(0.0, 0.10, t) * (1 - sm(0.90, 0.97, t));
+      open = 0.5 * sm(0.12, 0.22, t) * (1 - sm(0.90, 0.96, t));
+      if (t > 0.22 && t < 0.48) scan = (t - 0.22) / 0.26;
+      vanish = t > 0.50 && t < 0.88;
+      core2 = 0.3 + 0.5 * sm(0.12, 0.30, t) * (1 - sm(0.46, 0.52, t));
+      // the gun is gone: only the outline stays. Then it comes back, grip first, a plate at a time.
+      const back = (t - 0.60) / 0.26;
+      solids.forEach((m, i) => { const here = !vanish ? (t < 0.50 || t >= 0.88) : back >= rank[i]; m.visible = here; ghosts[i].visible = vanish && !here; ghosts[i].material.opacity = 0.35 + 0.25 * Math.sin(now * 20 + i); });
+      core.visible = !vanish || back > 0.5;
+      wasVanished = vanish;
+      if (!ev.v1 && back >= 0.25) { ev.v1 = 1; click('click'); }
+      if (!ev.v2 && back >= 0.50) { ev.v2 = 1; click('click'); }
+      if (!ev.v3 && back >= 0.75) { ev.v3 = 1; click('click'); }
+      if (!ev.v4 && t > 0.88) { ev.v4 = 1; click('clack'); pulseAt = now; }
+      if (t > 0.88 && t < 0.99) { screen.visible = true; paint('PHANTOM CIRCUIT // ONLINE', '#40f0ff'); } else screen.visible = false;
+      if (t < 0.02) ev = {};
+    } else if (wasVanished) { wasVanished = false; showAll(); core.visible = true; screen.visible = false; }
+    // the scan wave: grip to muzzle
+    if (scan >= 0) { wave.visible = true; wave.position.set(0, 0.01, 0.09 - 0.35 * scan); wave.material.opacity = 0.55 * Math.sin(Math.PI * scan); } else wave.visible = false;
+    // the pulse down the strips after a shot: muzzle segment first, then back toward the receiver
+    const pp = (now - pulseAt) / 0.15 * 4.5;
+    segMats.forEach((m, i) => { let b = Math.max(0, 1 - Math.abs(pp - i) / 1.2); if (scan >= 0) b = Math.max(b, Math.max(0, 1 - Math.abs((0.09 - 0.35 * scan) - (BZ - 0.040 + i * 0.027)) / 0.05)); b = Math.max(b, open * 0.5); tmp.setHex(0x0b5560).lerp(cyanHot, clamp01(b)); m.color.copy(tmp); });
+    if (pp >= 0 && pp < 6) core2 = Math.max(core2, 0.6 * (1 - pp / 6));
+    // idle: a digital distortion runs along the barrel every few seconds, and the strips stutter as it passes
+    if (!inspecting && !reloading && now > nextRing) { nextRing = now + 3.2 + Math.random() * 2.4; ringAt = now; glitchUntil = now + 0.35; }
+    const ra = (now - ringAt) / 0.55;
+    ring.visible = ra >= 0 && ra < 1; if (ring.visible) { ring.position.z = 0.02 - 0.27 * ra; ring.material.opacity = 0.8 * Math.sin(Math.PI * ra); }
+    const glitch = now < glitchUntil && !inspecting && !reloading;
+    stripList.forEach((s, i) => { s.plate.position.y = 0.0142 + open * 0.010 + (glitch ? (Math.random() - 0.5) * 0.0035 : 0); s.arm.position.x = glitch ? (Math.sin(now * 80 + i * 5) * 0.0016) : 0; });
+    tmp.copy(cyanDim).lerp(cyanHot, clamp01(core2)); coreM.color.copy(tmp);
+    rig.rotation.z = -roll; rig.rotation.x = -0.12 * roll;
+    if (!inspecting) { screen.visible = false; }
+  };
+  g._flash = flash; g._kickZ = 0.016; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.1, -0.1, -0.22); return g;
+}
+
 function buildDoubleTrouble() {
   // 💥 Sawed-Off -> Double Trouble. A short, chunky double-barrel built out of rectangles and ridges: matte black, brushed steel and bright orange. Two massive barrel
   // housings float a little apart from the central frame, with four armour plates standing off them. Fourteen separate pieces.
@@ -47998,6 +48249,7 @@ const SKIN_SHOT = {};
   G({ shape: 'hackbullet', c: [0x0a0a0a, 0x2dff6a], k: 1.5 }, null, ['pistol_hacker', 'ak20_hacker']);
   G({ shape: 'pixeltrail', c: [0xff2bd6, 0x2bf0ff], min: 0.06 }, 'cyber', ['vector_glitch_exe']);
   G({ shape: 'bolt', c: [0xff1030, 0xff2bd6] }, 'cyber', ['vector_neon_anarchy']);
+  G({ shape: 'bolt', c: [0x40f0ff, 0xffffff], k: 1.0 }, null, ['mauser_phantom_circuit']);                                  // PHANTOM CIRCUIT: a cyan bolt
   G({ shape: 'bolt', c: [0xff3a1a, 0xffb060], k: 1.2 }, null, ['vector_deadlock']);                                       // DEADLOCK: a red-hot round
   G(null, null, ['flamethrower_disco_inferno'], 0xff4fd8);   // the ordinary flames, with a pink glow round the yellow
   G({ shape: 'card', c: [0x15151c, 0xff2a3a], min: 0.05, k: 1.2 }, 'cards', ['throwing_knives_house_of_cards']);
@@ -59588,6 +59840,9 @@ const MODEL_SKINS = [
   { id: 'vector_deadlock', weapon: 'vector', name: 'DEADLOCK', rarity: 'legendary',
     sw: ['#3a3e46', '#ff3a1a'], build: buildDeadlock,
     blurb: 'A classified corporate Vector with its own cooling department: two armoured heat-exchanger housings above and below the barrel that slide outward the longer you hold the trigger, showing six glowing heat sinks and venting steam when it runs hot. The receiver covers slide back on equip and the screen flashes DEADLOCK // READY. Reload is a PURGE CYCLE: the housings fling open and steam blasts sideways before they slam shut on the new magazine. Inspect is an EMERGENCY SHUTDOWN: an alarm, an orange barrel, four clamps clanking round it, a steam cloud, and a little shake.' },
+  { id: 'mauser_phantom_circuit', weapon: 'mauser', name: 'PHANTOM CIRCUIT', rarity: 'legendary',
+    sw: ['#2a2d33', '#40f0ff'], build: buildPhantomCircuit,
+    blurb: 'A cyber-espionage broomhandle with a cloaking system in its frame: interlocking graphite plates over the receiver and six narrow armour strips that slide into place along the barrel when you draw it. Each shot sends a cyan pulse back along the strips, a digital distortion crawls down the barrel every few seconds, and reload parts the strips to show the glowing frame. Inspect is NOW YOU SEE ME: a scan runs grip to muzzle, the pistol vanishes to a faint outline and snaps back together, CLICK-CLICK-CLICK-CLACK, PHANTOM CIRCUIT // ONLINE. It is never really invisible.' },
   { id: 'flamethrower_disco_inferno', weapon: 'flamethrower', name: 'DISCO INFERNO', rarity: 'rare',
     sw: ['#e4e8f4', '#ff2bb0'], build: buildDiscoInferno,
     blurb: 'A nightclub with a pilot light. A disco ball spins over the barrel, the speakers pulse, confetti flies out with the flames, and hold the trigger and four spotlights unfold and sweep. Reload swaps the glowing tank; inspect is DISCO FEVER.' },
@@ -59827,9 +60082,10 @@ GEN2_SUPPORT_MODEL_SKIN_IDS.add('moon_mine_eclipse');   // (no skin is free: ser
 // (socket 'zombieTowerWin', mirrored by ZOMBIE_TOWER_SKIN_IDS in server.js). It is in no case and no bundle.
 const TOWER_MODEL_SKIN_IDS = new Set(['ak20_field_radio']);
 // 🐉 Gen 3: the newest skins have their own case. Mirrors GEN3_SKIN_IDS in server.js (no skin is free).
-const GEN3_MODEL_SKIN_IDS = new Set(['chain_gun_clockwork_dragon', 'ak20_breach_protocol', 'lever_remembrance']);
+const GEN3_MODEL_SKIN_IDS = new Set(['chain_gun_clockwork_dragon', 'ak20_breach_protocol', 'lever_remembrance', 'mauser_phantom_circuit']);
+const GEN3_MELEE_MODEL_SKIN_IDS = new Set(['scythe_deaths_head']);   // Gen 3 holds melee skins too
 const GATED_MODEL_SKIN_IDS = new Set([...GEN1_GATED_MODEL_SKIN_IDS, ...GEN2_MODEL_SKIN_IDS, ...GEN3_MODEL_SKIN_IDS, ...TOWER_MODEL_SKIN_IDS, ...PVP_SHOP_CATALOG.exclusiveSkins]);
-const GATED_MELEE_MODEL_SKIN_IDS = new Set([...GEN2_MELEE_MODEL_SKIN_IDS, ...GEN2_SUPPORT_MODEL_SKIN_IDS]);   // (the lock check is by id, so utilities share it)
+const GATED_MELEE_MODEL_SKIN_IDS = new Set([...GEN2_MELEE_MODEL_SKIN_IDS, ...GEN2_SUPPORT_MODEL_SKIN_IDS, ...GEN3_MELEE_MODEL_SKIN_IDS]);   // (the lock check is by id, so utilities share it)
 for (const id of GEN1_GATED_MODEL_SKIN_IDS) {
   const ms = MODEL_SKINS.find(m => m.id === id);
   if (ms && !GEN1_SKIN_BY_ID[id]) { GEN1_SKIN_DEFS.push(ms); GEN1_SKIN_BY_ID[id] = ms; }
@@ -61958,6 +62214,10 @@ function buildTapeMeasureKatana() {
   g.position.set(.10,-.12,-.20);return g;
 }
 const MELEE_MODEL_SKINS = [
+  {id:'scythe_deaths_head',melee:'scythe',name:"Death's Head",rarity:'legendary',raw:true,
+    sw:['#2b2e3b','#a65bff','#cfd6e2'],build:buildDeathsHead,
+    blurb:'The blade is the folded wings of a mechanical death\'s-head moth. Drawn, the wings unfold and lock into the crescent; swing and they part, then snap back together; purple lights pulse between the joints. Inspect is THE LAST FLIGHT: the blade folds in, the wings open right out to show their pattern, flutter, and lock shut. CLICK.',
+    equip:'unfold',equipMs:950,equipSfx:['whoosh','snapin']},
   {id:'katana_tape_measure',melee:'katana',name:'Tape Measure',rarity:'good',raw:true,
     sw:['#ffdb38','#24231e','#b6bdc2'],build:buildTapeMeasureKatana,
     blurb:'A rubberized tape measure with a numbered yellow blade that snaps back on a deflect.'},
@@ -62163,7 +62423,10 @@ const GEN2_SKIN_DEFS = [
   ...MELEE_MODEL_SKINS.filter(s => GEN2_MELEE_MODEL_SKIN_IDS.has(s.id)),
 ];
 const GEN2_SKIN_BY_ID = Object.fromEntries(GEN2_SKIN_DEFS.map(s => [s.id, s]));
-const GEN3_SKIN_DEFS = MODEL_SKINS.filter(s => GEN3_MODEL_SKIN_IDS.has(s.id));
+const GEN3_SKIN_DEFS = [
+  ...MODEL_SKINS.filter(s => GEN3_MODEL_SKIN_IDS.has(s.id)),
+  ...MELEE_MODEL_SKINS.filter(s => GEN3_MELEE_MODEL_SKIN_IDS.has(s.id)),
+];
 
 let equippedMeleeModelSkins = (() => {
   try { return JSON.parse(localStorage.getItem('pvp_melee_model_skins')) || {}; } catch (e) { return {}; }
@@ -65197,6 +65460,7 @@ const SKIN_FX = {
   harpoon_octopus: { equip: 'unfold', equipMs: 950, equipSfx: ['whoosh', 'squeak'] },
   flamethrower_disco_inferno: { equip: 'flip', equipMs: 950, equipSfx: ['whoosh', 'chime'],
     inspect: [K(.12, { py: .02, rx: -.15 }), K(.26, { py: .05, pz: -.02, rx: -.50 }), K(.80, { py: .05, pz: -.02, rx: -.50 }), K(.88, { py: .03, rx: -.30 }), K(.94, { py: .015, rx: -.08 }), K(1, {})] },
+  mauser_phantom_circuit: { equip: 'unfold', equipMs: 1000, equipSfx: ['whoosh', 'snapin'] },
   vector_deadlock: { equip: 'unfold', equipMs: 950, equipSfx: ['whoosh', 'snapin'] },
   vector_neon_anarchy: { equip: 'glitch', equipMs: 950, equipSfx: ['glitchsfx', 'snapin'],
     inspect: [K(.10, { py: .02 }), K(.20, { py: .06, pz: -.04, rx: .10 }), K(.80, { py: .06, pz: -.04, rx: .10 }), K(.84, { py: .06, pz: -.04, rx: .22 }), K(.92, { py: .03 }), K(1, {})] },
@@ -72752,6 +73016,8 @@ function hammerSickleInspectEnd(s) {
 }
 ITEM_INSPECT.totality = { ms: 6200, beats: [[.08, 620, .14], [.18, 900, .12], [.34, 1400, .10], [.67, 160, .30], [.84, 520, .30]], keys: [
   _MS(.10, [-.10, .09, -.18], [.30, 0, 0]), _MS(.90, [-.10, .09, -.18], [.30, 0, 0]), _MS(.9995, [0, 0, 0], [0, 0, 0])] };
+ITEM_INSPECT.deathsHead = { ms: 4600, beats: [], keys: [
+  _MS(.10, [-.13, .07, -.12], [.30, 0, 0]), _MS(.90, [-.13, .07, -.12], [.30, 0, 0]), _MS(.9995, [0, 0, 0], [0, 0, 0])] };   // held up to the middle of the view, the moth facing you
 function startItemInspect() {
   if (isDead || reloading) return false;
   if (itemInspect) { cancelItemInspect(); return false; }     // T again puts it away
@@ -84041,8 +84307,8 @@ function openItemSkins(kind, id, onClose, alwaysOnClose = false) {
       const models = MELEE_MODEL_SKINS_BY_BASE[id] || [], onModel = equippedMeleeModelSkins[id];
       if (models.length) {
         const cells = models.map(ms => {
-          const legend = isLegendLocked(ms), gen2 = GEN2_MELEE_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id), locked = legend || gen2;
-          const note = legend ? 'FFA Legend skins are earned in FFA.' : gen2 ? 'Pull from Gen 2 cases.' : '';
+          const legend = isLegendLocked(ms), gen2 = GEN2_MELEE_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id), gen3 = GEN3_MELEE_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id), locked = legend || gen2 || gen3;
+          const note = legend ? 'FFA Legend skins are earned in FFA.' : gen2 ? 'Pull from Gen 2 cases.' : gen3 ? 'Pull from Gen 3 cases.' : '';
           return { skinId: ms.id, name: ms.name, sub: ms.blurb, bg: bg(ms.sw), on: onModel === ms.id, locked, note,
             run: () => { if (locked) { alert(note); return false; } setMeleeModelSkin(id, ms.id); } };
         });
@@ -84171,8 +84437,8 @@ function openWeaponSkinsPanel() {
       if (!base || (base.archived && !currentUser?.isAdmin)) continue;
       const on = equippedMeleeModelSkins[bid];
       const cells = MELEE_MODEL_SKINS_BY_BASE[bid].map(ms => {
-        const gen2Locked = GEN2_MELEE_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id);
-        const locked = isLegendLocked(ms) || gen2Locked;
+        const gen2Locked = GEN2_MELEE_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id), gen3Locked = GEN3_MELEE_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id);
+        const locked = isLegendLocked(ms) || gen2Locked || gen3Locked;
         return `
         <div data-mmskin="${ms.id}" data-mmbase="${bid}" class="mms-cell"
              style="cursor:${locked?"not-allowed":"pointer"};opacity:${locked?0.45:1};filter:${locked?"grayscale(0.8)":"none"};border:2px solid ${on===ms.id?"#ffcc99":"#444"};border-radius:6px;padding:8px;background:${on===ms.id?"#2a2118":"#1d1a12"};">
@@ -84181,6 +84447,7 @@ function openWeaponSkinsPanel() {
           <div style="font-size:9px;color:#8a8a7a;margin-top:3px;line-height:1.3;">${ms.blurb}</div>
           ${isLegendLocked(ms) ? `<div style="font-size:9px;color:#ff6a4a;margin-top:4px;line-height:1.3;">${ffaLegendProgressText()}</div>` : ""}
           ${gen2Locked ? `<div style="font-size:9px;color:#c9a6ff;margin-top:4px;line-height:1.3;">Pull from Gen 2 — it makes an entrance.</div>` : ""}
+          ${gen3Locked ? `<div style="font-size:9px;color:#ffb347;margin-top:4px;line-height:1.3;">Pull from Gen 3 — the newest case.</div>` : ""}
         </div>`;
       }).join("");
       rows.push(`
@@ -84445,6 +84712,7 @@ function openWeaponSkinsPanel() {
       const ms = MELEE_MODEL_SKINS.find(m => m.id === cell.dataset.mmskin);
       if (isLegendLocked(ms)) { alert('FFA Legend skins are earned in FFA: deal 1,000,000 damage or win 5,000 FFA matches.'); return; }
       if (ms && GEN2_MELEE_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id)) { alert('You have not pulled that skin yet. Open Gen 2 cases in Lobby 13.'); return; }
+      if (ms && GEN3_MELEE_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id)) { alert('You have not pulled that skin yet. Open Gen 3 cases in Lobby 13.'); return; }
       setMeleeModelSkin(cell.dataset.mmbase, cell.dataset.mmskin || null);
       openWeaponSkinsPanel();
     });

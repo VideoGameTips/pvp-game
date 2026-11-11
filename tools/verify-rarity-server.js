@@ -7,7 +7,7 @@ const from = source.indexOf('const GEN1_SKIN_IDS = ['), to = source.indexOf('for
 assert(from > 0 && to > from, 'the skin lists were not found in server.js');
 const fnStart = source.indexOf('function pickWeighted('), fnEnd = source.indexOf('\n}\n', fnStart) + 3;
 assert(fnStart > 0 && fnEnd > fnStart, 'pickWeighted not found');
-const context = { SKIN_CASE_GEN1_COST: 1500, SKIN_CASE_GEN2_COST: 5000, Math, Set };
+const context = { SKIN_CASE_GEN1_COST: 1500, SKIN_CASE_GEN2_COST: 5000, SKIN_CASE_GEN3_COST: 8000, Math, Set };
 vm.createContext(context);
 vm.runInContext(source.slice(from, to) + '\n' + source.slice(fnStart, fnEnd), context);
 const { GEN1_SKIN_IDS, GEN2_SKIN_IDS, GEN2_SKIN_WEIGHTS, SKIN_CASES, GEN2_EPIC_SKIN_IDS, GEN2_NEW_MYTHIC_SKIN_IDS, GEN2_RARE_SKIN_IDS, GEN2_GOOD_SKIN_IDS, GEN2_LEGENDARY_SKIN_IDS, DONUT_SKIN_IDS } = vm.runInContext('({ GEN1_SKIN_IDS, GEN2_SKIN_IDS, GEN2_SKIN_WEIGHTS, SKIN_CASES, GEN2_EPIC_SKIN_IDS, GEN2_NEW_MYTHIC_SKIN_IDS, GEN2_RARE_SKIN_IDS, GEN2_GOOD_SKIN_IDS, GEN2_LEGENDARY_SKIN_IDS, DONUT_SKIN_IDS })', context);
