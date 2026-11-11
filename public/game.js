@@ -34116,6 +34116,188 @@ function buildClockworkDragon() {
   return g;
 }
 
+// ⬡ A real penteract (5-cube): 32 vertices, each five coordinates of +1 or -1; an edge joins two vertices that differ in exactly one coordinate
+// (that is 80 edges). project() turns five-dimensional rotations (a list of [axisA, axisB, angle]) into 3D points with two perspective
+// steps, 5D -> 4D -> 3D. petrie() is the Petrie projection (onto the plane spanned by u_i = cos(i*pi/5), v_i = sin(i*pi/5)), the
+// one that lays the whole shape out as a decagonal star.
+function createPenteract5D() {
+  const V = [], E = [];
+  for (let i = 0; i < 32; i++) V.push([0, 1, 2, 3, 4].map(b => ((i >> b) & 1) ? 1 : -1));
+  for (let i = 0; i < 32; i++) for (let b = 0; b < 5; b++) { const j = i ^ (1 << b); if (j > i) E.push([i, j]); }
+  const pts = V.map(() => new THREE.Vector3()), depth = new Float32Array(32), p = [0, 0, 0, 0, 0];
+  const D = 4.6;
+  const spin = (q, planes) => { for (const [a, b, th] of planes) { const c = Math.cos(th), s = Math.sin(th), x = q[a], y = q[b]; q[a] = c * x - s * y; q[b] = s * x + c * y; } };
+  const flat = (q, out) => {                                   // 5D -> 4D -> 3D, each a perspective divide
+    const k5 = D / Math.max(0.3, D - q[4]), w = q[3] * k5, k4 = D / Math.max(0.3, D - w);
+    out.set(q[0] * k5 * k4, q[1] * k5 * k4, q[2] * k5 * k4);
+  };
+  return {
+    V, E, pts, depth,
+    // the 4th and 5th coordinates scale by k4 and k5: at 0 the shape is a plain cube (the vertices stack in pairs), at 1 it is the full penteract
+    project(planes, k4 = 1, k5 = 1, star = 0) {
+      for (let i = 0; i < 32; i++) {
+        const v = V[i]; p[0] = v[0]; p[1] = v[1]; p[2] = v[2]; p[3] = v[3] * k4; p[4] = v[4] * k5;
+        spin(p, planes); flat(p, pts[i]); depth[i] = (p[3] + p[4]) * 0.3;
+        if (star > 0) {
+          let sx = 0, sy = 0, sz = 0;
+          for (let a = 0; a < 5; a++) { const s = (a < 3 ? v[a] : v[a] * (a === 3 ? k4 : k5)); sx += s * Math.cos(a * Math.PI / 5); sy += s * Math.sin(a * Math.PI / 5); sz += s * Math.cos(a * 3 * Math.PI / 5); }
+          const o = pts[i]; o.x += (sx * 0.62 - o.x) * star; o.y += (sy * 0.62 - o.y) * star; o.z += (sz * 0.30 - o.z) * star;
+        }
+      }
+      return pts;
+    },
+    axis(i, planes, len, out) { p[0] = p[1] = p[2] = p[3] = p[4] = 0; p[i] = len; spin(p, planes); flat(p, out); return out; },
+  };
+}
+
+// ⬡ Railgun -> Penteract. The Railgun, unchanged, with a rotating five-dimensional hypercube floating above its barrel: cyan to violet edges, white vertices.
+//   equip     it appears as a plain cube, grows a fourth then a fifth dimension until the whole shape is there
+//   fire      pink beams enter a vertex, run along edges and converge on the muzzle, then a white beam fires
+//   reload    the 80 edges contract to a point, and it opens back out
+//   inspect   THE FIFTH AXIS: it grows, five coloured axis lines come out of it, it spins through the 5D planes, folds into a decagonal star, collapses to a cube and returns; DIMENSIONAL INTEGRITY: 5/5
+// (looks only: the Railgun's damage and charge are unchanged.)
+function buildPenteractRailgun() {
+  const g = buildRailgun();
+  const clamp01 = u => Math.max(0, Math.min(1, u)), ease = u => u * u * (3 - 2 * u);
+  const dark = _skM(0x15181d, 140, 0x8a929c), steel = _skM(0x5a6470, 200, 0xe6eef8);
+  const cyanM = new THREE.MeshBasicMaterial({ color: 0x38e6ff, toneMapped: false }), white = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
+  const CY = 0.088, CZ = -0.170, U = 0.0125;
+  // the emitter the cage floats over: a pad on the barrel cover, a glowing ring, four slim pylons
+  gpCyl(g, dark, 0.016, 0.019, 0.008, 18, 0, 0.0385, CZ, 0);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.0155, 0.0016, 6, 24), cyanM); ring.rotation.x = Math.PI / 2; ring.position.set(0, 0.0435, CZ); g.add(ring);
+  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) gpBox(g, steel, 0.003, 0.016, 0.003, sx * 0.0125, 0.0485, CZ + sz * 0.0125);
+  if (g._flash && g._flash.material) g._flash.material.color.setHex(0xe8fbff);
+  const noWorld = o => { o.userData.eqFx = true; o.userData.noWorld = true; return o; };
+
+  const shape = createPenteract5D();
+  const core = noWorld(new THREE.Group()); core.position.set(0, CY, CZ); g.add(core);
+  const edgeGeo = new THREE.CylinderGeometry(0.0013, 0.0013, 1, 6), glowGeo = new THREE.CylinderGeometry(0.0042, 0.0042, 1, 6, 1, true);
+  const edgeMat = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false });
+  const glowMat = new THREE.MeshBasicMaterial({ color: 0x7f6bff, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
+  const edges = new THREE.InstancedMesh(edgeGeo, edgeMat, 80), glow = new THREE.InstancedMesh(glowGeo, glowMat, 80), nodes = new THREE.InstancedMesh(new THREE.OctahedronGeometry(0.0031, 0), white, 32);
+  edges.name = '80 penteract edges'; nodes.name = '32 penteract vertices';
+  for (const m of [edges, glow, nodes]) { m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.frustumCulled = false; noWorld(m); core.add(m); }
+  const dot = noWorld(new THREE.Mesh(new THREE.OctahedronGeometry(0.006, 0), white.clone())); dot.visible = false; core.add(dot);
+  // five axis lines, one colour per coordinate axis, for the inspect
+  const axCols = [0xff4a4a, 0x5aff7a, 0x5a8aff, 0xffe14a, 0xff4aff], axes = [];
+  for (let i = 0; i < 5; i++) { const m = noWorld(new THREE.Mesh(new THREE.CylinderGeometry(0.0016, 0.0016, 1, 6), new THREE.MeshBasicMaterial({ color: axCols[i], toneMapped: false }))); m.visible = false; core.add(m); axes.push(m); }
+  // pink beams for a shot: a polyline that runs along three edges then straight to the muzzle
+  const muzzle = new THREE.Vector3(0, 0.014 - CY, -0.398 - CZ);
+  const beams = [];
+  for (let i = 0; i < 3; i++) {
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(5 * 3), 3));
+    const ln = noWorld(new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xff5fd0, transparent: true, opacity: 1, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false })));
+    ln.frustumCulled = false; ln.visible = false; core.add(ln); beams.push({ ln, path: [0, 0, 0, 0] });
+  }
+  const bolt = noWorld(new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.006, 0.60), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })));
+  bolt.position.set(0, 0.014, -0.398 - 0.30); bolt.visible = false; g.add(bolt);
+  let label = null;
+  try {
+    const c = document.createElement('canvas'); c.width = 512; c.height = 64; const x = c.getContext('2d');
+    x.fillStyle = 'rgba(4,12,24,0.7)'; x.fillRect(0, 0, 512, 64); x.strokeStyle = '#38e6ff'; x.lineWidth = 3; x.strokeRect(2, 2, 508, 60);
+    x.fillStyle = '#9ff4ff'; x.font = 'bold 34px "Courier New", monospace'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('DIMENSIONAL INTEGRITY: 5/5', 256, 34);
+    label = noWorld(new THREE.Mesh(new THREE.PlaneGeometry(0.15, 0.019), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false, side: THREE.DoubleSide })));
+    label.position.set(0, 0.075, 0); label.visible = false; core.add(label);
+  } catch (e) { label = null; }
+
+  const temp = new THREE.Object3D(), a = new THREE.Vector3(), b = new THREE.Vector3(), dir = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), ax = new THREE.Vector3();
+  const cA = new THREE.Color(0x38e6ff), cB = new THREE.Color(0xa064ff), cc = new THREE.Color();
+  let phase = 0, eqT = -1, was = false, shotAt = -9, aim = 0, lockSfx = false, intSfx = false;
+  const planesFor = p => [[0, 3, p * 0.55], [1, 3, 0.9 + Math.sin(p * 0.30) * 0.30], [2, 4, p * 0.38], [0, 1, 0.35], [3, 4, p * 0.22], [1, 4, 0.5 + p * 0.15], [2, 3, 0.2 + Math.sin(p * 0.2) * 0.2]];
+  function draw(p, k4, k5, star, hot) {
+    const pl = planesFor(p), pts = shape.project(pl, k4, k5, star);
+    shape.E.forEach(([i, j], n) => {
+      a.copy(pts[i]).multiplyScalar(U); b.copy(pts[j]).multiplyScalar(U); dir.subVectors(b, a);
+      const len = dir.length();
+      temp.position.copy(a).lerp(b, 0.5);
+      if (len > 1e-9) temp.quaternion.setFromUnitVectors(up, dir.multiplyScalar(1 / len)); else temp.quaternion.identity();
+      temp.scale.set(1, Math.max(1e-4, len), 1); temp.updateMatrix();
+      edges.setMatrixAt(n, temp.matrix); glow.setMatrixAt(n, temp.matrix);
+      const m = 0.5 + 0.5 * Math.sin(p * 0.5 + (shape.depth[i] + shape.depth[j]) * 1.2);
+      cc.copy(cA).lerp(cB, m); if (hot > 0) cc.lerp(white.color, hot); edges.setColorAt(n, cc);
+    });
+    temp.quaternion.identity(); temp.scale.setScalar(1);
+    for (let i = 0; i < 32; i++) { temp.position.copy(pts[i]).multiplyScalar(U); temp.updateMatrix(); nodes.setMatrixAt(i, temp.matrix); }
+    edges.instanceMatrix.needsUpdate = glow.instanceMatrix.needsUpdate = nodes.instanceMatrix.needsUpdate = true;
+    if (edges.instanceColor) edges.instanceColor.needsUpdate = true;
+    return pl;
+  }
+  function startShot(now) {
+    shotAt = now;
+    for (const bm of beams) {
+      let v = Math.floor(Math.random() * 32); const used = [], path = [v];
+      for (let s = 0; s < 3; s++) { let bit; do { bit = Math.floor(Math.random() * 5); } while (used.includes(bit)); used.push(bit); v ^= (1 << bit); path.push(v); }
+      bm.path = path;
+    }
+  }
+  g._calm = () => {
+    phase = 0; eqT = 9; shotAt = -9; core.visible = true; core.scale.setScalar(1); core.position.y = CY;
+    dot.visible = false; bolt.visible = false; beams.forEach(bm => bm.ln.visible = false); axes.forEach(m => m.visible = false); if (label) label.visible = false;
+    edgeMat.color.setHex(0xffffff); glowMat.opacity = 0.22; draw(0.6, 1, 1, 0, 0);
+  };
+  draw(0.6, 1, 1, 0, 0);
+  g._tick = (dt, now, assembling) => {
+    if (assembling) { core.visible = false; eqT = -1; lockSfx = intSfx = false; bolt.visible = false; return; }
+    if (eqT < 0) eqT = 0;
+    const fired = !!(g._flash && g._flash.visible);
+    if (fired && !was) startShot(now); was = fired;
+    const t0 = g._reloadStart && g._reloadDur ? (Date.now() - g._reloadStart) / g._reloadDur : -1;
+    const inspecting = !!g._inspectMode && t0 >= 0 && t0 < 1, reloading = !g._inspectMode && t0 >= 0 && t0 < 1;
+    let size = 1, k4 = 1, k5 = 1, speed = 1, star = 0, axK = 0, lift = 0, labelK = 0, dotOn = false;
+    if (eqT < 1.5) {                                                             // DIMENSIONAL INITIALIZATION
+      eqT += dt; const e = eqT;
+      size = ease(clamp01(e / 0.18)); k4 = ease(clamp01((e - 0.18) / 0.50)); k5 = ease(clamp01((e - 0.62) / 0.60));
+      speed = 1.4 + 2 * (1 - k5);
+      if (e >= 1.25 && !lockSfx) { lockSfx = true; try { playSoundEvent('hypercube_lock', { volume: 0.5, minGap: 0 }); } catch (x) {} }
+    } else if (inspecting) {                                                     // THE FIFTH AXIS
+      const u = t0;
+      const show = u < 0.18 ? ease(u / 0.18) : u < 0.62 ? 1 : u < 0.80 ? 1 - ease((u - 0.62) / 0.18) : 0;
+      const c = u < 0.62 ? 1 : u < 0.74 ? 1 - 0.85 * ease((u - 0.62) / 0.12) : u < 0.90 ? 0.15 + 0.85 * ease((u - 0.74) / 0.16) : 1;
+      k4 = k5 = u < 0.62 ? 1 : u < 0.74 ? 1 - ease((u - 0.62) / 0.12) : u < 0.90 ? ease((u - 0.74) / 0.16) : 1;
+      size = (1 + 1.5 * show) * c; lift = 0.026 * show;
+      speed = u < 0.20 ? 1 : u < 0.58 ? 1 + 5 * ease((u - 0.20) / 0.38) : 2;
+      axK = u < 0.12 ? 0 : u < 0.20 ? ease((u - 0.12) / 0.08) : u < 0.62 ? 1 : u < 0.70 ? 1 - ease((u - 0.62) / 0.08) : 0;
+      star = u < 0.50 ? 0 : u < 0.56 ? ease((u - 0.50) / 0.06) : u < 0.60 ? 1 : u < 0.66 ? 1 - ease((u - 0.60) / 0.06) : 0;
+      labelK = u > 0.80 && u < 0.97 ? (u < 0.84 ? (u - 0.80) / 0.04 : u > 0.94 ? (0.97 - u) / 0.03 : 1) : 0;
+      if (u >= 0.80 && !intSfx) { intSfx = true; try { playSoundEvent('hypercube_lock', { volume: 0.8, minGap: 0 }); } catch (x) {} }
+      if (u < 0.5) intSfx = false;
+    } else if (reloading) {                                                      // DIMENSION COLLAPSE
+      const u = t0; size = 1 - 0.97 * Math.pow(Math.sin(Math.PI * u), 2); dotOn = size < 0.16; speed = 1 + 3 * Math.sin(Math.PI * u);
+    }
+    aim += ((isADS && weaponModels[currentWeaponIdx] === g && !inspecting && !reloading ? 1 : 0) - aim) * (1 - Math.exp(-dt * 16));
+    const age = now - shotAt, firing = age >= 0 && age < 0.26;
+    phase += dt * speed;
+    size *= 1 - aim * 0.82; core.position.y = CY - aim * 0.048 + lift;
+    core.scale.setScalar(Math.max(0.001, size * (firing && age < 0.12 ? 1 + 0.25 * (1 - age / 0.12) : 1))); core.visible = size > 0.02 || dotOn;
+    const pl = draw(phase, k4, k5, star, Math.max(star * 0.35, firing && age < 0.10 ? 1 : 0));
+    glowMat.opacity = 0.20 + 0.10 * star + (firing ? 0.30 * (1 - age / 0.26) : 0) - 0.08 * (size > 1.5 ? 1 : 0);
+    dot.visible = dotOn; if (dotOn) dot.scale.setScalar(2.4 + Math.sin(now * 40));
+    for (let i = 0; i < 5; i++) {
+      const m = axes[i]; m.visible = axK > 0.02; if (!m.visible) continue;
+      shape.axis(i, pl, 1.9 * axK, ax); ax.multiplyScalar(U);
+      const len = ax.length(); m.position.copy(ax).multiplyScalar(0.5); m.scale.set(1, Math.max(1e-4, len), 1);
+      if (len > 1e-9) m.quaternion.setFromUnitVectors(up, dir.copy(ax).multiplyScalar(1 / len));
+    }
+    if (label) { label.visible = labelK > 0.02; if (label.visible) { label.material.opacity = labelK; label.position.y = 0.075 + 0.012 * (1 - labelK); } }
+    // the shot: pink beams run along edges and converge on the muzzle, then a white beam
+    for (const bm of beams) {
+      bm.ln.visible = firing && age < 0.22;
+      if (!bm.ln.visible) continue;
+      const head = clamp01(age / 0.15) * 4, pos = bm.ln.geometry.attributes.position, pts = shape.pts, path = bm.path;
+      const at = i => (i < 4 ? a.copy(pts[path[i]]).multiplyScalar(U) : a.copy(muzzle).divideScalar(Math.max(0.05, core.scale.x)));   // (the beams ride in the cage's own, scaled space)
+      for (let i = 0; i < 5; i++) {
+        const f = Math.min(i, head); const i0 = Math.floor(f), fr = f - i0;
+        const p0 = at(Math.min(4, i0)).clone(), p1 = at(Math.min(4, i0 + 1));
+        p0.lerp(p1, fr); pos.setXYZ(i, p0.x, p0.y, p0.z);
+      }
+      pos.needsUpdate = true; bm.ln.material.opacity = 1 - age / 0.24;
+    }
+    bolt.visible = firing && age > 0.12 && age < 0.22; if (bolt.visible) bolt.material.opacity = 0.9 * (1 - (age - 0.12) / 0.10);
+  };
+  g._calm();
+  return g;
+}
+
 // 🪤 Crossbow -> Mousetrap. A spring bar that really snaps, and cheese on the catch.
 function buildMousetrap() {
   const g = new THREE.Group();
@@ -59788,6 +59970,9 @@ const MODEL_SKINS = [
   { id: 'minigun_stormwing', weapon: 'minigun', name: 'Stormwing', rarity: 'rare',
     sw: ['#9aa6b4', '#39b8ff'], build: buildStormwing,
     blurb: 'Grey steel and blue light. Aim, and the wings snap open and four more barrels slide out of them and fire with the main gun. Same damage: the extra barrels are for show.' },
+  { id: 'railgun_penteract', weapon: 'railgun', name: 'Penteract', rarity: 'legendary',
+    sw: ['#38e6ff', '#a064ff'], build: buildPenteractRailgun,
+    blurb: 'A rotating five-dimensional hypercube floats over the barrel: 32 vertices, 80 edges, real 5D rotations projected into 3D. Pink beams run along its edges and meet at the muzzle when you fire. Inspect it for the fifth axis. Still a Railgun: same damage and charge.' },
   { id: 'chain_gun_clockwork_dragon', weapon: 'chain_gun', name: 'Clockwork Dragon', rarity: 'legendary',
     sw: ['#9a6a2e', '#ffa81c'], build: buildClockworkDragon,
     blurb: 'A bronze dragon forged round the muzzle, the four barrels still spinning in its open mouth. Brass gears turn by the feed; hold the trigger and three rows of scales lift to show orange light and seep smoke. Inspect it for the dragon\'s breath. Still a Chain Gun: same damage and spin-up.' },
@@ -60082,7 +60267,7 @@ GEN2_SUPPORT_MODEL_SKIN_IDS.add('moon_mine_eclipse');   // (no skin is free: ser
 // (socket 'zombieTowerWin', mirrored by ZOMBIE_TOWER_SKIN_IDS in server.js). It is in no case and no bundle.
 const TOWER_MODEL_SKIN_IDS = new Set(['ak20_field_radio']);
 // 🐉 Gen 3: the newest skins have their own case. Mirrors GEN3_SKIN_IDS in server.js (no skin is free).
-const GEN3_MODEL_SKIN_IDS = new Set(['chain_gun_clockwork_dragon', 'ak20_breach_protocol', 'lever_remembrance', 'mauser_phantom_circuit']);
+const GEN3_MODEL_SKIN_IDS = new Set(['railgun_penteract', 'chain_gun_clockwork_dragon', 'ak20_breach_protocol', 'lever_remembrance', 'mauser_phantom_circuit']);
 const GEN3_MELEE_MODEL_SKIN_IDS = new Set(['scythe_deaths_head']);   // Gen 3 holds melee skins too
 const GATED_MODEL_SKIN_IDS = new Set([...GEN1_GATED_MODEL_SKIN_IDS, ...GEN2_MODEL_SKIN_IDS, ...GEN3_MODEL_SKIN_IDS, ...TOWER_MODEL_SKIN_IDS, ...PVP_SHOP_CATALOG.exclusiveSkins]);
 const GATED_MELEE_MODEL_SKIN_IDS = new Set([...GEN2_MELEE_MODEL_SKIN_IDS, ...GEN2_SUPPORT_MODEL_SKIN_IDS, ...GEN3_MELEE_MODEL_SKIN_IDS]);   // (the lock check is by id, so utilities share it)
@@ -65367,6 +65552,9 @@ const SKIN_FX = {
   p90_ppsh41: { equip: 'slam', equipMs: 900, equipSfx: ['whoosh', null], equipBeats: [[.55, 'slam']] },
   minigun_stormwing: { equip: 'unfold', equipMs: 950, equipSfx: ['fold', 'click'], equipBeats: [[.55, 'click'], [.82, 'chime']] },
   ak20_breach_protocol: { equip: 'draw', equipMs: 850, equipSfx: ['whoosh', null], inspectMs: 5200 },
+  railgun_penteract: { equip: 'build', equipMs: 850, equipSfx: ['slideout', 'chime'], inspectMs: 5600,
+    inspect: [K(.18, { px: -.04, py: .05, pz: -.16, rx: .50, ry: .30, rz: -.08 }),
+      K(.88, { px: -.04, py: .05, pz: -.16, rx: .50, ry: .30, rz: -.08 }), K(.96, { rx: .1 }), K(1, {})] },
   chain_gun_clockwork_dragon: { equip: 'build', equipMs: 900, equipSfx: ['slideout', 'clack'], inspectMs: 5400,
     inspect: [K(.16, { px: -.045, py: .055, pz: -.10, rx: .62, ry: .12, rz: -.05 }),
       K(.84, { px: -.045, py: .055, pz: -.10, rx: .62, ry: .12, rz: -.05 }), K(.95, { rx: .1 }), K(1, {})] },
