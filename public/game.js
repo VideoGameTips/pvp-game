@@ -1682,6 +1682,7 @@ const WEAPON_PRICE_MULT = 7;            // P2W items
 const NORMAL_WEAPON_PRICE_MULT = 4;
 const SKIN_CASE_GEN1_COST = 1500;
 const SKIN_CASE_GEN2_COST = 5000;       // cosmetic gacha, well under any P2W weapon now
+const SKIN_CASE_GEN3_COST = 8000;       // the newest skins; mirrors server.js
 const P2W_ITEM_IDS = new Set([
   'javelin_launcher',
   'event_horizon', 'storm_core', 'abs_zero', 'solar_lance', 'quantum_repeater',
@@ -33695,6 +33696,175 @@ function buildBreachProtocolAK() {
   return g;
 }
 
+// 🐉 Chain Gun -> Clockwork Dragon. The Chain Gun, unchanged: its four-barrel cluster still spins in the dragon's open mouth. A bronze
+// dragon head is forged round the muzzle (one jaw hinge), overlapping scale rows cover the receiver, two brass gears turn by the ammo feed and
+// a dragon-tail brace trails behind the handles.
+//   equip     the eyes light, the jaw opens, the barrels show
+//   fire      the jaw shudders, the gears turn; held down, three rows of scales lift to show orange light and smoke seeps out between them
+//   reload    the jaw closes while the mechanism cycles, then snaps open again
+//   inspect   DRAGON'S BREATH: the gun tilts up, the jaw opens wide, the eyes flare, the scales rise, a burst of (decorative) fire, ROOOOAR!
+// (looks only: damage, spin-up and spread are the Chain Gun's.)
+function buildClockworkDragon() {
+  const g = buildChainGun();
+  const bronze = _skM(0x9a6a2e, 170, 0xffd9a0), dbronze = _skM(0x6b4a22, 110, 0xd8b078), iron = _skM(0x211f1e, 60, 0x66625c), brass = _skM(0xc9a13a, 230, 0xfff0b0);
+  const amber = new THREE.MeshBasicMaterial({ color: 0xffa81c });
+  const eyeGlow = new THREE.MeshBasicMaterial({ color: 0xffa81c, transparent: true, opacity: 0.25, depthWrite: false, blending: THREE.AdditiveBlending });
+  const clamp01 = u => Math.max(0, Math.min(1, u)), ease = u => u * u * (3 - 2 * u);
+  const add = (parent, geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); m.castShadow = true; parent.add(m); return m; };
+  const box = (parent, mat, w, h, d, x, y, z, rx, ry, rz) => add(parent, new THREE.BoxGeometry(w, h, d), mat, x, y, z, rx, ry, rz);
+  const cone = (parent, mat, r, h, seg, x, y, z, rx, ry, rz) => add(parent, new THREE.ConeGeometry(r, h, seg), mat, x, y, z, rx, ry, rz);
+
+  // ── the head: skull, snout, horns, eyes, upper teeth (fixed), and the lower jaw on its hinge ──
+  const head = new THREE.Group(); g.add(head);
+  box(head, bronze, 0.090, 0.012, 0.220, 0, 0.066, -0.200);                    // the skull plate, over the barrels
+  box(head, dbronze, 0.050, 0.004, 0.200, 0, 0.074, -0.205);                   // a raised ridge down it
+  box(head, bronze, 0.062, 0.016, 0.070, 0, 0.060, -0.330, 0.10);              // the snout, sloping down at the tip
+  for (const sd of [-1, 1]) {
+    box(head, bronze, 0.010, 0.046, 0.120, sd * 0.046, 0.040, -0.150);         // the cheek plates
+    box(head, dbronze, 0.011, 0.016, 0.060, sd * 0.046, 0.064, -0.118, 0.0, 0, sd * 0.0);   // a brow over each eye
+    box(head, bronze, 0.006, 0.020, 0.050, sd * 0.034, 0.052, -0.340);         // the nostril ridges
+    cone(head, dbronze, 0.011, 0.070, 6, sd * 0.034, 0.088, -0.118, 0.95, 0, sd * 0.16);   // horns, swept back
+    cone(head, dbronze, 0.007, 0.040, 6, sd * 0.044, 0.070, -0.100, 1.2, 0, sd * 0.45);    // and a small one below it
+    const eye = box(head, amber, 0.008, 0.008, 0.016, sd * 0.0525, 0.058, -0.140);        // the eyes
+    const glow = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 6), eyeGlow); glow.position.set(sd * 0.054, 0.058, -0.140); glow.userData.eqFx = true; head.add(glow);
+    for (let i = 0; i < 5; i++) cone(head, bronze, 0.0042, 0.015, 4, sd * 0.037, 0.0515, -0.185 - i * 0.034, Math.PI);   // upper teeth, pointing down
+  }
+  const jaw = new THREE.Group(); jaw.position.set(0, -0.046, -0.118); head.add(jaw);          // the one hinge
+  for (const sd of [-1, 1]) {
+    box(jaw, bronze, 0.009, 0.014, 0.205, sd * 0.037, 0, -0.100);              // the lower jaw rails
+    for (let i = 0; i < 5; i++) cone(jaw, bronze, 0.0042, 0.015, 4, sd * 0.037, 0.012, -0.040 - i * 0.034);   // lower teeth, pointing up
+  }
+  box(jaw, dbronze, 0.084, 0.016, 0.026, 0, -0.002, -0.198);                   // the chin
+  box(jaw, bronze, 0.060, 0.012, 0.040, 0, -0.004, -0.022);                    // under the throat
+  jaw.userData.hinge = true;
+
+  // ── three rows of overlapping scales across the receiver, each hinged at its front edge, with orange light under them ──
+  const rows = [], glows = [];
+  for (let r = 0; r < 3; r++) {
+    const zf = -0.022 + r * 0.046;
+    const row = new THREE.Group(); row.position.set(0, 0.0478, zf); g.add(row);
+    for (let k = 0; k < 4; k++) box(row, k % 2 ? brass : bronze, 0.0215, 0.004, 0.046, -0.0323 + k * 0.0215, 0, 0.023, 0, 0, (k % 2 ? 0.05 : -0.05));
+    box(row, brass, 0.086, 0.0035, 0.004, 0, 0.0005, 0.0);
+    rows.push(row);
+    const gm = new THREE.MeshBasicMaterial({ color: 0x2a1004 }); glows.push(gm);
+    const gl = box(g, gm, 0.080, 0.002, 0.044, 0, 0.0462, zf + 0.023); gl.userData.eqFx = true; gl.castShadow = false;
+  }
+  // ── two brass gears by the ammunition feed (the left side), turning against each other ──
+  const gearMk = (z, teeth) => {
+    const gr = new THREE.Group(); gr.position.set(-0.0835, 0.014, z); g.add(gr);
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.0155, 0.0155, 0.006, 20), brass); body.rotation.z = Math.PI / 2; gr.add(body);
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.0052, 0.0052, 0.010, 10), iron); hub.rotation.z = Math.PI / 2; hub.position.x = -0.002; gr.add(hub);
+    for (let i = 0; i < teeth; i++) { const a = i / teeth * Math.PI * 2; const t = box(gr, brass, 0.006, 0.0058, 0.0064, 0, Math.sin(a) * 0.0172, Math.cos(a) * 0.0172, -a); }
+    return gr;
+  };
+  const gearA = gearMk(0.010, 10), gearB = gearMk(0.043, 10);
+  box(g, iron, 0.004, 0.044, 0.078, -0.0795, 0.014, 0.0265);                  // the bracket they turn on
+  // ── the dragon-tail brace: iron segments that narrow and curl up behind the handles ──
+  for (let i = 0; i < 5; i++) {
+    const w = 0.032 - i * 0.0044, hgt = 0.022 - i * 0.0030, z = 0.156 + i * 0.026, y = 0.030 + 0.0018 * i * i;
+    box(g, iron, w, hgt, 0.030, 0, y, z, -0.06 * i);
+    cone(g, bronze, 0.0055 - i * 0.0006, 0.012, 4, 0, y + hgt / 2 + 0.005, z, -0.06 * i);                       // a spine spike on each
+  }
+  box(g, bronze, 0.016, 0.020, 0.010, 0, 0.0475, 0.270, -0.30, 0, Math.PI / 4);                                    // the tail's spade tip
+  // ── fire for the inspect, a roar, and smoke for sustained fire ──
+  const flameOut = new THREE.MeshBasicMaterial({ color: 0xff5a14, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  const flameIn = new THREE.MeshBasicMaterial({ color: 0xffd25a, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  const fire = new THREE.Group(); fire.position.set(0, 0.006, -0.325); fire.visible = false; fire.userData.eqFx = true; g.add(fire);
+  { const o = new THREE.Mesh(new THREE.ConeGeometry(0.034, 0.34, 10, 1, true), flameOut); o.rotation.x = -Math.PI / 2; o.position.z = -0.17; fire.add(o);
+    const n = new THREE.Mesh(new THREE.ConeGeometry(0.017, 0.22, 8, 1, true), flameIn); n.rotation.x = -Math.PI / 2; n.position.z = -0.11; fire.add(n); }
+  let roar = null;
+  try {
+    const c = document.createElement('canvas'); c.width = 512; c.height = 96; const x = c.getContext('2d');
+    x.fillStyle = '#ffb02e'; x.strokeStyle = '#4a1a00'; x.lineWidth = 8; x.font = 'bold 64px "Arial Black", Impact, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.strokeText('ROOOOAR!', 256, 50); x.fillText('ROOOOAR!', 256, 50);
+    roar = new THREE.Mesh(new THREE.PlaneGeometry(0.17, 0.032), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+    roar.position.set(0, 0.125, -0.26); roar.visible = false; roar.userData.eqFx = true; g.add(roar);
+  } catch (e) { roar = null; }
+  const puffs = [];
+  for (let i = 0; i < 10; i++) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.010, 6, 5), new THREE.MeshBasicMaterial({ color: 0x8a8580, transparent: true, opacity: 0.5, depthWrite: false }));
+    m.visible = false; m.userData.eqFx = true; g.add(m); puffs.push({ m, t: 9 });
+  }
+
+  // ── motion ──
+  const REST_JAW = 0.32;
+  let jawA = REST_JAW, eye = 0.55, heat = 0, hold = 0, gSpin = 0, gSpeed = 0, eqT = -1, was = false, vib = 0, puffT = 0, flip1 = false, flip2 = false, flip3 = false;
+  const lift = [0, 0, 0];
+  const apply = (fireAmt, now) => {
+    jaw.rotation.x = -(jawA + Math.sin(now * 80) * 0.022 * fireAmt);
+    const k = clamp01(eye); amber.color.setRGB(Math.min(1, 0.25 + 0.75 * k), Math.min(1, 0.16 + 0.54 * k), 0.04 + 0.06 * k);
+    eyeGlow.opacity = 0.06 + 0.30 * clamp01(eye / 1.5);
+    for (let i = 0; i < 3; i++) {
+      rows[i].rotation.x = -(0.05 + lift[i] * 0.55);
+      const s = clamp01(lift[i] / 0.5); glows[i].color.setRGB(0.16 + 0.84 * s, 0.063 + 0.30 * s, 0.016 + 0.04 * s);
+    }
+  };
+  apply(0, 0);
+  g._calm = () => { jawA = REST_JAW; eye = 0.55; heat = 0; hold = 0; gSpeed = 0; lift[0] = lift[1] = lift[2] = 0; fire.visible = false; if (roar) roar.visible = false; puffs.forEach(p => { p.t = 9; p.m.visible = false; }); eqT = 9; apply(0, 0); };
+  g._tick = (dt, now, assembling) => {
+    if (assembling) { eqT = -1; flip1 = flip2 = false; jawA = 0.0; eye = 0; lift[0] = lift[1] = lift[2] = 0; fire.visible = false; if (roar) roar.visible = false; apply(0, now); return; }
+    if (eqT < 0) eqT = 0;
+    const fired = !!(g._flash && g._flash.visible);
+    vib += ((fired ? 1 : 0) - vib) * Math.min(1, dt * 12);
+    hold = fired ? 0.25 : Math.max(0, hold - dt);
+    heat = clamp01(heat + (hold > 0 ? dt * 0.6 : -dt * 0.4));
+    const t0 = g._reloadStart && g._reloadDur ? (Date.now() - g._reloadStart) / g._reloadDur : -1;
+    const inspecting = !!g._inspectMode && t0 >= 0 && t0 < 1, reloading = !g._inspectMode && t0 >= 0 && t0 < 1;
+    let jawGoal = REST_JAW, eyeGoal = 0.55 + 0.45 * heat, direct = false, spd = fired ? 1 : 0, fireK = 0, roarK = 0;
+    const lg = [heat > 0.30 ? clamp01((heat - 0.30) / 0.30) : 0, heat > 0.50 ? clamp01((heat - 0.50) / 0.30) : 0, heat > 0.70 ? clamp01((heat - 0.70) / 0.30) : 0].map(v => v * 0.8);
+    if (eqT < 1.0) {                                                             // THE DRAGON AWAKENS
+      eqT += dt; const e = eqT; direct = true;
+      eye = clamp01(e / 0.30) * 0.55 + 0.0;
+      jawA = e < 0.25 ? 0 : e < 0.50 ? 0.58 * ease((e - 0.25) / 0.25) : REST_JAW + (0.58 - REST_JAW) * (1 - ease(clamp01((e - 0.50) / 0.30)));
+      if (e >= 0.12 && !flip1) { flip1 = true; try { playEquipSound('click'); } catch (x) {} }
+      if (e >= 0.28 && !flip2) { flip2 = true; try { playEquipSound('slideout'); } catch (x) {} }
+      if (e >= 0.52 && !flip3) { flip3 = true; try { playEquipSound('clack'); } catch (x) {} }
+      lift[0] = lift[1] = lift[2] = 0;
+    } else if (inspecting) {                                                     // DRAGON'S BREATH
+      const u = t0; direct = true; flip3 = false;
+      jawA = u < 0.10 ? REST_JAW : u < 0.30 ? REST_JAW + (0.68 - REST_JAW) * ease((u - 0.10) / 0.20) : u < 0.84 ? 0.68 : u < 0.92 ? 0.68 * (1 - ease((u - 0.84) / 0.08)) : REST_JAW * ease((u - 0.92) / 0.08);
+      eye = u < 0.15 ? 0.55 : u < 0.30 ? 0.55 + 0.95 * ease((u - 0.15) / 0.15) : u < 0.72 ? 1.5 : 1.5 - 0.95 * ease((u - 0.72) / 0.12);
+      if (u >= 0.84) eye = 0.55 + 0.0;
+      for (let i = 0; i < 3; i++) { const a = 0.30 + i * 0.05; lift[i] = u < a ? 0 : u < a + 0.14 ? 1 * ease((u - a) / 0.14) : u < 0.70 ? 1 : u < 0.84 ? 1 - ease((u - 0.70) / 0.14) : 0; }
+      fireK = u < 0.48 ? 0 : u < 0.54 ? ease((u - 0.48) / 0.06) : u < 0.60 ? 1 : u < 0.70 ? 1 - ease((u - 0.60) / 0.10) : 0;
+      roarK = u < 0.48 ? 0 : u < 0.52 ? (u - 0.48) / 0.04 : u < 0.64 ? 1 : u < 0.72 ? 1 - (u - 0.64) / 0.08 : 0;
+      spd = 0;
+      if (u >= 0.48 && !flip1) { flip1 = true; try { playEquipSound('whoosh'); } catch (x) {} }
+      if (u < 0.40) flip1 = false;
+    } else if (reloading) {                                                      // closes while the mechanism cycles, then snaps open
+      const u = t0; direct = true; flip1 = false;
+      jawA = u < 0.05 ? REST_JAW : u < 0.20 ? REST_JAW + (0.02 - REST_JAW) * ease((u - 0.05) / 0.15) : u < 0.80 ? 0.02 : u < 0.90 ? 0.02 + (0.46 - 0.02) * ease((u - 0.80) / 0.10) : 0.46 + (REST_JAW - 0.46) * ease(clamp01((u - 0.90) / 0.10));
+      eye = 0.55; lift[0] = lift[1] = lift[2] = 0; spd = u > 0.2 && u < 0.78 ? 0.8 : 0;
+      if (u >= 0.82 && !flip2) { flip2 = true; try { playEquipSound('clack'); } catch (x) {} }
+    } else { flip2 = false; }
+    if (!direct || eqT < 1.0) {                                                  // idle / firing: settle at the goals
+      if (!(eqT < 1.0)) {
+        jawA += (jawGoal - jawA) * Math.min(1, dt * 9);
+        eye += (eyeGoal - eye) * Math.min(1, dt * 6);
+        for (let i = 0; i < 3; i++) lift[i] += (lg[i] - lift[i]) * Math.min(1, dt * 5);
+      }
+    }
+    gSpeed += (spd * 14 - gSpeed) * Math.min(1, dt * 6); gSpin += gSpeed * dt;
+    gearA.rotation.x = gSpin; gearB.rotation.x = -gSpin + Math.PI / 10;
+    apply(vib, now);
+    fire.visible = fireK > 0.02;
+    if (fire.visible) { const fl = 0.85 + Math.random() * 0.3; fire.scale.set(0.5 + fireK * 0.8 * fl, 0.5 + fireK * 0.8 * fl, Math.max(0.05, fireK * fl)); }
+    if (roar) { roar.visible = roarK > 0.02; if (roar.visible) { roar.scale.setScalar(0.6 + 0.5 * roarK); roar.material.opacity = Math.min(1, roarK * 1.5); roar.position.y = 0.125 + 0.02 * (1 - roarK); } }
+    // smoke seeps between the plates once the rows have lifted
+    puffT -= dt;
+    const gap = Math.max(lift[0], lift[1], lift[2]);
+    if (gap > 0.35 && puffT <= 0) {
+      puffT = 0.09; const p = puffs.find(q => q.t >= 1);
+      if (p) { p.t = 0; p.x = (Math.random() - 0.5) * 0.07; p.z = -0.02 + Math.random() * 0.14; p.m.visible = true; }
+    }
+    for (const p of puffs) if (p.t < 1) {
+      p.t += dt * 1.3; p.m.position.set(p.x + p.t * 0.012, 0.052 + p.t * 0.07, p.z + p.t * 0.02);
+      p.m.scale.setScalar(0.6 + p.t * 1.6); p.m.material.opacity = 0.5 * (1 - p.t); if (p.t >= 1) p.m.visible = false;
+    }
+  };
+  return g;
+}
+
 // 🪤 Crossbow -> Mousetrap. A spring bar that really snaps, and cheese on the catch.
 function buildMousetrap() {
   const g = new THREE.Group();
@@ -59282,6 +59452,9 @@ const MODEL_SKINS = [
   { id: 'minigun_stormwing', weapon: 'minigun', name: 'Stormwing', rarity: 'rare',
     sw: ['#9aa6b4', '#39b8ff'], build: buildStormwing,
     blurb: 'Grey steel and blue light. Aim, and the wings snap open and four more barrels slide out of them and fire with the main gun. Same damage: the extra barrels are for show.' },
+  { id: 'chain_gun_clockwork_dragon', weapon: 'chain_gun', name: 'Clockwork Dragon', rarity: 'legendary',
+    sw: ['#9a6a2e', '#ffa81c'], build: buildClockworkDragon,
+    blurb: 'A bronze dragon forged round the muzzle, the four barrels still spinning in its open mouth. Brass gears turn by the feed; hold the trigger and three rows of scales lift to show orange light and seep smoke. Inspect it for the dragon\'s breath. Still a Chain Gun: same damage and spin-up.' },
   { id: 'ak20_breach_protocol', weapon: 'ak20', name: 'Breach Protocol', rarity: 'legendary',
     sw: ['#16181c', '#ff1e30'], build: buildBreachProtocolAK,
     blurb: 'Black armour, crimson stripes, a rifle that looks ready to take a door off. Four plates slide off the handguard to show red-lit rails; a piston under the barrel works with every shot. Inspect it for a breach simulation. Still an AK-20 underneath: same damage, recoil and accuracy.' },
@@ -59540,8 +59713,6 @@ const DONUT_SKIN_IDS = [
 const GEN2_MODEL_SKIN_IDS = new Set([
   'rpg_siegebreaker', 'javelin_katyusha', 'p90_ppsh41',                                  // (no skin is free: server.js GEN2_LEGENDARY / GEN2_RARE_SKIN_IDS)
   'minigun_stormwing',                                          // (no skin is free: server.js GEN2_RARE_SKIN_IDS)
-  'ak20_breach_protocol',                                       // (no skin is free: server.js GEN2_LEGENDARY_SKIN_IDS)
-  'lever_remembrance',                                          // (no skin is free: server.js GEN2_RARE_SKIN_IDS)
   'revolver_final_notice','vector_crimson',
   'revolver_donut', 'ak20_donut', 'rpg_donut', 'machine_pistol_donut', 'pistol_donut',
   'sg8_donut', 'srx_donut', 'vector_donut', 'grenade_launcher_donut', 'minigun_donut',
@@ -59571,7 +59742,9 @@ GEN2_SUPPORT_MODEL_SKIN_IDS.add('moon_mine_eclipse');   // (no skin is free: ser
 // 🧟 Earned, never bought or pulled: the server hands this over the first time you call for the way out of the Zombie Tower
 // (socket 'zombieTowerWin', mirrored by ZOMBIE_TOWER_SKIN_IDS in server.js). It is in no case and no bundle.
 const TOWER_MODEL_SKIN_IDS = new Set(['ak20_field_radio']);
-const GATED_MODEL_SKIN_IDS = new Set([...GEN1_GATED_MODEL_SKIN_IDS, ...GEN2_MODEL_SKIN_IDS, ...TOWER_MODEL_SKIN_IDS, ...PVP_SHOP_CATALOG.exclusiveSkins]);
+// 🐉 Gen 3: the newest skins have their own case. Mirrors GEN3_SKIN_IDS in server.js (no skin is free).
+const GEN3_MODEL_SKIN_IDS = new Set(['chain_gun_clockwork_dragon', 'ak20_breach_protocol', 'lever_remembrance']);
+const GATED_MODEL_SKIN_IDS = new Set([...GEN1_GATED_MODEL_SKIN_IDS, ...GEN2_MODEL_SKIN_IDS, ...GEN3_MODEL_SKIN_IDS, ...TOWER_MODEL_SKIN_IDS, ...PVP_SHOP_CATALOG.exclusiveSkins]);
 const GATED_MELEE_MODEL_SKIN_IDS = new Set([...GEN2_MELEE_MODEL_SKIN_IDS, ...GEN2_SUPPORT_MODEL_SKIN_IDS]);   // (the lock check is by id, so utilities share it)
 for (const id of GEN1_GATED_MODEL_SKIN_IDS) {
   const ms = MODEL_SKINS.find(m => m.id === id);
@@ -61906,6 +62079,7 @@ const GEN2_SKIN_DEFS = [
   ...MELEE_MODEL_SKINS.filter(s => GEN2_MELEE_MODEL_SKIN_IDS.has(s.id)),
 ];
 const GEN2_SKIN_BY_ID = Object.fromEntries(GEN2_SKIN_DEFS.map(s => [s.id, s]));
+const GEN3_SKIN_DEFS = MODEL_SKINS.filter(s => GEN3_MODEL_SKIN_IDS.has(s.id));
 
 let equippedMeleeModelSkins = (() => {
   try { return JSON.parse(localStorage.getItem('pvp_melee_model_skins')) || {}; } catch (e) { return {}; }
@@ -64846,6 +65020,9 @@ const SKIN_FX = {
   p90_ppsh41: { equip: 'slam', equipMs: 900, equipSfx: ['whoosh', null], equipBeats: [[.55, 'slam']] },
   minigun_stormwing: { equip: 'unfold', equipMs: 950, equipSfx: ['fold', 'click'], equipBeats: [[.55, 'click'], [.82, 'chime']] },
   ak20_breach_protocol: { equip: 'draw', equipMs: 850, equipSfx: ['whoosh', null], inspectMs: 5200 },
+  chain_gun_clockwork_dragon: { equip: 'build', equipMs: 900, equipSfx: ['slideout', 'clack'], inspectMs: 5400,
+    inspect: [K(.16, { px: -.045, py: .055, pz: -.10, rx: .62, ry: .12, rz: -.05 }),
+      K(.84, { px: -.045, py: .055, pz: -.10, rx: .62, ry: .12, rz: -.05 }), K(.95, { rx: .1 }), K(1, {})] },
   lever_remembrance: { equip: 'draw', equipMs: 800, equipSfx: ['whoosh', null], inspectMs: 4400,
     inspect: [K(.20, { px: -.085, py: .05, pz: -.26, rx: .10, ry: 1.0, rz: -.18 }),
       K(.84, { px: -.085, py: .05, pz: -.26, rx: .10, ry: 1.05, rz: -.18 }), K(1, {})] },
@@ -83149,6 +83326,7 @@ const skinShown = s => !skinIsArchived(s) || !!currentUser?.isAdmin;
 const CLIENT_SKIN_CASES = {
   gen1_basic: { name: 'Skin Case Gen 1', shortName: 'GEN 1', cost: SKIN_CASE_GEN1_COST, defs: () => GEN1_SKIN_DEFS.filter(skinShown), accent: '#88ccff' },
   gen2_entrances: { name: 'Skin Case Gen 2', shortName: 'GEN 2', cost: SKIN_CASE_GEN2_COST, defs: () => GEN2_SKIN_DEFS.filter(skinShown), accent: '#c9a6ff' },
+  gen3_clockwork: { name: 'Skin Case Gen 3', shortName: 'GEN 3', cost: SKIN_CASE_GEN3_COST, defs: () => GEN3_SKIN_DEFS.filter(skinShown), accent: '#ffb347' },
 };
 function skinCaseDef(caseId) { return CLIENT_SKIN_CASES[caseId] || CLIENT_SKIN_CASES.gen1_basic; }
 // The colour of a rarity on the reel and in the reveal (public/lobby-case.js has the same table as numbers for the 3D case). EPIC and MYTHIC are the Gen 2 case's two new top tiers.
@@ -83754,7 +83932,8 @@ function openItemSkins(kind, id, onClose, alwaysOnClose = false) {
       if (models.length) {
         const cells = models.map(ms => {
           const legend = isLegendLocked(ms), locked = (GATED_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id)) || legend;
-          const note = legend ? ffaLegendProgressText() : GEN2_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id) ? 'Pull from Gen 2 cases.'
+          const note = legend ? ffaLegendProgressText() : GEN3_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id) ? 'Pull from Gen 3 cases.'
+            : GEN2_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id) ? 'Pull from Gen 2 cases.'
             : TOWER_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id) ? 'Escape the Zombie Tower to get this one.' : locked ? 'Open Gen 1 cases in Lobby 13.' : '';
           return { skinId: ms.id, name: ms.name, sub: ms.blurb, bg: bg(ms.sw), on: onModel === ms.id, locked, note,
             run: () => { if (locked) { alert(note || 'Locked.'); return false; } setModelSkin(id, ms.id); } };
@@ -83868,6 +84047,7 @@ function openWeaponSkinsPanel() {
           <div style="font-size:9px;color:#8a8a7a;margin-top:3px;line-height:1.3;">${ms.blurb}</div>
           ${legendLocked ? `<div style="font-size:9px;color:#ff6a4a;margin-top:4px;line-height:1.3;">${ffaLegendProgressText()}</div>` : ''}
           ${gen2Locked ? `<div style="font-size:9px;color:#c9a6ff;margin-top:4px;line-height:1.3;">Pull from Gen 2 — it makes an entrance.</div>` : ''}
+          ${GEN3_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id) ? `<div style="font-size:9px;color:#ffb347;margin-top:4px;line-height:1.3;">Pull from Gen 3 — the newest case.</div>` : ''}
           ${towerLocked ? `<div style="font-size:9px;color:#9fd07a;margin-top:4px;line-height:1.3;">Escape the Zombie Tower to get this one.</div>` : ''}
         </div>`;
       }).join('');
@@ -84023,6 +84203,21 @@ function openWeaponSkinsPanel() {
       ${meleeRows}` : ''}
     </div>`;
   };
+  const gen3CaseSection = () => {
+    const unopened = currentUser?.isAdmin ? 99 : (currentUser?.skinCasePacks?.gen3_clockwork || 0);
+    const ownedCount = ownedSkinCountFor(GEN3_SKIN_DEFS);
+    return `<div style="margin-top:18px;border-top:1px solid #6a5520;padding-top:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+        <div style="font-size:14px;letter-spacing:2px;color:#ffb347;">🐉 SKIN CASE GEN 3 · NEWEST</div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+          <div style="font-size:10px;color:#ffd9a0;letter-spacing:1px;">${ownedCount}/${GEN3_SKIN_DEFS.length} SKINS · ${unopened} CASES</div>
+          <button id="open-skin-case-gen3" ${unopened<=0?'disabled':''} style="padding:6px 10px;background:${unopened>0?'#33220f':'#222'};color:${unopened>0?'#ffb347':'#666'};border:1px solid ${unopened>0?'#ff9a2e':'#444'};border-radius:4px;font-family:inherit;font-size:10px;letter-spacing:1px;cursor:${unopened>0?'pointer':'default'};">OPEN IN LOBBY 13</button>
+          <button id="buy-skin-case-gen3" style="padding:6px 10px;background:#2a1c0c;color:#ffb347;border:1px solid #ff9a2e;border-radius:4px;font-family:inherit;font-size:10px;letter-spacing:1px;cursor:pointer;">BUY · ${money(SKIN_CASE_GEN3_COST)}</button>
+        </div>
+      </div>
+      <div style="font-size:10px;color:#bb9a70;margin:5px 0 2px;line-height:1.4;">The newest skins, in a case of their own: a clockwork dragon with a breath of fire, a breaching rifle, a poppy for Remembrance Day. Buy cases anywhere, open them in Lobby 13.</div>
+    </div>`;
+  };
   const gen2CaseSection = () => {
     const unopened = currentUser?.isAdmin ? 99 : (currentUser?.skinCasePacks?.gen2_entrances || 0);
     const ownedCount = ownedSkinCountFor(GEN2_SKIN_DEFS);
@@ -84059,6 +84254,7 @@ function openWeaponSkinsPanel() {
     <div style="font-size:10px;color:#9a8aa8;margin:8px 0 2px;line-height:1.45;">🔒 A wrap you paint yourself is a draft: send it for approval in the pixelizer, and once an admin has said yes it is yours to use and everyone sees it on your gun.
       <button id="ws-idea" style="margin-left:6px;padding:3px 8px;background:#1a2430;color:#bfe6ff;border:1px solid #4a8ac0;border-radius:3px;cursor:pointer;font-family:inherit;font-size:10px;">💡 SEND A WEAPON IDEA</button></div>
     ${contractsSectionHTML()}
+    ${gen3CaseSection()}
     ${gen2CaseSection()}
     ${basicCaseSection()}
   `;
@@ -84116,6 +84312,14 @@ function openWeaponSkinsPanel() {
   if (openCaseBtn) openCaseBtn.addEventListener('click', async () => {
     await openSkinCaseGen1();
   });
+  const buyGen3CaseBtn = panel.querySelector('#buy-skin-case-gen3');
+  if (buyGen3CaseBtn) buyGen3CaseBtn.addEventListener('click', async () => {
+    if (await buySkinCase('gen3_clockwork')) openWeaponSkinsPanel();
+  });
+  const openGen3CaseBtn = panel.querySelector('#open-skin-case-gen3');
+  if (openGen3CaseBtn) openGen3CaseBtn.addEventListener('click', async () => {
+    await openSkinCase('gen3_clockwork');
+  });
   const buyGen2CaseBtn = panel.querySelector('#buy-skin-case-gen2');
   if (buyGen2CaseBtn) buyGen2CaseBtn.addEventListener('click', async () => {
     if (await buySkinCase('gen2_entrances')) openWeaponSkinsPanel();
@@ -84158,6 +84362,7 @@ function openWeaponSkinsPanel() {
     cell.addEventListener('click', () => {
       const id = cell.dataset.mskin;
       if (id && GEN1_GATED_MODEL_SKIN_IDS.has(id) && !ownsSkin(id)) { alert('You have not pulled that skin yet. Open Gen 1 cases in Lobby 13.'); return; }
+      if (id && GEN3_MODEL_SKIN_IDS.has(id) && !ownsSkin(id)) { alert('You have not pulled that skin yet. Open Gen 3 cases in Lobby 13.'); return; }
       if (id && GEN2_MODEL_SKIN_IDS.has(id) && !ownsSkin(id)) { alert('You have not pulled that skin yet. Open Gen 2 cases in Lobby 13.'); return; }
       if (id && TOWER_MODEL_SKIN_IDS.has(id) && !ownsSkin(id)) { alert('You have not earned that skin yet. Escape the Zombie Tower to get it.'); return; }
       if (isLegendLocked(MODEL_SKINS.find(m => m.id === id))) { alert('FFA Legend skins are earned in FFA: deal 1,000,000 damage or win 5,000 FFA matches.'); return; }

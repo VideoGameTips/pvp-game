@@ -403,6 +403,7 @@ const SKIN_CASE_GEN1_COST = 1500;       // ~18 matches; the cheap rung under Gen
 // case. Both its skins draw with an animation, which is Gen 2's whole rule, so
 // they moved there as its rarest tier (see GEN2_MYTHIC_SKIN_IDS).
 const SKIN_CASE_GEN2_COST = 5000;       // ~59 matches. P2W is the absurd tier, not this
+const SKIN_CASE_GEN3_COST = 8000;       // the newest skins (Gen 3)
 // Balances saved under the old x400 rewards are rescaled once (ensureShopFields).
 const ECONOMY_V = 2;
 const OLD_MATCH_REWARD_MULT = 400;
@@ -445,7 +446,7 @@ const DONUT_SKIN_IDS = [
 // (gotcha #4): that list decides what the picker locks, this one what drops.
 const GEN2_MYTHIC_SKIN_IDS = DONUT_SKIN_IDS;   // one list, so the two cannot drift apart
 const GEN2_LEGENDARY_SKIN_IDS = [
-  'ak20_rainbow', 'railgun_oblivion', 'javelin_katyusha', 'rpg_siegebreaker', 'frag_spider', 'ak20_breach_protocol',
+  'ak20_rainbow', 'railgun_oblivion', 'javelin_katyusha', 'rpg_siegebreaker', 'frag_spider',
 ];
 const GEN2_RARE_SKIN_IDS = [
   'p90_ppsh41', 'black_hole_sputnik',
@@ -458,7 +459,7 @@ const GEN2_RARE_SKIN_IDS = [
   'railgun_constellation', 'knife_hyperspace', 'knife_butterfly', 'knife_singularity',
   'lightsabre_singularity', 'katana_laser', 'katana_sakura', 'katana_thunder',
   'combat_axe_frost', 'shock_baton_thunder', 'spear_thunder',
-  'minigun_stormwing', 'lever_remembrance',
+  'minigun_stormwing',
   'katana_tidal_fang', 'frag_stopwatch',
   'akimbo_apex',
 ];
@@ -494,6 +495,14 @@ for (const id of GEN2_RARE_SKIN_IDS) GEN2_SKIN_WEIGHTS[id] = 3;
 for (const id of GEN2_GOOD_SKIN_IDS) GEN2_SKIN_WEIGHTS[id] = 6;
 for (const id of GEN2_EPIC_SKIN_IDS) GEN2_SKIN_WEIGHTS[id] = 1.5;          // a bit rarer than the Rainbow AK (2) and half a rare skin (3)
 for (const id of GEN2_NEW_MYTHIC_SKIN_IDS) GEN2_SKIN_WEIGHTS[id] = 0.5;    // half as likely as any one donut gun
+// 🐉 Gen 3: the newest skins in a case of their own (mirrors GEN3_MODEL_SKIN_IDS in public/game.js). No skin is free:
+// each one is dealt by this case and nowhere else.
+const GEN3_LEGENDARY_SKIN_IDS = ['chain_gun_clockwork_dragon', 'ak20_breach_protocol'];
+const GEN3_RARE_SKIN_IDS = ['lever_remembrance'];
+const GEN3_SKIN_IDS = [...GEN3_LEGENDARY_SKIN_IDS, ...GEN3_RARE_SKIN_IDS];
+const GEN3_SKIN_WEIGHTS = {};
+for (const id of GEN3_LEGENDARY_SKIN_IDS) GEN3_SKIN_WEIGHTS[id] = 2;
+for (const id of GEN3_RARE_SKIN_IDS) GEN3_SKIN_WEIGHTS[id] = 3;
 // 🗄️ A skin belongs to its weapon. Once the weapon is archived (out of the shop, the loadouts and the chests) its skins go
 // with it: no case drops them any more. Anyone who already pulled one keeps it (it is still in their inventory, and
 // the admin still gets everything). Mirrors the skins of every `archived: true` item in public/game.js (gotcha #4);
@@ -513,6 +522,7 @@ const ARCHIVED_SKIN_IDS = new Set([
 const SKIN_CASES = {
   gen1_basic: { cost: SKIN_CASE_GEN1_COST, pool: GEN1_SKIN_IDS.filter(id => !ARCHIVED_SKIN_IDS.has(id)) },
   gen2_entrances: { cost: SKIN_CASE_GEN2_COST, pool: GEN2_SKIN_IDS.filter(id => !ARCHIVED_SKIN_IDS.has(id)), weights: GEN2_SKIN_WEIGHTS },
+  gen3_clockwork: { cost: SKIN_CASE_GEN3_COST, pool: GEN3_SKIN_IDS.filter(id => !ARCHIVED_SKIN_IDS.has(id)), weights: GEN3_SKIN_WEIGHTS },
 };
 for (const id of Object.keys(WEAPON_COSTS)) {
   if (WEAPON_COSTS[id] > 0) WEAPON_COSTS[id] *= P2W_ITEM_IDS.has(id) ? WEAPON_PRICE_MULT : NORMAL_WEAPON_PRICE_MULT;
@@ -1694,7 +1704,7 @@ app.post('/auth/claim-admin', (req, res) => {
   u.isAdmin = true;
   u.unlocks = Object.values(UNLOCK_CODES);
   u.credits = 999999999;
-  for (const id of [...GEN1_SKIN_IDS, ...DONUT_SKIN_IDS, ...GEN2_SKIN_IDS, ...ZOMBIE_TOWER_SKIN_IDS]) if (!u.skinInventory.includes(id)) u.skinInventory.push(id);
+  for (const id of [...GEN1_SKIN_IDS, ...DONUT_SKIN_IDS, ...GEN2_SKIN_IDS, ...GEN3_SKIN_IDS, ...ZOMBIE_TOWER_SKIN_IDS]) if (!u.skinInventory.includes(id)) u.skinInventory.push(id);
   saveUsers();
   console.log('[auth] ' + username + ' became admin through /adminpanel');
   res.json({ ok: true, isAdmin: true, unlocks: u.unlocks, credits: u.credits, skinInventory: u.skinInventory });
@@ -1715,7 +1725,7 @@ app.post('/auth/login', (req, res) => {
       users[username].credits = 999999999; // admin: unlimited
       for (const id of GEN1_SKIN_IDS) if (!users[username].skinInventory.includes(id)) users[username].skinInventory.push(id);
       for (const id of DONUT_SKIN_IDS) if (!users[username].skinInventory.includes(id)) users[username].skinInventory.push(id);
-      for (const id of GEN2_SKIN_IDS) if (!users[username].skinInventory.includes(id)) users[username].skinInventory.push(id);
+      for (const id of [...GEN2_SKIN_IDS, ...GEN3_SKIN_IDS]) if (!users[username].skinInventory.includes(id)) users[username].skinInventory.push(id);
       for (const id of ZOMBIE_TOWER_SKIN_IDS) if (!users[username].skinInventory.includes(id)) users[username].skinInventory.push(id);
     }
     saveUsers();
