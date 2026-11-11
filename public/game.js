@@ -72888,6 +72888,7 @@ function openLiveLoadout() {
 }
 function syncLiveLoadoutButton() {
   const button=document.getElementById('match-loadout-btn');
+  if(!button)return;
   button.hidden=!liveLoadoutAllowed()||isDead||isLoadoutOpen()||(!countdownActive&&!isTouchUI());
 }
 
@@ -72915,7 +72916,7 @@ function runCountdown(seconds, onDone) {
       overlay.style.display = 'none';
       countdownActive = false;
       syncLiveLoadoutButton();
-      document.getElementById('live-loadout-status').textContent='ROUND LIVE';
+      { const st=document.getElementById('live-loadout-status'); if(st)st.textContent='ROUND LIVE'; }
       onDone();
       return;
     }
@@ -72931,7 +72932,7 @@ function runCountdown(seconds, onDone) {
 
     lblEl.textContent = remaining === 1 ? 'GO!' : 'GET READY';
     syncLiveLoadoutButton();
-    document.getElementById('live-loadout-status').textContent='ROUND STARTS IN '+remaining;
+    { const st=document.getElementById('live-loadout-status'); if(st)st.textContent='ROUND STARTS IN '+remaining; }
     remaining--;
     setTimeout(tick, 1000);
   }
@@ -79974,8 +79975,7 @@ function showLoadoutScreen(mode) {
     (inLiveMatch() && loadoutMode === 'death') ? '🚪 LEAVE MATCH' : '← BACK';
   const screen = document.getElementById('loadout-screen');
   screen.querySelector('#best-loadouts-btn').hidden=!!liveLoadoutDraft;
-  screen.querySelector('#live-loadout-status').hidden=!liveLoadoutDraft;
-  if(liveLoadoutDraft&&!countdownActive)screen.querySelector('#live-loadout-status').textContent='ROUND LIVE';
+  { const st=screen.querySelector('#live-loadout-status'); if(st){ st.hidden=!liveLoadoutDraft; if(liveLoadoutDraft&&!countdownActive)st.textContent='ROUND LIVE'; } }
   const pList  = document.getElementById('loadout-primary-list');
   const sList  = document.getElementById('loadout-secondary-list');
   const mList  = document.getElementById('loadout-melee-list');
@@ -81326,7 +81326,7 @@ function afterDeath(ms, fn) {
 // inherit. Shared by the mode menu and the end-of-match buttons so they can't drift apart.
 function teardownMatchWorld() {
   discardLiveLoadout();
-  document.getElementById('match-loadout-btn').hidden=true;
+  { const mb=document.getElementById('match-loadout-btn'); if(mb)mb.hidden=true; }
   window.PVP_BATTLE_SIM?.stop();
   window.PVP_RAGDOLL?.clear();
   window.PVP_BACKROOMS?.stop();
@@ -84251,7 +84251,7 @@ document.getElementById('loadout-exit-btn').addEventListener('click', () => {
   }
   requestPointerLockSafe();                                           // SWAP: back to the fight, kit unchanged
 });
-document.getElementById('match-loadout-btn').addEventListener('click',openLiveLoadout);
+document.getElementById('match-loadout-btn')?.addEventListener('click',openLiveLoadout);   // (a missing element must never stop the rest of this file from running: the READY button and every touch control below it)
 document.getElementById('loadout-ready-btn').addEventListener('click', confirmLoadout);
 document.getElementById('loadout-ready-btn').addEventListener('touchstart', e => { e.preventDefault(); confirmLoadout(); }, { passive: false });
 // Change loadout while waiting between rounds in elim mode

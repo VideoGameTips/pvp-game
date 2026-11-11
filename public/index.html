@@ -434,6 +434,14 @@
       font-family: 'Courier New', monospace; font-size: 16px; color: #aaa;
       letter-spacing: 4px; margin-top: 6px;
     }
+    #match-loadout-btn {
+      position: fixed; left: 50%; bottom: max(108px, env(safe-area-inset-bottom)); transform: translateX(-50%);
+      z-index: 94; min-height: 44px; padding: 0 14px; border: 1px solid #8b9ca6; border-radius: 6px;
+      background: #1b252c; color: #f2f6f8; font: 600 13px system-ui, sans-serif; cursor: pointer;
+    }
+    body.touch-ui #match-loadout-btn { bottom: max(88px, env(safe-area-inset-bottom)); }
+    body.touch-ui #match-loadout-btn kbd { display: none; }
+    #live-loadout-status { grid-column: 1 / -1; text-align: center; font: 600 12px system-ui, sans-serif; color: #ffbe77; }
     @keyframes cdPop { from { transform: scale(1.7); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
     /* ── Spawn-shield indicator ── */
@@ -1487,6 +1495,7 @@
     <div id="countdown-number">5</div>
     <div id="countdown-label">GET READY</div>
   </div>
+  <button id="match-loadout-btn" type="button" hidden>Loadout <kbd>L</kbd></button>
 
   <!-- Compatibility hook for old round cleanup; no elimination overlay. -->
   <div id="waiting-screen" hidden aria-hidden="true"></div>
@@ -1543,6 +1552,7 @@
     <!-- ← BACK / 🚪 LEAVE MATCH, set in showLoadoutScreen (#26) -->
     <button id="loadout-exit-btn" style="position:absolute; top:20px; left:20px; min-height:40px; padding:8px 14px; background:#222; color:#ffb3a8; border:1px solid #7a3a34; cursor:pointer; font-family:'Courier New',monospace; font-size:12px; letter-spacing:1px; border-radius:6px;">← BACK</button>
     <button id="best-loadouts-btn" style="position:absolute; top:20px; right:20px; padding:8px 16px; background:#1a2a3a; color:#ffcc66; border:1px solid #ffcc66; cursor:pointer; font-family:'Courier New',monospace; font-size:12px; letter-spacing:2px; border-radius:4px;">📋 BEST LOADOUTS</button>
+    <span id="live-loadout-status" aria-live="polite" hidden></span>
     </header>
     <nav id="loadout-steps" aria-label="Loadout slots"></nav>
     <div class="lh-tools"><input id="loadout-search" type="search" placeholder="Search weapons" aria-label="Search this slot" autocomplete="off"><span id="loadout-count"></span></div>
