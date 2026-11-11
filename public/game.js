@@ -33480,6 +33480,221 @@ function buildStormwing() {
   return g;
 }
 
+// ⚠️ AK20 -> Breach Protocol. A corporate breaching rifle: it is still the AK-20 at every stage, in black armour with crimson stripes.
+//   equip     four armour plates snap outward off the handguard, a red scan light sweeps receiver -> muzzle, and the plates lock in their combat spacing
+//   fire      a hydraulic piston under the barrel compresses with each shot; the warning lights pulse faster the longer you hold the trigger
+//   reload    the magazine drops out, the plates open to show a feed mechanism that cycles once, a fresh magazine goes in and the plates slam shut
+//   inspect   BREACH SIMULATION: plates fully open, the muzzle shroud slides out, a red hologram door appears, a beam traces its hinges, and the door breaks into four pieces
+// (looks only: damage, recoil and accuracy are the AK-20's.)
+function buildBreachProtocolAK() {
+  const g = buildAK20(true);
+  const inFlash = o => { for (let p = o; p; p = p.parent) if (p === g._flash) return true; return false; };
+  g.traverse(o => {                                              // black the whole stock rifle (clone first: the finishes are shared)
+    if (!o.isMesh || !o.material || inFlash(o)) return;
+    const dk = m => { if (!m || m.isMeshBasicMaterial || !m.color) return m; const c = m.clone(); c.color.multiplyScalar(0.5); return c; };
+    o.material = Array.isArray(o.material) ? o.material.map(dk) : dk(o.material);
+  });
+  const armor = _skM(0x16181c, 150, 0x8a929c), hi = _skM(0x272a31, 190, 0xb4bcc6), dark = _skM(0x0b0c0e, 60, 0x40444a), steel = _skM(0x6a727c, 220, 0xffffff);
+  const crimson = new THREE.MeshBasicMaterial({ color: 0xff1e30 });
+  const railM = new THREE.MeshBasicMaterial({ color: 0x6a0a14 });
+  const warn = new THREE.MeshBasicMaterial({ color: 0xff1e30 });
+  const additive = (c, a) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: a, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending });
+  const ease = u => u * u * (3 - 2 * u), clamp01 = u => Math.max(0, Math.min(1, u));
+  // a line of lettering as a thin plane
+  const lettering = (text, w, h, px, col, bg) => {
+    let tex = null;
+    try {
+      const c = document.createElement('canvas'); c.width = 512; c.height = Math.round(512 * h / w);
+      const x = c.getContext('2d');
+      if (bg) { x.fillStyle = bg; x.fillRect(0, 0, c.width, c.height); x.strokeStyle = col; x.lineWidth = 3; x.strokeRect(2, 2, c.width - 4, c.height - 4); }
+      x.fillStyle = col; x.font = 'bold ' + px + 'px "Courier New", monospace'; x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.fillText(text, c.width / 2, c.height / 2 + 1);
+      tex = new THREE.CanvasTexture(c);
+    } catch (e) { tex = null; }
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, color: tex ? 0xffffff : 0xff1e30, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+    return m;
+  };
+
+  // ── identification: crimson stripes down both flanks, and the unit marking ──
+  for (const sd of [-1, 1]) {
+    gpBox(g, crimson, 0.0014, 0.007, 0.150, sd * 0.0262, 0.050, -0.012);
+    gpBox(g, crimson, 0.0014, 0.007, 0.060, sd * 0.0262, 0.050, 0.092);
+    const t = lettering('BREACH PROTOCOL // UNIT 07', 0.150, 0.0105, 34, '#ff2a3c', null);
+    t.position.set(sd * 0.0264, -0.009, -0.012); t.rotation.y = sd * Math.PI / 2; g.add(t);
+  }
+  // magazine: ammunition-count ticks down both sides (inside the magazine's own group, so they ride with it on a reload)
+  gpPart(g, 'magazine', () => {
+    for (const sd of [-1, 1]) for (let i = 0; i < 5; i++)
+      gpBox(g, i < 4 ? crimson : railM, 0.0012, 0.0034, 0.014, sd * 0.0196, -0.098 - i * 0.019, -0.069 - i * 0.0085, 0.38);
+  });
+  // stock: a hydraulic brace on each side, exposed ball joints at both ends
+  for (const sd of [-1, 1]) {
+    gpCyl(g, dark, 0.0068, 0.0068, 0.056, 12, sd * 0.029, 0.010, 0.186);
+    gpCyl(g, steel, 0.0036, 0.0036, 0.080, 10, sd * 0.029, 0.010, 0.238);
+    for (const z of [0.150, 0.280]) { const j = new THREE.Mesh(new THREE.SphereGeometry(0.0068, 10, 8), steel); j.position.set(sd * 0.029, 0.010, z); g.add(j); }
+  }
+  // hydraulic piston under the barrel: the housing is fixed, the rod is driven back by every shot
+  gpCyl(g, dark, 0.0070, 0.0070, 0.074, 12, 0, -0.019, -0.272);
+  gpBox(g, armor, 0.014, 0.012, 0.020, 0, -0.011, -0.250);       // its bracket
+  const rodHome = -0.330;
+  const rod = new THREE.Group(); rod.position.set(0, -0.019, rodHome); g.add(rod);
+  { const r = new THREE.Mesh(new THREE.CylinderGeometry(0.0036, 0.0036, 0.060, 10), steel); r.rotation.x = Math.PI / 2; rod.add(r);
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.0056, 0.0056, 0.008, 10), crimson); cap.rotation.x = Math.PI / 2; cap.position.z = -0.032; rod.add(cap); }
+  // muzzle shroud: a squared sleeve round the brake, a warning light inside it; it slides forward in the inspect
+  const shroud = new THREE.Group(); const shroudHome = -0.553; shroud.position.set(0, 0.018, shroudHome); g.add(shroud);
+  { const L = 0.056, W = 0.040, H = 0.034, T = 0.0045;
+    const b = (mat, w, h, d, x, y, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); shroud.add(m); return m; };
+    b(armor, W, T, L, 0, H / 2 - T / 2, 0); b(armor, W, T, L, 0, -H / 2 + T / 2, 0);
+    b(armor, T, H, L, W / 2 - T / 2, 0, 0); b(armor, T, H, L, -W / 2 + T / 2, 0, 0);
+    b(hi, W + 0.004, 0.004, 0.008, 0, H / 2 - 0.002, L / 2 - 0.004);                       // a lip at the front
+    for (const sx of [-1, 1]) b(warn, 0.007, 0.0022, 0.009, sx * 0.009, H / 2 + 0.0012, 0.004);   // the warning lights on top
+    b(warn, 0.010, 0.0025, 0.022, 0, H / 2 - T - 0.0014, 0.002);                            // and the one inside: lit through the opening
+  }
+
+  // ── the plates: four, two a side, that slide off the handguard (eqFx: they are not part of the entrance's flying parts) ──
+  const armorRig = new THREE.Group(); armorRig.userData.eqFx = true; g.add(armorRig);
+  const plates = [];
+  for (const sx of [-1, 1]) for (const z of [-0.208, -0.290]) {
+    const p = new THREE.Group(); armorRig.add(p);
+    const add = (mat, w, h, d, x, y, zz) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, zz); m.castShadow = true; p.add(m); };
+    add(armor, 0.0075, 0.056, 0.074, 0, 0, 0);
+    add(hi, 0.009, 0.007, 0.074, 0, 0.0305, 0);
+    add(hi, 0.009, 0.007, 0.074, 0, -0.0305, 0);
+    add(crimson, 0.0013, 0.0055, 0.056, sx * 0.0042, 0.006, 0);                              // the crimson stripe
+    add(dark, 0.0012, 0.020, 0.012, sx * 0.0040, -0.012, 0.022);                             // a vent slot
+    plates.push({ p, sx, z });
+  }
+  // the red-lit rails the plates uncover, and the feed blocks that ride them on a reload
+  const rails = new THREE.Group(); rails.userData.eqFx = true; g.add(rails);
+  const feeders = [];
+  for (const sx of [-1, 1]) {
+    for (const y of [0.034, 0.002]) { const r = new THREE.Mesh(new THREE.BoxGeometry(0.0034, 0.0042, 0.150), railM); r.position.set(sx * 0.0262, y, -0.250); rails.add(r); }
+    const f = new THREE.Mesh(new THREE.BoxGeometry(0.0046, 0.014, 0.020), crimson); f.position.set(sx * 0.0262, 0.018, -0.215); rails.add(f); feeders.push(f);
+  }
+  const sweep = new THREE.Mesh(new THREE.BoxGeometry(0.064, 0.090, 0.004), additive(0xff2a3a, 0.30)); sweep.userData.eqFx = true; sweep.visible = false; sweep.position.y = 0.018; g.add(sweep);
+
+  // ── the breach hologram, out in front of the muzzle ──
+  const DW = 0.130, DH = 0.210, QW = DW / 2, QH = DH / 2;
+  const holo = new THREE.Group(); holo.userData.eqFx = true; holo.visible = false; holo.position.set(0, 0.046, -0.790); g.add(holo);
+  const quarters = [];
+  for (const [qx, qy] of [[-1, 1], [1, 1], [-1, -1], [1, -1]]) {
+    const q = new THREE.Group(); q.position.set(qx * QW / 2, qy * QH / 2, 0); holo.add(q);
+    const fill = additive(0xff2a3a, 0.20), line = new THREE.LineBasicMaterial({ color: 0xff4a58, transparent: true, opacity: 0.95, depthWrite: false, blending: THREE.AdditiveBlending });
+    q.add(new THREE.Mesh(new THREE.PlaneGeometry(QW * 0.97, QH * 0.97), fill));
+    q.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(QW, QH)), line));
+    quarters.push({ q, qx, qy, fill, line });
+  }
+  const hinges = [];
+  for (const y of [-0.075, 0, 0.075]) { const h = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.014, 0.006), additive(0xff6a70, 0.9)); h.position.set(-DW / 2 - 0.004, y, 0); holo.add(h); hinges.push(h); }
+  { const k = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.006, 0.006), additive(0xff6a70, 0.9)); k.position.set(DW / 2 - 0.014, -0.004, 0); holo.add(k); }
+  const beam = new THREE.Mesh(new THREE.BoxGeometry(0.0035, DH, 0.0035), additive(0xffd0d4, 1)); beam.position.set(-DW / 2, DH / 2, 0.002); beam.visible = false; holo.add(beam);
+  const dot = new THREE.Mesh(new THREE.SphereGeometry(0.0065, 8, 6), additive(0xffffff, 1)); dot.visible = false; holo.add(dot);
+  const lab1 = lettering('SIMULATING BREACH...', 0.170, 0.030, 40, '#ff4a58', 'rgba(30,0,4,0.55)');
+  const lab2 = lettering('BREACH POINT IDENTIFIED', 0.170, 0.030, 36, '#ff4a58', 'rgba(30,0,4,0.55)');
+  const label = lab1; label.position.set(0, DH / 2 + 0.032, 0.004); holo.add(label); lab2.position.copy(label.position); lab2.visible = false; holo.add(lab2);
+
+  // (the muzzle flash, kick, hands and sight line all come from the stock AK-20 body)
+
+  // ── motion ──
+  const REST = 0.35;
+  let open = REST, kick = 0, was = false, heat = 0, hold = 0, eqT = -1, eqSnap = false, eqLock = false, rSeat = false, rSlam = false, iSlam = false;
+  const mag = () => g._parts && g._parts.magazine;
+  const pose = o => {
+    for (const q of plates) {
+      const dz = (q.z > -0.25 ? 1 : -1) * 0.014 * Math.min(1.3, o);
+      q.p.position.set(q.sx * (0.0295 + 0.030 * o), 0.022, q.z + dz);
+      q.p.rotation.z = -q.sx * 0.12 * Math.max(0, o - REST);
+    }
+    const s = 0.22 + 0.78 * clamp01((o - 0.15) / 0.85);
+    railM.color.setRGB(1 * s, 0.10 * s, 0.14 * s);
+  };
+  const showFx = v => { armorRig.visible = v; rails.visible = v; };
+  const reset = () => {
+    open = REST; pose(open); kick = 0; heat = 0; hold = 0;
+    rod.position.z = rodHome; shroud.position.z = shroudHome;
+    const m = mag(); if (m) { m.position.copy(m._home || m.position); m.visible = true; }
+    sweep.visible = false; holo.visible = false; beam.visible = false; dot.visible = false;
+    feeders.forEach(f => f.position.z = -0.215);
+  };
+  pose(REST);
+  g._calm = () => { reset(); eqT = 9; showFx(true); };
+  g._tick = (dt, now, assembling) => {
+    if (assembling) { eqT = -1; eqSnap = eqLock = false; showFx(false); sweep.visible = false; holo.visible = false; return; }
+    if (eqT < 0) { eqT = 0; showFx(true); open = 0; pose(0); }
+    const fired = !!(g._flash && g._flash.visible);
+    if (fired && !was) kick = 1; was = fired;
+    kick *= Math.exp(-dt * 14);
+    hold = fired ? 0.2 : Math.max(0, hold - dt);
+    heat = clamp01(heat + (hold > 0 ? dt * 0.55 : -dt * 0.5));
+    const pulse = 0.55 + 0.45 * Math.sin(now * (4 + 14 * heat) * 1.0);
+    warn.color.setRGB(0.45 + 0.55 * pulse, 0.06 + 0.08 * pulse, 0.10 + 0.08 * pulse);
+    rod.position.z = rodHome + 0.016 * kick;
+    const t0 = g._reloadStart && g._reloadDur ? (Date.now() - g._reloadStart) / g._reloadDur : -1;
+    const inspecting = !!g._inspectMode && t0 >= 0 && t0 < 1, reloading = !g._inspectMode && t0 >= 0 && t0 < 1;
+    const m = mag(), mh = m && (m._home || null);
+    let target = null;                                                           // what the plates are told to do this frame (null = settle at rest)
+    let shroudOut = 0;
+    if (eqT < 0.9) {                                                             // ENTRANCE: SYSTEM ONLINE
+      eqT += dt;
+      const e = eqT;
+      if (e < 0.20) target = 1.35 * (1 - Math.pow(1 - e / 0.20, 3));            // snap outward
+      else if (e < 0.55) target = 1.35 - 0.08 * ease((e - 0.20) / 0.35);
+      else target = 1.27 + (REST - 1.27) * ease(clamp01((e - 0.55) / 0.25));    // lock into the combat spacing
+      if (e >= 0.20 && !eqSnap) { eqSnap = true; try { playEquipSound('click'); } catch (x) {} }
+      if (e >= 0.78 && !eqLock) { eqLock = true; try { playEquipSound('slam'); } catch (x) {} }
+      const sw = clamp01((e - 0.12) / 0.50);                                    // the diagnostic light: receiver -> muzzle
+      sweep.visible = sw > 0 && sw < 1; sweep.position.z = 0.06 - 0.64 * sw; sweep.material.opacity = 0.34 * Math.sin(Math.PI * sw);
+    } else if (inspecting) {                                                     // BREACH SIMULATION
+      const u = t0; sweep.visible = false;
+      target = u < 0.15 ? REST + (1.6 - REST) * ease(u / 0.15) : u < 0.86 ? 1.6 : u < 0.94 ? 1.6 + (REST - 1.6) * ease((u - 0.86) / 0.08) : REST;
+      shroudOut = u < 0.15 ? 0 : u < 0.30 ? ease((u - 0.15) / 0.15) : u < 0.84 ? 1 : u < 0.92 ? 1 - ease((u - 0.84) / 0.08) : 0;
+      const showDoor = u > 0.18 && u < 0.85;
+      holo.visible = showDoor;
+      if (showDoor) {
+        const grow = ease(clamp01((u - 0.18) / 0.12));
+        holo.scale.setScalar(Math.max(0.001, grow)); holo.position.y = 0.046 + Math.sin(now * 2) * 0.002;
+        const fr = clamp01((u - 0.68) / 0.16);                                  // the door breaks into four
+        for (const q of quarters) {
+          q.q.position.set(q.qx * (QW / 2 + 0.085 * ease(fr)), q.qy * (QH / 2 + 0.060 * ease(fr)) - 0.05 * fr * fr, -0.12 * ease(fr));
+          q.q.rotation.set(q.qy * 0.9 * fr, q.qx * 0.7 * fr, q.qx * q.qy * 0.8 * fr);
+          q.fill.opacity = 0.20 * (1 - fr) + 0.1 * Math.sin(now * 30) * (fr > 0 && fr < 1 ? 1 : 0); q.line.opacity = 0.95 * (1 - fr);
+          q.fill.opacity = Math.max(0, q.fill.opacity);
+        }
+        const sc = clamp01((u - 0.40) / 0.16);                                  // the beam traces the hinges, top to bottom
+        beam.visible = sc > 0 && u < 0.62; beam.scale.y = Math.max(0.001, sc); beam.position.y = DH / 2 - (DH / 2) * sc;
+        dot.visible = beam.visible; dot.position.set(-DW / 2, DH / 2 - DH * sc, 0.004);
+        hinges.forEach((h, i) => { const hy = 0.075 - i * 0.075, lit = (DH / 2 - DH * sc) < hy + 0.01 && sc > 0; h.material.opacity = lit ? 1 : 0.55; });
+        const second = u >= 0.62; lab1.visible = !second; lab2.visible = second;
+        lab1.material.opacity = lab2.material.opacity = 0.75 + 0.25 * Math.sin(now * 12);
+        for (const l of [lab1, lab2]) l.visible = l.visible && u < 0.82;
+      }
+      if (u >= 0.93 && !iSlam) { iSlam = true; try { playEquipSound('slam'); } catch (x) {} }
+    } else if (reloading) {                                                      // EMERGENCY REARM
+      const u = t0; iSlam = false;
+      target = u < 0.18 ? REST + (1.1 - REST) * ease(u / 0.18) : u < 0.72 ? 1.1 : u < 0.80 ? 1.1 + (REST - 1.1) * ease((u - 0.72) / 0.08) : REST;
+      if (m) {
+        const drop = u < 0.06 ? 0 : u < 0.30 ? ease((u - 0.06) / 0.24) * 0.20 : u < 0.48 ? 0.20 : u < 0.68 ? 0.20 * (1 - ease((u - 0.48) / 0.20)) : 0;
+        m.position.set(m._home ? m._home.x : m.position.x, (m._home ? m._home.y : m.position.y) - drop, m._home ? m._home.z : m.position.z);
+        m.visible = !(u > 0.24 && u < 0.50);
+        if (u >= 0.68 && !rSeat) { rSeat = true; try { playEquipSound('click'); } catch (x) {} }
+      }
+      const cyc = u > 0.30 && u < 0.62 ? Math.sin(Math.PI * (u - 0.30) / 0.32) : 0;      // the feed blocks run up the rails and back, once
+      feeders.forEach(f => f.position.z = -0.215 - 0.090 * cyc);
+      if (u >= 0.80 && !rSlam) { rSlam = true; try { playEquipSound('slam'); } catch (x) {} }
+    } else {
+      rSeat = rSlam = iSlam = false;
+      if (m && m._home) { m.position.copy(m._home); m.visible = true; }
+      holo.visible = false; beam.visible = false;
+      feeders.forEach(f => f.position.z = -0.215);
+    }
+    const goal = target === null ? REST : target;
+    open = target === null ? open + (goal - open) * Math.min(1, dt * 8) : goal;
+    pose(open);
+    shroud.position.z = shroudHome - 0.060 * shroudOut;
+  };
+  return g;
+}
+
 // 🪤 Crossbow -> Mousetrap. A spring bar that really snaps, and cheese on the catch.
 function buildMousetrap() {
   const g = new THREE.Group();
@@ -58989,6 +59204,9 @@ const MODEL_SKINS = [
   { id: 'minigun_stormwing', weapon: 'minigun', name: 'Stormwing', rarity: 'rare',
     sw: ['#9aa6b4', '#39b8ff'], build: buildStormwing,
     blurb: 'Grey steel and blue light. Aim, and the wings snap open and four more barrels slide out of them and fire with the main gun. Same damage: the extra barrels are for show.' },
+  { id: 'ak20_breach_protocol', weapon: 'ak20', name: 'Breach Protocol', rarity: 'legendary',
+    sw: ['#16181c', '#ff1e30'], build: buildBreachProtocolAK,
+    blurb: 'Black armour, crimson stripes, a rifle that looks ready to take a door off. Four plates slide off the handguard to show red-lit rails; a piston under the barrel works with every shot. Inspect it for a breach simulation. Still an AK-20 underneath: same damage, recoil and accuracy.' },
   { id: 'crossbow_mousetrap', weapon: 'crossbow', name: 'Mousetrap', rarity: 'rare',
     sw: ['#c89a58', '#f2c230'], build: buildMousetrap,
     blurb: 'Loaded with cheese. The bar really does snap, and it is faster than it looks.' },
@@ -59244,6 +59462,7 @@ const DONUT_SKIN_IDS = [
 const GEN2_MODEL_SKIN_IDS = new Set([
   'rpg_siegebreaker', 'javelin_katyusha', 'p90_ppsh41',                                  // (no skin is free: server.js GEN2_LEGENDARY / GEN2_RARE_SKIN_IDS)
   'minigun_stormwing',                                          // (no skin is free: server.js GEN2_RARE_SKIN_IDS)
+  'ak20_breach_protocol',                                       // (no skin is free: server.js GEN2_LEGENDARY_SKIN_IDS)
   'revolver_final_notice','vector_crimson',
   'revolver_donut', 'ak20_donut', 'rpg_donut', 'machine_pistol_donut', 'pistol_donut',
   'sg8_donut', 'srx_donut', 'vector_donut', 'grenade_launcher_donut', 'minigun_donut',
@@ -64547,6 +64766,7 @@ const SKIN_FX = {
   javelin_katyusha: { equip: 'build', equipMs: 1000, equipSfx: ['whoosh', 'slam'], equipBeats: [[.7, 'click']] },
   p90_ppsh41: { equip: 'slam', equipMs: 900, equipSfx: ['whoosh', null], equipBeats: [[.55, 'slam']] },
   minigun_stormwing: { equip: 'unfold', equipMs: 950, equipSfx: ['fold', 'click'], equipBeats: [[.55, 'click'], [.82, 'chime']] },
+  ak20_breach_protocol: { equip: 'draw', equipMs: 850, equipSfx: ['whoosh', null], inspectMs: 5200 },
   minigun_ceiling_fan: { sound: _fxS('whirr', .28, .07, 700, 380),
     equip: 'spin', equipMs: 900, equipSfx: ['whoosh', 'ding'],
     // the light kit unscrewed, a fresh bulb dropped in, screwed back on, and two tugs on the pull chain

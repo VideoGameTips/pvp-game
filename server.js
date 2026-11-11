@@ -445,7 +445,7 @@ const DONUT_SKIN_IDS = [
 // (gotcha #4): that list decides what the picker locks, this one what drops.
 const GEN2_MYTHIC_SKIN_IDS = DONUT_SKIN_IDS;   // one list, so the two cannot drift apart
 const GEN2_LEGENDARY_SKIN_IDS = [
-  'ak20_rainbow', 'railgun_oblivion', 'javelin_katyusha', 'rpg_siegebreaker', 'frag_spider',
+  'ak20_rainbow', 'railgun_oblivion', 'javelin_katyusha', 'rpg_siegebreaker', 'frag_spider', 'ak20_breach_protocol',
 ];
 const GEN2_RARE_SKIN_IDS = [
   'p90_ppsh41', 'black_hole_sputnik',
