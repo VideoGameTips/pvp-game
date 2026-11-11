@@ -30256,6 +30256,141 @@ function buildIronJudge() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+function buildBroadside() {
+  // 🏴‍☠️ Hand Cannon -> Broadside. A pirate warship in one hand: a chunky bronze naval cannon for a barrel, dark wooden hull panels with gold trim, a little mast with a
+  // red-and-black flag, four hinged cannon ports (two a side) with a tiny gun behind each, and a ship's wheel behind the trigger guard.
+  //   idle     the flag waves and the whole ship rocks, as if it floated
+  //   aim      the four port covers flip open and the little guns slide out; the mast lowers out of your sight line
+  //   fire     the main gun puffs smoke, the four little guns recoil with it and the ship rocks backward
+  //   reload   a cannonball rolls down a little ramp into the barrel; the port covers close with a row of clicks
+  //   inspect  FULL BROADSIDE: the mast rises, the hull unfolds, and the four guns fire in turn -- BOOM BOOM BOOM BOOM -- before everything folds back
+  const g = new THREE.Group();
+  const wood = new THREE.MeshPhongMaterial({ color: 0x4a2c17, shininess: 40, specular: 0x6a4a2a });
+  const dark = new THREE.MeshPhongMaterial({ color: 0x2a190d, shininess: 30, specular: 0x3a2a1a });
+  const gold = new THREE.MeshPhongMaterial({ color: 0xd8a836, shininess: 170, specular: 0xfff0b0 });
+  const bronze = new THREE.MeshPhongMaterial({ color: 0x9a6a2c, shininess: 130, specular: 0xe8c080 });
+  const iron = new THREE.MeshPhongMaterial({ color: 0x1c1d20, shininess: 100, specular: 0x7a8088 });
+  const sailM = new THREE.MeshPhongMaterial({ color: 0xe8dcc0, shininess: 10 });
+  const flagRed = new THREE.MeshBasicMaterial({ color: 0xc8161d, side: THREE.DoubleSide }), flagBlk = new THREE.MeshBasicMaterial({ color: 0x0a0a0a, side: THREE.DoubleSide });
+  const Y = 0.020;
+  // hull: a long wooden body with gold rails, a keel underneath and a prow-like block at the front
+  gpBox(g, wood, 0.040, 0.044, 0.150, 0, Y - 0.004, -0.020);
+  gpBox(g, dark, 0.034, 0.010, 0.130, 0, Y - 0.030, -0.020);
+  gpBox(g, gold, 0.044, 0.003, 0.152, 0, Y + 0.020, -0.020); gpBox(g, gold, 0.044, 0.003, 0.152, 0, Y - 0.014, -0.020);
+  gpBox(g, dark, 0.030, 0.030, 0.030, 0, Y - 0.004, -0.100, 0.35, 0, 0);
+  for (let i = 0; i < 3; i++) gpBox(g, gold, 0.0016, 0.034, 0.003, 0.0206, Y + 0.002, -0.070 + i * 0.048);    // gold ribs along the hull
+  for (let i = 0; i < 3; i++) gpBox(g, gold, 0.0016, 0.034, 0.003, -0.0206, Y + 0.002, -0.070 + i * 0.048);
+  // grip and the ship's wheel behind the trigger guard
+  const grip = new THREE.Group(); g.add(grip);
+  gpPlate(grip, wood, [[0.060, -0.004], [0.072, -0.090], [0.044, -0.108], [0.020, -0.094], [0.026, -0.004]], 0.030, -0.011);
+  gpBox(grip, gold, 0.032, 0.004, 0.044, 0, -0.106, 0.044, 0.2);
+  { const t = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.0032, 6, 14, Math.PI * 1.1), gold); t.rotation.set(0, Math.PI / 2, -0.4); t.position.set(0, -0.006, 0.010); g.add(t); }
+  gpBox(g, gold, 0.006, 0.020, 0.006, 0, -0.012, 0.000, 0.25);                                                           // the trigger
+  const wheel = new THREE.Group(); wheel.position.set(0.0, Y + 0.004, 0.070); g.add(wheel);                              // the ship's wheel, turning at the back
+  { const rim = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.0030, 6, 18), wood); rim.rotation.y = Math.PI / 2; wheel.add(rim);
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.0060, 0.0060, 0.010, 10), gold); hub.rotation.z = Math.PI / 2; wheel.add(hub);
+    for (let i = 0; i < 8; i++) { const sp = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.0030, 0.0030), gold); const a = i / 8 * Math.PI * 2; sp.position.set(0, Math.sin(a) * 0.024, Math.cos(a) * 0.024); sp.rotation.x = -a; sp.scale.set(1, 1, 8.5); wheel.add(sp); } }
+  // the main gun: a fat bronze barrel with rings, a muzzle swell, a cascabel at the back and a little front sight
+  gpCyl(g, bronze, 0.0140, 0.0160, 0.150, 16, 0, Y + 0.002, -0.140);
+  for (const z of [-0.075, -0.120, -0.165, -0.205]) gpCyl(g, gold, 0.0178, 0.0178, 0.005, 16, 0, Y + 0.002, z);
+  gpCyl(g, bronze, 0.0185, 0.0150, 0.020, 16, 0, Y + 0.002, -0.222);
+  gpCyl(g, new THREE.MeshBasicMaterial({ color: 0x050403 }), 0.0100, 0.0100, 0.004, 12, 0, Y + 0.002, -0.2325);
+  const casc = new THREE.Mesh(new THREE.SphereGeometry(0.0085, 10, 8), bronze); casc.position.set(0, Y + 0.002, -0.058); g.add(casc);
+  gpBox(g, iron, 0.004, 0.010, 0.006, 0, Y + 0.025, -0.215);
+  // the reload ramp, a little cannonball and the dock it rolls into
+  const ramp = gpBox(g, dark, 0.016, 0.003, 0.060, 0, Y + 0.0250, -0.040, -0.42);                                          // a short wooden chute sloping down toward the barrel
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(0.0072, 10, 8), iron); ball.userData.eqFx = true; ball.visible = false; g.add(ball);
+  // the mast: a pole, a yard across it, a furled sail and the flag at the top; it lowers as you aim so it is not in your way
+  const mast = new THREE.Group(); mast.position.set(0, Y + 0.0225, 0.020); g.add(mast);
+  const pole = gpBox(mast, wood, 0.005, 0.040, 0.005, 0, 0.020, 0), yard = gpBox(mast, wood, 0.034, 0.003, 0.003, 0, 0.030, 0), sail = gpBox(mast, sailM, 0.030, 0.012, 0.0016, 0, 0.0235, 0.0016);
+  const flagG = new THREE.Group(); mast.add(flagG);
+  const flagGeo = new THREE.PlaneGeometry(0.030, 0.019, 6, 1), flagBase = Array.from(flagGeo.attributes.position.array);
+  { const f = new THREE.Mesh(flagGeo, flagRed); f.position.set(0.0155, 0, 0); flagG.add(f);
+    const skull = new THREE.Mesh(new THREE.PlaneGeometry(0.0075, 0.0075), flagBlk); skull.position.set(0.0155, 0.0014, 0.0007); flagG.add(skull);
+    const bone = new THREE.Mesh(new THREE.PlaneGeometry(0.014, 0.0022), flagBlk); bone.position.set(0.0155, -0.0044, 0.0007); bone.rotation.z = 0.5; flagG.add(bone); flagG.userData.skull = skull; flagG.userData.bone = bone; }
+  // four ports: a hinged cover and a tiny gun behind each (two a side)
+  const ports = [];
+  for (const s of [-1, 1]) for (const z of [-0.062, -0.0]) {
+    const cover = new THREE.Group(); cover.position.set(s * 0.0212, Y + 0.0100, z - 0.000); g.add(cover);
+    gpBox(cover, dark, 0.0020, 0.018, 0.022, s * 0.0008, -0.0090, 0); gpBox(cover, gold, 0.0022, 0.003, 0.022, s * 0.0008, -0.0170, 0);
+    const gun = new THREE.Group(); gun.position.set(s * 0.0170, Y - 0.0000, z); g.add(gun);
+    gpCyl(gun, bronze, 0.0042, 0.0050, 0.020, 10, s * 0.0040, 0, 0, Math.PI / 2, Math.PI / 2);
+    gpCyl(gun, gold, 0.0058, 0.0058, 0.003, 10, s * 0.0138, 0, 0, Math.PI / 2, Math.PI / 2);
+    gpCyl(gun, new THREE.MeshBasicMaterial({ color: 0x050403 }), 0.0030, 0.0030, 0.002, 8, s * 0.0152, 0, 0, Math.PI / 2, Math.PI / 2);
+    ports.push({ s, z, cover, gun, fired: -9, doing: false, open: 0 });
+  }
+  // two hull wings that unfold on the inspect
+  const wings = [-1, 1].map(s => { const w = new THREE.Group(); w.position.set(s * 0.0200, Y - 0.0190, -0.020); g.add(w); gpBox(w, wood, 0.012, 0.004, 0.140, s * 0.0060, 0, 0); gpBox(w, gold, 0.012, 0.0016, 0.142, s * 0.0060, -0.0028, 0); return { w, s }; });
+  // smoke puffs and the glow of each little gun, all pooled
+  const puffM = () => new THREE.MeshBasicMaterial({ color: 0xcfcfd2, transparent: true, opacity: 0, depthWrite: false });
+  const puffs = [];
+  for (let i = 0; i < 10; i++) { const p = new THREE.Mesh(new THREE.SphereGeometry(0.010, 8, 6), puffM()); p.userData.eqFx = true; p.visible = false; g.add(p); puffs.push({ m: p, t: -9, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, big: 1 }); }
+  let pi = 0;
+  const puff = (x, y, z, vx, vy, vz, big, now) => { const q = puffs[pi++ % puffs.length]; q.t = now; q.x = x; q.y = y; q.z = z; q.vx = vx; q.vy = vy; q.vz = vz; q.big = big; };
+  const flash = makeMuzzleFlash(); flash.position.set(0, Y + 0.002, -0.262); _hackFlash(flash, 0xffa23a); g.add(flash);
+  const ease = u => u * u * (3 - 2 * u), clamp01 = u => Math.max(0, Math.min(1, u));
+  let aim = 0, was = false, fireAt = -9, closedClick = 0, clickedN = 0, wheelA = 0, mastS = 1;
+  g._tick = (dt, now, assembling) => {
+    if (assembling) { puffs.forEach(p => { p.m.visible = false; p.t = -9; }); ball.visible = false; return; }
+    const fired = !!(g._flash && g._flash.visible); if (fired && !was) { fireAt = now; puff(0, Y + 0.002, -0.250, 0, 0.004, -0.030, 1.6, now); puff(0.004, Y + 0.004, -0.245, 0.01, 0.01, -0.012, 1.1, now); ports.forEach(p => { p.fired = now; }); } was = fired;
+    aim += ((isADS ? 1 : 0) - aim) * Math.min(1, dt * 9);
+    const t0 = g._reloadStart && g._reloadDur ? (Date.now() - g._reloadStart) / g._reloadDur : -1;
+    const inspecting = !!g._inspectMode && t0 >= 0 && t0 < 1, reloading = !g._inspectMode && t0 >= 0 && t0 < 1;
+    const sf = now - fireAt, kick = sf < 0.06 ? sf / 0.06 : sf < 0.42 ? 1 - ease((sf - 0.06) / 0.36) : 0;
+    // inspect envelope: up, hold through the four broadsides, down
+    const f = inspecting ? (t0 < 0.20 ? ease(t0 / 0.20) : t0 < 0.82 ? 1 : 1 - ease((t0 - 0.82) / 0.18)) : 0;
+    // reload: the covers swing shut halfway through, the ball rolls in first
+    const open = inspecting ? f : reloading ? Math.max(aim, ease(clamp01(t0 / 0.20))) * (1 - ease(clamp01((t0 - 0.25) / 0.35))) : aim;
+    // ports: cover swings out by `open`; the little gun slides out behind it; each recoils on a shot
+    ports.forEach((p, i) => {
+      const sp = now - p.fired, rec = sp < 0.04 ? sp / 0.04 : sp < 0.30 ? 1 - ease((sp - 0.04) / 0.26) : 0;
+      const o = open;
+      const slotK = inspecting ? (t0 - (0.26 + i * 0.105)) / 0.105 : -1;                                            // the broadside: four guns, one after another
+      if (slotK >= 0 && slotK < 1) {
+        if (!p.doing) { p.doing = true; puff(p.s * 0.020, Y + 0.002, p.z, p.s * 0.030, 0.012, 0, 2.0, now); puff(p.s * 0.026, Y + 0.006, p.z + 0.004, p.s * 0.018, 0.02, 0.006, 1.4, now); p.fired = now; try { playSoundEvent('explosion', { position: camera.position.clone(), volume: 0.16, minGap: 0 }); } catch (e) {} }
+      } else p.doing = false;
+      p.cover.rotation.z = p.s * 1.35 * o;
+      p.gun.position.set(p.s * (0.0170 + 0.0075 * o * (inspecting ? 1.4 : 1) - 0.0060 * rec), Y, p.z);
+      p.cover.visible = true;
+    });
+    // hull wings, mast and flag
+    wings.forEach(w => { w.w.rotation.z = -w.s * 0.50 * f; w.w.position.x = w.s * (0.0200 + 0.010 * f); });
+    const mTarget = inspecting ? 1.0 + 0.7 * f : 1 - 0.62 * aim;
+    mastS += (mTarget - mastS) * Math.min(1, dt * 10);
+    pole.scale.y = mastS; pole.position.y = 0.020 * mastS; yard.position.y = 0.030 * mastS; sail.position.y = 0.0235 * mastS; sail.scale.y = 0.6 + 0.4 * mastS;
+    flagG.position.set(0.0010, 0.0345 * mastS, 0);
+    { const pa = flagGeo.attributes.position; for (let v = 0; v < pa.count; v++) { const bx = flagBase[v * 3]; const wave = (bx + 0.015) / 0.030; pa.setZ(v, Math.sin(now * 7 - bx * 120) * 0.0035 * wave * (0.6 + 0.4 * (1 - aim))); } pa.needsUpdate = true; }
+    flagG.userData.skull.position.z = 0.0007 + Math.sin(now * 7) * 0.0035 * 0.5; flagG.userData.bone.position.z = flagG.userData.skull.position.z;
+    // rocking: the whole ship floats, tips back when it fires; the wheel turns with the sway
+    const sway = Math.sin(now * 1.6) * (1 - aim * 0.7);
+    g.rotation.x = -kick * 0.06 + Math.sin(now * 1.1) * 0.012 * (1 - aim);
+    g.rotation.z = sway * 0.028 + (inspecting ? Math.sin(now * 5) * 0.02 * f : 0);
+    wheelA += (sway * 0.4 + kick * 0.9 - wheelA) * Math.min(1, dt * 6); wheel.rotation.x = wheelA * 2.2 + (reloading ? t0 * 6 : 0);
+    // reload: the ball rolls down the chute and drops into the barrel
+    ball.visible = false;
+    if (reloading) {
+      const u = clamp01((t0 - 0.06) / 0.34);
+      if (t0 > 0.06 && t0 < 0.46) {
+        ball.visible = true; const along = ease(u);
+        ball.position.set(0, Y + 0.0340 - along * 0.012 - ease(clamp01((u - 0.78) / 0.22)) * 0.013, -0.060 + along * -0.0200 - ease(clamp01((u - 0.70) / 0.30)) * 0.0090);
+        if (u > 0.98 && closedClick === 0) { closedClick = 1; try { playEquipSound('snapin'); } catch (e) {} }
+      }
+      const nClick = t0 < 0.45 ? 0 : Math.min(4, Math.floor((t0 - 0.45) / 0.07) + 1);                                // the covers close with a row of clicks
+      if (nClick > clickedN) { clickedN = nClick; try { playEquipSound('snapin'); } catch (e) {} }
+    } else { closedClick = 0; clickedN = 0; }
+    // smoke
+    puffs.forEach(p => {
+      const a = now - p.t;
+      if (a < 0 || a > 0.9) { p.m.visible = false; return; }
+      const k = a / 0.9; p.m.visible = true;
+      p.m.position.set(p.x + p.vx * a, p.y + p.vy * a + k * 0.02, p.z + p.vz * a); p.m.scale.setScalar((0.5 + k * 1.7) * p.big); p.m.material.opacity = (1 - k) * 0.7;
+    });
+  };
+  g._calm = () => { fireAt = -9; closedClick = 0; clickedN = 0; puffs.forEach(p => { p.t = -9; p.m.visible = false; }); ball.visible = false; ports.forEach(p => { p.fired = -9; p.doing = false; }); g.rotation.x = 0; g.rotation.z = 0; };
+  g._flash = flash; g._kickZ = 0.016; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
 function buildDoubleTrouble() {
   // 💥 Sawed-Off -> Double Trouble. A short, chunky double-barrel built out of rectangles and ridges: matte black, brushed steel and bright orange. Two massive barrel
   // housings float a little apart from the central frame, with four armour plates standing off them. Fourteen separate pieces.
@@ -47259,6 +47394,7 @@ const SKIN_SHOT = {};
   G({ shape: 'goldbullet', c: [0xffc83d, 0xfff2b8], k: 1.6 }, null, ['revolver_midas']);                       // the Midas Revolver: a gold round on a gold trail
   G({ shape: 'bolt', c: [0x35e8ff, 0xffffff], k: 1.2 }, null, ['machine_pistol_overclocked']);
   G({ shape: 'ball', c: [0xff7a1a, 0xfff0d0], k: 1.5 }, 'orbital', ['grenade_launcher_orbital']);                        // Orbital Strike: a glowing orange grenade
+  G({ shape: 'ball', c: [0x2a2a30, 0xffb04a], k: 1.8 }, null, ['hand_cannon_broadside']);                                // Broadside: a cannonball on a fiery trail
   G({ shape: 'goldbullet', c: [0xff7a1a, 0xffd08a], k: 1.5 }, null, ['hand_cannon_iron_judge']);                  // The Iron Judge: a molten round                    // Overclocked: a cyan bolt
   G({ shape: 'hackbullet', c: [0x0a0a0a, 0xff2a3d], k: 1.8 }, null, ['ak20_xerror']);                       // X!@&!@: the hacker round in red, and a size bigger               // the Hacker Grenade: a black ball in a green ring, trailing code
   G({ shape: 'cube', c: [0xe74c3c, 0x2ecc71] }, 'pixel', ['p90_rubiks_cube']);
@@ -58426,6 +58562,9 @@ const MODEL_SKINS = [
   { id: 'hand_cannon_iron_judge', weapon: 'hand_cannon', name: 'The Iron Judge', rarity: 'legendary',
     sw: ['#0d0e10', '#ff7a1a'], build: buildIronJudge,
     blurb: 'An industrial cannon squeezed into one hand: black, gunmetal and molten orange, the barrel four steel blocks held together by a bar of glowing energy. They float apart when idle, slide forward and lock when you aim, and split open for a blink with an orange shockwave when you fire. Reloading floats all five cartridges over the gun before they drop into their chambers. Inspect unfolds it into a little artillery piece and back.' },
+  { id: 'hand_cannon_broadside', weapon: 'hand_cannon', name: 'Broadside', rarity: 'legendary',
+    sw: ['#4a2c17', '#d8a836'], build: buildBroadside,
+    blurb: 'A pirate warship in one hand: a bronze naval cannon for a barrel, dark wooden hull with gold trim, a little mast and skull-and-crossbones flag, four hinged cannon ports and a ship\'s wheel behind the trigger guard. The flag waves and the ship rocks while you hold it; aim and the port covers flip open as the mast lowers. Every shot puffs smoke, recoils the four little guns and rocks the ship back. Reload rolls a cannonball down a ramp into the barrel and clicks the ports shut. Inspect is FULL BROADSIDE: the mast rises, the hull unfolds and all four guns fire in turn.' },
   { id: 'sawed_off_double_trouble', weapon: 'sawed_off', name: 'Double Trouble', rarity: 'legendary',
     sw: ['#0e0f11', '#ff7a14'], build: buildDoubleTrouble,
     blurb: 'A short, chunky double-barrel built from rectangles and ridges in matte black, brushed steel and bright orange, with two massive barrel housings floating apart from the frame. Aim and they lock together while four armour plates push out to show the orange joints; every shot throws the housings backward and the plates out before they snap back. Reload splits the barrels right apart so two oversized shells can float in. Inspect breaks it into fourteen hovering pieces and reassembles it with a heavy clunk.' },
@@ -58880,7 +59019,7 @@ const GEN2_MODEL_SKIN_IDS = new Set([
   'revolver_donut', 'ak20_donut', 'rpg_donut', 'machine_pistol_donut', 'pistol_donut',
   'sg8_donut', 'srx_donut', 'vector_donut', 'grenade_launcher_donut', 'minigun_donut',
   'mp40_donut', 'deagle_donut', 'shorty_donut',
-  'revolver_midas', 'pistol_frost', 'ak20_xerror', 'revolver_shatterpoint', 'machine_pistol_overclocked', 'hand_cannon_iron_judge', 'sawed_off_double_trouble', 'sawed_off_classic_shorty', 'grenade_launcher_orbital', 'minigun_redline',            // the Gen 2 case's two new top rarities: EPIC and MYTHIC (server.js GEN2_EPIC_SKIN_IDS / GEN2_NEW_MYTHIC_SKIN_IDS)
+  'revolver_midas', 'pistol_frost', 'ak20_xerror', 'revolver_shatterpoint', 'machine_pistol_overclocked', 'hand_cannon_iron_judge', 'hand_cannon_broadside', 'sawed_off_double_trouble', 'sawed_off_classic_shorty', 'grenade_launcher_orbital', 'minigun_redline',            // the Gen 2 case's two new top rarities: EPIC and MYTHIC (server.js GEN2_EPIC_SKIN_IDS / GEN2_NEW_MYTHIC_SKIN_IDS)
   'ak20_rainbow', 'ak20_hyperspace', 'ak20_blueprint', 'sg8_portal', 'vector_portal',
   'railgun_portal_detector', 'p90_quantum_scanner', 'freeze_hyperslush', 'firework_showman',
   'shorty_outlaw', 'snub_gunslinger', 'deagle_glitch', 'deagle_phantom', 'vector_glitch_exe', 'vector_neon_anarchy', 'flamethrower_disco_inferno', 'crossbow_widowmaker', 'throwing_knives_house_of_cards', 'boombow_gravity_end', 'harpoon_octopus',
@@ -64253,6 +64392,7 @@ const SKIN_FX = {
   sawed_off_classic_shorty: { equip: 'slam', equipMs: 850, equipSfx: ['whoosh', null] },
   sawed_off_double_trouble: { equip: 'slam', equipMs: 900, equipSfx: ['whoosh', 'snapin'] },
   hand_cannon_iron_judge: { equip: 'unfold', equipMs: 1000, equipSfx: ['whoosh', 'snapin'] },
+  hand_cannon_broadside: { equip: 'unfold', equipMs: 1000, equipSfx: ['whoosh', 'snapin'] },
   machine_pistol_overclocked: { equip: 'windup', equipMs: 1000, equipSfx: ['windup', 'ding'] },
   revolver_shatterpoint: { equip: 'assemble', equipMs: 1000, equipSfx: ['snapin', 'chime'] },
   rpg_black_hole: { equip: 'blackhole', equipMs: 1100, equipSfx: ['singularity', 'chime'] },

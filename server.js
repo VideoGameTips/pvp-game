@@ -478,7 +478,7 @@ GEN2_LEGENDARY_SKIN_IDS.push('vector_neon_anarchy');   // NEON//ANARCHY: the lop
 GEN2_LEGENDARY_SKIN_IDS.push('boombow_gravity_end');   // Gravity's End: the bow that bends space
 GEN2_RARE_SKIN_IDS.push('harpoon_octopus');   // Octopus: the speargun that shoots tentacles
 GEN2_RARE_SKIN_IDS.push('flamethrower_disco_inferno');   // DISCO INFERNO: the nightclub flamethrower
-GEN2_LEGENDARY_SKIN_IDS.push('rpg_black_hole', 'hand_cannon_iron_judge', 'sawed_off_double_trouble', 'grenade_launcher_orbital', 'minigun_redline');
+GEN2_LEGENDARY_SKIN_IDS.push('rpg_black_hole', 'hand_cannon_iron_judge', 'hand_cannon_broadside', 'sawed_off_double_trouble', 'grenade_launcher_orbital', 'minigun_redline');
 GEN2_LEGENDARY_SKIN_IDS.push('moon_mine_eclipse');   // Eclipse Engine, the Moon Mine's skin
 GEN2_GOOD_SKIN_IDS.push('sawed_off_classic_shorty');   // the old Shorty pump, as a skin of the merged Shorty   // Black Hole Cannon
 GEN2_RARE_SKIN_IDS.push('srx_absolute_zero', 'sg8_tectonic');   // Absolute Zero, Tectonic
