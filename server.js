@@ -99,6 +99,7 @@ app.use((req, res, next) => {
 // Storage location is configurable via env var so we can point at a persistent
 // volume on Railway. Without that, every redeploy wipes the file.
 // Set DATA_DIR=/data in Railway, attach a volume mounted at /data.
+const RANK = require('./public/rank-core.js');                 // the ladder and the rating maths (shared with the client)
 const contentFilter = require('./content-filter');   // what chat and names may not contain (see that file)
 const DATA_DIR = process.env.DATA_DIR || __dirname;
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
@@ -1287,6 +1288,17 @@ function pickWeighted(pool, weights) {
   return pool[pool.length - 1];
 }
 
+app.post('/rank/me', (req, res) => {                              // your rating, rank and record
+  const u = authedUser(req);
+  if (!u) return res.status(401).json({ error: 'auth failed' });
+  res.json({ ok: true, rank: rankView(u) });
+});
+app.get('/rank/top', (req, res) => {                              // the top 25: players who have played a ranked game
+  const rows = Object.entries(users).filter(([, u]) => u.rank && u.rank.games > 0 && !u.isAdmin)
+    .map(([name, u]) => ({ name, points: u.rank.points, label: RANK.tierOf(u.rank.points).label, rank: RANK.tierOf(u.rank.points).rank, games: u.rank.games, wins: u.rank.wins }))
+    .sort((a, b) => b.points - a.points).slice(0, 25);
+  res.json({ ok: true, top: rows });
+});
 app.post('/shop/buy-skin-case', (req, res) => {
   const { caseId } = req.body || {};
   const u = authedUser(req);
@@ -1790,6 +1802,90 @@ const pvpQueues = { '1v1': [], '2v2': [], '3v3': [] };
 const PVP_WAIT_MS = 3000; // how long a player waits for a match before falling back to solo
 const TEAM_SIZES   = { '1v1': 1, '2v2': 2, '3v3': 3 };
 
+
+// ── 🏆 RANKED (1v1 and 2v2 only) ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+// Every account has one rating (u.rank.points, see public/rank-core.js for the ladder and the zero-sum Elo). A match is RANKED when it is a 1v1 or 2v2 made from the staging lobby
+// with no bots and no guests in it (a duel challenge from Lobby 13 is a friendly and never counts). The server remembers who was in it. The result is NOT taken from one
+// player's word: when the match ends every client reports who won, and it counts only if everyone who reports agrees (a disagreement changes nothing). Someone who leaves or
+// drops out before the match was reported over forfeits it: a loss, paid to the other side. Matches are paired by rating too (getOpenLobby).
+const rankedMatches = {};          // matchId -> { matchId, mode, startedAt, parts: [{ sid, account, team, reported }], done, timer }
+const RANKED_MODES = new Set(['1v1', '2v2']);
+const RANKED_MIN_MS = 20000;       // a report sooner than this after the start is not a finished match
+const RANKED_REPORT_WAIT_MS = 30000;
+const RANKED_DAY_MS = 24 * 3600 * 1000;
+function rankOf(u) {
+  if (!u.rank || typeof u.rank.points !== 'number') u.rank = { points: RANK.START_POINTS, games: 0, wins: 0, losses: 0, draws: 0, peak: RANK.START_POINTS, log: [] };
+  if (!Array.isArray(u.rank.log)) u.rank.log = [];
+  return u.rank;
+}
+function rankView(u) {
+  const r = rankOf(u);
+  return { points: r.points, ...RANK.tierOf(r.points), games: r.games, wins: r.wins, losses: r.losses, draws: r.draws, peak: r.peak, peakLabel: RANK.tierOf(r.peak).label };
+}
+function ratingOfSocket(sid) {
+  const a = players[sid] && players[sid].account;
+  return a && users[a] ? rankOf(users[a]).points : RANK.START_POINTS;
+}
+function rankedPartOf(sid) {
+  for (const rm of Object.values(rankedMatches)) if (!rm.done) { const part = rm.parts.find(p => p.sid === sid); if (part) return { rm, part }; }
+  return null;
+}
+// A match that is over: pay it out. winnerTeam is 'ally', 'enemy' or 'draw' (the lobby's absolute teams).
+function rankedSettle(rm, winnerTeam, why) {
+  if (rm.done) return;
+  rm.done = true; clearTimeout(rm.timer);
+  setTimeout(() => { delete rankedMatches[rm.matchId]; }, 60000);
+  const accounts = rm.parts.map(p => p.account);
+  if (new Set(accounts).size !== accounts.length || accounts.some(a => !users[a])) return;      // the same account twice, or one that has gone: nothing to settle
+  const side = team => rm.parts.filter(p => p.team === team).map(p => ({ id: p.account, points: rankOf(users[p.account]).points }));
+  const A = side('ally'), B = side('enemy');
+  const now = Date.now();
+  let earlier = 0;                                                    // how often today these players have already met
+  for (const pa of A) for (const pb of B) for (const [me, them] of [[pa.id, pb.id], [pb.id, pa.id]]) {
+    const n = rankOf(users[me]).log.filter(e => now - e.t < RANKED_DAY_MS && e.opp.includes(them)).length;
+    if (n > earlier) earlier = n;
+  }
+  const out = RANK.settle(A, B, winnerTeam === 'ally' ? 'A' : winnerTeam === 'enemy' ? 'B' : 'draw', earlier);
+  for (const c of out) {
+    const u = users[c.id], r = rankOf(u), mine = rm.parts.find(p => p.account === c.id);
+    r.points = c.after; r.games++; if (c.after > r.peak) r.peak = c.after;
+    const result = winnerTeam === 'draw' ? 'draw' : mine.team === winnerTeam ? 'win' : 'loss';
+    if (result === 'win') r.wins++; else if (result === 'loss') r.losses++; else r.draws++;
+    r.log.push({ t: now, mode: rm.mode, opp: rm.parts.filter(p => p.team !== mine.team).map(p => p.account), delta: c.delta });
+    if (r.log.length > 60) r.log.splice(0, r.log.length - 60);
+    if (mine && players[mine.sid]) io.to(mine.sid).emit('rankUpdate', { matchId: rm.matchId, mode: rm.mode, result, why: why || 'played', delta: c.delta, farmed: earlier > 1, before: { points: c.before, ...RANK.tierOf(c.before) }, after: rankView(u) });
+  }
+  saveUsers();
+}
+function rankedVoid(rm, why) {
+  if (rm.done) return;
+  rm.done = true; clearTimeout(rm.timer);
+  setTimeout(() => { delete rankedMatches[rm.matchId]; }, 60000);
+  for (const p of rm.parts) if (players[p.sid]) io.to(p.sid).emit('rankUpdate', { matchId: rm.matchId, mode: rm.mode, result: 'void', why, delta: 0 });
+}
+// Everyone who is still here has reported (or the wait ran out): do the reports agree?
+function rankedTryResolve(rm, force) {
+  if (rm.done) return;
+  const here = rm.parts.filter(p => players[p.sid]);
+  const reported = rm.parts.filter(p => p.reported);
+  if (!force && here.some(p => !p.reported)) return;                                  // still waiting for someone who is connected
+  if (!reported.length) return;
+  const implied = reported.map(p => (p.reported.draw ? 'draw' : p.reported.won ? p.team : (p.team === 'ally' ? 'enemy' : 'ally')));
+  if (implied.some(x => x !== implied[0])) return rankedVoid(rm, 'The two sides disagreed about who won, so nothing changes.');
+  const teamsHere = new Set(reported.map(p => p.team));
+  const missing = ['ally', 'enemy'].filter(tm => !teamsHere.has(tm) && rm.parts.some(p => p.team === tm && players[p.sid]));
+  if (missing.length) return rankedVoid(rm, 'One side never reported the result, so nothing changes.');
+  rankedSettle(rm, implied[0], 'played');
+}
+// Someone leaves a ranked match (the LEAVE button, closing the tab, dropping out) before anyone has reported it over: it is a forfeit.
+function rankedLeft(sid) {
+  const f = rankedPartOf(sid);
+  if (!f) return;
+  const { rm, part } = f;
+  if (rm.parts.some(p => p.reported)) return rankedTryResolve(rm);                      // the match was already over
+  rankedSettle(rm, part.team === 'ally' ? 'enemy' : 'ally', 'forfeit');
+}
+
 // ── 🏛️ MATCH STAGING LOBBIES — players gather, ready up, then start ─────
 // One lobby per mode. Players auto-assigned to balance teams.
 // lobbies[mode] = { players: [{socketId, team, ready, fillBots}], createdAt }
@@ -1803,10 +1899,21 @@ function lobbyMax(mode) {
   return c.ally + c.enemy; // e.g. 3v3 -> 6 humans max in one match
 }
 // First lobby instance of this mode with a free seat, or a fresh one.
-function getOpenLobby(mode) {
+function getOpenLobby(mode, rating = null) {
   if (!stagingLobbies[mode]) stagingLobbies[mode] = [];
   const max = lobbyMax(mode);
-  let L = stagingLobbies[mode].find(l => l.players.length < max);
+  let L;
+  if (rating != null && RANKED_MODES.has(mode)) {
+    // 1v1 and 2v2 pair by rating: the closest lobby whose players are within the window, which widens the longer that lobby has waited
+    const avg = l => l.players.reduce((a, p) => a + ratingOfSocket(p.socketId), 0) / Math.max(1, l.players.length);
+    let best = null;
+    for (const l of stagingLobbies[mode]) {
+      if (l.players.length >= max) continue;
+      const gap = Math.abs(avg(l) - rating);
+      if (gap <= RANK.matchWindow(Date.now() - l.createdAt) && (!best || gap < best.gap)) best = { l, gap };
+    }
+    L = best && best.l;
+  } else L = stagingLobbies[mode].find(l => l.players.length < max);
   if (!L) {
     L = { id: `${mode}-${++_lobbySeq}`, players: [], mode, createdAt: Date.now() };
     stagingLobbies[mode].push(L);
@@ -1977,6 +2084,13 @@ function startLobbyMatch(L, extra = {}) {
     : (pickedMap && mapPoolFor(mode).includes(pickedMap)) ? pickedMap
     : ((p => (p && (mode === '1v1' || mode === '2v2' || !DUEL_ONLY_MAPS.has(p))) ? p : null)(lobbyMapPick(L))
         || randomMapFor(mode));
+  // 🏆 Ranked: a 1v1 or 2v2 from the staging lobby with only signed-in people in it (no bots, no guests, no duel challenge).
+  let rm = null;
+  if (RANKED_MODES.has(mode) && !lobbyExtra.duel && allyBots === 0 && enemyBots === 0 && L.players.length === lobbyMax(mode)
+      && L.players.every(p => players[p.socketId] && players[p.socketId].account && users[players[p.socketId].account])) {
+    rm = { matchId, mode, startedAt: Date.now(), parts: L.players.map(p => ({ sid: p.socketId, account: players[p.socketId].account, team: p.team, reported: null })), done: false, timer: null };
+    rankedMatches[matchId] = rm;
+  }
   // Designate the first player as host (they spawn the bots if any)
   const host = L.players[0];
   for (const p of L.players) {
@@ -1987,7 +2101,8 @@ function startLobbyMatch(L, extra = {}) {
     }
     io.to(p.socketId).emit('lobbyStart', {
       mode, matchId, mapId, team: p.team, isHost: p.socketId === host?.socketId, hostId: host?.socketId || null,
-      allyBots, enemyBots, opponents: L.players.filter(o => o.socketId !== p.socketId).map(o => ({ socketId: o.socketId, team: o.team, name: players[o.socketId]?.name || '' })),
+      allyBots, enemyBots, opponents: L.players.filter(o => o.socketId !== p.socketId).map(o => ({ socketId: o.socketId, team: o.team, name: players[o.socketId]?.name || '', rating: rm ? ratingOfSocket(o.socketId) : null })),
+      ranked: !!rm,
       ...lobbyExtra,
     });
   }
@@ -3373,7 +3488,7 @@ io.on('connection', (socket) => {
     if (!MODE_TEAM_SIZES[mode]) { socket.emit('lobbyError', { error: 'unknown mode' }); return; }
     // Remove from any other staging lobby first
     removeSocketFromLobbies(socket.id);
-    const L = getOpenLobby(mode);
+    const L = getOpenLobby(mode, RANKED_MODES.has(mode) ? ratingOfSocket(socket.id) : null);
     // Already in this lobby?
     if (L.players.some(p => p.socketId === socket.id)) return;
     const team = autoAssignTeam(L, mode);
@@ -3510,9 +3625,18 @@ io.on('connection', (socket) => {
     saveUsers();
     socket.emit('towerSkinUnlocked', { skinId: ZOMBIE_TOWER_SKIN_IDS[0], isNew, wins: u.zombieTowerWins, skinInventory: u.skinInventory });
   });
+  socket.on('rankedReport', (data) => {                               // a client says how the ranked match it was in ended
+    const rm = rankedMatches[String((data && data.matchId) || '')];
+    const part = rm && !rm.done && rm.parts.find(x => x.sid === socket.id);
+    if (!part || part.reported || Date.now() - rm.startedAt < RANKED_MIN_MS) return;
+    part.reported = { won: !!(data && data.won), draw: !!(data && data.draw) };
+    if (!rm.timer) rm.timer = setTimeout(() => rankedTryResolve(rm, true), RANKED_REPORT_WAIT_MS);
+    rankedTryResolve(rm);
+  });
   socket.on('leaveMatch', () => {
     const p = players[socket.id];
     if (!p) return;
+    rankedLeft(socket.id);
     p.matchMode = null;
     // Remove this player's bots entirely when leaving (they're not needed in the
     // lobby). Tell the match they were in before deleting them, or their bodies
@@ -3627,6 +3751,7 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     console.log('Player disconnected:', socket.id);
+    rankedLeft(socket.id);
     const leavingPlayer = players[socket.id];
     const leavingMatch = leavingPlayer ? leavingPlayer.matchId : 'lobby';
     // Clean up any PvP queue entries
