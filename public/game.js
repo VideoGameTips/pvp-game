@@ -64329,7 +64329,7 @@ function startInspect() {
   model._secretInspect = secretInspectFor(id);
   model._inspectMode = true;
   model._reloadStart = Date.now();
-  model._reloadDur = model._secretInspect?.triggered ? (model._secretInspect.duration || 3400) : INSPECT_MS;
+  model._reloadDur = Math.max(INSPECT_MIN_MS, model._secretInspect?.triggered ? (model._secretInspect.duration || 3400) : INSPECT_MS);   // (never shorter than the roll)
   const ctx = getAudioCtx();
   if (ctx) {
     const t0 = ctx.currentTime + 0.002;
@@ -65979,12 +65979,13 @@ const SKIN_FX = {
     equip: 'donutbuild', equipMs: 1550, equipSfx: ['whoosh', 'chime'], equipBeats: [[.88,'snapin'],[.88,'cling']] },
 };
 
-// 🌀 Every inspect (guns, melee, utilities) rolls about its front-to-back axis (the model's own z) on one timeline, whatever its own pose does:
-//   0 s 0 deg · 0.25 s -65 · 0.55 s -65 · 0.85 s 0 · 1.15 s +65 · 1.45 s +65 · 1.75 s 0 (and still after that).
-// Each move is mostly even with a little ease in and out blended in (about 0.6x speed at the ends, 1.2x in the middle): you cannot pick the difference out,
-// but it is not a robot's constant pace either.
-const INSPECT_ROLL_KEYS = [[0, 0], [0.25, -65], [0.55, -65], [0.85, 0], [1.15, 65], [1.45, 65], [1.75, 0]];
-const INSPECT_ROLL_EASE = 0.4;
+// 🌀 Every inspect (guns, melee, utilities) is one slow, steady roll about the weapon's front-to-back axis (the model's own z), held in ONE hand, by its handle
+// (a gun's second hand is put away for the inspect):
+//   0 s 0 deg · rolls to -65 over 1 s at a constant speed · held for 2 s · rolls back to 0 over 1 s at the same speed · done at 4 s.
+// It is added to whatever roll the weapon's own inspect pose has, so nothing snaps, and an inspect is never shorter than the roll (INSPECT_MIN_MS).
+const INSPECT_ROLL_KEYS = [[0, 0], [1.0, -65], [3.0, -65], [4.0, 0]];
+const INSPECT_ROLL_EASE = 0;          // 0 = exactly even speed (an earlier version blended in 0.4 of a smooth ease in and out)
+const INSPECT_MIN_MS = 4000;
 function _inspectRoll(sec) {
   const K = INSPECT_ROLL_KEYS;
   if (!(sec > 0) || sec >= K[K.length - 1][0]) return 0;
@@ -66129,6 +66130,7 @@ function updateReloadAnim() {
   }
   const H = model._hands;
   const rest = () => {
+    if (model._frontHid) { model._frontHid = false; if (H && !H.hideFront) H.front.visible = model._frontWas !== false; }   // the second hand comes back after an inspect
     if (model._homePos) model.position.copy(model._homePos);
     else model.position.set(0.12, -0.1, -0.25);
     model.rotation.set(0, 0, 0);
@@ -66154,6 +66156,10 @@ function updateReloadAnim() {
   }
   if (!model._homePos) model._homePos = model.position.clone();
   if (H && H.hideFront) H.front.visible = true;   // the off hand comes in to work
+  if (H && !H.single && model._inspectMode) {      // an inspect is held in one hand, at the handle: the second hand is put away
+    if (!model._frontHid) { model._frontHid = true; model._frontWas = H.front.visible; }
+    H.front.visible = false;
+  }
   model._wasReloading = true;
   const t = Math.min(1, (Date.now() - model._reloadStart) / model._reloadDur);
   if (t >= 1) {
@@ -73486,7 +73492,7 @@ function startItemInspect() {
                     base: model.position.clone(), baseRot: model.rotation.clone(), order: model.rotation.order, gojo: gojoInspectBegin() };
     return true;
   }
-  itemInspect = { model, slot, idx, kind, t0: performance.now(), ms: spec.ms, keys: spec.keys, beats: spec.beats, beat: 0,
+  itemInspect = { model, slot, idx, kind, t0: performance.now(), ms: Math.max(INSPECT_MIN_MS, spec.ms), keys: spec.keys, beats: spec.beats, beat: 0,
                   base: model.position.clone(), baseRot: model.rotation.clone(), order: model.rotation.order };
   return true;
 }
