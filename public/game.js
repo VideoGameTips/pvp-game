@@ -43888,6 +43888,45 @@ const PIXEL_SKINS = {
     ])),
 };
 
+// ⬜ THE BLANK: the default avatar. White armour, a black visor, charcoal joints, and one team accent (red or blue) on the shoulders and chest bar. It is drawn
+// pixel by pixel from the sheet: each face is rows of letters (W armour #e6e6e6, G secondary #b3b9c4, D straps #3a3f4b, J joints and boots #1f2430, K visor #0a0a0a,
+// A the team accent), so one drawing serves both teams. The body is the same rig as every other skin, so animation, hitboxes and aiming are untouched.
+// The sheet draws an arm or a leg as ONE 16-row strip; the rig has an upper and a lower part of each, so the strip is cut at the elbow / knee (see _blankSlice).
+function blankSkin(accent) {
+  const key = { W: '#e6e6e6', G: '#b3b9c4', D: '#3a3f4b', J: '#1f2430', K: '#0a0a0a', A: accent };
+  const R = (ch, n = 16) => ch.repeat(n);
+  const rows = (...runs) => runs.flatMap(([n, s]) => Array(n).fill(s));          // [count, row] pairs -> the 16 rows of a face
+  const draw = rs => gridFace(key, rs);
+  const solid = ch => draw(rows([16, R(ch)]));
+  const slice = (full, a, b) => Array.from({ length: 16 }, (_, y) => full[Math.min(15, Math.floor(16 * a + y * (b - a)))]);   // rows a..b (fractions of the strip), stretched to 16
+  const bar = 'WW' + R('A', 12) + 'WW';
+  const armStrip = rows([3, R('A')], [5, R('W')], [3, R('D')], [3, R('W')], [2, R('J')]);   // shoulder pad, sleeve, elbow band, sleeve, wrist
+  const legStrip = rows([7, R('W')], [3, R('D')], [4, R('W')], [2, R('J')]);                // thigh, knee band, shin, boot top
+  const fu = BODY.upperArm / (BODY.upperArm + BODY.foreArm), fl = BODY.thigh / (BODY.thigh + BODY.shin);
+  const torsoFace = rows([3, R('D')], [2, R('W')], [2, bar], [4, R('W')], [2, R('D')], [3, R('J')]);
+  return {
+    hand: 0xe6e6e6, foot: '#1f2430',
+    head: {
+      front:  draw(rows([6, R('W')], [6, 'WW' + R('K', 12) + 'WW'], [2, R('W')], [2, R('G')])),
+      back:   draw(rows([14, R('W')], [2, R('G')])),
+      left:   draw(rows([6, R('W')], [6, R('W', 12) + R('D', 4)], [4, R('W')])),      // -X face: the dark visor wrap is at the front edge
+      right:  draw(rows([6, R('W')], [6, R('D', 4) + R('W', 12)], [4, R('W')])),      // +X face: the same, mirrored
+      side:   solid('D'),                                                              // (the neck, a charcoal joint)
+      top:    solid('W'), bottom: solid('J'),
+    },
+    torso: { front: draw(torsoFace), back: draw(torsoFace), side: draw(rows([11, R('W')], [2, R('D')], [3, R('J')])), top: solid('W'), bottom: solid('J') },
+    armU: draw(slice(armStrip, 0, fu)),        armF: draw(slice(armStrip, fu, 1)),
+    armUS: solid('W'), armFS: solid('W'), armUT: solid('A'),                           // the sides of an arm are plain; the top of the shoulder is the accent
+    leg: draw(slice(legStrip, 0, fl)),         shin: draw(slice(legStrip, fl, 1)),
+    legS: solid('W'), shinS: solid('W'),
+    pelvis: solid('W'),
+  };
+}
+PIXEL_SKINS.operator = { ...PIXEL_SKINS.default };            // the old default (the black Operator) is still a skin you can pick
+PIXEL_SKINS.blank_red = blankSkin('#ff4444');                 // The Blank, red team
+PIXEL_SKINS.blank_blue = blankSkin('#3b82ff');                // The Blank, blue team
+PIXEL_SKINS.default = blankSkin('#ff4444');                   // the default is The Blank (makePlayerMesh gives allies the blue one)
+
 // Swap a built body over to a drawn skin. Everything below only replaces
 // materials and, for two skins, adds one block of geometry — the rig, the
 // joints and the hitboxes are untouched, so animation and shooting cannot
@@ -43905,10 +43944,18 @@ function applyPixelSkin(art, parts) {
   if (neck) neck.material = charMat('n:' + art._id, art.head.side);
   torso.material = charFaceMats('t:' + art._id, art.torso);
   // armLimbs is [upperL, foreL, upperR, foreR]; legLimbs is [thighL, shinL, …]
-  armLimbs.forEach((m, i) => { m.material = charMat('a' + (i % 2) + ':' + art._id, i % 2 ? art.armF : art.armU); });
-  legLimbs.forEach((m, i) => { m.material = charMat('g' + (i % 2) + ':' + art._id, i % 2 ? art.shin : art.leg); });
+  armLimbs.forEach((m, i) => {
+    const lower = i % 2, front = lower ? art.armF : art.armU, side = lower ? art.armFS : art.armUS;
+    m.material = side ? charFaceMats('a' + lower + ':' + art._id, { front, back: front, side, top: (!lower && art.armUT) || side, bottom: side })   // a skin that draws the sides of its limbs
+                      : charMat('a' + lower + ':' + art._id, front);
+  });
+  legLimbs.forEach((m, i) => {
+    const lower = i % 2, front = lower ? art.shin : art.leg, side = lower ? art.shinS : art.legS;
+    m.material = side ? charFaceMats('g' + lower + ':' + art._id, { front, back: front, side, top: side, bottom: side })
+                      : charMat('g' + lower + ':' + art._id, front);
+  });
   // The pelvis wears the trousers, so it takes the thigh texture.
-  if (pelvis) pelvis.material = charMat('g0:' + art._id, art.leg);
+  if (pelvis) pelvis.material = art.pelvis ? charMat('p:' + art._id, art.pelvis) : charMat('g0:' + art._id, art.leg);
   for (const h of hands) h.material = new THREE.MeshLambertMaterial({ color: art.hand });
   if (art.foot) for (const f of feet) f.material = new THREE.MeshLambertMaterial({ color: new THREE.Color(art.foot) });
   if (art.hair && art.hair.long) {
@@ -43935,7 +43982,8 @@ function applyPixelSkin(art, parts) {
 }for (const k of Object.keys(PIXEL_SKINS)) PIXEL_SKINS[k]._id = k;
 
 const SKINS = [
-  { id: 'default',     name: 'Operator',      desc: 'Balaclava, goggle band, amber-tipped mag pouches.' },
+  { id: 'default',     name: 'The Blank',     desc: 'White armour, a black visor, and your team\'s colour on the shoulders and chest.' },
+  { id: 'operator',    name: 'Operator',      desc: 'Balaclava, goggle band, amber-tipped mag pouches.' },
   { id: 'soldier',     name: 'Soldier',       desc: 'Olive kit, goggles pushed up, face uncovered.' },
   { id: 'riot',        name: 'Riot',          desc: 'Navy armour behind a full clear face shield.' },
   { id: 'ranger',      name: 'Desert Recon',  desc: 'Sand helmet, amber goggles, shemagh over the face.' },
@@ -46417,7 +46465,8 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   // from inside its own case, and without the container to land in the crown
   // fell back to raw group space and floated 0.7 m over his head.
   group._gearHead = gearHead;
-  applyCharacterSkin(skinId, {
+  // The default skin is The Blank, which carries the team's colour: allies blue, everyone else red (from the viewer's side).
+  applyCharacterSkin(skinId === 'default' ? (team === 'ally' ? 'blank_blue' : 'blank_red') : skinId, {
     group, head, headMats, faceMat, torso, torsoMat, pelvis, pelvisMat, neck, neckMat,
     armLimbs, legLimbs, look, hands, feet: legFeet,
     gearHead, gearBody,
