@@ -43593,10 +43593,10 @@ const GEAR_FIT = {
 // Minecraft character is hard-edged blocks wearing a PIXEL texture, so that is
 // what these are now — same sizes, same joints, same hitboxes, no bevel.
 const _mcBoxCache = new Map();
-function mcBoxGeo(w, h, d) {
-  const key = w + ',' + h + ',' + d;
+function mcBoxGeo(w, h, d, dy = 0) {                       // (dy: shift the box up or down inside its own frame, for a block that is not centred on its joint)
+  const key = w + ',' + h + ',' + d + (dy ? '@' + dy : '');
   let geo = _mcBoxCache.get(key);
-  if (!geo) { geo = new THREE.BoxGeometry(w, h, d); _mcBoxCache.set(key, geo); }
+  if (!geo) { geo = new THREE.BoxGeometry(w, h, d); if (dy) geo.translate(0, dy, 0); _mcBoxCache.set(key, geo); }
   return geo;
 }
 
@@ -43893,6 +43893,14 @@ const PIXEL_SKINS = {
 // pixel by pixel from the sheet: each face is rows of letters (W armour #e6e6e6, G secondary #b3b9c4, D straps #3a3f4b, J joints and boots #1f2430, K visor #0a0a0a,
 // A the team accent), so one drawing serves both teams. The body is the same rig as every other skin, so animation, hitboxes and aiming are untouched.
 // The sheet draws an arm or a leg as ONE 16-row strip; the rig has an upper and a lower part of each, so the strip is cut at the elbow / knee (see _blankSlice).
+// The Blank's proportions, from the sheet (head 0.46 cube; torso 0.56 x 0.56 x 0.30; each arm 0.22 x 0.66 x 0.28; each leg 0.24 x 0.72 x 0.28), scaled by one factor so the whole figure holds
+// the volume the old rig had (0.332 m3: the sheet as written is 11% more). Legs stand on the floor, the torso sits on them, the head sits straight on the torso (no neck) and the arms hang
+// from the top of the torso. The rig's joints do not move; only the blocks are laid out to fill the sheet's figure (see makePlayerMesh).
+const BLANK = (() => {
+  const k = 0.9648, head = .46 * k, tw = .56 * k, th = .56 * k, td = .30 * k, aw = .22 * k, ah = .66 * k, ad = .28 * k, lw = .24 * k, lh = .72 * k, ld = .28 * k;
+  const torsoBot = lh, torsoTop = lh + th;
+  return { head, tw, th, td, aw, ah, ad, lw, lh, ld, torsoBot, torsoTop, headCenter: torsoTop + head / 2 };
+})();
 function blankSkin(accent) {
   const key = { W: '#e6e6e6', G: '#b3b9c4', D: '#3a3f4b', J: '#1f2430', K: '#0a0a0a', A: accent };
   const R = (ch, n = 16) => ch.repeat(n);
@@ -43903,8 +43911,8 @@ function blankSkin(accent) {
   const bar = 'WW' + R('A', 12) + 'WW';
   const armStrip = rows([3, R('A')], [5, R('W')], [3, R('D')], [3, R('W')], [2, R('J')]);   // shoulder pad, sleeve, elbow band, sleeve, wrist
   const legStrip = rows([7, R('W')], [3, R('D')], [4, R('W')], [2, R('J')]);                // thigh, knee band, shin, boot top
-  const fu = BODY.upperArm / (BODY.upperArm + BODY.foreArm + BODY.handH), fl = BODY.thigh / (BODY.thigh + BODY.shin + BODY.bootH);   // the arm and leg are one block each: the strip is cut where the joint is
-  const fc = BODY.torsoH / (BODY.torsoH + BODY.pelvisH);                                                                            // and the torso is one chunk: chest then hips
+  const fu = (BLANK.torsoTop - BODY.elbow) / BLANK.ah, fl = (BLANK.lh - BODY.knee) / BLANK.lh;   // the arm and leg are one block each: the strip is cut where the joint is
+  const fc = (BLANK.torsoTop - BODY.waist) / BLANK.th;                                                                            // and the torso is one chunk: chest then hips
   const torsoFace = rows([3, R('D')], [2, R('W')], [2, bar], [4, R('W')], [2, R('D')], [3, R('J')]);
   const torsoSide = rows([11, R('W')], [2, R('D')], [3, R('J')]);
   return {
@@ -46363,6 +46371,7 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   const drawn = skinId === 'default' ? (team === 'ally' ? 'blank_blue' : 'blank_red') : skinId;
   const sharp = drawn === 'blank_blue' || drawn === 'blank_red';
   const shapeGeo = sharp ? (w, h, d) => mcBoxGeo(w, h, d) : characterShapeGeo;
+  const Q = BLANK, sharpBox = (w, h, d, dy = 0) => mcBoxGeo(w, h, d, dy);
 
   // Flat faces with softly rounded silhouettes; dimensions and joint anchors stay unchanged.
   const mkMat = c => new THREE.MeshLambertMaterial({ color: c });
@@ -46372,7 +46381,7 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   // Six material slots are preserved, including the face on +Z.
   const faceMat  = new THREE.MeshLambertMaterial({ map: faceTextureFor(skin) });
   const headMats = [mkMat(skin), mkMat(skin), mkMat(skin), mkMat(skin), faceMat, mkMat(skin)];
-  const head = new THREE.Mesh(shapeGeo(B.headHalfW * 2, B.headH, B.headHalfD * 2,.08), headMats);
+  const head = new THREE.Mesh(sharp ? sharpBox(Q.head, Q.head, Q.head, Q.headCenter - B.headY) : characterShapeGeo(B.headHalfW * 2, B.headH, B.headHalfD * 2,.08), headMats);
   head.position.set(0, B.headY, 0); head.castShadow = true; group.add(head);
 
   // Neck. The blocky body had none and its head floated; this is a short block
@@ -46383,18 +46392,18 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   // both cast. The shadow pass is a second draw of everything that casts it,
   // and in Lobby 13 renderer.render is 96% of the frame's CPU — so only parts
   // that change the silhouette earn a place in it (#53).
-  neck.position.set(0, B.neckY, 0); group.add(neck);
+  neck.position.set(0, B.neckY, 0); group.add(neck); if (sharp) neck.visible = false;   // (the sharp head sits straight on the torso)
 
   // ── Torso ─────────────────────────────────────────────────────────────────
   // One 0.55 x 0.65 x 0.30 block in the old model; two here, because the rig
   // twists the chest and the hips must not come with it.
   const torsoMat = mkCloth(shirt);
-  const torso = new THREE.Mesh(shapeGeo(B.chestW, B.torsoH, B.chestD,.045), torsoMat);
+  const torso = new THREE.Mesh(sharp ? sharpBox(Q.tw, Q.torsoTop - B.waist, Q.td, (B.waist + Q.torsoTop) / 2 - B.torsoY) : characterShapeGeo(B.chestW, B.torsoH, B.chestD,.045), torsoMat);
   torso.position.set(0, B.torsoY, 0); torso.castShadow = true; group.add(torso);
 
   // Pelvis — trousers, so it takes the LEG colour.
   const pelvisMat = mkCloth(pant);
-  const pelvis = new THREE.Mesh(shapeGeo(sharp ? B.chestW : B.pelvisW, B.pelvisH, B.chestD,.03), pelvisMat);
+  const pelvis = new THREE.Mesh(sharp ? sharpBox(Q.tw, B.waist - Q.torsoBot, Q.td, (Q.torsoBot + B.waist) / 2 - B.pelvisY) : characterShapeGeo(B.pelvisW, B.pelvisH, B.chestD,.03), pelvisMat);
   pelvis.position.set(0, B.pelvisY, 0); pelvis.castShadow = true; group.add(pelvis);
 
   // ── Arms ──────────────────────────────────────────────────────────────────
@@ -46406,11 +46415,11 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   [-1, 1].forEach(side => {
     const pivot = new THREE.Group();
     pivot.position.set(side * B.shoulderHalf, B.shoulder, 0);
-    const upper = new THREE.Mesh(shapeGeo(B.upperArmW, B.upperArm, B.upperArmW), mkCloth(shirt));
-    upper.position.y = -B.upperArm / 2; upper.castShadow = true; pivot.add(upper);
+    const upper = new THREE.Mesh(sharp ? sharpBox(Q.aw, Q.torsoTop - B.elbow, Q.ad) : characterShapeGeo(B.upperArmW, B.upperArm, B.upperArmW), mkCloth(shirt));
+    upper.position.y = sharp ? (Q.torsoTop + B.elbow) / 2 - B.shoulder : -B.upperArm / 2; upper.castShadow = true; pivot.add(upper);
     const elbow = new THREE.Group(); elbow.position.y = -B.upperArm; pivot.add(elbow);
-    const fore = new THREE.Mesh(shapeGeo(sharp ? B.upperArmW : B.foreArmW, sharp ? B.foreArm + B.handH : B.foreArm, sharp ? B.upperArmW : B.foreArmW), mkCloth(shirt));
-    fore.position.y = -(sharp ? B.foreArm + B.handH : B.foreArm) / 2; fore.castShadow = true; elbow.add(fore);
+    const fore = new THREE.Mesh(sharp ? sharpBox(Q.aw, B.elbow - (Q.torsoTop - Q.ah), Q.ad) : characterShapeGeo(B.foreArmW, B.foreArm, B.foreArmW), mkCloth(shirt));
+    fore.position.y = sharp ? -(B.elbow - (Q.torsoTop - Q.ah)) / 2 : -B.foreArm / 2; fore.castShadow = true; elbow.add(fore);
     const wrist = new THREE.Group(); wrist.position.y = -B.foreArm; elbow.add(wrist);
     const hand = new THREE.Mesh(shapeGeo(B.handW, B.handH, B.handW,.025), mkMat(skin));
     hand.position.y = -B.handH / 2; wrist.add(hand); if (sharp) hand.visible = false;   // (the sharp arm ends in its own cuff)   // no shadow: it is inside the forearm's
@@ -46431,11 +46440,11 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   [-1, 1].forEach(side => {
     const pivot = new THREE.Group();
     pivot.position.set(side * B.hipHalf, B.hip, 0);
-    const thigh = new THREE.Mesh(shapeGeo(B.thighW, B.thigh, B.thighD), mkCloth(pant));
-    thigh.position.y = -B.thigh / 2; thigh.castShadow = true; pivot.add(thigh);
+    const thigh = new THREE.Mesh(sharp ? sharpBox(Q.lw, Q.lh - B.knee, Q.ld) : characterShapeGeo(B.thighW, B.thigh, B.thighD), mkCloth(pant));
+    thigh.position.y = sharp ? (Q.lh + B.knee) / 2 - B.hip : -B.thigh / 2; thigh.castShadow = true; pivot.add(thigh);
     const knee = new THREE.Group(); knee.position.y = -B.thigh; pivot.add(knee);
-    const shin = new THREE.Mesh(shapeGeo(sharp ? B.thighW : B.shinW, sharp ? B.shin + B.bootH : B.shin, sharp ? B.thighD : B.shinD), mkCloth(pant));
-    shin.position.y = -(sharp ? B.shin + B.bootH : B.shin) / 2; shin.castShadow = true; knee.add(shin);
+    const shin = new THREE.Mesh(sharp ? sharpBox(Q.lw, B.knee, Q.ld) : characterShapeGeo(B.shinW, B.shin, B.shinD), mkCloth(pant));
+    shin.position.y = sharp ? -B.knee / 2 : -B.shin / 2; shin.castShadow = true; knee.add(shin);
     // A real ankle joint, so the foot ROLLS about the ankle instead of spinning
     // about the middle of the boot the way it did when the mesh was the pivot.
     const ankle = new THREE.Group(); ankle.position.y = -B.shin; knee.add(ankle);
@@ -46459,7 +46468,7 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   // once #53 gave remote players a real aim pitch the head rotated inside gear
   // still bolted to the shoulders. _addShades already knew this rule and said
   // so in its comment; this family never followed it.
-  gearHead.position.y = -hf.s[1] * hf.y;
+  gearHead.position.y = -hf.s[1] * hf.y + (sharp ? Q.headCenter - B.headY : 0);
   head.add(gearHead);
   head._gear = gearHead;   // how _addSeedHair / _addShades find it from the head alone
   const gearBody = new THREE.Group();            // group space, torso gear
