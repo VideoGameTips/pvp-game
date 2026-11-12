@@ -6289,7 +6289,7 @@ var MAP_BOT_BOUNDS = {}, MAP_VOID = {};
 // Every map that can be played, and the subset the random draw skips (#66).
 // Mirrors server.js — MAP_IDS and THIN_MAPS have to stay identical there
 // (CLAUDE.md #4), because the server picks the map and the client honours it.
-const MAP_IDS = ['blank', 'urban', 'warehouse', 'forest', 'vietnam', 'volcano', 'cyber', 'desert', 'tundra', 'space', 'airport', 'trenches', 'chernobyl', 'refinery', 'skydock', 'sewer', 'gravity_lab', 'glassworks', 'carrier', 'overgrowth', 'orbital_station', 'foundry', 'carnival', 'biosphere', 'lockdown', 'studio', 'temple', 'holiday', 'labyrinth', 'arena', 'opera', 'doomsday', 'train', 'dreamscape', 'pearl_harbor', 'titanic', 'supermarket', 'pyongyang', 'traffic_cone_republic', 'flying_moai', 'big_arena', 'super_arena', 'big_harbor', 'storm_pier', 'pinball_arcade', 'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise', 'neon_tokyo', 'sky_arena', 'shipyard', 'battleground', 'atoll', 'duel_grid', 'duel_crossroads', 'duel_pillars', 'duel_platform', 'duel_alley', 'duel_cells', 'duel_loft', 'duel_yard', 'grid_corridors', 'grid_rooms', 'grid_hall', 'grid_court'];
+const MAP_IDS = ['blank', 'urban', 'warehouse', 'forest', 'vietnam', 'volcano', 'cyber', 'desert', 'tundra', 'space', 'airport', 'trenches', 'chernobyl', 'refinery', 'skydock', 'sewer', 'gravity_lab', 'glassworks', 'carrier', 'overgrowth', 'orbital_station', 'foundry', 'carnival', 'biosphere', 'lockdown', 'studio', 'temple', 'holiday', 'labyrinth', 'arena', 'opera', 'doomsday', 'train', 'dreamscape', 'pearl_harbor', 'titanic', 'supermarket', 'pyongyang', 'traffic_cone_republic', 'flying_moai', 'big_arena', 'super_arena', 'big_harbor', 'storm_pier', 'pinball_arcade', 'laser_vault', 'cargo_belts', 'gale_peaks', 'magma_rise', 'neon_tokyo', 'sky_arena', 'shipyard', 'battleground', 'atoll', 'duel_grid', 'duel_crossroads', 'duel_pillars', 'duel_platform', 'duel_alley', 'duel_cells', 'duel_loft', 'duel_yard', 'gb_duel_yard', 'gb_split_cover', 'gb_boxyard', 'gb_l_block', 'gb_center_ramp', 'gb_ring_walk', 'gb_overpass', 'gb_crossroads', 'gb_factory', 'gb_arc_hall', 'gb_terrace', 'gb_cargo', 'gb_three_lanes', 'gb_dual_bridge', 'gb_pentagon', 'gb_hub'];
 const THIN_MAPS = new Set([]);
 // ⚔️ 1v1 duel maps: plain arenas, 72 x 112 m (about fourteen seconds spawn to spawn), dealt only to 1v1. They are in
 // MAP_IDS so that a server-sent id activates, and kept out of the random pool of every other mode.
@@ -6302,9 +6302,11 @@ const DUEL_ONLY_MAPS = new Set(DUEL_MAP_IDS);
 // 🗄️ ARCHIVED MAPS. Every map from before the white grid maps is archived: the lobby no longer deals, votes on or random-draws one,
 // except for 5v5 and 10v10, which keep playing all of them. (The maps for a mode's own game -- the boss arena, D-Day, the zombie tower,
 // the range, the obby -- are not lobby maps and are untouched.) Mirrors server.js.
-const GRID_SMALL_IDS = ['grid_corridors', 'grid_rooms'];
-const GRID_BIG_IDS = ['grid_hall', 'grid_court'];
-const GRID_MAP_IDS = GRID_SMALL_IDS.concat(GRID_BIG_IDS);
+const GB_TINY_IDS = ['gb_duel_yard', 'gb_split_cover', 'gb_boxyard', 'gb_l_block'];     // 1v1 - 2v2
+const GB_SMALL_IDS = ['gb_center_ramp', 'gb_ring_walk', 'gb_overpass', 'gb_crossroads'];    // 1v1 - 3v3
+const GB_MEDIUM_IDS = ['gb_factory', 'gb_arc_hall', 'gb_terrace', 'gb_cargo'];   // 1v1 - 3v3
+const GB_LARGE_IDS = ['gb_three_lanes', 'gb_dual_bridge', 'gb_pentagon', 'gb_hub'];    // 3v3 - 5v5
+const GRID_MAP_IDS = GB_TINY_IDS.concat(GB_SMALL_IDS, GB_MEDIUM_IDS, GB_LARGE_IDS);
 const ARCHIVE_EXEMPT_MODES = new Set(['5v5', '10v10']);
 const ARCHIVED_MAP_IDS = new Set(MAP_IDS.filter(m => !GRID_MAP_IDS.includes(m)));
 // A picked map only counts in the mode it was made for: a duel map left over from a 1v1 is 'auto' anywhere else.
@@ -6320,8 +6322,8 @@ function effectivePickedMap(modeId, map) {
 const DUEL_SHARE_2V2 = 0.3;
 function mapPoolForMode(modeId) {
   const main = MAP_IDS.filter(m => !THIN_MAPS.has(m) && !DUEL_ONLY_MAPS.has(m) && !GRID_MAP_IDS.includes(m));
-  if (ARCHIVE_EXEMPT_MODES.has(modeId)) return main;                                        // 5v5 and 10v10 keep every old map
-  const base = modeId === '1v1' ? DUEL_SMALL_IDS.concat(GRID_SMALL_IDS) : modeId === '2v2' ? main.concat(DUEL_BIG_IDS).concat(GRID_BIG_IDS) : main.concat(GRID_BIG_IDS);
+  if (ARCHIVE_EXEMPT_MODES.has(modeId)) return modeId === '5v5' ? main.concat(GB_LARGE_IDS) : main;                                        // 5v5 and 10v10 keep every old map
+  const base = modeId === '1v1' || modeId === '2v2' ? GB_TINY_IDS.concat(GB_SMALL_IDS, GB_MEDIUM_IDS) : modeId === '3v3' ? GB_SMALL_IDS.concat(GB_MEDIUM_IDS, GB_LARGE_IDS) : GB_MEDIUM_IDS.concat(GB_LARGE_IDS);
   return base.filter(m => !ARCHIVED_MAP_IDS.has(m));                                         // ...so for everyone else it is the white grid maps
 }
 function randomMapForMode(modeId) {
@@ -18044,47 +18046,143 @@ function _gridDress(name) {
   G._gridMap = true;
 }
 const GRID_LOOK = { floor: '#ffffff', fine: '#cdd6e0', bold: '#a3b4c8', wall: 0xffffff, cover_: 0xeef2f6, tall: 0xffffff, accent: 0xd6e6fa, sky: 0xa9d6f8 };
-// 1. CORRIDORS (1v1): a corridor of high walls out of each start, a lane either side with low walls and crates.
-buildDuelMap('grid_corridors', { ...DUEL_SMALL, ...GRID_LOOK, cover: [], ramps: [],
-  macro: [
-    [0, 0, 22, DUEL_HIGH_WALL, 1.6, 'tall'],
-    [-9, -12, 1.6, DUEL_HIGH_WALL, 18, 'tall'], [9, -12, 1.6, DUEL_HIGH_WALL, 18, 'tall'],
-    [-19, -8, 6, 1.2, 1.2, 'cover'], [19, -14, 6, 1.2, 1.2, 'cover'], [0, -26, 8, 1.2, 1.2, 'cover'],
-    [-20, -22, 3.4, 2.2, 3.4, 'hi'], [20, -4, 3.4, 2.2, 3.4, 'hi'],
-  ] });
-// 2. ROOMS (1v1): a wall in front of each start with a wide gap and two narrow ones, and the fight in the middle.
-buildDuelMap('grid_rooms', { ...DUEL_SMALL, ...GRID_LOOK, cover: [], ramps: [],
-  macro: [
-    [0, 0, 22, DUEL_HIGH_WALL, 1.6, 'tall'],
-    [-14, -18, 12, DUEL_HIGH_WALL, 1.6, 'tall'], [14, -18, 12, DUEL_HIGH_WALL, 1.6, 'tall'],
-    [-22, -8, 3.4, 2.2, 3.4, 'hi'], [22, -8, 3.4, 2.2, 3.4, 'hi'], [0, -10, 10, 1.2, 1.2, 'cover'],
-    [-12, -28, 6, 1.2, 1.2, 'cover'], [-4, -26, 1.6, DUEL_HIGH_WALL, 8, 'tall'],
-  ] });
-// 3. HALL (every mode but 1v1, 5v5 and 10v10): 96 x 150 m, partition walls making rooms with doors, pillars and crates.
-buildDuelMap('grid_hall', { w: 96, d: 150, spawnZ: 62, ...GRID_LOOK, cover: [], ramps: [],
-  macro: [
-    [0, 0, 36, DUEL_HIGH_WALL, 1.6, 'tall'],
-    [-24, -14, 1.6, DUEL_HIGH_WALL, 24, 'tall'], [24, -14, 1.6, DUEL_HIGH_WALL, 24, 'tall'],
-    [-36, -36, 18, DUEL_HIGH_WALL, 1.6, 'tall'], [36, -36, 18, DUEL_HIGH_WALL, 1.6, 'tall'], [0, -30, 1.6, DUEL_HIGH_WALL, 16, 'tall'],
-    [-8, -50, 2.4, DUEL_HIGH_WALL, 2.4, 'tall'], [8, -50, 2.4, DUEL_HIGH_WALL, 2.4, 'tall'],
-    [-10, -18, 3.4, 2.2, 3.4, 'hi'], [10, -8, 3.4, 2.2, 3.4, 'hi'],
-    [-16, -44, 8, 1.2, 1.2, 'cover'], [16, -44, 8, 1.2, 1.2, 'cover'], [-40, -20, 6, 1.2, 1.2, 'cover'], [40, -26, 6, 1.2, 1.2, 'cover'],
-    [-40, -8, 1.6, DUEL_HIGH_WALL, 16, 'tall'], [40, -48, 1.6, DUEL_HIGH_WALL, 12, 'tall'], [-30, -52, 14, DUEL_HIGH_WALL, 1.6, 'tall'], [22, -20, 14, DUEL_HIGH_WALL, 1.6, 'tall'],
-    [-14, -38, 1.6, DUEL_HIGH_WALL, 12, 'tall'], [14, -6, 1.6, DUEL_HIGH_WALL, 10, 'tall'], [-6, -22, 10, DUEL_HIGH_WALL, 1.6, 'tall'],
-  ] });
-// 4. COURT (every mode but 1v1, 5v5 and 10v10): 144 x 224 m, long walls into lanes and rows of pillars.
-buildDuelMap('grid_court', { ...GRID_LOOK, cover: [], ramps: [],
-  macro: [
-    [0, 0, 60, DUEL_HIGH_WALL, 1.6, 'tall'],
-    [-36, -24, 1.6, DUEL_HIGH_WALL, 34, 'tall'], [36, -24, 1.6, DUEL_HIGH_WALL, 34, 'tall'],
-    [-54, -50, 24, DUEL_HIGH_WALL, 1.6, 'tall'], [54, -50, 24, DUEL_HIGH_WALL, 1.6, 'tall'], [0, -52, 1.6, DUEL_HIGH_WALL, 24, 'tall'],
-    [-20, -76, 20, DUEL_HIGH_WALL, 1.6, 'tall'], [20, -76, 20, DUEL_HIGH_WALL, 1.6, 'tall'],
-    [-60, -66, 3, DUEL_HIGH_WALL, 3, 'tall'], [-30, -66, 3, DUEL_HIGH_WALL, 3, 'tall'], [30, -66, 3, DUEL_HIGH_WALL, 3, 'tall'], [60, -66, 3, DUEL_HIGH_WALL, 3, 'tall'],
-    [-12, -12, 3.4, 2.2, 3.4, 'hi'], [14, -30, 3.4, 2.2, 3.4, 'hi'], [-62, -20, 3.4, 2.2, 3.4, 'hi'],
-    [-18, -40, 10, 1.2, 1.2, 'cover'], [18, -44, 10, 1.2, 1.2, 'cover'], [-46, -34, 8, 1.2, 1.2, 'cover'], [48, -14, 8, 1.2, 1.2, 'cover'], [0, -88, 12, 1.2, 1.2, 'cover'],
-    [-66, -30, 1.6, DUEL_HIGH_WALL, 20, 'tall'], [66, -90, 1.6, DUEL_HIGH_WALL, 20, 'tall'], [-44, -88, 16, DUEL_HIGH_WALL, 1.6, 'tall'], [26, -34, 16, DUEL_HIGH_WALL, 1.6, 'tall'],
-    [-12, -60, 1.6, DUEL_HIGH_WALL, 14, 'tall'], [50, -66, 1.6, DUEL_HIGH_WALL, 12, 'tall'],
-  ] });
+// ⬜ Graybox maps: sixteen plain layouts for 1v1 up to 5v5, written as cells (X, Y, Z): ground is Y 0, a full block is one cell, a half block is half a
+// cell high, and a ramp climbs one layer over its own cell (a longer ramp is a longer run). X is the long way: it becomes the map's z, and the two
+// spawns sit at the two ends of it. Nothing is dressed: blocks, ramps and the white grid, and nothing else. One layer is 1 m; a cell is 1.5 to 2.8 m
+// across, chosen per size so the walk from one spawn to the other takes 5 to 7 seconds (walking is about 6.7 m/s).
+// b = [x0, y0, z0, x1, y1, z1] blocks (inclusive) · h = [x, y, z] half blocks · r = [x0, y0, z0, x1, y1, z1, dir] ramps (N S E W: the way they climb).
+const _GB_CELL = { tiny: 2.8, small: 2.2, medium: 1.8, large: 1.5 }, _GB_LAYER = 1;
+const _GB_SPEC = {
+  gb_duel_yard: { size: 'tiny', n: [16, 12],
+    sp: [[-2.8,3.2,18.4,21.4], [-7.8,-1.8,-21.4,-18.4]],
+    b: [[2,1,2,6,1,2],[9,1,2,13,1,2],[2,1,9,6,1,9],[9,1,9,13,1,9],[6,1,5,9,1,6],[6,2,5,9,2,6],[3,1,4,5,1,4],[10,1,7,12,1,7]],
+    h: [[4,1,7],[11,1,4]],
+    r: [[3,1,5,3,1,5,'N'],[12,1,6,12,1,6,'S']] },
+  gb_split_cover: { size: 'tiny', n: [16, 12],
+    sp: [[-5.8,2.2,18.4,21.4], [4.2,12.2,-21.4,-18.4]],
+    b: [[3,1,2,7,1,2],[8,1,9,12,1,9],[5,1,4,7,1,6],[9,1,6,11,1,8],[2,1,5,3,1,7],[12,1,4,13,1,6],[5,2,4,7,2,6],[9,2,6,11,2,8]],
+    h: [[8,1,3],[7,1,8]],
+    r: [[4,1,5,4,1,5,'E'],[12,1,7,12,1,7,'W']] },
+  gb_boxyard: { size: 'tiny', n: [20, 14],
+    sp: [[-3.6,4.4,24,27], [-3.6,4.4,-27,-24]],
+    b: [[3,1,2,8,1,2],[11,1,2,16,1,2],[4,1,5,7,1,7],[12,1,7,15,1,9],[8,1,9,10,1,11],[4,2,5,7,2,7],[12,2,7,15,2,9],[3,1,11,6,1,11],[13,1,11,17,1,11]],
+    h: [[9,1,4],[11,1,10]],
+    r: [[4,1,8,7,1,8,'N'],[12,1,6,15,1,6,'S']] },
+  gb_l_block: { size: 'tiny', n: [20, 14],
+    sp: [[-10.6,-2.6,24,27], [4.4,12.4,-27,-24]],
+    b: [[4,1,3,14,1,3],[4,1,4,4,1,10],[7,1,7,10,1,9],[12,1,8,15,1,10],[7,2,7,10,2,9],[2,1,5,3,1,8],[16,1,4,17,1,9]],
+    h: [[6,1,10],[13,1,5]],
+    r: [[6,1,7,6,1,7,'E'],[11,1,8,11,1,8,'W']] },
+  gb_center_ramp: { size: 'small', n: [22, 16],
+    sp: [[-8.6,-0.6,20.2,23.2], [-2.6,5.4,-23.2,-20.2]],
+    b: [[3,1,3,8,1,3],[13,1,3,18,1,3],[7,1,7,14,1,9],[7,2,7,14,2,9],[9,1,12,12,1,13],[9,2,12,12,2,13],[3,1,12,6,1,12],[15,1,12,19,1,12]],
+    h: [[5,1,6],[16,1,10]],
+    r: [[5,1,7,6,1,9,'E'],[15,1,7,16,1,9,'W']] },
+  gb_ring_walk: { size: 'small', n: [22, 16],
+    sp: [[-3.6,4.4,20.2,23.2], [-3.6,4.4,-23.2,-20.2]],
+    b: [[4,1,3,17,1,4],[4,1,11,17,1,12],[4,1,5,5,1,10],[16,1,5,17,1,10],[9,1,6,12,1,9],[9,2,6,12,2,9],[4,2,3,17,2,4],[4,2,11,17,2,12],[4,2,5,5,2,10],[16,2,5,17,2,10]],
+    h: [[7,1,7],[14,1,8]],
+    r: [[6,1,5,6,1,5,'N'],[15,1,10,15,1,10,'S']] },
+  gb_overpass: { size: 'small', n: [22, 16],
+    sp: [[-10.6,-2.6,20.2,23.2], [-2.6,5.4,-23.2,-20.2]],
+    b: [[4,1,3,9,1,3],[12,1,12,18,1,12],[5,3,7,17,3,8],[6,1,7,6,2,8],[11,1,7,11,2,8],[16,1,7,16,2,8],[8,1,11,10,1,13],[8,2,11,10,2,13]],
+    h: [[4,1,10],[18,1,5]],
+    r: [[4,1,7,4,1,7,'E'],[5,2,7,5,2,7,'E'],[18,1,8,18,1,8,'W'],[17,2,8,17,2,8,'W']] },
+  gb_crossroads: { size: 'small', n: [22, 16],
+    sp: [[-3.6,4.4,20.2,23.2], [-3.6,4.4,-23.2,-20.2]],
+    b: [[10,1,3,11,1,12],[4,1,7,17,1,8],[10,2,3,11,2,12],[4,2,7,17,2,8],[5,1,4,7,1,6],[14,1,9,16,1,11]],
+    h: [[7,1,10],[14,1,5]],
+    r: [[8,1,7,8,1,7,'E'],[13,1,8,13,1,8,'W'],[10,1,6,10,1,6,'S'],[11,1,9,11,1,9,'N']] },
+  gb_factory: { size: 'medium', n: [28, 20],
+    sp: [[1,9,21.2,24.2], [-4,4,-24.2,-21.2]],
+    b: [[4,1,3,11,1,3],[16,1,3,23,1,3],[6,1,6,10,1,9],[17,1,11,21,1,14],[12,1,5,15,1,7],[10,1,14,13,1,17],[6,2,6,10,2,9],[17,2,11,21,2,14],[5,1,10,12,1,11],[15,1,8,23,1,9]],
+    h: [[13,1,12],[15,1,15]],
+    r: [[5,1,12,8,1,12,'N'],[20,1,10,23,1,10,'S']] },
+  gb_arc_hall: { size: 'medium', n: [28, 20],
+    sp: [[-3,3,21.2,24.2], [11,17,-24.2,-21.2]],
+    b: [[4,1,3,11,1,3],[16,1,3,23,1,3],[6,1,9,21,1,10],[6,3,9,21,3,10],[6,1,9,6,2,10],[21,1,9,21,2,10],[12,1,14,16,1,17],[12,2,14,16,2,17],[8,1,5,11,1,7]],
+    h: [[5,1,14],[22,1,6]],
+    r: [[4,1,9,4,1,9,'E'],[5,2,9,5,2,9,'E'],[23,1,10,23,1,10,'W'],[22,2,10,22,2,10,'W']] },
+  gb_terrace: { size: 'medium', n: [28, 20],
+    sp: [[-4,4,21.2,24.2], [-4,4,-24.2,-21.2]],
+    b: [[4,1,4,11,1,8],[4,2,4,11,2,8],[11,1,8,19,1,12],[11,2,8,19,2,12],[11,3,8,19,3,12],[19,1,12,24,1,17],[19,2,12,24,2,17],[19,3,12,24,3,17],[19,4,12,24,4,17]],
+    h: [[7,1,12],[15,1,5]],
+    r: [[4,1,9,8,1,9,'N'],[12,3,7,16,3,7,'S'],[19,4,11,22,4,11,'S']] },
+  gb_cargo: { size: 'medium', n: [28, 20],
+    sp: [[-3,5,21.2,24.2], [-9,-1,-24.2,-21.2]],
+    b: [[5,1,4,9,1,7],[13,1,5,17,1,8],[19,1,12,23,1,16],[7,1,13,11,1,17],[5,2,4,9,2,7],[19,2,12,23,2,16],[5,3,9,23,3,10],[6,1,9,6,2,10],[13,1,9,13,2,10],[21,1,9,21,2,10]],
+    h: [[12,1,12],[17,1,15]],
+    r: [[4,1,9,4,1,9,'E'],[5,2,9,5,2,9,'E'],[24,1,10,24,1,10,'W'],[23,2,10,23,2,10,'W']] },
+  gb_three_lanes: { size: 'large', n: [36, 24],
+    sp: [[-1,7,23,26], [-8,0,-26,-23]],
+    b: [[4,1,6,15,1,6],[20,1,6,31,1,6],[4,1,17,15,1,17],[20,1,17,31,1,17],[16,1,10,19,1,14],[16,2,10,19,2,14],[16,3,10,19,3,14],[7,1,10,11,1,13],[24,1,10,28,1,13],[5,1,3,13,1,5],[5,2,3,13,2,5],[22,1,18,30,1,20],[22,2,18,30,2,20]],
+    h: [[13,1,12],[22,1,12]],
+    r: [[5,1,6,13,1,6,'N'],[22,1,17,30,1,17,'S']] },
+  gb_dual_bridge: { size: 'large', n: [36, 24],
+    sp: [[-5,3,23,26], [-3,5,-26,-23]],
+    b: [[5,3,7,30,3,8],[5,3,16,30,3,17],[7,1,7,7,2,8],[17,1,7,17,2,8],[28,1,7,28,2,8],[7,1,16,7,2,17],[17,1,16,17,2,17],[28,1,16,28,2,17],[16,1,10,20,1,14],[16,2,10,20,2,14],[8,1,11,12,1,13],[24,1,11,28,1,13]],
+    h: [[13,1,5],[23,1,19]],
+    r: [[4,1,7,4,1,7,'E'],[5,2,7,5,2,7,'E'],[31,1,8,31,1,8,'W'],[30,2,8,30,2,8,'W'],[4,1,16,4,1,16,'E'],[5,2,16,5,2,16,'E'],[31,1,17,31,1,17,'W'],[30,2,17,30,2,17,'W']] },
+  gb_pentagon: { size: 'large', n: [36, 28],
+    sp: [[-2,6,23,26], [-18,-10,-26,-23]],
+    b: [[10,1,3,25,1,3],[4,1,9,5,1,19],[30,1,9,31,1,19],[10,1,24,25,1,24],[15,1,11,20,1,16],[15,2,11,20,2,16],[15,3,11,20,3,16],[7,1,6,12,1,8],[23,1,6,28,1,8],[7,1,19,12,1,21],[23,1,19,28,1,21],[7,2,6,12,2,8],[23,2,19,28,2,21]],
+    h: [[12,1,13],[23,1,14]],
+    r: [[7,1,9,12,1,9,'N'],[23,1,18,28,1,18,'S']] },
+  gb_hub: { size: 'large', n: [36, 28],
+    sp: [[-4,4,23,26], [-4,4,-26,-23]],
+    b: [[15,1,10,21,1,17],[15,2,10,21,2,17],[15,3,10,21,3,17],[15,4,10,21,4,17],[15,4,4,21,4,9],[15,4,18,21,4,23],[5,4,12,14,4,15],[22,4,12,31,4,15],[8,1,6,12,1,10],[24,1,18,28,1,22],[8,2,6,12,2,10],[24,2,18,28,2,22]],
+    h: [[11,1,18],[25,1,9]],
+    r: [[15,1,3,21,1,3,'S'],[15,2,4,21,2,4,'S'],[15,3,5,21,3,5,'S'],[15,1,24,21,1,24,'N'],[15,2,23,21,2,23,'N'],[15,3,22,21,3,22,'N']] },
+};
+
+// A ramp that starts up on a block rather than on the floor: the same wedge and hidden 0.25 m steps as addRamp, lifted y0 (it has no entry in MAP_RAMPS).
+function _gbRampUp(name, x0, z0, ux, uz, w, y0, rise, run, color) {
+  const th = Math.atan2(-uz, ux), zx = Math.sin(th), zz = Math.cos(th);
+  const wedge = new THREE.Shape(); wedge.moveTo(0, 0); wedge.lineTo(run, 0); wedge.lineTo(run, rise); wedge.closePath();
+  const mesh = new THREE.Mesh(new THREE.ExtrudeGeometry(wedge, { depth: w, bevelEnabled: false }), new THREE.MeshLambertMaterial({ color }));
+  mesh.rotation.y = th; mesh.position.set(x0 - zx * w / 2, y0, z0 - zz * w / 2); MAP_GROUPS[name].add(mesh);
+  const n = Math.max(1, Math.round(rise / 0.25)), d = run / n, alongX = Math.abs(ux) > 0.5;
+  for (let i = 0; i < n; i++) {
+    const h = (i + 0.5) * 0.25, dist = PLAYER_RADIUS + i * d + d / 2;
+    addMapBox(name, x0 + ux * dist, y0 + h / 2, z0 + uz * dist, alongX ? d : w, h, alongX ? w : d, color).visible = false;
+  }
+}
+function _gbBuild(id, S) {
+  const s = _GB_CELL[S.size], HV = _GB_LAYER, [NX, NZ] = S.n, W = NZ * s, D = NX * s;
+  buildDuelMap(id, { w: W, d: D, spawnZ: D / 2 - 2.6, ...GRID_LOOK, cover: [], ramps: [], macro: [], macroRamps: [] });
+  const ex = X => (X - NX / 2) * s, ez = Z => (Z - NZ / 2) * s;          // a cell boundary, in metres (spec X -> map z, spec Z -> map x)
+  const block = (x0, y0, z0, x1, y1, z1, hy) => {
+    const top = hy != null ? (y0 - 1) * HV + hy : y1 * HV, bot = (y0 - 1) * HV;
+    addMapBox(id, (ez(z0 - 1) + ez(z1)) / 2, (bot + top) / 2, (ex(x0 - 1) + ex(x1)) / 2, ez(z1) - ez(z0 - 1), top - bot, ex(x1) - ex(x0 - 1), GRID_LOOK.cover_);
+  };
+  for (const [x0, y0, z0, x1, y1, z1] of S.b) block(x0, y0, z0, x1, y1, z1);
+  for (const [x, y, z] of S.h) block(x, y, z, x, y, z, HV / 2);
+  // where each side starts: the clear spots (found by search, for each map) at the ends where the two spawns cannot see each other; the pads are moved to match
+  const sp = S.sp, G = MAP_GROUPS[id];
+  MAP_SPAWNS[id] = { ally: { x0: sp[0][0], x1: sp[0][1], z0: sp[0][2], z1: sp[0][3] }, enemy: { x0: sp[1][0], x1: sp[1][1], z0: sp[1][2], z1: sp[1][3] } };
+  const pads = G.children.filter(m => m.isMesh && m.geometry.type === 'BoxGeometry' && m.material.transparent && Math.abs(m.geometry.parameters.width - 14) < 0.01);
+  [sp[0], sp[1]].forEach((r, i) => { const p = pads[i]; if (p) { p.position.set((r[0] + r[1]) / 2, 0.03, (r[2] + r[3]) / 2); p.scale.set((r[1] - r[0]) / 14, 1, (r[3] - r[2]) / 5); } });
+  // ramps: a ramp on the layer above one that ends where it starts is the same ramp (a staircase of cells), so those join into one long climb
+  const DIRS = { N: [-1, 0, 'Z', -1], S: [1, 0, 'Z', 1], E: [0, 1, 'X', 1], W: [0, -1, 'X', -1] };
+  const pieces = S.r.map(([x0, y0, z0, x1, y1, z1, d]) => ({ x0, x1, z0, z1, k: y0, d }));
+  const along = p => (DIRS[p.d][2] === 'X' ? [p.x0, p.x1] : [p.z0, p.z1]), across = p => (DIRS[p.d][2] === 'X' ? [p.z0, p.z1] : [p.x0, p.x1]);
+  const sgn = p => DIRS[p.d][3];
+  const next = p => pieces.find(q => q.d === p.d && q.k === p.k + 1 && across(q).join() === across(p).join() && (sgn(p) > 0 ? along(q)[0] === along(p)[1] + 1 : along(q)[1] === along(p)[0] - 1));
+  const hasPrev = p => pieces.some(q => next(q) === p);
+  for (const p of pieces) {
+    if (hasPrev(p)) continue;
+    let q = p, len = along(p)[1] - along(p)[0] + 1, top = p.k;
+    while ((q = next(q))) { len += along(q)[1] - along(q)[0] + 1; top = q.k; }
+    const [a0, a1] = along(p), [c0, c1] = across(p), start = sgn(p) > 0 ? a0 - 1 : a1;     // the cell boundary the climb starts from
+    const wM = (DIRS[p.d][2] === 'X' ? ez(c1) - ez(c0 - 1) : ex(c1) - ex(c0 - 1)), mid = DIRS[p.d][2] === 'X' ? (ez(c0 - 1) + ez(c1)) / 2 : (ex(c0 - 1) + ex(c1)) / 2;
+    const ux2 = DIRS[p.d][2] === 'Z' ? sgn(p) : 0, uz2 = DIRS[p.d][2] === 'X' ? sgn(p) : 0;   // (spec Z is the map's x, spec X its z)
+    const fx = DIRS[p.d][2] === 'Z' ? ez(start) : mid, fz = DIRS[p.d][2] === 'X' ? ex(start) : mid;
+    const y0 = (p.k - 1) * HV, rise = (top - p.k + 1) * HV, run = len * s;
+    if (y0 <= 0) addRamp(id, fx, fz, ux2, uz2, { width: wM, rise, run, landing: 0, color: GRID_LOOK.cover_, landColor: GRID_LOOK.tall, lipColor: GRID_LOOK.accent });
+    else _gbRampUp(id, fx, fz, ux2, uz2, wM, y0, rise, run, GRID_LOOK.cover_);
+  }
+}
+for (const id of Object.keys(_GB_SPEC)) _gbBuild(id, _GB_SPEC[id]);
 for (const id of GRID_MAP_IDS) _gridDress(id);
 
 // ✨ Finishing the four duel arenas. buildDuelMap lays the arena out in plain boxes (that is what makes a layout a short
@@ -85998,10 +86096,22 @@ const MAP_DESCS = {
   pyongyang: 'Pyongyang — monuments, squares and wide-sweeping live-fire searchlights',
   traffic_cone_republic: '🚧 Traffic Cone Republic — giant cones, a roundabout, a flyover · TOLL LANES charge health for speed',
   flying_moai: '🗿 Flying Moai — a plateau of stone heads',
-  grid_corridors: '⬜ Grid Corridors — 1v1 · 56 × 88 m · white walls and a grid on everything: a corridor of high walls out of each start, a lane either side',
-  grid_rooms:     '⬜ Grid Rooms — 1v1 · 56 × 88 m · white walls and a grid on everything: a wall in front of each start with a wide gap and two narrow ones',
-  grid_hall:      '⬜ Grid Hall — 96 × 150 m · white walls and a grid on everything: partition walls into rooms with doors, pillars and crates, under a clear blue sky',
-  grid_court:     '⬜ Grid Court — 144 × 224 m · white walls and a grid on everything: long walls into lanes, rows of pillars and a wide open middle, under a clear blue sky',
+  gb_duel_yard: '⬜ Duel Yard — tiny · 1v1 to 2v2 · a block in the middle, a ramp up to a platform each side',
+  gb_split_cover: '⬜ Split Cover — tiny · 1v1 to 2v2 · a cross of walls in the middle, ramps up the flanks',
+  gb_boxyard: '⬜ Boxyard — tiny · 1v1 to 2v2 · crates and blocks of every size, one ramp to a platform',
+  gb_l_block: '⬜ L-Block — tiny · 1v1 to 2v2 · an L of high walls, a block in the middle, a raised platform',
+  gb_center_ramp: '⬜ Center Ramp — small · 1v1 to 3v3 · a raised block in the middle with a ramp up from each side',
+  gb_ring_walk: '⬜ Ring Walk — small · 1v1 to 3v3 · a block to walk round, a ramp up to a platform in each corner',
+  gb_overpass: '⬜ Overpass — small · 1v1 to 3v3 · a deck across the middle on ramps, walk over or under it',
+  gb_crossroads: '⬜ Crossroads — small · 1v1 to 3v3 · a cross of high walls into four rooms, one raised corner',
+  gb_factory: '⬜ Factory — medium · 1v1 to 3v3 · machine blocks and walls round a raised middle',
+  gb_arc_hall: '⬜ Arc Hall — medium · 1v1 to 3v3 · a long deck over the middle, walls curving round it',
+  gb_terrace: '⬜ Terrace — medium · 1v1 to 3v3 · two raised terraces at different heights',
+  gb_cargo: '⬜ Cargo — medium · 1v1 to 3v3 · rows of containers, a ramp up onto one',
+  gb_three_lanes: '⬜ Three Lanes — large · 3v3 to 5v5 · two long walls make three lanes, raised platforms on the sides',
+  gb_dual_bridge: '⬜ Dual Bridge — large · 3v3 to 5v5 · two decks across the map on ramps, a wall between them',
+  gb_pentagon: '⬜ Pentagon — large · 3v3 to 5v5 · a walled ring in the middle, raised platforms on the sides',
+  gb_hub: '⬜ Hub — large · 3v3 to 5v5 · a raised hub with decks running off it',
   duel_grid:      '⚔️ Duel Grid — 2v2 · 144 × 224 m grid arena: high walls make rooms with doors, windowed walls, L bunkers, crates, and galleries up ramps',
   duel_crossroads:'⚔️ Crossroads — 2v2 · 144 × 224 m · long high walls stagger into an S through the field; ramps take you over the middle on bridges',
   duel_pillars:   '⚔️ Pillar Hall — 2v2 · 144 × 224 m · colonnades with arches, high aisle walls with doors, and raised stages up broad ramps',
