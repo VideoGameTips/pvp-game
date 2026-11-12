@@ -51936,6 +51936,7 @@ function _eqSegment(m, a, b) {
 }
 
 function switchWeapon(idx) {
+  if (inLobby) return;                // Lobby 13 is unarmed
   // Upper bound too: WEAPONS / weaponModels are parallel arrays (tools/verify-weapons.js checks
   // their lengths), and a stray index used to crash on weaponModels[idx].visible (#4).
   if (idx === null || idx === undefined || idx < 0 || idx >= WEAPONS.length || !weaponModels[idx]) return;
@@ -52269,6 +52270,7 @@ let _quickMeleeUntil  = 0;         // hard stop, so a held buff cannot strand yo
 let _quickMeleeStart  = 0;
 
 function quickMelee() {
+  if (inLobby) return;                // Lobby 13 is unarmed
   if (fixedKitModeActive()) return;
   if (rngKit()) return;   // 🎲 there is no melee but the one the dice gave you
   if (isDead || !gameStarted || activeSlot === 'melee' || _quickMeleeReturn) return;
@@ -57154,6 +57156,7 @@ function tryShoot() {
 }
 
 function tryUseActive() {
+  if (inLobby) return;                // Lobby 13 is unarmed
   if (activeSlot === 'melee') return tryMelee();
   if (activeSlot === 'support') return trySupport();
   return tryShoot();
@@ -71808,6 +71811,7 @@ function disposeBody(obj) {
 function armRemoteMesh(mesh, weaponId, skinId) {
   if (!mesh) return;
   skinId = skinId || null;
+  if (inLobby && mesh._ownerId) weaponId = null;   // Lobby 13 is unarmed: weapons are for the shooting range and matches. The default walk, jump and slide are all there is.
   // Re-sending the same weapon is common (a reconnect replays it), and tearing
   // the prop down to build an identical one is pure churn.
   if (mesh._gun && mesh._gunId === weaponId && (mesh._gunSkin || null) === skinId) return;
@@ -80777,6 +80781,8 @@ function loop() {
   safeLoopStep('weapon-skin-fx', () => updateWeaponSkinFX(dt)); // gun-skin particles/streaks
   safeLoopStep('aim-assist', () => updateAimAssist(dt));  // auto-shoot / aim assist / aimbot / AI-aim dot
   if (inLobby) safeLoopStep('lobby-interactions', () => updateLobbyInteractions()); // duel-pad / challenge prompt
+  if (inLobby) safeLoopStep('lobby-unarmed', lobbyUnarmedStep);                    // nothing in your hands in the lobby
+  else if (document.body.classList.contains('lobby-unarmed')) document.body.classList.remove('lobby-unarmed');
   safeLoopStep('interact-button', syncInteractButton); // every frame, so DUEL clears once you leave the lobby
   safeLoopStep('ability-button', syncAbilityButton);   // shows only while what you hold has an ability (#30)
   if (activeSlot === 'support' && SUPPORT_ITEMS[selectedSupportIdx]?.recharge) safeLoopStep('support-recharge', updateWeaponHUD);
@@ -84323,6 +84329,30 @@ function applyUpgrades(w) {
   return clone;
 }
 
+// 🛋️ LOBBY 13 IS UNARMED. Weapons are for the shooting range (and matches); in the lobby you walk, jump and slide, and that is all. Every frame in the lobby the first-person weapon models are
+// hidden, aiming and reloading are cleared, and the crosshair, ammo, weapon bar and ability readouts are hidden; the weapon, reload, ability, inspect and slot keys do nothing (a capture
+// listener, so nothing below it sees them), and the functions that fire, swing, switch and throw refuse in the lobby too. Other bodies in the lobby are not given a gun either (armRemoteMesh).
+const LOBBY_NO_WEAPON_KEYS = new Set(['KeyR', 'KeyE', 'KeyG', 'KeyT', 'KeyB', 'KeyH', 'Digit1', 'Digit2', 'Digit3', 'Digit4']);
+window.addEventListener('keydown', e => {
+  if (!inLobby || !gameStarted || !LOBBY_NO_WEAPON_KEYS.has(e.code)) return;
+  if (commsMenuOpen || e.target?.closest?.('input,textarea,select,[contenteditable]')) return;      // (a phrase picked from the comms menu, or typing in a box)
+  e.stopImmediatePropagation();
+}, true);
+let _lobbyUnarmedCss = null;
+function lobbyUnarmedStep() {
+  if (!_lobbyUnarmedCss) {
+    _lobbyUnarmedCss = document.createElement('style');
+    _lobbyUnarmedCss.textContent = 'body.lobby-unarmed #crosshair, body.lobby-unarmed #ammo, body.lobby-unarmed #ammo-hint, body.lobby-unarmed #weapon-selector, body.lobby-unarmed #ability-hud, ' +
+      'body.lobby-unarmed #btn-prev-weapon, body.lobby-unarmed #btn-next-weapon, body.lobby-unarmed #btn-ability { display: none !important; }';
+    document.head.appendChild(_lobbyUnarmedCss);
+  }
+  document.body.classList.add('lobby-unarmed');
+  shooting = false; isADS = false;
+  if (reloading) { try { cancelReload(); } catch (e) {} }
+  for (const m of weaponModels) if (m && m.visible) m.visible = false;
+  for (const m of meleeModels) if (m && m.visible) m.visible = false;
+  for (const m of supportModels) if (m && m.visible) m.visible = false;
+}
 function selectMode(modeId) {
   if (modeId === 'battle_simulator' && window.PVP_BATTLE_SIM) { window.PVP_BATTLE_SIM.open(); return; }
   if (ARCHIVED_MODES.has(modeId)) { try { showAnnouncement('ARCHIVED', 'That mode has been retired · here is FFA instead', '#ffcc66', 2600); } catch (e) {} modeId = 'ffa5'; }
@@ -84418,7 +84448,7 @@ function selectMode(modeId) {
     supportModels.forEach(m => m.visible = false);
     currentWeaponIdx = selectedPrimaryIdx;
     currentWeapon    = WEAPONS[selectedPrimaryIdx];
-    if (weaponModels[selectedPrimaryIdx]) weaponModels[selectedPrimaryIdx].visible = true;
+    // (no weapon is shown in the lobby: see lobbyUnarmedStep)
     updateAmmoHUD(); updateWeaponHUD(); updateWeaponSelector();
     gameStarted = true;
     spawnGameBots();
