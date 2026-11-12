@@ -43622,11 +43622,13 @@ function charTex(key, draw) {
   draw(p);
   const crisp = /^[a-z0-9]+:(?:default|blank_red|blank_blue)(?::|$)/.test(key);     // The Blank: flat colours, hard pixel edges
   if (!crisp) refineCharacterTexels(ctx,key);
+  const blankExtra = _blankKey(key) ? _blankFinish(ctx, key) : null;     // The Blank: metal plates, a glossy visor, a glowing team colour
   t = new THREE.CanvasTexture(c);
   t.magFilter = THREE.NearestFilter;
   t.minFilter = crisp ? THREE.NearestMipmapNearestFilter : THREE.LinearMipmapLinearFilter;
   t.generateMipmaps = true;
   t.userData.characterResolution=64;
+  if (blankExtra) { if ('colorSpace' in t) t.colorSpace = THREE.SRGBColorSpace; t.userData.glow = blankExtra.glow; t.userData.orm = blankExtra.orm; }
   _charTexCache.set(key, t);
   return t;
 }
@@ -43649,9 +43651,57 @@ function refineCharacterTexels(ctx,key) {
 }
 // The Blank (the default avatar) is a satin grey plastic: a soft specular sheen that catches the light, so it is neither the chalky matte of cloth nor metal.
 const _blankKey = key => /^[a-z0-9]+:(?:default|blank_red|blank_blue)(?::|$)/.test(key);
+// The Blank is a futuristic armoured soldier, so its plates get a metal finish on top of the drawn skin: a gradient across every plate, a bright bevel on the
+// top and left edge of each panel and a dark one on the bottom and right, a brushed grain, a glossy visor with a lit cyan strip, and the team colour glowing on
+// the shoulders and chest bar. It returns the glow map (emissive) and an ORM-style map (green = roughness, blue = metalness) the material reads.
+function _blankFinish(ctx, key) {
+  const N = 64, img = ctx.getImageData(0, 0, N, N), d = img.data, o = new Uint8ClampedArray(d);
+  const acc = /blank_blue/.test(key) ? [0x3b, 0x82, 0xff] : [0xff, 0x44, 0x44];
+  const mk = () => { const c = document.createElement('canvas'); c.width = c.height = N; const x = c.getContext('2d'); return { c, im: x.createImageData(N, N), x }; };
+  const G = mk(), M = mk(), g = G.im.data, m = M.im.data;
+  const sum = i => o[i] + o[i + 1] + o[i + 2];
+  const diff = (i, j) => Math.abs(o[i] - o[j]) + Math.abs(o[i + 1] - o[j + 1]) + Math.abs(o[i + 2] - o[j + 2]);
+  const isAcc = i => Math.abs(o[i] - acc[0]) + Math.abs(o[i + 1] - acc[1]) + Math.abs(o[i + 2] - acc[2]) < 60;
+  const headFront = /^h:/.test(key) && /:f$/.test(key);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const i = (y * N + x) * 4;
+    g[i + 3] = 255; m[i + 3] = 255;
+    if (!o[i + 3]) { m[i] = 255; m[i + 1] = 128; continue; }
+    const a = isAcc(i), s = sum(i), visor = s < 45, joint = !a && !visor && s < 260;
+    const U = y > 0 ? i - N * 4 : i, B = y < N - 1 ? i + N * 4 : i, L = x > 0 ? i - 4 : i, R = x < N - 1 ? i + 4 : i;
+    const f = 1.13 - 0.27 * (y / (N - 1));                                                          // lit from above: brighter at the top of each face
+    let add = 0;
+    if (diff(i, U) > 30) add += 40; if (diff(i, L) > 30) add += 26;                                 // a lit edge on the top and left of a panel
+    if (diff(i, B) > 30) add -= 40; if (diff(i, R) > 30) add -= 26;                                 // a dark one on the bottom and right
+    const grain = (((Math.imul(y + 31, 2246822519) ^ Math.imul((x >> 3) + 7, 3266489917)) >>> 0) % 9) - 4;   // brushed streaks, long across and short down
+    if (visor) {                                                                                    // a glossy dark glass: blue-black, a lighter band across the top
+      const band = Math.max(0, 1 - (y % 16) / 5);
+      d[i] = 9 + band * 18; d[i + 1] = 18 + band * 30; d[i + 2] = 30 + band * 46;
+    } else {
+      for (let k = 0; k < 3; k++) d[i + k] = Math.max(0, Math.min(255, o[i + k] * f + add + grain * (joint ? 0.5 : 1)));
+    }
+    if (a) { g[i] = acc[0] * 0.95; g[i + 1] = acc[1] * 0.95; g[i + 2] = acc[2] * 0.95; }              // the team colour glows
+    m[i] = 255; m[i + 1] = (visor ? 0.08 : a ? 0.34 : joint ? 0.52 : 0.30) * 255; m[i + 2] = (visor ? 0.85 : a ? 0.30 : joint ? 0.60 : 0.42) * 255;
+  }
+  if (headFront) {                                                                                  // a lit cyan strip across the visor
+    for (let y = 33; y <= 36; y++) for (let x = 12; x <= 51; x++) {
+      const i = (y * N + x) * 4, edge = Math.min(x - 12, 51 - x) < 3 ? 0.55 : 1;
+      d[i] = 120 * edge; d[i + 1] = 235 * edge; d[i + 2] = 255 * edge;
+      g[i] = 80 * edge; g[i + 1] = 220 * edge; g[i + 2] = 255 * edge; m[i + 1] = 0.2 * 255; m[i + 2] = 0.2 * 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  G.x.putImageData(G.im, 0, 0); M.x.putImageData(M.im, 0, 0);
+  const tex = (c, srgb) => { const t = new THREE.CanvasTexture(c); t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestMipmapNearestFilter; t.generateMipmaps = true; if (srgb && 'colorSpace' in t) t.colorSpace = THREE.SRGBColorSpace; return t; };
+  return { glow: tex(G.c, true), orm: tex(M.c, false) };
+}
 function charMat(key, draw) {
   const map = charTex(key, draw);
-  return _blankKey(key) ? new THREE.MeshPhongMaterial({ map, specular: 0x5a5d63, shininess: 42 }) : new THREE.MeshLambertMaterial({ map });
+  if (_blankKey(key) && map.userData.orm) {                       // brushed metal: roughness and metalness painted per pixel, the team colour and the visor strip glow
+    return new THREE.MeshStandardMaterial({ map, roughnessMap: map.userData.orm, metalnessMap: map.userData.orm, roughness: 1, metalness: 1,
+      emissive: 0xffffff, emissiveMap: map.userData.glow, emissiveIntensity: 1, envMapIntensity: 1.6 });
+  }
+  return new THREE.MeshLambertMaterial({ map });
 }
 // BoxGeometry material order is +X −X +Y −Y +Z −Z: right, left, top, bottom,
 // front, back. A face left out falls back to the part's plain colour.
@@ -43981,8 +44031,10 @@ function applyPixelSkin(art, parts) {
   });
   // The pelvis wears the trousers, so it takes the thigh texture.
   if (pelvis) pelvis.material = art.pelvisFaces ? charFaceMats('p:' + art._id, art.pelvisFaces) : art.pelvis ? charMat('p:' + art._id, art.pelvis) : charMat('g0:' + art._id, art.leg);
-  for (const h of hands) h.material = new THREE.MeshLambertMaterial({ color: art.hand });
-  if (art.foot) for (const f of feet) f.material = new THREE.MeshLambertMaterial({ color: new THREE.Color(art.foot) });
+  const blankArt = art._id === 'default' || art._id === 'blank_red' || art._id === 'blank_blue';      // The Blank's hands and boots are metal too
+  const metal = (color, rough) => new THREE.MeshStandardMaterial({ color, metalness: 0.72, roughness: rough, envMapIntensity: 1.6 });
+  for (const h of hands) h.material = blankArt ? metal(art.hand, 0.32) : new THREE.MeshLambertMaterial({ color: art.hand });
+  if (art.foot) for (const f of feet) f.material = blankArt ? metal(new THREE.Color(art.foot), 0.42) : new THREE.MeshLambertMaterial({ color: new THREE.Color(art.foot) });
   if (art.hair && art.hair.long) {
     const mat = new THREE.MeshLambertMaterial({ color: art.hair.color });
     const back = new THREE.Mesh(mcBoxGeo(0.46, 0.55, 0.10), mat);
