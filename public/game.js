@@ -65979,6 +65979,22 @@ const SKIN_FX = {
     equip: 'donutbuild', equipMs: 1550, equipSfx: ['whoosh', 'chime'], equipBeats: [[.88,'snapin'],[.88,'cling']] },
 };
 
+// 🌀 Every inspect (guns, melee, utilities) rolls about its front-to-back axis (the model's own z) on one timeline, whatever its own pose does:
+//   0 s 0 deg · 0.25 s -65 · 0.55 s -65 · 0.85 s 0 · 1.15 s +65 · 1.45 s +65 · 1.75 s 0 (and still after that).
+// Each move is mostly even with a little ease in and out blended in (about 0.6x speed at the ends, 1.2x in the middle): you cannot pick the difference out,
+// but it is not a robot's constant pace either.
+const INSPECT_ROLL_KEYS = [[0, 0], [0.25, -65], [0.55, -65], [0.85, 0], [1.15, 65], [1.45, 65], [1.75, 0]];
+const INSPECT_ROLL_EASE = 0.4;
+function _inspectRoll(sec) {
+  const K = INSPECT_ROLL_KEYS;
+  if (!(sec > 0) || sec >= K[K.length - 1][0]) return 0;
+  for (let i = 1; i < K.length; i++) {
+    if (sec > K[i][0]) continue;
+    const u = (sec - K[i - 1][0]) / (K[i][0] - K[i - 1][0]), e = u + INSPECT_ROLL_EASE * (u * u * (3 - 2 * u) - u);
+    return (K[i - 1][1] + (K[i][1] - K[i - 1][1]) * e) * Math.PI / 180;
+  }
+  return 0;
+}
 function _reloadPose(track, t) {
   // A Hermite spline through the keys, with Fritsch-Carlson tangents. The old
   // smoothstep between each pair of keys brought the gun to a dead stop at every
@@ -66194,6 +66210,7 @@ function updateReloadAnim() {
     inspecting ? inspectTrack : ((skinReload && skinReload.keys) || (plan && plan.keys) || RELOAD_KEYS[id] || _RELOAD_DEFAULT), t);
   if (inspecting) {
     updateSecretInspect(model, t, P);
+    P.rz += _inspectRoll(t * model._reloadDur / 1000);         // the roll every inspect has
     // Open whatever this weapon opens, out and back across the middle of the
     // look. Same channels the reload drives, so nothing special downstream.
     const op = secretTrack || inspectTrackUsesAssembly(inspectTrack) ? null : inspectOpenPose(id);
@@ -73492,10 +73509,11 @@ function updateItemInspect() {
   const busy = meleeSwingT < 1 || meleeSlam || meleeDash || batCrowdCharge || scytheDash || meleeAbilityBuff
     || grenadeWindupT < 1 || _equip || useAnim;
   if (!held || busy) { cancelItemInspect(); return; }
-  if (s.gojo) { if (!gojoInspectStep(s)) cancelItemInspect(); return; }
-  if (s.hs) { if (!hammerSickleInspectStep(s.hs)) cancelItemInspect(); return; }
+  if (s.gojo) { if (!gojoInspectStep(s)) cancelItemInspect(); else m.rotation.z += _inspectRoll((performance.now() - s.t0) / 1000); return; }
+  if (s.hs) { if (!hammerSickleInspectStep(s.hs)) cancelItemInspect(); else m.rotation.z = s.baseRot.z + _inspectRoll((performance.now() - s.t0) / 1000); return; }
   const t = Math.min(1, (performance.now() - s.t0) / s.ms);
   const P = _reloadPose(s.keys, t);
+  P.rz += _inspectRoll((performance.now() - s.t0) / 1000);   // the roll every inspect has
   m.rotation.order = 'YXZ';
   m.position.set(s.base.x + P.px, s.base.y + P.py, s.base.z + P.pz);
   m.rotation.set(s.baseRot.x + P.rx, s.baseRot.y + P.ry, s.baseRot.z + P.rz);
