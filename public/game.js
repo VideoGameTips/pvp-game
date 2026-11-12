@@ -43547,6 +43547,9 @@ const GUN_HOLD = {
   // Cancels the forearm's world pitch (shoulderX + elbowX) so the weapon comes
   // out level; it has to be re-derived whenever the two above move.
   gripPitch: 1.943,
+  // How far the muzzle is raised above level (radians): a high-ready carry, so the weapon reads as held up and ready, not slung low. fitWeaponPose re-solves the support hand onto the
+  // handguard of the raised weapon; the firing arm and grip point do not move.
+  upright: 0.35,
   // Carried ACROSS the body, a patrol carry, rather than with the muzzle
   // pointed at whoever is looking. Not decoration: measured head-on at three
   // metres, a weapon held straight projects to 24 x 43 px — a sliver against a
@@ -43912,7 +43915,6 @@ function blankSkin(accent) {
   const armStrip = rows([3, R('A')], [5, R('W')], [3, R('D')], [3, R('W')], [2, R('J')]);   // shoulder pad, sleeve, elbow band, sleeve, wrist
   const legStrip = rows([7, R('W')], [3, R('D')], [4, R('W')], [2, R('J')]);                // thigh, knee band, shin, boot top
   const fu = (BLANK.torsoTop - BODY.elbow) / BLANK.ah, fl = (BLANK.lh - BODY.knee) / BLANK.lh;   // the arm and leg are one block each: the strip is cut where the joint is
-  const fc = (BLANK.torsoTop - BODY.waist) / BLANK.th;                                                                            // and the torso is one chunk: chest then hips
   const torsoFace = rows([3, R('D')], [2, R('W')], [2, bar], [4, R('W')], [2, R('D')], [3, R('J')]);
   const torsoSide = rows([11, R('W')], [2, R('D')], [3, R('J')]);
   return {
@@ -43925,12 +43927,11 @@ function blankSkin(accent) {
       side:   solid('D'),                                                              // (the neck, a charcoal joint)
       top:    solid('W'), bottom: solid('J'),
     },
-    torso: { front: draw(slice(torsoFace, 0, fc)), back: draw(slice(torsoFace, 0, fc)), side: draw(slice(torsoSide, 0, fc)), top: solid('W'), bottom: solid('D') },
+    torso: { front: draw(torsoFace), back: draw(torsoFace), side: draw(torsoSide), top: solid('W'), bottom: solid('J') },
     armU: draw(slice(armStrip, 0, fu)),        armF: draw(slice(armStrip, fu, 1)),
     armUS: solid('W'), armFS: solid('W'), armUT: solid('A'),                           // the sides of an arm are plain; the top of the shoulder is the accent
     leg: draw(slice(legStrip, 0, fl)),         shin: draw(slice(legStrip, fl, 1)),
     legS: solid('W'), shinS: solid('W'),
-    pelvisFaces: { front: draw(slice(torsoFace, fc, 1)), back: draw(slice(torsoFace, fc, 1)), side: draw(slice(torsoSide, fc, 1)), top: solid('D'), bottom: solid('J') },
   };
 }
 PIXEL_SKINS.operator = { ...PIXEL_SKINS.default };            // the old default (the black Operator) is still a skin you can pick
@@ -46398,13 +46399,13 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   // One 0.55 x 0.65 x 0.30 block in the old model; two here, because the rig
   // twists the chest and the hips must not come with it.
   const torsoMat = mkCloth(shirt);
-  const torso = new THREE.Mesh(sharp ? sharpBox(Q.tw, Q.torsoTop - B.waist, Q.td, (B.waist + Q.torsoTop) / 2 - B.torsoY) : characterShapeGeo(B.chestW, B.torsoH, B.chestD,.045), torsoMat);
+  const torso = new THREE.Mesh(sharp ? sharpBox(Q.tw, Q.th, Q.td, (Q.torsoBot + Q.torsoTop) / 2 - B.torsoY) : characterShapeGeo(B.chestW, B.torsoH, B.chestD,.045), torsoMat);
   torso.position.set(0, B.torsoY, 0); torso.castShadow = true; group.add(torso);
 
   // Pelvis — trousers, so it takes the LEG colour.
   const pelvisMat = mkCloth(pant);
   const pelvis = new THREE.Mesh(sharp ? sharpBox(Q.tw, B.waist - Q.torsoBot, Q.td, (Q.torsoBot + B.waist) / 2 - B.pelvisY) : characterShapeGeo(B.pelvisW, B.pelvisH, B.chestD,.03), pelvisMat);
-  pelvis.position.set(0, B.pelvisY, 0); pelvis.castShadow = true; group.add(pelvis);
+  pelvis.position.set(0, B.pelvisY, 0); pelvis.castShadow = true; group.add(pelvis); if (sharp) pelvis.visible = false;   // (the sharp torso is one block from the legs to the shoulders)
 
   // ── Arms ──────────────────────────────────────────────────────────────────
   // shoulder → upper arm → ELBOW → forearm → WRIST → hand, plus a grip anchor
@@ -46432,7 +46433,7 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
   // arm through every other one.
   const gripR = new THREE.Group();
   gripR.position.copy(hands[1].position);
-  gripR.rotation.set(GUN_HOLD.gripPitch, GUN_HOLD.gripYaw, 0);
+  gripR.rotation.set(GUN_HOLD.gripPitch + GUN_HOLD.upright, GUN_HOLD.gripYaw, 0);
   armWrists[1].add(gripR);
 
   // ── Legs ──────────────────────────────────────────────────────────────────
@@ -46603,7 +46604,7 @@ function fitWeaponPose(mesh, gun, key) {
   if (!rig || !rig.wristL || !gun) return;
   const apply = (c) => {
     rig.firePose = c.fire; rig.supPose = c.sup; rig.magPose = c.mag;
-    rig.gripR.rotation.set(c.fire.pitch, GUN_HOLD.gripYaw, 0);
+    rig.gripR.rotation.set(c.fire.pitch + GUN_HOLD.upright, GUN_HOLD.gripYaw, 0);
   };
   // The arms are solved from the weapon's SHAPE, so that is what the cache is
   // keyed on rather than its name. A cold Lobby 13 holds seventeen different
@@ -46672,6 +46673,7 @@ function fitWeaponPose(mesh, gun, key) {
     }
   const fire = { x: fb.sx, ex: fb.ex, pitch: -(fb.sx + fb.ex) };
   fireErr(fb.sx, fb.ex);                      // leave the arm in the solved pose
+  rig.gripR.rotation.x += GUN_HOLD.upright;   // ...and the weapon raised, so the support hand below is solved onto the raised handguard
 
   // ── Support arm, onto wherever that put the weapon ────────────────────────
   mesh.updateMatrixWorld(true);
