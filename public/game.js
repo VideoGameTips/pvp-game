@@ -2017,11 +2017,11 @@ let playerYVel = 0;               // Player vertical velocity (for air grenades 
 // Gravity ×2 off the floaty pass. That is the heaviest the game has ever been —
 // with JUMP_VEL untouched the plain jump lands back on the original 3.0 m, and
 // blast arcs come down fast and hard instead of hanging.
-// A jump covers ground for as long as it hangs, 2 x launch speed / gravity, at whatever speed you were running. So the jump's reach is cut by both at once: gravity UP and launch speed DOWN.
+// A jump covers ground for as long as it hangs, 2 x launch speed / gravity, at whatever speed you were running. Only GRAVITY is raised: the jump's launch speeds are what they always were.
 //   before   24 m/s², 13.8 m/s  ->  1.15 s hang, 3.97 m apex  (mid-air jump 12.3 m/s: 1.03 s, 3.15 m)
-//   now      30 m/s², 12.4 m/s  ->  0.83 s hang, 2.56 m apex  (mid-air jump 11.0 m/s: 0.73 s, 2.02 m): 28% less distance, standing or running
-// The obstacle course keeps the old jump: its gaps (up to about 8 m) were built for the long one and would be impossible now (see applyJumpTuning, called from selectMode).
-const JUMP_TUNING = { normal: { g: 30, jump: 12.4, air: 11.0 }, obby: { g: 24, jump: 13.8, air: 12.3 } };
+//   now      33 m/s², 13.8 m/s  ->  0.84 s hang, 2.88 m apex  (mid-air jump 12.3 m/s: 0.75 s, 2.29 m): 27% less distance, standing or running
+// The obstacle course keeps the old gravity: its gaps (up to about 8 m) were built for the long jump and would be impossible now (see applyJumpTuning, called from selectMode).
+const JUMP_TUNING = { normal: { g: 33, jump: 13.8, air: 12.3 }, obby: { g: 24, jump: 13.8, air: 12.3 } };
 let GRAVITY = JUMP_TUNING.normal.g;     // m/s²
 // The longer you stay off the ground, the harder it pulls you down. A jump is over before it starts (1.5 s of ordinary gravity), then the
 // pull doubles every second -- a launch pad or a long fall ends in a crash -- up to 64 times the ordinary pull. Landing starts it over.
