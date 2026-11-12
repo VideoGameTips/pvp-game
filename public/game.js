@@ -2017,7 +2017,12 @@ let playerYVel = 0;               // Player vertical velocity (for air grenades 
 // Gravity ×2 off the floaty pass. That is the heaviest the game has ever been —
 // with JUMP_VEL untouched the plain jump lands back on the original 3.0 m, and
 // blast arcs come down fast and hard instead of hanging.
-const GRAVITY       = 24;    // m/s² -> 3.97 m apex, 1.15 s hang (was 31.5, before that 21)
+// A jump covers ground for as long as it hangs, 2 x launch speed / gravity, at whatever speed you were running. So the jump's reach is cut by both at once: gravity UP and launch speed DOWN.
+//   before   24 m/s², 13.8 m/s  ->  1.15 s hang, 3.97 m apex  (mid-air jump 12.3 m/s: 1.03 s, 3.15 m)
+//   now      30 m/s², 12.4 m/s  ->  0.83 s hang, 2.56 m apex  (mid-air jump 11.0 m/s: 0.73 s, 2.02 m): 28% less distance, standing or running
+// The obstacle course keeps the old jump: its gaps (up to about 8 m) were built for the long one and would be impossible now (see applyJumpTuning, called from selectMode).
+const JUMP_TUNING = { normal: { g: 30, jump: 12.4, air: 11.0 }, obby: { g: 24, jump: 13.8, air: 12.3 } };
+let GRAVITY = JUMP_TUNING.normal.g;     // m/s²
 // The longer you stay off the ground, the harder it pulls you down. A jump is over before it starts (1.5 s of ordinary gravity), then the
 // pull doubles every second -- a launch pad or a long fall ends in a crash -- up to 64 times the ordinary pull. Landing starts it over.
 // It only starts over after you have really stood on something for AIR_PULL.settle seconds: skimming a step or a ramp edge at speed, or a
@@ -2029,8 +2034,9 @@ function airPull(dt, counting) {
   if (counting) { airTime += dt; airGroundT = 0; }
   return airTime <= AIR_PULL.grace ? 1 : Math.min(AIR_PULL.max, 2 ** ((airTime - AIR_PULL.grace) / AIR_PULL.doubleEvery));
 }
-const JUMP_VEL      = 13.8;  // m/s standing jump -> 3.02 m apex
-const AIR_JUMP_VEL  = 12.3;  // m/s mid-air second jump -> 2.4 m, same ratio as before
+let JUMP_VEL      = JUMP_TUNING.normal.jump;   // m/s standing jump
+let AIR_JUMP_VEL  = JUMP_TUNING.normal.air;    // m/s mid-air second jump
+function applyJumpTuning(obby) { const k = obby ? JUMP_TUNING.obby : JUMP_TUNING.normal; GRAVITY = k.g; JUMP_VEL = k.jump; AIR_JUMP_VEL = k.air; }
 const DEFAULT_MOVE_MULT = 0.65; // calmer default player/bot ground speed
 const BOT_SPEED_MULT = 1.5 * DEFAULT_MOVE_MULT * 0.65;  // NPCs move 35% slower than the previous bot pace
 const SLIDE_MS      = 1250;  // slide duration (was 800)
@@ -84354,6 +84360,7 @@ function lobbyUnarmedStep() {
   for (const m of supportModels) if (m && m.visible) m.visible = false;
 }
 function selectMode(modeId) {
+  applyJumpTuning(modeId === 'obby');   // the obstacle course keeps its original, longer jump
   if (modeId === 'battle_simulator' && window.PVP_BATTLE_SIM) { window.PVP_BATTLE_SIM.open(); return; }
   if (ARCHIVED_MODES.has(modeId)) { try { showAnnouncement('ARCHIVED', 'That mode has been retired · here is FFA instead', '#ffcc66', 2600); } catch (e) {} modeId = 'ffa5'; }
   if (modeId === 'backrooms' && window.PVP_BACKROOMS) { window.PVP_BACKROOMS.open(); return; }
