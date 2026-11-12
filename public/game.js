@@ -43893,11 +43893,11 @@ const PIXEL_SKINS = {
 // pixel by pixel from the sheet: each face is rows of letters (W armour #e6e6e6, G secondary #b3b9c4, D straps #3a3f4b, J joints and boots #1f2430, K visor #0a0a0a,
 // A the team accent), so one drawing serves both teams. The body is the same rig as every other skin, so animation, hitboxes and aiming are untouched.
 // The sheet draws an arm or a leg as ONE 16-row strip; the rig has an upper and a lower part of each, so the strip is cut at the elbow / knee (see _blankSlice).
-// The Blank's proportions, from the sheet (head 0.46 cube; torso 0.56 x 0.56 x 0.30; each arm 0.22 x 0.66 x 0.28; each leg 0.24 x 0.72 x 0.28), scaled by one factor so the whole figure holds
-// the volume the old rig had (0.332 m3: the sheet as written is 11% more). Legs stand on the floor, the torso sits on them, the head sits straight on the torso (no neck) and the arms hang
-// from the top of the torso. The rig's joints do not move; only the blocks are laid out to fill the sheet's figure (see makePlayerMesh).
+// The Blank's proportions, exactly as the sheet gives them: head 0.45 cube; torso 0.45 x 0.675 x 0.225; each arm and each leg 0.225 x 0.675 x 0.225 (1.8 m tall in all). Legs stand on the
+// floor, the torso sits on them, the head sits straight on the torso (no neck) and the arms hang from the top of the torso, flush with its sides, as do the legs under it. The rig's joints
+// do not move; only the blocks are laid out to fill the sheet's figure (see makePlayerMesh). The volume is 0.296 m3, a little under the old rig's 0.332.
 const BLANK = (() => {
-  const k = 0.9648, head = .46 * k, tw = .56 * k, th = .56 * k, td = .30 * k, aw = .22 * k, ah = .66 * k, ad = .28 * k, lw = .24 * k, lh = .72 * k, ld = .28 * k;
+  const head = .45, tw = .45, th = .675, td = .225, aw = .225, ah = .675, ad = .225, lw = .225, lh = .675, ld = .225;
   const torsoBot = lh, torsoTop = lh + th;
   return { head, tw, th, td, aw, ah, ad, lw, lh, ld, torsoBot, torsoTop, headCenter: torsoTop + head / 2 };
 })();
@@ -46416,10 +46416,10 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
     const pivot = new THREE.Group();
     pivot.position.set(side * B.shoulderHalf, B.shoulder, 0);
     const upper = new THREE.Mesh(sharp ? sharpBox(Q.aw, Q.torsoTop - B.elbow, Q.ad) : characterShapeGeo(B.upperArmW, B.upperArm, B.upperArmW), mkCloth(shirt));
-    upper.position.y = sharp ? (Q.torsoTop + B.elbow) / 2 - B.shoulder : -B.upperArm / 2; upper.castShadow = true; pivot.add(upper);
+    upper.position.y = sharp ? (Q.torsoTop + B.elbow) / 2 - B.shoulder : -B.upperArm / 2; if (sharp) upper.position.x = -side * (B.shoulderHalf - (Q.tw + Q.aw) / 2); upper.castShadow = true; pivot.add(upper);
     const elbow = new THREE.Group(); elbow.position.y = -B.upperArm; pivot.add(elbow);
     const fore = new THREE.Mesh(sharp ? sharpBox(Q.aw, B.elbow - (Q.torsoTop - Q.ah), Q.ad) : characterShapeGeo(B.foreArmW, B.foreArm, B.foreArmW), mkCloth(shirt));
-    fore.position.y = sharp ? -(B.elbow - (Q.torsoTop - Q.ah)) / 2 : -B.foreArm / 2; fore.castShadow = true; elbow.add(fore);
+    fore.position.y = sharp ? -(B.elbow - (Q.torsoTop - Q.ah)) / 2 : -B.foreArm / 2; if (sharp) fore.position.x = -side * (B.shoulderHalf - (Q.tw + Q.aw) / 2); fore.castShadow = true; elbow.add(fore);
     const wrist = new THREE.Group(); wrist.position.y = -B.foreArm; elbow.add(wrist);
     const hand = new THREE.Mesh(shapeGeo(B.handW, B.handH, B.handW,.025), mkMat(skin));
     hand.position.y = -B.handH / 2; wrist.add(hand); if (sharp) hand.visible = false;   // (the sharp arm ends in its own cuff)   // no shadow: it is inside the forearm's
@@ -46441,10 +46441,10 @@ function makePlayerMesh(name, isBot = false, team = 'enemy', skinId = 'default',
     const pivot = new THREE.Group();
     pivot.position.set(side * B.hipHalf, B.hip, 0);
     const thigh = new THREE.Mesh(sharp ? sharpBox(Q.lw, Q.lh - B.knee, Q.ld) : characterShapeGeo(B.thighW, B.thigh, B.thighD), mkCloth(pant));
-    thigh.position.y = sharp ? (Q.lh + B.knee) / 2 - B.hip : -B.thigh / 2; thigh.castShadow = true; pivot.add(thigh);
+    thigh.position.y = sharp ? (Q.lh + B.knee) / 2 - B.hip : -B.thigh / 2; if (sharp) thigh.position.x = -side * (B.hipHalf - (Q.tw - Q.lw) / 2); thigh.castShadow = true; pivot.add(thigh);
     const knee = new THREE.Group(); knee.position.y = -B.thigh; pivot.add(knee);
     const shin = new THREE.Mesh(sharp ? sharpBox(Q.lw, B.knee, Q.ld) : characterShapeGeo(B.shinW, B.shin, B.shinD), mkCloth(pant));
-    shin.position.y = sharp ? -B.knee / 2 : -B.shin / 2; shin.castShadow = true; knee.add(shin);
+    shin.position.y = sharp ? -B.knee / 2 : -B.shin / 2; if (sharp) shin.position.x = -side * (B.hipHalf - (Q.tw - Q.lw) / 2); shin.castShadow = true; knee.add(shin);
     // A real ankle joint, so the foot ROLLS about the ankle instead of spinning
     // about the middle of the boot the way it did when the mesh was the pivot.
     const ankle = new THREE.Group(); ankle.position.y = -B.shin; knee.add(ankle);
