@@ -2095,6 +2095,7 @@ function boostBlastCarryOnAirJump() {
 // aim, and the horizontal is left generous, because crossing a gap is the
 // interesting trick.
 const BLAST_MAX_UP    = 24;   // m/s -> about 12 m apex (back to the original height; sideways stays at 75%)
+const BLAST_JUMP_VEL_MULT = Math.sqrt(1.5);   // a grenade / blast jump goes 1.5x as HIGH as it did (1.22x the upward speed; the cap above scales with it)
 const BLAST_MAX_HORIZ = 34.5; // m/s (was 46 originally; 75%)
 const BLAST_UP_BIAS   = 0.55; // minimum upward share (was 0.32): the push goes up more than out, so a blast lifts you higher without sending you further
 
@@ -6207,6 +6208,7 @@ function nearClimbableWall() {
 // 0.25m are well under half of the thinnest wall (plus the player's radius).
 const MAX_MOVE_STEP = 0.25;
 const RAMP_LAUNCH_MAX = 6;    // extra m/s up from a ramp slide-jump, however fast the slide
+const RAMP_JUMP_VEL_MULT = Math.SQRT2;   // a ramp jump goes 2x as HIGH as it did (apex = v^2 / 2g, so 1.414x the upward speed)
 function moveWithWalls(dir, dist) {
   if (!(dist > 0)) return;
   const n = Math.min(120, Math.max(1, Math.ceil(dist / MAX_MOVE_STEP)));
@@ -50251,6 +50253,7 @@ function doJump(repeat) {
       if (ramp && up > 0.25) {
         const h = Math.hypot(playerVelocity.x, playerVelocity.z);
         slamState.vel += Math.min(RAMP_LAUNCH_MAX, h * ramp.tan * up * 0.3);
+        slamState.vel *= RAMP_JUMP_VEL_MULT;                                           // twice the height of a ramp jump
         spawnAbilityAOEFX(camera.position.clone().setY(camera.position.y - 1.4), 1.6, 0xffcc66);
         playEquipSound('whoosh');
       }
@@ -50273,6 +50276,7 @@ function doJump(repeat) {
     // or halfway back down.
     if (slamState) slamState.vel = AIR_JUMP_VEL;
     else slamState = { vel: AIR_JUMP_VEL, type: 'jump' };
+    airTime = 0;   // a double jump starts your air gravity over (it used to keep building: after 1.5 s up the pull doubles every second)
     // Spend the weapon's jump first and keep the blast one in reserve, so
     // riding a charge while holding a light weapon really does leave you two.
     if ((window._airJumpsLeft || 0) > 0) window._airJumpsLeft--;
@@ -52291,6 +52295,7 @@ function quickMelee() {
   if (m.doubleJump && !isPlayerGrounded() && (window._airJumpsLeft || 0) > 0) {
     if (slamState) slamState.vel = AIR_JUMP_VEL;
     else slamState = { vel: AIR_JUMP_VEL, type: 'jump' };
+    airTime = 0;   // a double jump starts your air gravity over (it used to keep building: after 1.5 s up the pull doubles every second)
     window._airJumpsLeft--;
     boostBlastCarryOnAirJump();
     spawnAbilityAOEFX(camera.position.clone().setY(camera.position.y - 1.4), 1.2, 0xaaccff);
@@ -72786,9 +72791,9 @@ function applyBlastImpulse(pos, opts = {}) {
   // progress but never subtract from it, so a blast can only ever help you up --
   // but cap the total, or two charges stack into the same orbit the single one
   // used to reach.
-  const up = Math.min(away.y * power, BLAST_MAX_UP);
+  const up = Math.min(away.y * power, BLAST_MAX_UP) * BLAST_JUMP_VEL_MULT;
   const before = slamState ? Math.max(slamState.vel, 0) : 0;
-  const climb = Math.min(before + up, BLAST_MAX_UP);
+  const climb = Math.min(before + up, BLAST_MAX_UP * BLAST_JUMP_VEL_MULT);
   if (slamState) slamState.vel = climb;
   else slamState = { vel: climb, type: 'jump' };
   // 🛹 Slide into a blast and it carries you. Normally a charge shoves you away
