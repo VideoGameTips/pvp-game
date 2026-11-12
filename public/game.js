@@ -18056,10 +18056,10 @@ function _gridDress(name) {
 const GRID_LOOK = { floor: '#ffffff', fine: '#cdd6e0', bold: '#a3b4c8', wall: 0xffffff, cover_: 0xeef2f6, tall: 0xffffff, accent: 0xd6e6fa, sky: 0xa9d6f8 };
 // ⬜ Graybox maps: sixteen plain layouts for 1v1 up to 5v5, written as cells (X, Y, Z): ground is Y 0, a full block is one cell, a half block is half a
 // cell high, and a ramp climbs one layer over its own cell (a longer ramp is a longer run). X is the long way: it becomes the map's z, and the two
-// spawns sit at the two ends of it. Nothing is dressed: blocks, ramps and the white grid, and nothing else. One layer is 1 m; a cell is 1.5 to 2.8 m
+// spawns sit at the two ends of it. Nothing is dressed: blocks, ramps and the white grid, and nothing else. One layer is 2 m high (it was 1: the walls, blocks and ramps inside were made twice as high, nothing wider); a cell is 1.5 to 2.8 m
 // across, chosen per size so the walk from one spawn to the other takes 5 to 7 seconds (walking is about 6.7 m/s).
 // b = [x0, y0, z0, x1, y1, z1] blocks (inclusive) · h = [x, y, z] half blocks · r = [x0, y0, z0, x1, y1, z1, dir] ramps (N S E W: the way they climb).
-const _GB_CELL = { tiny: 2.8, small: 2.2, medium: 1.8, large: 1.5 }, _GB_LAYER = 1;
+const _GB_CELL = { tiny: 2.8, small: 2.2, medium: 1.8, large: 1.5 }, _GB_LAYER = 2;
 const _GB_SPEC = {
   gb_duel_yard: { size: 'tiny', n: [16, 12],
     sp: [[-2.8,3.2,18.4,21.4], [-7.8,-1.8,-21.4,-18.4]],
