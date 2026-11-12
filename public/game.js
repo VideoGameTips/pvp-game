@@ -43645,7 +43645,12 @@ function refineCharacterTexels(ctx,key) {
   }
   ctx.putImageData(img,0,0);
 }
-function charMat(key, draw) { return new THREE.MeshLambertMaterial({ map: charTex(key, draw) }); }
+// The Blank (the default avatar) is a satin grey plastic: a soft specular sheen that catches the light, so it is neither the chalky matte of cloth nor metal.
+const _blankKey = key => /^[a-z0-9]+:(?:default|blank_red|blank_blue)(?::|$)/.test(key);
+function charMat(key, draw) {
+  const map = charTex(key, draw);
+  return _blankKey(key) ? new THREE.MeshPhongMaterial({ map, specular: 0x5a5d63, shininess: 42 }) : new THREE.MeshLambertMaterial({ map });
+}
 // BoxGeometry material order is +X −X +Y −Y +Z −Z: right, left, top, bottom,
 // front, back. A face left out falls back to the part's plain colour.
 function charFaceMats(id, f) {
@@ -43911,7 +43916,7 @@ const BLANK = (() => {
   return { head, tw, th, td, aw, ah, ad, lw, lh, ld, torsoBot, torsoTop, headCenter: torsoTop + head / 2 };
 })();
 function blankSkin(accent) {
-  const key = { W: '#e6e6e6', G: '#b3b9c4', D: '#3a3f4b', J: '#1f2430', K: '#0a0a0a', A: accent };
+  const key = { W: '#c9ccd1', G: '#9aa0ab', D: '#3a3f4b', J: '#1f2430', K: '#0a0a0a', A: accent };   // (the sheet's #e6e6e6 and #b3b9c4, turned down a step to a soft grey)
   const R = (ch, n = 16) => ch.repeat(n);
   const rows = (...runs) => runs.flatMap(([n, s]) => Array(n).fill(s));          // [count, row] pairs -> the 16 rows of a face
   const draw = rs => gridFace(key, rs);
@@ -43924,7 +43929,7 @@ function blankSkin(accent) {
   const torsoFace = rows([3, R('D')], [2, R('W')], [2, bar], [4, R('W')], [2, R('D')], [3, R('J')]);
   const torsoSide = rows([11, R('W')], [2, R('D')], [3, R('J')]);
   return {
-    hand: 0xe6e6e6, foot: '#1f2430',
+    hand: 0xc9ccd1, foot: '#1f2430',
     head: {
       front:  draw(rows([6, R('W')], [6, 'WW' + R('K', 12) + 'WW'], [2, R('W')], [2, R('G')])),
       back:   draw(rows([14, R('W')], [2, R('G')])),
