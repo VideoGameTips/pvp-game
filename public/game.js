@@ -60403,6 +60403,9 @@ const MODEL_SKINS = [
   { id: 'vector_deadlock', weapon: 'vector', name: 'DEADLOCK', rarity: 'legendary',
     sw: ['#3a3e46', '#ff3a1a'], build: buildDeadlock,
     blurb: 'A classified corporate Vector with its own cooling department: two armoured heat-exchanger housings above and below the barrel that slide outward the longer you hold the trigger, showing six glowing heat sinks and venting steam when it runs hot. The receiver covers slide back on equip and the screen flashes DEADLOCK // READY. Reload is a PURGE CYCLE: the housings fling open and steam blasts sideways before they slam shut on the new magazine. Inspect is an EMERGENCY SHUTDOWN: an alarm, an orange barrel, four clamps clanking round it, a steam cloud, and a little shake.' },
+  { id: 'crossbow_chronos_engine', weapon: 'crossbow', name: 'Chronos Engine', rarity: 'legendary',
+    sw: ['#c79a45', '#ffa42e'], build: buildChronosEngine,
+    blurb: 'A pocket watch turned into a crossbow. The bolt rail runs through a big brass clock casing with a ticking escape wheel and a rocking balance wheel; the limbs are two hinged clock-hand arms that snap in when you fire; a winding key turns as you reload; and the stock is a hollow brass frame with a pendulum swinging in it. Still just a Crossbow.' },
   { id: 'mauser_phantom_circuit', weapon: 'mauser', name: 'PHANTOM CIRCUIT', rarity: 'legendary',
     sw: ['#2a2d33', '#40f0ff'], build: buildPhantomCircuit,
     blurb: 'A cyber-espionage broomhandle with a cloaking system in its frame: interlocking graphite plates over the receiver and six narrow armour strips that slide into place along the barrel when you draw it. Each shot sends a cyan pulse back along the strips, a digital distortion crawls down the barrel every few seconds, and reload parts the strips to show the glowing frame. Inspect is NOW YOU SEE ME: a scan runs grip to muzzle, the pistol vanishes to a faint outline and snaps back together, CLICK-CLICK-CLICK-CLACK, PHANTOM CIRCUIT // ONLINE. It is never really invisible.' },
@@ -60653,7 +60656,7 @@ const TOWER_MODEL_SKIN_IDS = new Set(['ak20_field_radio']);
 // 🏆 Earned at the end of a ranked season by finishing it at Legend rank: never bought, pulled or won any other way (server.js SEASON_SKIN_IDS grants it when the season is closed).
 const SEASON_MODEL_SKIN_IDS = new Set(['ak20_phoenix_reign']);
 // 🐉 Gen 3: the newest skins have their own case. Mirrors GEN3_SKIN_IDS in server.js (no skin is free).
-const GEN3_MODEL_SKIN_IDS = new Set(['crossbow_fracture', 'railgun_penteract', 'chain_gun_clockwork_dragon', 'ak20_breach_protocol', 'lever_remembrance', 'mauser_phantom_circuit']);
+const GEN3_MODEL_SKIN_IDS = new Set(['crossbow_chronos_engine', 'crossbow_fracture', 'railgun_penteract', 'chain_gun_clockwork_dragon', 'ak20_breach_protocol', 'lever_remembrance', 'mauser_phantom_circuit']);
 const GEN3_MELEE_MODEL_SKIN_IDS = new Set(['scythe_deaths_head']);   // Gen 3 holds melee skins too
 const GATED_MODEL_SKIN_IDS = new Set([...GEN1_GATED_MODEL_SKIN_IDS, ...GEN2_MODEL_SKIN_IDS, ...GEN3_MODEL_SKIN_IDS, ...TOWER_MODEL_SKIN_IDS, ...SEASON_MODEL_SKIN_IDS, ...PVP_SHOP_CATALOG.exclusiveSkins]);
 const GATED_MELEE_MODEL_SKIN_IDS = new Set([...GEN2_MELEE_MODEL_SKIN_IDS, ...GEN2_SUPPORT_MODEL_SKIN_IDS, ...GEN3_MELEE_MODEL_SKIN_IDS]);   // (the lock check is by id, so utilities share it)
@@ -66036,6 +66039,7 @@ const SKIN_FX = {
   harpoon_octopus: { equip: 'unfold', equipMs: 950, equipSfx: ['whoosh', 'squeak'] },
   flamethrower_disco_inferno: { equip: 'flip', equipMs: 950, equipSfx: ['whoosh', 'chime'],
     inspect: [K(.12, { py: .02, rx: -.15 }), K(.26, { py: .05, pz: -.02, rx: -.50 }), K(.80, { py: .05, pz: -.02, rx: -.50 }), K(.88, { py: .03, rx: -.30 }), K(.94, { py: .015, rx: -.08 }), K(1, {})] },
+  crossbow_chronos_engine: { equip: 'unfold', equipMs: 1100, equipSfx: ['whoosh', 'chime'] },
   mauser_phantom_circuit: { equip: 'unfold', equipMs: 1000, equipSfx: ['whoosh', 'snapin'] },
   ak20_phoenix_reign: { equip: 'build', equipMs: 900, equipSfx: ['whoosh', 'chime'] },
   vector_deadlock: { equip: 'unfold', equipMs: 950, equipSfx: ['whoosh', 'snapin'] },
