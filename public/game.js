@@ -67932,10 +67932,10 @@ const DMG_TOTAL_STYLE = [
   'z-index:99999', 'font-family:Arial Black,Arial,sans-serif', 'font-weight:900',
   'font-size:19px', 'color:#ff4400',
   'text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000',
-  'background:rgba(0,0,0,0.45)', 'padding:1px 6px', 'border-radius:4px',
-  'transform:translate(-50%,-100%)',
+  'transform:translate(-50%,-100%)', 'transform-origin:50% 100%',   // (no grey box behind it)
 ].join(';');
 
+const DMG_TOTAL_LIFE = 1100;    // ms the running total stays up after your last hit (it was 3.5 s)
 function trackTotalDamage(targetId, damage, targetMesh, tier, label = null, hack = false) {
   if (!(damage > 0) || !targetMesh) return;
   if (!damageTracker[targetId]) {
@@ -67982,8 +67982,9 @@ function updateDamageNumbers() {
   for (const [id, tr] of Object.entries(damageTracker)) {
     if (!tr.mesh || !tr.el) { delete damageTracker[id]; continue; }
     const age = now - tr.lastHit;
-    if (age > 3500) { tr.el.remove(); delete damageTracker[id]; continue; }
-    tr.el.style.opacity = age > 3000 ? String(1 - (age - 3000) / 500) : '1';
+    if (age > DMG_TOTAL_LIFE) { tr.el.remove(); delete damageTracker[id]; continue; }          // gone quickly: it must not point at where somebody is
+    tr.el.style.opacity = age > DMG_TOTAL_LIFE - 350 ? String(Math.max(0, (DMG_TOTAL_LIFE - age) / 350)) : '1';
+    tr.el.style.transform = 'translate(-50%,-100%) scale(' + (1 + 0.35 * Math.max(0, 1 - age / 140)).toFixed(3) + ')';   // a quick pop on every hit
     const sc = worldToScreen(tr.mesh.position.clone().setY(tr.mesh.position.y + 2.00));  // crown is 1.78 (#53)
     if (!sc) { tr.el.style.display = 'none'; continue; }
     tr.el.style.display = 'block';
