@@ -499,7 +499,7 @@ for (const id of GEN2_EPIC_SKIN_IDS) GEN2_SKIN_WEIGHTS[id] = 1.5;          // a 
 for (const id of GEN2_NEW_MYTHIC_SKIN_IDS) GEN2_SKIN_WEIGHTS[id] = 0.5;    // half as likely as any one donut gun
 // 🐉 Gen 3: the newest skins in a case of their own (mirrors GEN3_MODEL_SKIN_IDS in public/game.js). No skin is free:
 // each one is dealt by this case and nowhere else.
-const GEN3_LEGENDARY_SKIN_IDS = ['railgun_penteract', 'chain_gun_clockwork_dragon', 'ak20_breach_protocol', 'scythe_deaths_head', 'mauser_phantom_circuit'];
+const GEN3_LEGENDARY_SKIN_IDS = ['crossbow_fracture', 'railgun_penteract', 'chain_gun_clockwork_dragon', 'ak20_breach_protocol', 'scythe_deaths_head', 'mauser_phantom_circuit'];
 const GEN3_RARE_SKIN_IDS = ['lever_remembrance'];
 const GEN3_SKIN_IDS = [...GEN3_LEGENDARY_SKIN_IDS, ...GEN3_RARE_SKIN_IDS];
 const GEN3_SKIN_WEIGHTS = {};

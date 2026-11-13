@@ -34519,6 +34519,130 @@ function buildPenteractRailgun() {
   return g;
 }
 
+// 💠 Crossbow -> FRACTURE. A crossbow that looks like a broken object hanging in the air: 20 big obsidian shards with REAL empty gaps between them (each shard is its
+// own piece, with a separation offset from where it would sit if the crossbow were whole), three jagged limb shards a side in place of the bow arms, a split bolt rail,
+// a shattered stock, and a violet crystal hanging in the gap where the receiver should connect. Cut faces are dark violet with a glowing violet edge.
+//   idle     every shard drifts a few millimetres, as if barely held
+//   fire     the shards snap into alignment as the bolt goes, then come apart again
+//   reload   the limb shards spread outward and come back
+//   inspect  the crossbow tilts from side to side and the gaps open wider
+// (looks only: damage, bolt speed, fire rate and behaviour are the Crossbow's.)
+function buildFractureCrossbow() {
+  const g = new THREE.Group();
+  const obsidian = new THREE.MeshPhongMaterial({ color: 0x151222, shininess: 150, specular: 0xb4a2f0 });
+  const inside = new THREE.MeshPhongMaterial({ color: 0x1b0f33, shininess: 30, specular: 0x4a2a8a, emissive: 0x12072a });
+  const edgeM = new THREE.LineBasicMaterial({ color: 0xa066ff, transparent: true, opacity: 1 });
+  const violet = new THREE.MeshBasicMaterial({ color: 0xb36bff });
+  const frags = [];
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const addFrag = (grp, s, opt = {}) => {                                   // a shard: its group sits at its separation offset s; (0,0,0) would be the whole crossbow
+    grp.position.copy(s); g.add(grp);
+    frags.push({ g: grp, s: s.clone(), ph: frags.length * 2.17 + 0.6, a: opt.a || 0.0018, limb: !!opt.limb });
+    return grp;
+  };
+  const edges = mesh => { const e = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, 28), edgeM); mesh.add(e); return mesh; };
+  // a side-on shard: profile points are [z, y], extruded across x (the same layout the stock of the crossbow uses)
+  const side = (pts, width, x = 0) => {
+    const sh = new THREE.Shape(); pts.forEach((p, i) => (i ? sh.lineTo(p[0], p[1]) : sh.moveTo(p[0], p[1]))); sh.closePath();
+    const geo = new THREE.ExtrudeGeometry(sh, { depth: width, bevelEnabled: false });
+    geo.rotateY(-Math.PI / 2); geo.translate(x + width / 2, 0, 0);
+    const m = new THREE.Mesh(geo, [obsidian, inside]); m.castShadow = true; return edges(m);
+  };
+  // a top-down shard (a bow limb): profile points are [x, z], extruded up from y0 by h
+  const top = (pts, y0, h) => {
+    const sh = new THREE.Shape(); pts.forEach((p, i) => (i ? sh.lineTo(p[0], -p[1]) : sh.moveTo(p[0], -p[1]))); sh.closePath();
+    const geo = new THREE.ExtrudeGeometry(sh, { depth: h, bevelEnabled: false });
+    geo.rotateX(-Math.PI / 2); geo.translate(0, y0, 0);
+    const m = new THREE.Mesh(geo, [obsidian, inside]); m.castShadow = true; return edges(m);
+  };
+  const piece = (...meshes) => { const p = new THREE.Group(); meshes.forEach(m => p.add(m)); return p; };
+  const W = 0.034;
+  // receiver: six shards from the nose back; the biggest gap (R3 / R4) is where the crystal hangs
+  const R = [
+    { p: [[-0.248,0.004],[-0.240,0.020],[-0.200,0.022],[-0.208,-0.002],[-0.236,-0.014]], s: V(0.000, 0.003, -0.036) },
+    { p: [[-0.198,0.022],[-0.158,0.021],[-0.166,-0.006],[-0.206,-0.002]], s: V(0.000, -0.003, -0.026) },
+    { p: [[-0.154,0.021],[-0.114,0.022],[-0.124,-0.008],[-0.164,-0.006]], s: V(0.000, 0.004, -0.016) },
+    { p: [[-0.110,0.022],[-0.066,0.022],[-0.076,-0.010],[-0.120,-0.008]], s: V(0.000, -0.003, 0.006) },
+    { p: [[-0.062,0.022],[-0.018,0.022],[-0.026,-0.012],[-0.072,-0.010]], s: V(0.000, 0.003, 0.016) },
+    { p: [[-0.014,0.022],[0.036,0.022],[0.030,-0.012],[-0.022,-0.012]], s: V(0.000, -0.002, 0.024) },
+  ];
+  R.forEach(r => addFrag(piece(side(r.p, W)), r.s));
+  // the bolt rail, broken in two with a narrow gap, and the sight riding the rear half
+  const rail = (z0, z1) => { const m = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.010, z1 - z0), [obsidian, obsidian, obsidian, obsidian, obsidian, obsidian]); m.position.set(0, 0.030, (z0 + z1) / 2); return edges(m); };
+  addFrag(piece(rail(-0.255, -0.095)), V(0, 0.002, -0.006), { a: 0.0014 });
+  const railB = piece(rail(-0.078, 0.075));
+  { const lens = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.014, 0.060), obsidian); lens.position.set(0, 0.044, 0.010); railB.add(edges(lens));
+    const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.0055, 0.0055, 0.004, 10), violet); glass.rotation.x = Math.PI / 2; glass.position.set(0, 0.044, -0.022); railB.add(glass); }
+  addFrag(railB, V(0, 0.004, 0.006), { a: 0.0014 });
+  // the stock: four disconnected pieces of a shattered frame
+  [
+    { p: [[0.044,0.022],[0.088,0.018],[0.082,-0.012],[0.040,-0.012]], s: V(0.000, 0.002, 0.020) },
+    { p: [[0.092,0.018],[0.122,0.016],[0.126,-0.010],[0.086,-0.013]], s: V(0.000, -0.003, 0.024) },
+    { p: [[0.126,0.016],[0.150,-0.004],[0.146,-0.036],[0.124,-0.030],[0.130,-0.010]], s: V(0.000, 0.002, 0.028) },
+    { p: [[0.056,-0.016],[0.086,-0.040],[0.140,-0.038],[0.126,-0.018],[0.092,-0.016]], s: V(0.000, -0.006, 0.024) },
+  ].forEach(r => addFrag(piece(side(r.p, W)), r.s));
+  // the grip (with its guard and trigger) and the foregrip: where the hands are, so they hardly drift
+  {
+    const grip = piece(side([[0.062,-0.030],[0.030,-0.086],[-0.004,-0.088],[0.004,-0.030],[0.030,-0.040]], 0.028));
+    const guard = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.0032, 6, 12, Math.PI * 1.05), obsidian); guard.rotation.set(0, Math.PI / 2, -0.4); guard.position.set(0, -0.032, -0.004); grip.add(guard);
+    const trig = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.014, 0.005), violet); trig.position.set(0, -0.024, -0.004); trig.rotation.x = 0.2; grip.add(trig);
+    addFrag(grip, V(0, -0.004, 0), { a: 0.0007 });
+    const fore = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.044, 0.030), [obsidian, obsidian, obsidian, obsidian, obsidian, obsidian]); fore.position.set(0, -0.026, -0.152);
+    addFrag(piece(edges(fore)), V(0, -0.008, 0), { a: 0.0007 });
+  }
+  // the limbs: three jagged shards a side, swept forward and out into a rough bow shape
+  for (const sd of [-1, 1]) {
+    addFrag(piece(top([[sd*0.026,-0.222],[sd*0.060,-0.250],[sd*0.094,-0.244],[sd*0.098,-0.230],[sd*0.062,-0.226],[sd*0.032,-0.204]], 0.014, 0.012)), V(sd * 0.010, 0.002, -0.004), { limb: true, a: 0.0024 });
+    addFrag(piece(top([[sd*0.102,-0.248],[sd*0.130,-0.246],[sd*0.152,-0.230],[sd*0.150,-0.214],[sd*0.124,-0.226],[sd*0.104,-0.230]], 0.022, 0.011)), V(sd * 0.022, 0.004, -0.008), { limb: true, a: 0.0026 });
+    addFrag(piece(top([[sd*0.156,-0.234],[sd*0.186,-0.216],[sd*0.198,-0.200],[sd*0.186,-0.190],[sd*0.158,-0.208]], 0.026, 0.010)), V(sd * 0.034, 0.008, -0.004), { limb: true, a: 0.0030 });
+  }
+  // the bolt, lying in the groove across the gap in the rail
+  const bolt = new THREE.Group(); bolt.position.set(0, 0.039, -0.126); g.add(bolt);
+  { const sh = new THREE.Mesh(new THREE.CylinderGeometry(0.0034, 0.0034, 0.180, 8), obsidian); sh.rotation.x = Math.PI / 2; bolt.add(sh);
+    const head = new THREE.Mesh(new THREE.ConeGeometry(0.0075, 0.026, 6), violet); head.rotation.x = -Math.PI / 2; head.position.z = -0.100; bolt.add(head);
+    for (let i = 0; i < 3; i++) { const f = new THREE.Mesh(new THREE.BoxGeometry(0.0035, 0.012, 0.020), inside); f.position.z = 0.084; f.rotation.z = i * Math.PI * 2 / 3; bolt.add(f); } }
+  // the core: a violet crystal hanging in the gap between R3 and R4, with a soft halo
+  const core = new THREE.Group(); core.position.set(0, 0.006, -0.122); g.add(core);
+  const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.011, 0), new THREE.MeshPhongMaterial({ color: 0xc08cff, emissive: 0x7a2cff, shininess: 200, specular: 0xffffff }));
+  crystal.scale.set(0.8, 1.5, 0.8); core.add(crystal);
+  const halo = new THREE.Mesh(new THREE.SphereGeometry(0.020, 12, 8), new THREE.MeshBasicMaterial({ color: 0x9a52ff, transparent: true, opacity: 0.22, depthWrite: false, blending: THREE.AdditiveBlending }));
+  core.add(halo);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.034, -0.262); g.add(flash);
+  g._flash = flash; g._kickZ = 0.006; g._greebled = true; g._handDetailed = true;
+  g._fractureCount = frags.length;
+
+  // ── motion ──
+  let fireK = 0, was = false;
+  const place = (now, snap, spread, gap) => {
+    for (const f of frags) {
+      const k = 1 + gap + (f.limb ? spread : 0);
+      const dx = Math.sin(now * 0.9 + f.ph) * f.a, dy = Math.sin(now * 1.3 + f.ph * 2) * f.a * 1.2, dz = Math.sin(now * 0.7 + f.ph * 3) * f.a;
+      const live = 1 - snap;
+      f.g.position.set(f.s.x * k * live + dx * live, f.s.y * k * live + dy * live, f.s.z * k * live + dz * live);
+      f.g.rotation.set(Math.sin(now * 0.8 + f.ph) * 0.012 * live, Math.sin(now * 0.6 + f.ph * 1.7) * 0.012 * live, Math.sin(now * 0.7 + f.ph * 2.3) * 0.014 * live);
+    }
+  };
+  const calm = () => { fireK = 0; was = false; place(0, 0, 0, 0); core.scale.setScalar(1); };
+  g._calm = calm;
+  place(0, 0, 0, 0);
+  g._tick = (dt, now, assembling) => {
+    if (assembling) return;
+    const fired = !!(g._flash && g._flash.visible);
+    if (fired && !was) fireK = 1; was = fired;
+    fireK = Math.max(0, fireK - dt / 0.28);
+    const snap = fireK > 0 ? Math.min(1, fireK * 2.2) : 0;                 // snapped together as the bolt leaves, then drifting apart again
+    const t0 = g._reloadStart && g._reloadDur ? (Date.now() - g._reloadStart) / g._reloadDur : -1;
+    const inspecting = !!g._inspectMode && t0 >= 0 && t0 < 1, reloading = !g._inspectMode && t0 >= 0 && t0 < 1;
+    const spread = reloading ? 1.6 * Math.sin(Math.PI * t0) : 0;           // the limbs open outward and return
+    const gap = inspecting ? 0.7 * Math.sin(Math.PI * Math.min(1, t0 * 1.15)) : 0;
+    place(now, snap, spread, gap);
+    crystal.rotation.y += dt * 1.6;
+    const pulse = 1 + 0.10 * Math.sin(now * 3.2) + fireK * 0.7;
+    core.scale.setScalar(pulse); halo.material.opacity = 0.20 + 0.10 * Math.sin(now * 3.2) + fireK * 0.35;
+  };
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
 // 🪤 Crossbow -> Mousetrap. A spring bar that really snaps, and cheese on the catch.
 function buildMousetrap() {
   const g = new THREE.Group();
@@ -60264,6 +60388,9 @@ const MODEL_SKINS = [
   { id: 'throwing_knives_house_of_cards', weapon: 'throwing_knives', name: 'House of Cards', rarity: 'legendary', look: { hit: 'card' },
     sw: ['#15151c', '#ff2a3a'], build: buildHouseOfCards,
     blurb: 'Razor playing cards: black steel, silver borders, glowing red suits. A fan of three with the ace of spades floating over it; every throw shuffles the rest. Inspect it for the Impossible Shuffle. Whoever it kills is shown the ace of spades. The cards throw exactly like the knives.' },
+  { id: 'crossbow_fracture', weapon: 'crossbow', name: 'FRACTURE', rarity: 'legendary',
+    sw: ['#0b0a14', '#a066ff'], build: buildFractureCrossbow,
+    blurb: 'A crossbow that looks like a broken object hanging in the air: 20 obsidian shards with real gaps between them, three jagged shards a side for limbs, a split rail, a shattered stock and a violet crystal where the receiver should join. They drift, snap together when you fire and come apart again. Same damage, bolt speed and fire rate as the Crossbow.' },
   { id: 'crossbow_widowmaker', weapon: 'crossbow', name: 'WIDOWMAKER', rarity: 'legendary', look: { hit: 'web' },
     sw: ['#0e0e12', '#ff2a2a'], build: buildWidowmaker,
     blurb: 'A mechanical spider that is also a crossbow. Eight legs fold along its sides; aim and they unfold into the bow arms. A shot snaps the front legs in, a reload sends a little spider crawling along the rail with the next bolt, and inspect stands it up and walks it across your view. Whoever it kills hangs in a giant red web that then shatters.' },
@@ -60526,7 +60653,7 @@ const TOWER_MODEL_SKIN_IDS = new Set(['ak20_field_radio']);
 // 🏆 Earned at the end of a ranked season by finishing it at Legend rank: never bought, pulled or won any other way (server.js SEASON_SKIN_IDS grants it when the season is closed).
 const SEASON_MODEL_SKIN_IDS = new Set(['ak20_phoenix_reign']);
 // 🐉 Gen 3: the newest skins have their own case. Mirrors GEN3_SKIN_IDS in server.js (no skin is free).
-const GEN3_MODEL_SKIN_IDS = new Set(['railgun_penteract', 'chain_gun_clockwork_dragon', 'ak20_breach_protocol', 'lever_remembrance', 'mauser_phantom_circuit']);
+const GEN3_MODEL_SKIN_IDS = new Set(['crossbow_fracture', 'railgun_penteract', 'chain_gun_clockwork_dragon', 'ak20_breach_protocol', 'lever_remembrance', 'mauser_phantom_circuit']);
 const GEN3_MELEE_MODEL_SKIN_IDS = new Set(['scythe_deaths_head']);   // Gen 3 holds melee skins too
 const GATED_MODEL_SKIN_IDS = new Set([...GEN1_GATED_MODEL_SKIN_IDS, ...GEN2_MODEL_SKIN_IDS, ...GEN3_MODEL_SKIN_IDS, ...TOWER_MODEL_SKIN_IDS, ...SEASON_MODEL_SKIN_IDS, ...PVP_SHOP_CATALOG.exclusiveSkins]);
 const GATED_MELEE_MODEL_SKIN_IDS = new Set([...GEN2_MELEE_MODEL_SKIN_IDS, ...GEN2_SUPPORT_MODEL_SKIN_IDS, ...GEN3_MELEE_MODEL_SKIN_IDS]);   // (the lock check is by id, so utilities share it)
@@ -65918,6 +66045,8 @@ const SKIN_FX = {
     inspect: [K(.10, { py: .02 }), K(.20, { py: .06, pz: -.04, rx: .10 }), K(.80, { py: .06, pz: -.04, rx: .10 }), K(.92, { py: .03 }), K(1, {})] },
   throwing_knives_house_of_cards: { equip: 'unfold', equipMs: 900, equipSfx: ['fold', 'click'],
     inspect: [K(.12, { py: .02 }), K(.9, { py: .02 }), K(1, {})] },
+  crossbow_fracture: { equip: 'build', equipMs: 900, equipSfx: ['whoosh', 'snapin'],
+    inspect: [K(.14, { py: .03 }), K(.30, { py: .045, rz: .40 }), K(.50, { py: .045, rz: -.40 }), K(.70, { py: .045, rz: .35 }), K(.88, { py: .02, rz: -.15 }), K(1, {})] },
   crossbow_widowmaker: { equip: 'unfold', equipMs: 1000, equipSfx: ['fold', 'click'],
     inspect: [K(.14, { py: .012 }), K(.26, { py: .05 }), K(.34, { py: .05, px: -.02, ry: .9 }), K(.54, { py: .05, px: -.17, ry: .9 }), K(.62, { py: .05, px: -.17, ry: -.9 }),
               K(.80, { py: .05, px: -.01, ry: -.9 }), K(.90, { py: .012 }), K(1, {})] },
