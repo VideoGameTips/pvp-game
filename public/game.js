@@ -4788,7 +4788,7 @@ function weaponSamplesPreload(ctx) {                                // (one fetc
 const EVENT_SAMPLES = {
   // 🎯 The headshot: the ding, an octave up (rate 2.0). No tier changes it, the click that goes with every hit is the hitmarker's.
   headshot: { min: 0, dedupe: 0, clips: [
-    { file: 'headshot', gain: 0.6, from: 0.10, len: 0.22, fade: 0.10, rate: [2.0, 2.0] },
+    { file: 'headshot', gain: 1.0, from: 0.10, len: 0.22, fade: 0.10, rate: [2.0, 2.0] },   // gain 1.0: about 150% of a gun shot's loudness (measured: the Vector's first 0.3 s has an RMS of 0.035, this 0.052)
   ] },
   explosion: { min: 0.85, dedupe: 150, clips: [
     { file: 'boomCrack', gain: 0.124, from: 0.03, len: 2.8, fade: 1.2, rate: [1, 1] },
