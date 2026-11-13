@@ -190,6 +190,192 @@ if (ok && process.argv.includes('--combat-feedback')) {
   else console.log('combat feedback: last-hit bearing, camera turns, deduplication, marker priority and shield break');
 }
 
+if (ok && process.argv.includes('--hitmarker')) {
+  // The X hitmarker: its look and timing, that it restarts instead of stacking, that only a CONFIRMED hit draws it (a real
+  // player's hit is confirmed by the server's playerHit: nothing taken, nothing shown), the three sounds and their spam limit,
+  // the optional damage numbers (combined, never invented), and the saved settings.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const stub = () => ({ style: {}, className: '', textContent: '', appendChild() {}, remove() {} });
+    const saved = { HITMARKER: { ...HITMARKER }, sound: playSoundEvent, myId, inLobby, now: performance.now, snd: _hmSoundLog.length };
+    const calls = [];
+    let T = 100000; try { performance.now = () => T; } catch (e) { issues.push('could not drive the clock'); }
+    try {
+      HITMARKER = { ...HITMARKER_DEFAULT };
+      // ── look and timing
+      for (const k of ['hit', 'head', 'kill']) {
+        const L = HITMARKER_LOOK[k];
+        if (k !== 'kill' && (L.totalMs < 180 || L.totalMs > 200)) issues.push(k + ' lasts ' + L.totalMs + ' ms, wanted 180 to 200');
+        if (L.growMs < 50 || L.growMs > 70) issues.push(k + ' grows for ' + L.growMs + ' ms, wanted about 60');
+        if (L.totalMs - L.growMs < 100 || L.totalMs - L.growMs > 220) issues.push(k + ' contracts and fades in ' + (L.totalMs - L.growMs) + ' ms');
+        const peak = hitmarkerPose(L, L.growMs - 0.001), mid = hitmarkerPose(L, (L.growMs + L.totalMs) / 2), end = hitmarkerPose(L, L.totalMs - 1);
+        if (!(peak.off > L.grow * 0.97)) issues.push(k + ' does not reach its full spread by the end of the growth: ' + peak.off);
+        if (!(mid.off < peak.off && end.off < mid.off && end.alpha < mid.alpha && mid.alpha < 1)) issues.push(k + ' does not contract and fade smoothly');
+        if (hitmarkerPose(L, L.totalMs) !== null || hitmarkerPose(L, -5) !== null) issues.push(k + ' is not over at its end');
+        let prev = -1; for (let a = 0; a < L.growMs; a += 2) { const o = hitmarkerPose(L, a).off; if (o < prev - 1e-9) issues.push(k + ' spread goes backwards while growing'); prev = o; }
+        if (hitmarkerPose(L, 0).off !== 0 || hitmarkerPose(L, 0).alpha !== 1) issues.push(k + ' should appear at full strength with no delay');
+      }
+      if (!(HITMARKER_LOOK.head.grow > HITMARKER_LOOK.hit.grow)) issues.push('a headshot should spread further than a body hit');
+      if (!(HITMARKER_LOOK.kill.totalMs > HITMARKER_LOOK.hit.totalMs)) issues.push('an elimination should fade more slowly');
+      if (HITMARKER_LOOK.hit.color !== '#ffffff' || !/^#ff[0-5]/.test(HITMARKER_LOOK.head.color) || !/^#ff[b-d]/.test(HITMARKER_LOOK.kill.color)) issues.push('colours: white, red, gold');
+      // ── one element, restarting
+      const el = stub(), view = makeHitmarkerView(() => el);
+      let made = 0; const keepCreate = document.createElement; document.createElement = () => { made++; return keepCreate.call(document); };
+      try {
+        for (let i = 0; i < 300; i++) { T += 7; view.play('hit', T); }
+      } finally { document.createElement = keepCreate; }
+      if (made) issues.push('hits create elements (' + made + ')');
+      T += 1000; view.play('hit', T); const t0 = view.t0; view.play('hit', T + 5);
+      if (view.t0 !== t0) issues.push('the pellets of one blast should be one marker, not a restart each');
+      view.play('hit', T + 60);
+      if (view.t0 !== T + 60) issues.push('a second hit should restart the marker');
+      view.play('head', T + 61);
+      if (view.kind !== 'head' || el.style.color !== HITMARKER_LOOK.head.color) issues.push('a headshot should turn the marker red');
+      view.play('hit', T + 70);
+      if (view.kind !== 'head') issues.push('a body hit should not overwrite a headshot that has just landed');
+      view.play('kill', T + 71);
+      if (view.kind !== 'kill' || el.style.color !== HITMARKER_LOOK.kill.color) issues.push('an elimination should turn the marker gold');
+      view.play('head', T + 100);
+      if (view.kind !== 'kill') issues.push('a headshot should not overwrite an elimination that has just landed');
+      view.play('hit', T + 400);
+      if (view.kind !== 'hit' || el.style.color !== HITMARKER_LOOK.hit.color) issues.push('after the priority window a body hit is white again');
+      view.render(T + 400 + 500);
+      if (el.style.opacity !== '0' || view.active) issues.push('the marker should be gone after its time');
+      // frame-rate independence: the pose is a function of the clock, so 30 fps and 240 fps see the same marker
+      view.play('hit', T + 2000);
+      view.render(T + 2000 + 90); const a = [el.style['--hm-gap'], el.style.opacity];
+      for (let f = 0; f < 20; f++) view.render(T + 2000 + 4 * f);
+      view.render(T + 2000 + 90); if (el.style['--hm-gap'] !== a[0] || el.style.opacity !== a[1]) issues.push('the marker depends on how often it is drawn');
+      // the ticks rest outside a ring crosshair, and clear of thick arms
+      const keepCh = CROSSHAIR; CROSSHAIR = { shape: 'circle', size: 18, thickness: 2, gap: 0, dot: 0 };
+      if (!(hitmarkerRestGap(1) >= 18)) issues.push('the X starts inside a ring crosshair: ' + hitmarkerRestGap(1));
+      CROSSHAIR = { shape: 'cross', size: 10, thickness: 8, gap: 0, dot: 0 };
+      if (!(hitmarkerRestGap(1) >= (8 / 2 + 3) * 1.4)) issues.push('the X touches thick crosshair arms: ' + hitmarkerRestGap(1));
+      CROSSHAIR = keepCh;
+      // off: nothing drawn
+      const before = HITMARKER_VIEW.t0; HITMARKER.enabled = false; T += 1000; showHitmarker('kill');
+      if (HITMARKER_VIEW.t0 !== before) issues.push('a hitmarker that is switched off still draws');
+      HITMARKER.enabled = true;
+      // ── settings: clamped, saved, loaded
+      const bad = sanitizeHitmarker({ size: 99, opacity: 'x', volume: -3, enabled: 0, numbers: 1 });
+      if (bad.size !== 2 || bad.opacity !== 1 || bad.volume !== 0 || bad.enabled !== false || bad.numbers !== true) issues.push('settings are not clamped: ' + JSON.stringify(bad));
+      HITMARKER = { enabled: true, size: 1.5, opacity: 0.6, volume: 0.4, numbers: true }; saveHitmarker();
+      const stored = JSON.parse(localStorage.getItem('pvp_hitmarker'));
+      if (stored.size !== 1.5 || stored.opacity !== 0.6 || stored.volume !== 0.4 || stored.numbers !== true) issues.push('settings are not saved: ' + JSON.stringify(stored));
+      if (HITMARKER_DEFAULT.numbers !== false) issues.push('damage numbers should be off by default');
+      HITMARKER = { ...HITMARKER_DEFAULT };
+      // ── sounds: three distinct cues, volume setting, spam limit
+      playSoundEvent = (name, o) => { calls.push([name, o]); };
+      for (const [k, n] of [['hit', 'hm_body'], ['head', 'hm_head'], ['kill', 'hm_kill']]) { T += 1000; _hmSoundLog.length = 0; calls.length = 0; playHitConfirmSound(k, 'yellow'); if (!calls.length || calls[0][0] !== n) issues.push(k + ' should play ' + n + ', played ' + (calls[0] && calls[0][0])); }
+      HITMARKER.volume = 0; calls.length = 0; T += 1000; _hmSoundLog.length = 0; playHitConfirmSound('hit'); playHitConfirmSound('kill');
+      if (calls.length) issues.push('a hitmarker volume of 0 still makes sound');
+      HITMARKER.volume = 0.5; T += 1000; calls.length = 0; _hmSoundLog.length = 0; playHitConfirmSound('hit');
+      const half = calls[0][1].volume; HITMARKER.volume = 1; T += 1000; calls.length = 0; _hmSoundLog.length = 0; playHitConfirmSound('hit');
+      if (!(Math.abs(half * 2 - calls[0][1].volume) < 1e-6)) issues.push('the hitmarker volume does not scale the click');
+      // a P90 (15 hits a second) and a Minigun (25) for two seconds
+      for (const [rate, label] of [[15, 'P90'], [25, 'Minigun']]) {
+        calls.length = 0; T += 5000; _hmSoundLog.length = 0;
+        for (let i = 0; i < rate * 2; i++) { T += 1000 / rate; playHitConfirmSound('hit'); }
+        const vols = calls.map(c => c[1].volume);
+        if (calls.length > rate * 2 * 0.85 && label === 'Minigun') issues.push(label + ' plays ' + calls.length + ' clicks for ' + rate * 2 + ' hits: no limit');
+        if (!(vols[vols.length - 1] < vols[0] * 0.65)) issues.push(label + ' clicks do not get quieter as they pile up: ' + vols[0].toFixed(2) + ' -> ' + vols[vols.length - 1].toFixed(2));
+        if (calls.some(c => c[1].minGap < 60)) issues.push(label + ': the click gap is too short');
+      }
+      calls.length = 0; T += 5000; _hmSoundLog.length = 0; for (let i = 0; i < 12; i++) { T += 10; playHitConfirmSound('hit'); }
+      const crowded = calls.length; playHitConfirmSound('kill'); if (calls.length !== crowded + 1) issues.push('an elimination should always be heard, even in a crowd of clicks');
+      // ── damage numbers: off by default, combined when quick, above and to the side, never invented
+      const host = stub(), made2 = []; host.appendChild = c => made2.push(c);
+      const nl = makeHitNumberLayer(() => host);
+      const kd = document.createElement; document.createElement = () => stub();
+      try {
+        HITMARKER.numbers = false; addHitNumber(30, false); if (HITMARKER_NUMBERS.slots.length) issues.push('numbers appear while switched off');
+        T += 5000; nl.add(10, false, T); nl.add(12, false, T + 50); nl.add(0, false, T + 60); nl.add(-4, true, T + 70);
+        if (nl.slots.length !== 1 || nl.slots[0].total !== 22 || nl.slots[0].el.textContent !== '22') issues.push('quick hits should add into one number (got ' + nl.slots.map(s => s.total) + ')');
+        if (nl.slots[0].head) issues.push('a zero or negative hit made a headshot number');
+        nl.add(30, true, T + 60); if (nl.slots.length !== 1 || nl.slots[0].total !== 52 || !nl.slots[0].head) issues.push('a headshot among quick hits should make the number red');
+        nl.add(15, false, T + 600); if (nl.slots.length !== 2) issues.push('a later hit should be its own number');
+        const s1 = nl.slots[0], s2 = nl.slots[1];
+        if (!(s1.y < 0 && s2.y < 0)) issues.push('numbers should sit above the crosshair');
+        if (!(s1.x * s2.x < 0)) issues.push('successive numbers should go to alternate sides');
+        for (let i = 0; i < 20; i++) nl.add(5, false, T + 1000 + i * 300);
+        if (nl.slots.length > 5) issues.push('too many number elements: ' + nl.slots.length);
+        nl.clear();
+      } finally { document.createElement = kd; }
+      // ── confirmed hits only
+      myId = 'me_hm'; inLobby = false; HITMARKER = { ...HITMARKER_DEFAULT, numbers: true }; HITMARKER_NUMBERS.clear();
+      const nSlots = () => HITMARKER_NUMBERS.slots.filter(x => x.on).length;
+      T += 5000; HITMARKER_VIEW.clear(); calls.length = 0; _hmSoundLog.length = 0;
+      const taken = { shooterId: 'me_hm', targetId: 'v1', hp: 70, dealt: 30, bulletId: 'k1', weapon: 'ak20', headshot: false };
+      if (!hitConfirmFromServer(taken, 100)) issues.push('a server-confirmed hit was not shown');
+      if (HITMARKER_VIEW.kind !== 'hit' || !calls.length || calls[0][0] !== 'hm_body') issues.push('a confirmed body hit should draw the marker and click');
+      if (!nSlots() || HITMARKER_NUMBERS.last.total !== 30) issues.push('the number should be what the server says was taken');
+      if (hitConfirmFromServer(taken, 100)) issues.push('the same hit, echoed twice, showed twice');
+      T += 500; HITMARKER_VIEW.clear(); const nHits = calls.length;
+      for (const [label, d] of [['a hit that took nothing (shield, guard, blocked)', { ...taken, bulletId: 'k2', hp: 100, dealt: 0 }], ['a reflected round', { ...taken, bulletId: 'k3', reflected: true }],
+                                ['health being healed', { ...taken, bulletId: 'k4', healthEvent: 'heal' }], ['damage to me', { ...taken, bulletId: 'k5', targetId: 'me_hm' }], ['somebody elses hit', { ...taken, bulletId: 'k6', shooterId: 'other' }]]) {
+        HITMARKER_VIEW.clear(); const t1 = HITMARKER_VIEW.t0;
+        if (hitConfirmFromServer(d, 100) || HITMARKER_VIEW.t0 !== t1 && HITMARKER_VIEW.active) issues.push(label + ' showed a hitmarker');
+      }
+      if (calls.length !== nHits) issues.push('feedback sounds for hits that took nothing');
+      T += 500; HITMARKER_VIEW.clear();
+      hitConfirmFromServer({ ...taken, bulletId: 'k7', headshot: true, hp: 55, dealt: 45 }, 100);
+      if (HITMARKER_VIEW.kind !== 'head' || calls[calls.length - 1][0] !== 'hm_head') issues.push('a confirmed headshot should be red with the headshot click');
+      T += 500; HITMARKER_VIEW.clear(); calls.length = 0;
+      hitConfirmFromServer({ ...taken, bulletId: 'k8', hp: 60, dealt: undefined }, 100);      // an older server: no 'dealt', only the new health
+      if (!HITMARKER_NUMBERS.last || HITMARKER_NUMBERS.last.total !== 40) issues.push('without a dealt figure the drop in health should be used');
+      T += 500; HITMARKER_VIEW.clear(); calls.length = 0; const before2 = HITMARKER_VIEW.t0;
+      hitConfirmFromServer({ ...taken, bulletId: 'k9', hp: 0, dealt: 30 }, 30);
+      if (HITMARKER_VIEW.t0 !== before2 || calls.length) issues.push('a killing blow should leave the marker and the tone to the elimination, not play a body click first');
+      T += 5000; HITMARKER_VIEW.clear(); calls.length = 0; _lastKillConfirm = { id: null, t: 0 };
+      confirmKill('v1', 'Victim');
+      if (HITMARKER_VIEW.kind !== 'kill' || calls.length !== 1 || calls[0][0] !== 'hm_kill') issues.push('an elimination should draw the gold marker and play its tone once');
+      confirmKill('v1', 'Victim'); if (calls.length !== 1) issues.push('the elimination tone played twice for one kill');
+      // the lobby: grey, no damage
+      inLobby = true; T += 5000; HITMARKER_VIEW.clear();
+      emitHit('lobby_target', 'lb1', 'ak20', new THREE.Vector3(0, 1, -5));
+      if (HITMARKER_VIEW.kind !== 'lobby') issues.push('a lobby hit should draw the grey marker');
+      inLobby = false;
+      // the real emitHit: a real player's hit waits for the server, a bot's is confirmed when its health comes off
+      const keepEmit = socket.emit, spies = [spawnHitNumber, trackTotalDamage, skinHitFX]; spawnHitNumber = () => {}; trackTotalDamage = () => {}; skinHitFX = () => {};
+      socket.emit = () => {};
+      const here = new THREE.Vector3(0, 1, -5);
+      players.hm_real = { id: 'hm_real', hp: 100, team: 'enemy' }; remoteMeshes.hm_real = { visible: true, position: new THREE.Vector3(0, 0, -5), rotation: { y: 0 } };
+      players.hm_bot = { id: 'hm_bot', hp: 300, team: 'enemy', isBot: true }; remoteMeshes.hm_bot = { visible: true, position: new THREE.Vector3(2, 0, -5), rotation: { y: 0 } };
+      const botObj = { id: 'hm_bot', hp: 300, maxHp: 300, x: 2, z: -5, y: 0, team: 'enemy', isBot: true, dead: false };
+      gameBots.push(botObj);
+      try {
+        T += 5000; HITMARKER_VIEW.clear(); calls.length = 0; _hmSoundLog.length = 0;
+        emitHit('hm_real', 'rb1', 'ak20', here.clone());
+        if (HITMARKER_VIEW.active || calls.length) issues.push('a shot at a real player drew a hitmarker or clicked before the server confirmed it');
+        hitConfirmFromServer({ shooterId: myId, targetId: 'hm_real', hp: 75, bulletId: 'rb1', weapon: 'ak20', dealt: 25 }, 100);
+        if (HITMARKER_VIEW.kind !== 'hit') issues.push('the server confirmation of a real players hit drew nothing');
+        T += 5000; HITMARKER_VIEW.clear(); calls.length = 0; _hmSoundLog.length = 0;
+        emitHit('hm_bot', 'bb1', 'ak20', here.clone());
+        if (HITMARKER_VIEW.kind !== 'hit' || botObj.hp >= 300) issues.push('a hit on a bot should draw the marker once its health came off (marker ' + HITMARKER_VIEW.kind + ', hp ' + botObj.hp + ')');
+        const hpAfter = botObj.hp, played = calls.length;
+        hitConfirmFromServer({ shooterId: myId, targetId: 'hm_bot', hp: hpAfter, bulletId: 'bb1', weapon: 'ak20' }, 300);
+        if (calls.length !== played) issues.push('the servers echo of a bot hit played a second click');
+        T += 5000; HITMARKER_VIEW.clear(); calls.length = 0; _hmSoundLog.length = 0;
+        emitHit('hm_bot', 'bb2', 'ak20', here.clone(), true);
+        if (HITMARKER_VIEW.kind !== 'head' || calls[0] && calls[0][0] !== 'hm_head') issues.push('a headshot on a bot should be red with the headshot click');
+        // a bot with its katana Deflect on sends the round back: no hit was taken, so nothing is drawn or heard
+        T += 5000; HITMARKER_VIEW.clear(); calls.length = 0; _hmSoundLog.length = 0; botObj._deflectUntil = Date.now() + 5000; const hpGuard = botObj.hp;
+        emitHit('hm_bot', 'bb3', 'ak20', here.clone());
+        if (HITMARKER_VIEW.active || calls.length || botObj.hp !== hpGuard) issues.push('a deflected shot at a bot drew a hitmarker or made a click (active ' + HITMARKER_VIEW.active + ', sounds ' + calls.length + ', hp ' + hpGuard + ' -> ' + botObj.hp + ')');
+        botObj._deflectUntil = 0;
+      } finally { socket.emit = keepEmit; [spawnHitNumber, trackTotalDamage, skinHitFX] = spies; gameBots.splice(gameBots.indexOf(botObj), 1); for (const id of ['hm_real', 'hm_bot']) { delete players[id]; delete remoteMeshes[id]; } }
+    } catch (e) {
+      issues.push('threw: ' + (e && e.stack ? e.stack.split('\\n').slice(0, 3).join(' | ') : e));
+    } finally {
+      HITMARKER = saved.HITMARKER; playSoundEvent = saved.sound; myId = saved.myId; inLobby = saved.inLobby; HITMARKER_VIEW.clear(); HITMARKER_NUMBERS.clear();
+      try { performance.now = saved.now; } catch (e) {}
+    }
+    return issues;
+  })()`);
+  if (issues.length) { ok = false; console.log('hitmarker failures:\n' + issues.join('\n')); }
+  else console.log('hitmarker: X look and timing, restart not stack, priority, confirmed hits only (server for players, local for bots), three sounds and the spam limit, damage numbers, saved settings');
+}
+
 if (ok && process.argv.includes('--action-wind')) {
   const issues = vm.runInThisContext(`(() => {
     const issues=[], saved={gameStarted,isDead,activeSlot,velocity:playerVelocity.clone()};

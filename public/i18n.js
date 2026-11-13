@@ -448,6 +448,8 @@
     'Comms wheel 2': '通讯轮盘 2', 'Scoreboard': '计分板', 'PRESS A KEY…': '请按键…',
     'RESET ALL TO DEFAULT': '全部恢复默认', 'RESET TO DEFAULT': '恢复默认', 'SIZE': '大小', 'THICKNESS': '粗细',
     'CENTER GAP': '中心间隙', 'DOT SIZE': '圆点大小', 'OPACITY': '透明度', 'BLACK OUTLINE': '黑色描边',
+    '💥 HITMARKER': '💥 命中标记', 'SHOW HITMARKER': '显示命中标记', 'HITMARKER SOUND VOLUME': '命中音效音量', 'DAMAGE NUMBERS': '伤害数字',
+    'BODY': '身体', 'HEADSHOT': '爆头', 'ELIMINATION': '击杀',
     'That key is reserved.': '这个键已被保留。',
     'Click a key, then press the new one. Esc cancels. Taking a key that is already in use swaps the two actions. Saved on this device. On-screen hints may still show the default keys.': '点击一个按键，再按下新的键。Esc 取消。占用已被使用的键会和对方互换。保存在本设备上。屏幕上的提示可能仍显示默认按键。',
     '🗑 F · SWAP WEAPONS': '🗑 F · 换武器',

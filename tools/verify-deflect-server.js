@@ -53,4 +53,9 @@ handlers.botHitMe({botId:'bot',weapon:'srx',headshot:true});assert.equal(players
 players.bot.ownerId='defender';players.defender.hp=300;players.defender.shield=true;
 handlers.botHitMe({botId:'bot',weapon:'ak20',reflectedDamage:190});assert.equal(players.defender.hp,110,'Full return was reduced to gun base damage');
 assert(events.some(e=>e.event==='playerHit'&&e.data.reflected&&e.data.damage===190));
+// what the shooter's hitmarker is told (hitConfirmFromServer in public/game.js): a hit that took health says how much; one that was deflected or blocked says nothing about the defender
+reset();players.defender._deflectGuard=null;hit('plain');
+{const ph=events.find(e=>e.event==='playerHit'&&e.data.targetId==='defender');assert(ph,'A plain hit sent no playerHit');assert.equal(ph.data.dealt,40,'playerHit.dealt is not what the hit took');assert.equal(ph.data.shooterId,'shooter');}
+reset();hit('deflected');assert(!events.some(e=>e.event==='playerHit'&&e.data.targetId==='defender'),'A deflected shot was reported to its shooter as a hit on the defender');
+reset();players.defender.shield=true;hit('blocked');assert(!events.some(e=>e.event==='playerHit'&&e.data.targetId==='defender'),'A shielded hit was reported as damage');
 console.log('PASS: PvP return damage only while Deflect is on (an idle katana returns nothing), lethal blocks, kill credit, deduplication, piercers/explosives, cooldown, expiry, weapon switches, team/match isolation, shields, racket, bot headshots');

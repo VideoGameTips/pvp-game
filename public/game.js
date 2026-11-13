@@ -5596,6 +5596,26 @@ function playSoundEvent(name, opts = {}) {
     playFilteredNoise(ctx,start,.11,out,.5*mult,'bandpass',1300,.8);
     playFilteredNoise(ctx,start+.04,.38,out,.32*mult,'lowpass',850,.7);
     for(let i=0;i<3;i++) playTone(ctx,start+i*.035,.07,out,210+i*65,65,.12*mult,'triangle');
+  } else if (name === 'hm_body') {
+    // The click of a hit that took health: soft, short, a little thock under it. `tier` nudges the pitch (a far, weak hit is duller).
+    const k = (HIT_TIERS[opts.tier] || HIT_TIERS.yellow).click;
+    playFilteredNoise(ctx, start, 0.005, out, 0.13 * mult, 'highpass', 3200 * k, 0.5, 0.0002, 0);
+    playTone(ctx, start, 0.024, out, 1750 * k, 1150 * k, 0.11 * mult, 'sine');
+    playTone(ctx, start, 0.034, out, 250, 130, 0.08 * mult, 'sine');
+  } else if (name === 'hm_head') {
+    // A headshot: the same hard edge, sharper and higher, three ringing partials that die in under a tenth of a second.
+    const k = (HIT_TIERS[opts.tier] || HIT_TIERS.orange).click;
+    playFilteredNoise(ctx, start, 0.004, out, 0.20 * mult, 'highpass', 5200, 0.5, 0.0002, 0);
+    playTone(ctx, start, 0.085, out, 3000 * k, 2960 * k, 0.13 * mult, 'sine');
+    playTone(ctx, start, 0.060, out, 4500 * k, 4440 * k, 0.085 * mult, 'sine');
+    playTone(ctx, start, 0.042, out, 6200 * k, 6100 * k, 0.045 * mult, 'sine');
+    playTone(ctx, start, 0.040, out, 300, 140, 0.09 * mult, 'sine');
+  } else if (name === 'hm_kill') {
+    // An elimination: two quick rising notes (A5, E6) and a soft low thump, about a fifth of a second all told.
+    playTone(ctx, start, 0.075, out, 880, 880, 0.12 * mult, 'triangle');
+    playTone(ctx, start + 0.06, 0.13, out, 1318.5, 1318.5, 0.13 * mult, 'triangle');
+    playTone(ctx, start + 0.06, 0.09, out, 2637, 2637, 0.04 * mult, 'sine');
+    playTone(ctx, start, 0.09, out, 170, 70, 0.10 * mult, 'sine');
   } else if (name === 'hitmarker') {
     // A click, not a beep: a hard 3 ms edge, a short pitched tick that falls away, and a small
     // wooden thock underneath so it lands with some weight. `tier` nudges the pitch (a far,
@@ -50394,6 +50414,69 @@ function openCrosshairPanel() {
 }
 applyCrosshair();
 
+// ── 💥 Hitmarker settings (⚙ Settings → Hitmarker): on/off, size, opacity, sound volume, damage numbers. Saved like the crosshair. ──
+let _hmPreview = null;
+function openHitmarkerPanel() {
+  closeOtherDialogs('hitmarker-panel');
+  let panel = document.getElementById('hitmarker-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'hitmarker-panel';
+    panel.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9900;background:#14120a;border:2px solid #ffcc44;border-radius:8px;padding:22px;color:#fff;font-family:"Courier New",monospace;min-width:300px;';
+    document.body.appendChild(panel);
+  }
+  panel.style.display = 'block';
+  const btn = (attrs, label, on) => `<button ${attrs} style="padding:6px 10px;cursor:pointer;font-family:inherit;font-size:11px;font-weight:bold;letter-spacing:1px;border-radius:4px;background:${on ? '#4a3a10' : '#241f10'};color:${on ? '#ffe28a' : '#c9b46a'};border:1px solid ${on ? '#ffcc44' : '#5a4a20'};">${label}</button>`;
+  const fmt = { size: v => v.toFixed(2) + '×', opacity: v => Math.round(v * 100) + '%', volume: v => Math.round(v * 100) + '%' };
+  const slider = (key, label, min, max, step) => `
+    <div style="margin:9px 0;">
+      <div style="display:flex;justify-content:space-between;font-size:11px;letter-spacing:1px;color:#f0e2b0;"><span>${label}</span><span id="hm-${key}-val" style="color:#ffe28a;">${fmt[key](HITMARKER[key])}</span></div>
+      <input data-hm="${key}" type="range" min="${min}" max="${max}" step="${step}" value="${HITMARKER[key]}" style="width:100%;">
+    </div>`;
+  const toggle = (id, label, on) => `<div style="display:flex;align-items:center;justify-content:space-between;margin:10px 0 4px;"><div style="font-size:11px;letter-spacing:1px;color:#f0e2b0;">${label}</div>${btn(`id="${id}"`, on ? 'ON' : 'OFF', on)}</div>`;
+  const X = '<i></i><i></i><i></i><i></i>';
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;border-bottom:1px solid #6a5420;padding-bottom:10px;">
+      <div style="font-size:18px;letter-spacing:3px;color:#ffd866;">💥 HITMARKER</div>
+      <button id="hm-close" style="background:#3a2a1a;color:#ffaaaa;border:1px solid #ff6666;padding:4px 10px;cursor:pointer;font-family:inherit;border-radius:3px;">✕</button>
+    </div>
+    <div style="position:relative;height:130px;margin-bottom:10px;border-radius:6px;background:linear-gradient(135deg,#3b4a5a,#1b232c);overflow:hidden;">
+      <div id="hmp-cross" style="position:absolute;left:50%;top:50%;width:0;height:0;"></div>
+      <div id="hmp-x" class="hm-x">${X}</div>
+      <div id="hmp-dmg" class="hm-dmg"></div>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:6px;">
+      ${btn('data-test="hit"', 'BODY', false)}${btn('data-test="head"', 'HEADSHOT', false)}${btn('data-test="kill"', 'ELIMINATION', false)}
+    </div>
+    ${toggle('hm-enabled', 'SHOW HITMARKER', HITMARKER.enabled)}
+    ${slider('size', 'SIZE', 0.5, 2, 0.05)}
+    ${slider('opacity', 'OPACITY', 0.2, 1, 0.05)}
+    ${slider('volume', 'HITMARKER SOUND VOLUME', 0, 1, 0.05)}
+    ${toggle('hm-numbers', 'DAMAGE NUMBERS', HITMARKER.numbers)}
+    <button id="hm-reset" style="display:block;width:100%;margin-top:12px;padding:10px;background:#2a1a1a;color:#ff9988;border:1px solid #ff5544;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">RESET TO DEFAULT</button>
+  `;
+  if (_hmPreview) { _hmPreview.view.clear(); _hmPreview.nums.clear(); }
+  const view = makeHitmarkerView(() => document.getElementById('hmp-x')), nums = makeHitNumberLayer(() => document.getElementById('hmp-dmg'));
+  _hmPreview = { view, nums };
+  buildCrosshairParts(document.getElementById('hmp-cross'), CROSSHAIR);       // the player's own crosshair, so they see the two together
+  const test = kind => {
+    if (HITMARKER.enabled) view.play(kind);
+    playHitConfirmSound(kind, kind === 'head' ? 'orange' : 'yellow');
+    if (HITMARKER.numbers) nums.add(kind === 'kill' ? 100 : kind === 'head' ? 54 : 27, kind === 'head');
+  };
+  if (HITMARKER.enabled) view.play('hit');
+  document.getElementById('hm-close').addEventListener('click', () => { view.clear(); nums.clear(); panel.style.display = 'none'; });
+  panel.querySelectorAll('[data-test]').forEach(b => b.addEventListener('click', () => test(b.dataset.test)));
+  panel.querySelectorAll('input[data-hm]').forEach(inp => inp.addEventListener('input', () => {
+    const k = inp.dataset.hm; HITMARKER[k] = parseFloat(inp.value); saveHitmarker();
+    const v = document.getElementById(`hm-${k}-val`); if (v) v.textContent = fmt[k](HITMARKER[k]);
+    if (k !== 'volume') test('hit');
+  }));
+  document.getElementById('hm-enabled').addEventListener('click', () => { HITMARKER.enabled = !HITMARKER.enabled; saveHitmarker(); openHitmarkerPanel(); });
+  document.getElementById('hm-numbers').addEventListener('click', () => { HITMARKER.numbers = !HITMARKER.numbers; saveHitmarker(); openHitmarkerPanel(); });
+  document.getElementById('hm-reset').addEventListener('click', () => { HITMARKER = { ...HITMARKER_DEFAULT }; saveHitmarker(); openHitmarkerPanel(); });
+}
+
 const keys = {};
 const EMOTES = [
   { id: 'take_l', name: 'Take the L', duration: 6000 },
@@ -66695,23 +66778,198 @@ const uiPrompt  = (m, d = '') => uiDialog({ message: m, okText: 'OK', cancelText
 const uiPassPrompt = m => uiDialog({ message: m, okText: 'OK', cancelText: 'Cancel', input: '', password: true });
 window.alert = m => { uiAlert(m); };   // the ~50 fire-and-forget alerts
 
-// ── 🎯 Hit / kill / ammo at the crosshair (#34) ─────────────────────────────
+// ── 🎯 Hit / kill / ammo at the crosshair (#34; the hitmarker itself was redrawn as an X, see below) ─────────────────────
 // Before this a hit showed only a small number at the target (and a sound a muted phone never
 // plays); a kill made the body vanish and left one line in the corner feed; an empty gun did
 // nothing at all. Shooters answer all three where the eyes already are: on the crosshair.
-let hitmarkerPriorityUntil = 0, hitmarkerPriority = 0;
+// ── 🎯 The hitmarker, and what a CONFIRMED hit does at the crosshair ──────────────────────────────────────────────
+// An X of four short ticks pointing at the crosshair, with a gap in the middle so the crosshair stays readable. It is
+// its own element (#hitmarker, at the centre of the screen like the crosshair) so nothing it does moves the crosshair.
+//   white = a hit · red = a headshot · gold = an elimination · grey = Lobby 13 (nothing takes damage there)
+// A confirmed hit is one that really took health off someone: a bot or a dummy this client simulates is confirmed on the
+// spot; a real player is confirmed by the server's 'playerHit' (so a shot that missed, was deflected, was blocked by a
+// shield or a spawn guard, or that the server threw out, shows nothing). The same call draws the marker, plays the
+// click and (if switched on) floats the number, so the three can never disagree.
+//
+// TO ADJUST IT: the timing, size and colour of each kind are in HITMARKER_LOOK below (ms and pixels, colours as CSS);
+// the resting gap and stroke shape are in the `.hm-x` rules in index.html; the three sounds are 'hm_body', 'hm_head'
+// and 'hm_kill' in playSoundEvent; the player's own choices (on/off, size, opacity, volume, numbers) are HITMARKER.
+const HITMARKER_DEFAULT = { enabled: true, size: 1, opacity: 1, volume: 1, numbers: false };
+function sanitizeHitmarker(o) {
+  const num = (v, lo, hi, d) => { v = Number(v); return Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d; };
+  o = o || {};
+  return {
+    enabled: o.enabled === undefined ? HITMARKER_DEFAULT.enabled : !!o.enabled,
+    size: num(o.size, 0.5, 2, HITMARKER_DEFAULT.size),
+    opacity: num(o.opacity, 0.2, 1, HITMARKER_DEFAULT.opacity),
+    volume: num(o.volume, 0, 1, HITMARKER_DEFAULT.volume),
+    numbers: o.numbers === undefined ? HITMARKER_DEFAULT.numbers : !!o.numbers,
+  };
+}
+let HITMARKER = { ...HITMARKER_DEFAULT };
+try { HITMARKER = sanitizeHitmarker(JSON.parse(localStorage.getItem('pvp_hitmarker') || '{}')); } catch (e) {}
+function saveHitmarker() {
+  HITMARKER = sanitizeHitmarker(HITMARKER);
+  try { localStorage.setItem('pvp_hitmarker', JSON.stringify(HITMARKER)); } catch (e) {}
+}
+// grow: how far the ticks fly outward (px) in growMs, then they come back in and fade by totalMs. len: stroke length scale.
+const HITMARKER_LOOK = {
+  hit:   { color: '#ffffff', grow: 3.5, growMs: 60, totalMs: 190, len: 1.00 },
+  head:  { color: '#ff3b30', grow: 6.5, growMs: 60, totalMs: 195, len: 1.10 },
+  kill:  { color: '#ffc72e', grow: 8.0, growMs: 70, totalMs: 280, len: 1.25 },
+  lobby: { color: '#aab0b8', grow: 3.0, growMs: 60, totalMs: 190, len: 1.00 },
+};
+const _hmEaseOut = u => 1 - Math.pow(1 - u, 3);
+const _hmEaseInOut = u => u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
+// Where the marker is `age` ms after a hit: how far out the ticks are (px from their resting place), their length scale and
+// their opacity. null once it is over. Pure, and a function of time only: not of the frame rate or the fire rate.
+function hitmarkerPose(look, age) {
+  if (!(age >= 0) || age >= look.totalMs) return null;
+  if (age < look.growMs) return { off: look.grow * _hmEaseOut(age / look.growMs), len: 1, alpha: 1 };
+  const u = (age - look.growMs) / (look.totalMs - look.growMs), e = _hmEaseInOut(u);
+  return { off: look.grow * (1 - e) - 1.2 * e, len: 1 - 0.25 * e, alpha: 1 - u * u };
+}
+const _hitmarkerPriority = kind => kind === 'kill' ? 3 : kind === 'head' ? 2 : 1;
+// How far from the middle the ticks rest: outside whatever the player's crosshair is (a ring is round, so the X starts
+// outside it; arms lie on the axes and the X on the diagonals clears them, more so for thick arms or a dot).
+function hitmarkerRestGap(scale = 1) {
+  let c = {}; try { c = CROSSHAIR || {}; } catch (e) {}
+  const t = Math.max(1, +c.thickness || 2);
+  const ring = c.shape === 'circle' ? (+c.size || 10) + t + 3 : 0;
+  const dot = (c.shape === 'dot' || c.shape === 'crossdot' || +c.dot > 0) ? Math.max(+c.dot || 0, 2) + 5 : 0;
+  return Math.max(7, ring, dot, (t / 2 + 3) * 1.42) + (scale - 1) * 3;
+}
+const _hmSet = (el, name, v) => { if (el.style.setProperty) el.style.setProperty(name, v); else el.style[name] = v; };
+// One marker on screen: restarts on every hit (it never stacks), draws itself the moment it is called, then keeps itself
+// going on animation frames (only while it is visible) from the clock, so it takes the same time at any frame rate.
+function makeHitmarkerView(getEl) {
+  const v = { el: null, kind: null, prio: 0, prioUntil: 0, t0: 0, raf: 0, active: false, gap: 7, scale: 1, op: 1 };
+  const grab = () => v.el || (v.el = getEl());
+  v.render = now => {
+    const el = grab(); if (!el) return false;
+    const look = HITMARKER_LOOK[v.kind] || HITMARKER_LOOK.hit, pose = hitmarkerPose(look, now - v.t0);
+    if (!pose) { el.style.opacity = '0'; v.active = false; return false; }
+    _hmSet(el, '--hm-gap', (v.gap + pose.off * v.scale).toFixed(2));
+    _hmSet(el, '--hm-len', (look.len * pose.len).toFixed(3));
+    el.style.opacity = (pose.alpha * v.op).toFixed(3);
+    return true;
+  };
+  v.loop = () => { v.raf = 0; if (v.render(performance.now())) v.raf = requestAnimationFrame(v.loop); };
+  v.play = (kind, now = performance.now()) => {
+    const el = grab(); if (!el) return false;
+    const look = HITMARKER_LOOK[kind] || HITMARKER_LOOK.hit, prio = _hitmarkerPriority(kind);
+    if (now < v.prioUntil && prio < v.prio) return false;                    // a kill or a headshot is not overwritten by a body hit that lands in its first moments
+    if (v.active && kind === v.kind && now - v.t0 < 16) return true;         // the pellets of one shotgun blast are one marker
+    v.kind = kind; v.prio = prio; v.t0 = now; v.prioUntil = now + (kind === 'kill' ? 260 : 120);
+    v.scale = HITMARKER.size; v.op = HITMARKER.opacity; v.gap = hitmarkerRestGap(v.scale);
+    _hmSet(el, '--hm-s', String(v.scale));
+    el.className = 'hm-x' + (kind === 'hit' ? '' : ' ' + kind); el.style.color = look.color;
+    v.active = true; v.render(now);
+    if (!v.raf) v.raf = requestAnimationFrame(v.loop);
+    return true;
+  };
+  v.clear = () => {
+    if (v.raf) cancelAnimationFrame(v.raf);
+    v.raf = 0; v.active = false; v.prio = 0; v.prioUntil = 0;
+    const el = v.el; if (el) el.style.opacity = '0';
+  };
+  return v;
+}
+// Damage numbers by the crosshair: up and to the side, rising a short way and fading. Very quick hits (the pellets of a
+// shotgun, an SMG burst) add up into the number already on its way up, so it stays readable. Five elements, made once.
+function makeHitNumberLayer(getHost) {
+  const L = { host: null, slots: [], last: null, raf: 0, side: 1 };
+  const DUR = 650, RISE = 26;
+  const host = () => L.host || (L.host = getHost());
+  const fill = s => { s.el.textContent = String(s.total); s.el.className = s.head ? 'head' : ''; s.el.style.fontSize = ((s.head ? 19 : 17) * HITMARKER.size).toFixed(1) + 'px'; };
+  const draw = (s, now) => {
+    const u = (now - s.t0) / DUR;
+    if (u >= 1) { s.on = false; s.el.style.opacity = '0'; return false; }
+    const e = 1 - (1 - u) * (1 - u);
+    s.el.style.transform = 'translate(calc(-50% + ' + s.x.toFixed(1) + 'px),calc(-50% + ' + (s.y - RISE * e).toFixed(1) + 'px))';
+    s.el.style.opacity = u < 0.55 ? '1' : String(Math.max(0, 1 - (u - 0.55) / 0.45));
+    return true;
+  };
+  L.tick = () => { L.raf = 0; const now = performance.now(); let any = false; for (const s of L.slots) if (s.on && draw(s, now)) any = true; if (any) L.raf = requestAnimationFrame(L.tick); };
+  L.add = (damage, head, now = performance.now()) => {
+    const h = host(); damage = Math.round(damage);
+    if (!h || !(damage > 0)) return false;
+    const cur = L.last;
+    if (cur && cur.on && now - cur.t0 < 260 && now - cur.last < 120) { cur.total += damage; cur.head = cur.head || !!head; cur.last = now; fill(cur); return true; }
+    let s = L.slots.find(x => !x.on);
+    if (!s) {
+      if (L.slots.length < 5) { s = { el: document.createElement('b'), on: false }; h.appendChild(s.el); L.slots.push(s); }
+      else s = L.slots.reduce((a, b) => a.t0 <= b.t0 ? a : b);
+    }
+    L.side = -L.side;                                                         // the next one goes to the other side of the crosshair
+    Object.assign(s, { on: true, t0: now, last: now, total: damage, head: !!head, x: L.side * 26 * HITMARKER.size, y: -20 * HITMARKER.size });
+    L.last = s; fill(s); draw(s, now);
+    if (!L.raf) L.raf = requestAnimationFrame(L.tick);
+    return true;
+  };
+  L.clear = () => { if (L.raf) cancelAnimationFrame(L.raf); L.raf = 0; L.last = null; for (const s of L.slots) { s.on = false; s.el.style.opacity = '0'; } };
+  return L;
+}
+let hitmarkerPriorityUntil = 0, hitmarkerPriority = 0;      // (what the view last decided: the combat-feedback test and clearCombatFeedback read them)
+const HITMARKER_VIEW = makeHitmarkerView(() => document.getElementById('hitmarker'));
+const HITMARKER_NUMBERS = makeHitNumberLayer(() => document.getElementById('hm-dmg') || document.getElementById('hud'));
 function showHitmarker(kind) {
-  const el = document.getElementById('hitmarker');
-  if (!el) return;
-  const priority = kind === 'kill' ? 3 : kind === 'head' ? 2 : 1;
+  if (!HITMARKER.enabled) return;
+  HITMARKER_VIEW.play(kind);
+  hitmarkerPriority = HITMARKER_VIEW.prio; hitmarkerPriorityUntil = HITMARKER_VIEW.prioUntil;
+}
+function addHitNumber(damage, headshot) { if (HITMARKER.numbers) HITMARKER_NUMBERS.add(damage, headshot); }
+// The click. A P90 or a Minigun lands fifteen to twenty hits a second: each kind keeps a minimum gap, and the more sounds
+// there have been in the last half second the quieter and rarer the next body click gets. A kill is always heard.
+const _hmSoundLog = [];
+function playHitConfirmSound(kind, tier) {
+  const vol = HITMARKER.volume;
+  if (!(vol > 0)) return false;
   const now = performance.now();
-  if (now < hitmarkerPriorityUntil && priority < hitmarkerPriority) return;
-  hitmarkerPriority = priority;
-  hitmarkerPriorityUntil = now + (kind === 'kill' ? 380 : 110);
-  el.className = kind === 'hit' ? '' : kind;          // '' = white; head / kill / lobby recolour it
-  el.style.transition = 'none'; el.style.opacity = '1';
-  clearTimeout(el._t);
-  el._t = setTimeout(() => { el.style.transition = 'opacity 0.18s'; el.style.opacity = '0'; }, kind === 'kill' ? 380 : 110);
+  while (_hmSoundLog.length && now - _hmSoundLog[0] > 500) _hmSoundLog.shift();
+  const crowd = _hmSoundLog.length;
+  if (kind !== 'kill' && crowd >= 8) return false;
+  _hmSoundLog.push(now);
+  const base = kind === 'kill' ? 0.9 : kind === 'head' ? 0.85 : 0.7, duck = kind === 'kill' ? 1 : 1 / (1 + 0.16 * crowd);
+  playSoundEvent(kind === 'kill' ? 'hm_kill' : kind === 'head' ? 'hm_head' : 'hm_body',
+    { volume: base * vol * duck, minGap: kind === 'kill' ? 120 : kind === 'head' ? 80 : 70, tier });
+  return true;
+}
+// A confirmed hit that is not a kill: marker, click, number (the number is what was actually taken off).
+function hitConfirmed(kind, o = {}) {
+  showHitmarker(kind);
+  playHitConfirmSound(kind, o.tier);
+  if (o.damage > 0) addHitNumber(o.damage, kind === 'head');
+}
+// What a bullet has already been counted as (a bot's hit is confirmed here and then echoed by the server), and the grade it
+// had when it was fired, so a player's hit, confirmed by the server a moment later, rings the same.
+const _hmSeen = new Map(), _hmTiers = new Map();
+function _hmFirstTime(targetId, bulletId, now = performance.now()) {
+  if (!bulletId) return true;
+  if (_hmSeen.size > 120) for (const [k, t] of _hmSeen) if (now - t > 2000) _hmSeen.delete(k);
+  const key = targetId + '|' + bulletId;
+  if (_hmSeen.has(key)) return false;
+  _hmSeen.set(key, now);
+  return true;
+}
+function _hmRememberTier(bulletId, tier) {
+  if (!bulletId || !tier) return;
+  if (_hmTiers.size > 64) _hmTiers.delete(_hmTiers.keys().next().value);
+  _hmTiers.set(bulletId, tier);
+}
+// The server's word that I took health off someone (a real player, or a bot this client does not simulate): `dealt` is what
+// it took (older servers: the drop in what we knew of their health). Nothing taken, nothing shown; a reflected round, an
+// environmental tick or a heal is not my hit; a killing blow leaves the marker and tone to the kill (playerDied -> confirmKill).
+function hitConfirmFromServer(data, knownHpBefore) {
+  if (!data || data.shooterId !== myId || data.targetId === myId || data.reflected) return false;
+  if (data.healthEvent === 'environment' || data.healthEvent === 'heal' || inLobby) return false;
+  if (!_hmFirstTime(data.targetId, data.bulletId)) return false;
+  const dealt = Number.isFinite(data.dealt) ? data.dealt : (Number.isFinite(knownHpBefore) && Number.isFinite(data.hp) ? knownHpBefore - data.hp : 0);
+  if (!(dealt > 0)) return false;
+  const head = !!data.headshot;
+  if (data.hp <= 0) { addHitNumber(dealt, head); return true; }
+  hitConfirmed(head ? 'head' : 'hit', { tier: _hmTiers.get(data.bulletId), damage: dealt });
+  return true;
 }
 // The local hit path and the server's echo both report the same kill; only the first one counts.
 let _lastKillConfirm = { id: null, t: 0 };
@@ -66720,6 +66978,7 @@ function confirmKill(id, name) {
   if (_lastKillConfirm.id === id && now - _lastKillConfirm.t < 1500) return false;
   _lastKillConfirm = { id, t: now };
   showHitmarker('kill');
+  playHitConfirmSound('kill');              // the elimination tone: once per kill (the local hit and the server's echo both land here)
   const el = document.getElementById('kill-confirm');
   if (el) {
     el.textContent = '☠ ' + (name || 'Enemy');
@@ -67695,7 +67954,7 @@ function trackTotalDamage(targetId, damage, targetMesh, tier, label = null, hack
 
 // One call per landed hit, from emitHit and from the training dummies: grade it, fling the
 // number, tint the running total, and click. Returns the grade.
-function hitFeedback(targetId, mesh, hitPos, damage, headshot, falloff, headMiss, weaponId = null) {
+function hitFeedback(targetId, mesh, hitPos, damage, headshot, falloff, headMiss, weaponId = null, quiet = false) {   // quiet: the click is the hitmarker's (hitConfirmed), not this one's
   const tier = gradeHit(headshot, falloff == null ? 1 : falloff, headMiss);
   const at = hitPos || (mesh ? mesh.position.clone().setY(mesh.position.y + 1.2) : null);
   const label = weaponId === 'omega_pistol' ? '\u03a9' : null;
@@ -67703,7 +67962,7 @@ function hitFeedback(targetId, mesh, hitPos, damage, headshot, falloff, headMiss
   if (hack && at) skinHitFX(hack, at, true);                            // a blade or a blast has no round to do it: every such hit does it here (skinHitFX drops the twin from a round)
   spawnHitNumber(targetId, at, damage, tier, label, hack);
   if (mesh) trackTotalDamage(targetId, damage, mesh, tier, label, hack);
-  if (damage > 0) {
+  if (damage > 0 && !quiet) {
     const crit = headshot;
     playSoundEvent(crit ? 'headshot' : 'hitmarker', {
       volume: crit ? 1.1 : 0.8, minGap: crit ? 60 : 35, tier,
@@ -67884,7 +68143,6 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
     headshot, instakill, fatal, tags: killTags, wallPenetrated: !!opts.wallPenetrated,
     damageOverride: dmg, reflectedDamage: !!opts.reflectedDamage,
   });
-  showHitmarker(headshot ? 'head' : 'hit');   // a kill below turns it red
   // Briefly tint the damage number / spawn a synergy spark for player discovery
   if (synergy > 1 && hitWorldPos) {
     spawnAbilityAOEFX(hitWorldPos.clone().setY(hitWorldPos.y + 0.4), 0.6,
@@ -67900,7 +68158,10 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
     const z = mesh._rig?.hitHeadZ || 0;
     headMiss = Math.hypot(hitWorldPos.x - (mesh.position.x+Math.sin(mesh.rotation.y)*z), hitWorldPos.y - (mesh.position.y + off), hitWorldPos.z - (mesh.position.z+Math.cos(mesh.rotation.y)*z));
   }
-  hitFeedback(pid, mesh, hitWorldPos, dmg, headshot, Number.isFinite(opts.damageOverride) ? 1 : falloff, headMiss, weaponId);
+  const hitTier = hitFeedback(pid, mesh, hitWorldPos, dmg, headshot, Number.isFinite(opts.damageOverride) ? 1 : falloff, headMiss, weaponId, true);
+  // (No hitmarker here: it is drawn once the hit is CONFIRMED. A bot this client simulates is confirmed below, when its health
+  //  comes off; a real player's hit is confirmed by the server's 'playerHit', so a deflected or shielded shot shows nothing.)
+  if (!isBot) _hmRememberTier(bulletId, hitTier);
   // Switchblade Gun: any successful hit re-charges to the 100-dmg shot
   if (weaponId === 'switchblade_gun' || weaponId === 'switchblade_charged') {
     switchbladeCharged = true;
@@ -67952,8 +68213,10 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
     const bot = resolveBot(pid);
     if (bot && !bot.dead) {
       const effective = weaponId==='omega_pistol' ? bot.hp : instakill ? 9999 : dmg;
+      const hpBeforeHit = bot.hp;
       bot.hp = Math.max(0, bot.hp - effective);
       if (players[pid]) players[pid].hp = bot.hp;
+      const dealtToBot = hpBeforeHit - bot.hp, firstCount = _hmFirstTime(pid, bulletId);   // what really came off, and whether this bullet has been counted
       // Flee-trigger metrics: track recent damage + consecutive hits
       const nowT = Date.now();
       if (!bot._lastBigHit || nowT - bot._lastBigHit > 1500) bot._recentDmg = 0;
@@ -67978,12 +68241,12 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
         const kc = document.getElementById('kill-count');
         if (kc) kc.textContent = `Kills: ${myKills}`;
         const botName = players[pid]?.name || 'Bot';
-        playSoundEvent('kill', { volume: 1.05, minGap: 80 });
+        if (firstCount) addHitNumber(dealtToBot, headshot);       // (the gold marker and the tone are confirmKill's)
         if (confirmKill(pid, botName)) showAnnouncement('ELIMINATED', botName, '#ff4444', 1200);
         onEntityDied(pid, myId);
         // Schedule local respawn after 3s (in case server isn't responding)
         setTimeout(() => clientRespawnBot(pid), 3000);
-      }
+      } else if (firstCount) hitConfirmed(headshot ? 'head' : 'hit', { tier: hitTier, damage: dealtToBot });
     }
   }
 }
@@ -68128,7 +68391,8 @@ spawnTrainingDummies(); // safe here — TRAINING_DUMMIES const is already initi
 function handleDummyHit(dummy, mesh, opts, hitPos) {
   if (activeMapName !== 'lobby13' || !mesh?.visible) return;
   const dmg = opts.damage ?? getClientWeaponDamage(opts.weaponId);
-  hitFeedback(dummy.id, mesh, hitPos, dmg, !!opts.headshot, opts.falloff, opts.headMiss, opts.weaponId);
+  const dummyTier = hitFeedback(dummy.id, mesh, hitPos, dmg, !!opts.headshot, opts.falloff, opts.headMiss, opts.weaponId, true);
+  if (dummy.infinite || dummy.hp > 0) hitConfirmed(opts.headshot ? 'head' : 'hit', { tier: dummyTier, damage: dummy.infinite ? dmg : Math.min(dmg, dummy.hp) });   // (a dummy greyed out and waiting to come back takes nothing)
   if (dummy.infinite) {
     flashDummyMesh(mesh);
     return;
@@ -68737,7 +69001,6 @@ function updateBullets(dt) {
             const dFall = falloffMultiplier(b.weaponId, camera.position.distanceTo(_bpos));
             const dmg = Math.round((bestHit.headshot ? baseDmg * headshotMultFor(b.weaponId) : baseDmg) * dFall * projectileWallDamageScale(b, bestHit.t));
             handleDummyHit(dummy, bestHit.mesh, { damage: dmg, headshot: bestHit.headshot, falloff: dFall, headMiss: bestHit.miss, weaponId: b.weaponId }, _bpos.clone());
-            if (bestHit.headshot) showHitmarker('head');
           }
         } else if (b.isPaintBomb) {
           triggerPaintExplosion(_bpos.clone(), b);
@@ -70652,6 +70915,7 @@ function clearCombatFeedback() {
   for (const entry of damageDirectionEntries) entry.el.remove();
   damageDirectionEntries.length = 0;
   hitmarkerPriority = 0; hitmarkerPriorityUntil = 0;
+  HITMARKER_VIEW.clear(); HITMARKER_NUMBERS.clear();
   for (const id of ['hitmarker','dmg-edge']) {
     const el = document.getElementById(id);
     if (el) { clearTimeout(el._t); el.style.opacity = '0'; }
@@ -71694,6 +71958,7 @@ socket.on('playerHit', data => {
   const healthOnly = data.healthEvent === 'environment' || data.healthEvent === 'heal';
   if (data.shooterId && data.weapon) noteKillInfo(data.targetId, data.shooterId, data.weapon, data.headshot, { tags: data.tags });   // for the kill feed
   _othersSkinHit(data);                                                // a hit look's flash on the victim (the Hacker, X!@&!@ and Midas skins), for everyone who is not the shooter
+  if (data.shooterId === myId) hitConfirmFromServer(data, players[data.targetId]?.hp);   // my hit took health off someone: the marker, the click and the number
   // Range mode: player is invincible — just ignore any damage (no healSelf to avoid server loop)
   if (data.targetId === myId && match?.type === 'range') {
     updateHealthHUD(300);
@@ -83695,7 +83960,7 @@ document.addEventListener('langchange', () => {
 // One dialog at a time (#21): each of these used to open on top of whatever was already open, all in
 // different sizes. Closing is only hiding — every dialog rebuilds from current state when it opens.
 // index.html gives them one shared frame.
-const DIALOG_IDS = ['player-record-panel', 'stealth-panel', 'settings-hub-panel', 'controls-panel', 'touch-controls-panel', 'crosshair-panel', 'shoot-fx-panel', 'aim-assist-panel', 'weapon-skins-panel', 'item-skins-panel',
+const DIALOG_IDS = ['player-record-panel', 'stealth-panel', 'settings-hub-panel', 'controls-panel', 'touch-controls-panel', 'crosshair-panel', 'hitmarker-panel', 'shoot-fx-panel', 'aim-assist-panel', 'weapon-skins-panel', 'item-skins-panel',
                     'skins-panel', 'kill-log-panel', 'char-chat-panel', 'map-dialog', 'diff-dialog', 'duel-panel', 'lobby-service-panel','weapon-inspect-panel'];
 function anyDialogOpen() {
   return DIALOG_IDS.some(id => { const el = document.getElementById(id); return el && getComputedStyle(el).display !== 'none'; });
@@ -83784,6 +84049,7 @@ function openSettingsHub() {
       <button id="settings-controls" style="padding:12px;background:#10203a;color:#8fbfff;border:1px solid #5599ff;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">🎮 CONTROLS</button>
       <button id="settings-crosshair" style="padding:12px;background:#2a2410;color:#ffd866;border:1px solid #ffcc44;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">🎯 CROSSHAIR</button>
     </div>
+    <button id="settings-hitmarker" style="display:block;width:100%;margin:8px 0;padding:12px;background:#2a2410;color:#ffd866;border:1px solid #ffcc44;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">💥 HITMARKER</button>
     <button id="settings-shoot-fx" style="display:block;width:100%;margin:8px 0;padding:12px;background:#2a1a3a;color:#cc99ff;border:1px solid #aa77ff;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">🔊 SHOOT FX</button>
     <button id="settings-aim-assist" style="display:block;width:100%;margin:8px 0;padding:12px;background:#3a1a1a;color:#ff9988;border:1px solid #ff5544;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">🎯 AIM ASSIST</button>
     ${inLobby && currentUser ? `<button id="settings-logout" style="display:block;width:100%;min-height:48px;margin-top:14px;background:transparent;color:#ffb3a8;border:1px solid #7a3a34;border-radius:6px;cursor:pointer;font-family:inherit;font-size:13px;font-weight:bold;letter-spacing:2px;">🚪 LOG OUT</button>` : ''}
@@ -83823,6 +84089,7 @@ function openSettingsHub() {
   });
   document.getElementById('settings-controls').addEventListener('click', () => { panel.style.display = 'none'; if (isTouchUI()) openTouchControlsPanel(); else openControlsPanel(); });  // a phone has no keys to rebind
   document.getElementById('settings-crosshair').addEventListener('click', () => { panel.style.display = 'none'; openCrosshairPanel(); });
+  document.getElementById('settings-hitmarker').addEventListener('click', () => { panel.style.display = 'none'; openHitmarkerPanel(); });
   document.getElementById('settings-shoot-fx').addEventListener('click', () => { panel.style.display = 'none'; openShootFxPanel(); });
   document.getElementById('settings-aim-assist').addEventListener('click', () => { panel.style.display = 'none'; openAimAssistPanel(); });
   const resume = document.getElementById('settings-resume');

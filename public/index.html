@@ -78,20 +78,30 @@
 
 
     /* ── 🎯 Hit / kill / ammo at the crosshair (#34) ──
-       An ✕ of four ticks around the crosshair (the centre is masked out so the crosshair stays
-       readable): white = hit, gold = headshot, red = kill, grey = the lobby, where nothing takes
-       damage (#35). Under it: the kill confirm, then one line for ammo (or RELOADING). */
-    #hitmarker {
-      position: absolute; top: 50%; left: 50%; width: 26px; height: 26px; color: #fff;
-      transform: translate(-50%, -50%) rotate(45deg); pointer-events: none; opacity: 0;
-      -webkit-mask: radial-gradient(circle, transparent 5px, #000 5.5px); mask: radial-gradient(circle, transparent 5px, #000 5.5px);
+       The hitmarker is an X of four short ticks pointing at the crosshair, with a gap in the middle so the crosshair stays
+       readable: white = hit, red = headshot, gold = elimination, grey = the lobby, where nothing takes damage (#35).
+       Under it: the kill confirm, then one line for ammo (or RELOADING). The colours, timing and growth of each kind are
+       in HITMARKER_LOOK (game.js), which sets the colour and writes --hm-gap (px from the middle), --hm-len and the opacity
+       every frame; the resting stroke shape is here: 9 x 2.4 px at size 1 (the player's size setting is --hm-s). */
+    .hm-x {
+      position: absolute; top: 50%; left: 50%; width: 0; height: 0; color: #fff; opacity: 0; pointer-events: none;
+      --hm-gap: 7; --hm-len: 1; --hm-s: 1;
     }
-    #hitmarker::before, #hitmarker::after { content: ''; position: absolute; background: currentColor; }
-    #hitmarker::before { left: 50%; top: 0; width: 3px; height: 100%; transform: translateX(-50%); }
-    #hitmarker::after  { top: 50%; left: 0; height: 3px; width: 100%; transform: translateY(-50%); }
-    #hitmarker.head  { color: #ffd23f; }
-    #hitmarker.kill  { color: #ff3b3b; width: 36px; height: 36px; }
-    #hitmarker.lobby { color: #aab0b8; }
+    .hm-x i {
+      position: absolute; left: 0; top: 0; border-radius: 1px; background: currentColor;
+      width: calc(9px * var(--hm-s) * var(--hm-len)); height: calc(2.4px * var(--hm-s)); margin-top: calc(-1.2px * var(--hm-s));
+      transform-origin: 0 50%; transform: rotate(var(--a)) translateX(calc(var(--hm-gap) * 1px));
+      box-shadow: 0 0 0 0.6px rgba(0, 0, 0, 0.4);
+    }
+    .hm-x i:nth-child(1) { --a: 45deg; } .hm-x i:nth-child(2) { --a: 135deg; }
+    .hm-x i:nth-child(3) { --a: 225deg; } .hm-x i:nth-child(4) { --a: 315deg; }
+    /* the optional damage numbers, up and to the side of the crosshair (game.js makeHitNumberLayer) */
+    .hm-dmg { position: absolute; top: 50%; left: 50%; width: 0; height: 0; pointer-events: none; }
+    .hm-dmg b {
+      position: absolute; left: 0; top: 0; opacity: 0; white-space: nowrap; color: #fff;
+      font: 800 17px/1 "Arial Black", Arial, sans-serif; text-shadow: 0 1px 2px #000, 0 0 3px rgba(0, 0, 0, 0.8);
+    }
+    .hm-dmg b.head { color: #ff4b3a; }
     #kill-confirm {
       position: absolute; top: calc(50% + 30px); left: 50%; transform: translateX(-50%);
       font: 700 15px/1.2 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
@@ -1326,7 +1336,8 @@
   <div id="hud">
     <div id="crosshair"></div>
     <!-- Your own hits, kills and ammo, at the crosshair where your eyes already are (#34) -->
-    <div id="hitmarker"></div>
+    <div id="hitmarker" class="hm-x"><i></i><i></i><i></i><i></i></div>
+    <div id="hm-dmg" class="hm-dmg"></div>
     <div id="kill-confirm"></div>
     <div id="ammo-hint"></div>
     <!-- Lobby 13 says what it is: shooting works, nothing takes damage (#35) -->

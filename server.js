@@ -3336,7 +3336,7 @@ io.on('connection', (socket) => {
     creditFfaDamage(shooter, hpBefore - target.hp);
     // shooterId: the victim's screen points an arc at whoever fired (#36)
     const killTags = cleanKillTags(data.tags);
-    emitToMatch(target.matchId, 'playerHit', { targetId: target.id, hp: target.hp, environmentSeq: target.environmentSeq || 0, bulletId: data.bulletId, shooterId: socket.id, weapon: data.weapon, headshot: !!data.headshot, shattered: !!data._shattered, tags: killTags, skin: cleanSkinId(data.skin) });
+    emitToMatch(target.matchId, 'playerHit', { targetId: target.id, hp: target.hp, dealt: hpBefore - target.hp, environmentSeq: target.environmentSeq || 0, bulletId: data.bulletId, shooterId: socket.id, weapon: data.weapon, headshot: !!data.headshot, shattered: !!data._shattered, tags: killTags, skin: cleanSkinId(data.skin) });
     if (target.hp <= 0) {
       target.dead = true; target.deaths++; shooter.kills++;
       shooter.matchKills = (shooter.matchKills || 0) + 1;
