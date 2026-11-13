@@ -47500,16 +47500,12 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
 
   // Air pose: knees tuck and the shoulders pitch forward so jumps read as a
   // deliberate athletic hop instead of the standing pose floating upward.
-  if (jump > 0.01) {
-    const j = jump * (1 - slide * 0.35);
-    rig.torso.rotation.x = THREE.MathUtils.lerp(rig.torso.rotation.x, 0.34, j);
-    rig.head.rotation.x = THREE.MathUtils.lerp(rig.head.rotation.x, -0.18, j);
-  }
+  // (No tilt in the air any more: the body and the head stay upright through a jump.)
 
   // Landing: both knees give at once, the hips drop and the chest folds over
   // them. Applied last so it reads on top of whatever pose is underneath.
   if (land > 0.004) {
-    rig.torso.rotation.x = THREE.MathUtils.lerp(rig.torso.rotation.x, 0.26, land * 0.9);     // no knees to give: the chest folds a little
+    // (no chest fold on landing either: the body stays upright after a jump)
   }
 
   // ── Spine and gaze ────────────────────────────────────────────────────────
@@ -47519,8 +47515,8 @@ function animateCharacterMesh(mesh, dt, crouchTarget, slideTarget = 0, jumpTarge
   rig.torso.rotation.x += aim * 0.26 + rk * 0.10;      // a reload bows the chest over the weapon
   // Intent. Nobody in a firefight walks upright: the chest is thrown forward into the move (more the faster it is), the
   // chin comes down behind the shoulders, and a body holding a gun stands braced rather than at ease.
-  rig.torso.rotation.x += (lean * (0.07 + run * 0.20) + (rig.holdsGun ? idle * 0.06 : 0)) * (1-slide) * (1-ck);
-  rig.head.rotation.x  -= lean * (0.03 + run * 0.09) * (1-slide);
+  rig.torso.rotation.x += (lean * (0.07 + run * 0.20) + (rig.holdsGun ? idle * 0.06 : 0)) * (1-slide) * (1-ck) * (1-jump);   // (no run-lean in the air: a jump stays upright)
+  rig.head.rotation.x  -= lean * (0.03 + run * 0.09) * (1-slide) * (1-jump);
   rig.head.rotation.x = Math.max(-1.0, Math.min(1.0, rig.head.rotation.x + aim * 0.62));
   if (rig.pelvis) {
     // Keep the trunk facing the same direction through strides and jumps.
@@ -52462,7 +52458,6 @@ function _eqSegment(m, a, b) {
 }
 
 function switchWeapon(idx) {
-  if (inLobby) return;                // Lobby 13 is unarmed
   // Upper bound too: WEAPONS / weaponModels are parallel arrays (tools/verify-weapons.js checks
   // their lengths), and a stray index used to crash on weaponModels[idx].visible (#4).
   if (idx === null || idx === undefined || idx < 0 || idx >= WEAPONS.length || !weaponModels[idx]) return;
@@ -52796,7 +52791,6 @@ let _quickMeleeUntil  = 0;         // hard stop, so a held buff cannot strand yo
 let _quickMeleeStart  = 0;
 
 function quickMelee() {
-  if (inLobby) return;                // Lobby 13 is unarmed
   if (fixedKitModeActive()) return;
   if (rngKit()) return;   // 🎲 there is no melee but the one the dice gave you
   if (isDead || !gameStarted || activeSlot === 'melee' || _quickMeleeReturn) return;
@@ -57445,7 +57439,6 @@ function tryShoot() {
 }
 
 function tryUseActive() {
-  if (inLobby) return;                // Lobby 13 is unarmed
   if (activeSlot === 'melee') return tryMelee();
   if (activeSlot === 'support') return trySupport();
   return tryShoot();
@@ -64564,7 +64557,9 @@ function startInspect() {
   model._secretInspect = secretInspectFor(id);
   model._inspectMode = true;
   model._reloadStart = Date.now();
-  model._reloadDur = Math.max(INSPECT_MIN_MS, model._secretInspect?.triggered ? (model._secretInspect.duration || 3400) : INSPECT_MS);   // (never shorter than the roll)
+  { const own = _skinOwnsInspect(_activeModelSkin[id]), len = model._secretInspect?.triggered ? (model._secretInspect.duration || 3400) : INSPECT_MS;
+    model._reloadDur = own ? len : Math.max(INSPECT_MIN_MS, len); }   // (the 4 s floor is for the roll; a skin's own inspect keeps its own length)
+  void 0;   // (never shorter than the roll)
   const ctx = getAudioCtx();
   if (ctx) {
     const t0 = ctx.currentTime + 0.002;
@@ -66227,6 +66222,15 @@ const SKIN_FX = {
 const INSPECT_ROLL_KEYS = [[0, 0], [1.0, -65], [3.0, -65], [4.0, 0]];
 const INSPECT_ROLL_EASE = 0;          // 0 = exactly even speed (an earlier version blended in 0.4 of a smooth ease in and out)
 const INSPECT_MIN_MS = 4000;
+// A skin that has an inspect of its own (its builder runs its own show off _inspectMode, or its SKIN_FX gives it an inspect track / length) plays THAT, with no roll added on top.
+const _ownInspectCache = {};
+function _skinOwnsInspect(skin) {
+  if (!skin) return false;
+  if (skin.id in _ownInspectCache) return _ownInspectCache[skin.id];
+  let own = false;
+  try { const fx = SKIN_FX[skin.id]; own = !!(fx && (fx.inspectOwnRoll || fx.inspect || fx.inspectMs)) || (typeof skin.build === 'function' && /_inspectMode/.test(Function.prototype.toString.call(skin.build))); } catch (e) {}
+  return _ownInspectCache[skin.id] = own;
+}
 function _inspectRoll(sec) {
   const K = INSPECT_ROLL_KEYS;
   if (!(sec > 0) || sec >= K[K.length - 1][0]) return 0;
@@ -66457,7 +66461,7 @@ function updateReloadAnim() {
     inspecting ? inspectTrack : ((skinReload && skinReload.keys) || (plan && plan.keys) || RELOAD_KEYS[id] || _RELOAD_DEFAULT), t);
   if (inspecting) {
     updateSecretInspect(model, t, P);
-    P.rz += _inspectRoll(t * model._reloadDur / 1000);         // the roll every inspect has
+    if (!_skinOwnsInspect(_activeModelSkin[id])) P.rz += _inspectRoll(t * model._reloadDur / 1000);   // the roll every inspect has (a skin with its own inspect plays just that)
     // Open whatever this weapon opens, out and back across the middle of the
     // look. Same channels the reload drives, so nothing special downstream.
     const op = secretTrack || inspectTrackUsesAssembly(inspectTrack) ? null : inspectOpenPose(id);
@@ -72322,7 +72326,6 @@ function disposeBody(obj) {
 function armRemoteMesh(mesh, weaponId, skinId) {
   if (!mesh) return;
   skinId = skinId || null;
-  if (inLobby && mesh._ownerId) weaponId = null;   // Lobby 13 is unarmed: weapons are for the shooting range and matches. The default walk, jump and slide are all there is.
   // Re-sending the same weapon is common (a reconnect replays it), and tearing
   // the prop down to build an identical one is pure churn.
   if (mesh._gun && mesh._gunId === weaponId && (mesh._gunSkin || null) === skinId) return;
@@ -73912,7 +73915,7 @@ function startItemInspect() {
                     base: model.position.clone(), baseRot: model.rotation.clone(), order: model.rotation.order, gojo: gojoInspectBegin() };
     return true;
   }
-  itemInspect = { model, slot, idx, kind, t0: performance.now(), ms: Math.max(INSPECT_MIN_MS, spec.ms), keys: spec.keys, beats: spec.beats, beat: 0,
+  itemInspect = { model, slot, idx, kind, t0: performance.now(), ms: model._itemInspectKind ? spec.ms : Math.max(INSPECT_MIN_MS, spec.ms), keys: spec.keys, beats: spec.beats, beat: 0,
                   base: model.position.clone(), baseRot: model.rotation.clone(), order: model.rotation.order };
   return true;
 }
@@ -73935,11 +73938,11 @@ function updateItemInspect() {
   const busy = meleeSwingT < 1 || meleeSlam || meleeDash || batCrowdCharge || scytheDash || meleeAbilityBuff
     || grenadeWindupT < 1 || _equip || useAnim;
   if (!held || busy) { cancelItemInspect(); return; }
-  if (s.gojo) { if (!gojoInspectStep(s)) cancelItemInspect(); else m.rotation.z += _inspectRoll((performance.now() - s.t0) / 1000); return; }
-  if (s.hs) { if (!hammerSickleInspectStep(s.hs)) cancelItemInspect(); else m.rotation.z = s.baseRot.z + _inspectRoll((performance.now() - s.t0) / 1000); return; }
+  if (s.gojo) { if (!gojoInspectStep(s)) cancelItemInspect(); return; }                 // (their own shows: no roll on top)
+  if (s.hs) { if (!hammerSickleInspectStep(s.hs)) cancelItemInspect(); return; }
   const t = Math.min(1, (performance.now() - s.t0) / s.ms);
   const P = _reloadPose(s.keys, t);
-  P.rz += _inspectRoll((performance.now() - s.t0) / 1000);   // the roll every inspect has
+  if (!m._itemInspectKind) P.rz += _inspectRoll((performance.now() - s.t0) / 1000);   // the roll every plain inspect has (a skin with its own inspect kind plays just that)
   m.rotation.order = 'YXZ';
   m.position.set(s.base.x + P.px, s.base.y + P.py, s.base.z + P.pz);
   m.rotation.set(s.baseRot.x + P.rx, s.baseRot.y + P.ry, s.baseRot.z + P.rz);
@@ -81290,8 +81293,6 @@ function loop() {
   safeLoopStep('weapon-skin-fx', () => updateWeaponSkinFX(dt)); // gun-skin particles/streaks
   safeLoopStep('aim-assist', () => updateAimAssist(dt));  // auto-shoot / aim assist / aimbot / AI-aim dot
   if (inLobby) safeLoopStep('lobby-interactions', () => updateLobbyInteractions()); // duel-pad / challenge prompt
-  if (inLobby) safeLoopStep('lobby-unarmed', lobbyUnarmedStep);                    // nothing in your hands in the lobby
-  else if (document.body.classList.contains('lobby-unarmed')) document.body.classList.remove('lobby-unarmed');
   safeLoopStep('interact-button', syncInteractButton); // every frame, so DUEL clears once you leave the lobby
   safeLoopStep('ability-button', syncAbilityButton);   // shows only while what you hold has an ability (#30)
   if (activeSlot === 'support' && SUPPORT_ITEMS[selectedSupportIdx]?.recharge) safeLoopStep('support-recharge', updateWeaponHUD);
@@ -84839,30 +84840,6 @@ function applyUpgrades(w) {
   return clone;
 }
 
-// 🛋️ LOBBY 13 IS UNARMED. Weapons are for the shooting range (and matches); in the lobby you walk, jump and slide, and that is all. Every frame in the lobby the first-person weapon models are
-// hidden, aiming and reloading are cleared, and the crosshair, ammo, weapon bar and ability readouts are hidden; the weapon, reload, ability, inspect and slot keys do nothing (a capture
-// listener, so nothing below it sees them), and the functions that fire, swing, switch and throw refuse in the lobby too. Other bodies in the lobby are not given a gun either (armRemoteMesh).
-const LOBBY_NO_WEAPON_KEYS = new Set(['KeyR', 'KeyE', 'KeyG', 'KeyT', 'KeyB', 'KeyH', 'Digit1', 'Digit2', 'Digit3', 'Digit4']);
-window.addEventListener('keydown', e => {
-  if (!inLobby || !gameStarted || !LOBBY_NO_WEAPON_KEYS.has(e.code)) return;
-  if (commsMenuOpen || e.target?.closest?.('input,textarea,select,[contenteditable]')) return;      // (a phrase picked from the comms menu, or typing in a box)
-  e.stopImmediatePropagation();
-}, true);
-let _lobbyUnarmedCss = null;
-function lobbyUnarmedStep() {
-  if (!_lobbyUnarmedCss) {
-    _lobbyUnarmedCss = document.createElement('style');
-    _lobbyUnarmedCss.textContent = 'body.lobby-unarmed #crosshair, body.lobby-unarmed #ammo, body.lobby-unarmed #ammo-hint, body.lobby-unarmed #weapon-selector, body.lobby-unarmed #ability-hud, ' +
-      'body.lobby-unarmed #btn-prev-weapon, body.lobby-unarmed #btn-next-weapon, body.lobby-unarmed #btn-ability { display: none !important; }';
-    document.head.appendChild(_lobbyUnarmedCss);
-  }
-  document.body.classList.add('lobby-unarmed');
-  shooting = false; isADS = false;
-  if (reloading) { try { cancelReload(); } catch (e) {} }
-  for (const m of weaponModels) if (m && m.visible) m.visible = false;
-  for (const m of meleeModels) if (m && m.visible) m.visible = false;
-  for (const m of supportModels) if (m && m.visible) m.visible = false;
-}
 function selectMode(modeId) {
   applyJumpTuning(modeId === 'obby');   // the obstacle course keeps its original, longer jump
   if (modeId === 'battle_simulator' && window.PVP_BATTLE_SIM) { window.PVP_BATTLE_SIM.open(); return; }
@@ -84959,7 +84936,7 @@ function selectMode(modeId) {
     supportModels.forEach(m => m.visible = false);
     currentWeaponIdx = selectedPrimaryIdx;
     currentWeapon    = WEAPONS[selectedPrimaryIdx];
-    // (no weapon is shown in the lobby: see lobbyUnarmedStep)
+    if (weaponModels[selectedPrimaryIdx]) weaponModels[selectedPrimaryIdx].visible = true;
     updateAmmoHUD(); updateWeaponHUD(); updateWeaponSelector();
     gameStarted = true;
     spawnGameBots();
