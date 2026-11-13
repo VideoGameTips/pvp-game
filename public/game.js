@@ -4592,7 +4592,7 @@ function gunBus(ctx) {
 // sharing a file with a lighter one plays it a little lower), `gain` is the level against the others (solved by rendering each through the game's own sound code and matching the loudness of the first 0.3 s to a target for that kind of gun: snipers loudest, then rockets and big pistols, then the launcher; the arc rifle fires too fast to be loud).
 // A name in an ability's own id (hand_cannon_ab, barrett_ab ...) is not listed on purpose: the big shots keep their own sound, so you can hear them coming.
 const SAMPLE_FILES = {
-  headshot:  'sounds/headshot-ding.mp3',    // a short bright ding (ElevenLabs), played an octave up as the headshot sound; the 2.6 s of silence after it is cut off
+  headshot:  'sounds/headshot-ding.mp3',    // a short bright ding (ElevenLabs), played up 8 semitones (rate 1.6) as the headshot sound; the 2.6 s of silence after it is cut off
   stealth: 'sounds/stealth-shot.mp3',
   vector:    'sounds/vector-shot.mp3',      // a sharp crack, over in a third of a second
   thump:     'sounds/thump-shot.mp3',       // a big dull thud, nearly all low end: a large-bore pistol
@@ -4786,9 +4786,9 @@ function weaponSamplesPreload(ctx) {                                // (one fetc
 // pops of a map gimmick (volume 0.4 to 0.8) keep the made-up boom, a 3 s roll under every one of them would be a lot. One of the clips, never the same one twice running.
 // `dedupe`: spawnExplosion and rocketExplode both announce the same rocket, one roar is enough.
 const EVENT_SAMPLES = {
-  // 🎯 The headshot: the ding, an octave up (rate 2.0). No tier changes it, the click that goes with every hit is the hitmarker's.
+  // 🎯 The headshot: the ding, up 8 semitones (rate 1.6). No tier changes it, the click that goes with every hit is the hitmarker's.
   headshot: { min: 0, dedupe: 0, clips: [
-    { file: 'headshot', gain: 1.0, from: 0.10, len: 0.22, fade: 0.10, rate: [2.0, 2.0] },   // gain 1.0: about 150% of a gun shot's loudness (measured: the Vector's first 0.3 s has an RMS of 0.035, this 0.052)
+    { file: 'headshot', gain: 1.0, from: 0.10, len: 0.22, fade: 0.10, rate: [1.6, 1.6] },   // gain 1.0: about 150% of a gun shot's loudness (measured: the Vector's first 0.3 s has an RMS of 0.035, this 0.052)
   ] },
   explosion: { min: 0.85, dedupe: 150, clips: [
     { file: 'boomCrack', gain: 0.124, from: 0.03, len: 2.8, fade: 1.2, rate: [1, 1] },
