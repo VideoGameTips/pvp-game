@@ -30904,6 +30904,121 @@ function buildPhantomCircuit() {
   g.position.set(0.1, -0.1, -0.22); return g;
 }
 
+function buildPhoenixReign() {
+  // 👑🔥 AK-20 -> PHOENIX REIGN. The Season 1 Legend exclusive: obsidian-black furniture, royal gold, crimson. A golden phoenix spreads across the receiver (both flanks), glowing gold cracks run
+  // through the black like cooling lava, a crown insignia sits on the handguard and a pair of victory laurels wrap the stock. Pure prestige: the same rifle underneath.
+  //   inspect  the rifle tilts slowly left and right to show the phoenix on each side, and the cracks and the phoenix glow up while it does
+  //   kill     a brief golden phoenix flare rises from the victim (phoenixKillFlare)
+  const g = buildAK20(true);
+  const inFlash = o => { for (let p = o; p; p = p.parent) if (p === g._flash) return true; return false; };
+  g.traverse(o => {                                                  // obsidian: black the whole stock rifle (clone first: the finishes are shared)
+    if (!o.isMesh || !o.material || inFlash(o)) return;
+    const gp = o.geometry && o.geometry.parameters;
+    if (gp && gp.width === 0.0032 && gp.height === 0.006) { o.visible = false; return; }     // the stock rifle's grey flank stripes: the phoenix takes their place
+    const dk = m => { if (!m || m.isMeshBasicMaterial || !m.color) return m; const c = m.clone(); c.color.setHex(0x0c0c11); if ('specular' in c) c.specular.setHex(0x6a5a40); if ('shininess' in c) c.shininess = 120; return c; };
+    o.material = Array.isArray(o.material) ? o.material.map(dk) : dk(o.material);
+  });
+  const goldM = new THREE.MeshBasicMaterial({ color: 0xf2b52a, toneMapped: false }), goldHi = new THREE.MeshBasicMaterial({ color: 0xffe08a, toneMapped: false });
+  const crimson = new THREE.MeshBasicMaterial({ color: 0xc4182a, toneMapped: false }), royal = _skM(0xd4a017, 220, 0xfff0b8);
+  const crackM = [0, 1, 2, 3].map(() => new THREE.MeshBasicMaterial({ color: 0x8a5a10, toneMapped: false }));        // the glowing cracks (four groups, so they can pulse out of step)
+  const lerpHex = (m, a, b, k) => m.color.setRGB(((a >> 16) & 255) / 255 * (1 - k) + ((b >> 16) & 255) / 255 * k, ((a >> 8) & 255) / 255 * (1 - k) + ((b >> 8) & 255) / 255 * k, (a & 255) / 255 * (1 - k) + (b & 255) / 255 * k);
+  // ── the phoenix, facing forward, as a flat plate on each flank of the receiver (z is along the barrel, forward is negative) ──
+  const bird = [[-0.150, 0.014], [-0.132, 0.026], [-0.122, 0.041], [-0.108, 0.034], [-0.095, 0.040],
+                [-0.060, 0.050], [-0.030, 0.048], [-0.010, 0.056], [0.010, 0.047], [0.030, 0.054], [0.046, 0.045], [0.064, 0.051], [0.080, 0.040],
+                [0.100, 0.034], [0.120, 0.026], [0.140, 0.031], [0.128, 0.016], [0.146, 0.006], [0.124, 0.004], [0.138, -0.012], [0.112, -0.008], [0.096, -0.014],
+                [0.060, -0.018], [0.050, -0.032], [0.030, -0.022], [0.014, -0.035], [-0.004, -0.024], [-0.026, -0.033], [-0.040, -0.018], [-0.062, -0.012],
+                [-0.085, 0.000], [-0.108, 0.004], [-0.126, 0.002], [-0.140, 0.008]];
+  const inner = bird.map(([z, y]) => [z * 0.74 - 0.002, y * 0.74 + 0.004]);                              // a smaller crimson bird inside the gold one
+  for (const sd of [-1, 1]) {
+    const x = sd > 0 ? 0.0233 : -0.0245;
+    gpPlate(g, goldM, bird, 0.0012, x);
+    gpPlate(g, crimson, inner, 0.0012, sd > 0 ? x + 0.0006 : x - 0.0006);
+    gpBox(g, goldHi, 0.0016, 0.0044, 0.0044, sd * 0.0246, 0.030, -0.121);                                  // the eye
+  }
+  // ── royal gold trim: rails, muzzle ring, handguard collars, a bar along the top of the receiver ──
+  gpBox(g, royal, 0.050, 0.004, 0.300, 0, 0.0575, -0.010); gpBox(g, royal, 0.052, 0.004, 0.034, 0, -0.0455, 0.015);
+  for (const z of [-0.205, -0.300, -0.395]) gpBox(g, royal, 0.0420, 0.0420, 0.006, 0, 0.0, z);
+  gpCyl(g, royal, 0.0138, 0.0138, 0.012, 14, 0, 0.0, -0.470);
+  // ── the crown insignia on the handguard, both sides ──
+  const crown = [[-0.250, -0.012], [-0.250, 0.014], [-0.241, 0.006], [-0.235, 0.020], [-0.229, 0.006], [-0.220, 0.014], [-0.220, -0.012]];
+  for (const sd of [-1, 1]) { const x = sd > 0 ? 0.0206 : -0.0218; gpPlate(g, goldM, crown, 0.0012, x); gpBox(g, crimson, 0.0016, 0.0030, 0.0030, sd * 0.0222, 0.002, -0.235); }
+  // ── glowing gold cracks: thin bright lines laid on the black, in four groups that pulse out of step ──
+  const crack = (grp, x, y, z, len, rot) => gpBox(g, crackM[grp], 0.0012, 0.0011, len, x, y, z, rot, 0, 0);
+  for (const sd of [-1, 1]) {
+    const x = sd * 0.0228;
+    crack(0, x, -0.004, -0.320, 0.034, 0.30); crack(0, x, 0.010, -0.340, 0.022, -0.5); crack(0, x, -0.010, -0.370, 0.030, 0.2); crack(1, x, 0.006, -0.420, 0.026, -0.3);
+    crack(1, x, -0.030, -0.040, 0.030, 0.6); crack(1, x, -0.036, 0.020, 0.020, -0.4);                                      // on the lower receiver
+    crack(2, x, 0.000, 0.205, 0.040, 0.15); crack(2, x, -0.020, 0.250, 0.030, -0.45); crack(2, x, 0.018, 0.270, 0.024, 0.35); // across the stock
+    crack(3, sd * 0.0168, -0.120, -0.090, 0.030, 0.2); crack(3, sd * 0.0168, -0.150, -0.105, 0.022, -0.3);                 // down the magazine
+  }
+  // ── the victory laurels: a branch of leaves up each side of the stock, meeting at a gold ribbon ──
+  for (const sd of [-1, 1]) {
+    for (let i = 0; i < 7; i++) {
+      const u = i / 6, z = 0.180 + u * 0.110, y = -0.022 + Math.sin(u * Math.PI * 0.85) * 0.040;
+      const leaf = gpBox(g, i % 2 ? goldM : royal, 0.0012, 0.0070, 0.0160, sd * 0.0285, y, z, 0.5 - u * 0.9, 0, sd * 0.25);
+      leaf.rotation.order = 'ZYX';
+      const bud = gpBox(g, goldHi, 0.0012, 0.0036, 0.0080, sd * 0.0285, y + 0.007, z + 0.002, 0.2 - u * 0.9);
+    }
+    gpBox(g, crimson, 0.0014, 0.0050, 0.0120, sd * 0.0285, -0.028, 0.176);                                                    // the ribbon
+  }
+  // ── a phoenix glow for the inspect: a soft additive plane over each flank, hidden until it is shown ──
+  const glowM = new THREE.MeshBasicMaterial({ color: 0xffb830, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, toneMapped: false });
+  const glow = [-1, 1].map(sd => { const m = new THREE.Mesh(new THREE.PlaneGeometry(0.30, 0.100), glowM); m.rotation.y = sd * Math.PI / 2; m.position.set(sd * 0.0252, 0.012, -0.002); m.userData.eqFx = true; g.add(m); return m; });
+  g.traverse(o => { if (o.isMesh) o.userData.noSmooth = true; });
+  // ── motion: everything rides in a rig so the whole rifle can tilt in the inspect ──
+  const rig = new THREE.Group(); const flash = g._flash;
+  for (const c of g.children.slice()) if (c !== flash && !c.userData.eqFx) rig.add(c);
+  g.add(rig);
+  const clamp01 = u => Math.max(0, Math.min(1, u)), sm = (a, b, t) => { const x = clamp01((t - a) / (b - a)); return x * x * (3 - 2 * x); };
+  g._tick = (dt, now, assembling) => {
+    if (assembling) { rig.rotation.set(0, 0, 0); glowM.opacity = 0; return; }
+    const t0 = g._reloadStart && g._reloadDur ? (Date.now() - g._reloadStart) / g._reloadDur : -1;
+    const inspecting = !!g._inspectMode && t0 >= 0 && t0 < 1;
+    let tilt = 0, yaw = 0, glo = 0;
+    if (inspecting) {                                                    // slowly left, then right, then level: the phoenix shows on each side in turn
+      const e = sm(0, 0.10, t0) * (1 - sm(0.90, 1, t0));
+      tilt = e * Math.sin(t0 * Math.PI * 2 * 1.0) * 0.62; yaw = e * Math.sin(t0 * Math.PI * 2 * 1.0) * -0.30; glo = e * (0.35 + 0.25 * Math.sin(now * 5));
+    }
+    rig.rotation.z += (tilt - rig.rotation.z) * Math.min(1, dt * 10); rig.rotation.y += (yaw - rig.rotation.y) * Math.min(1, dt * 10);
+    glowM.opacity += (glo - glowM.opacity) * Math.min(1, dt * 8);
+    const base = inspecting ? 0.65 : 0.22;
+    crackM.forEach((m, i) => lerpHex(m, 0x7a4c0c, 0xffd25a, clamp01(base + 0.28 * Math.sin(now * (1.6 + i * 0.5) + i * 1.7) + (inspecting ? 0.2 : 0))));
+  };
+  g._flash = flash; g._kickZ = 0.014; g._greebled = true; g._handDetailed = true;
+  return g;
+}
+
+// 🔥 A brief golden phoenix on an elimination: it rises out of the victim and fades in under a second. Small, thin and see-through, so it never hides the fight.
+// Shown to everyone who can see the kill, when the killer's AK-20 wears PHOENIX REIGN.
+let _phoenixTex = null;
+function phoenixKillFlare(targetId, killerId) {
+  const skin = killerId === myId ? (equippedModelSkins && equippedModelSkins.ak20) : (players[killerId] && players[killerId].weaponSkin);
+  if (skin !== 'ak20_phoenix_reign') return;
+  const mesh = remoteMeshes[targetId];
+  const at = mesh ? mesh.position.clone() : (targetId === myId ? camera.position.clone().setY(0) : null);
+  if (!at) return;
+  if (!_phoenixTex) {
+    const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
+    const grad = x.createLinearGradient(0, 128, 0, 0); grad.addColorStop(0, '#ff3a2a'); grad.addColorStop(0.5, '#ffb62e'); grad.addColorStop(1, '#fff0a8');
+    x.fillStyle = grad; x.shadowColor = '#ffb62e'; x.shadowBlur = 10;
+    x.beginPath();                                                       // wings up, head high, a fan of tail feathers below
+    x.moveTo(64, 14); x.lineTo(72, 34); x.lineTo(94, 12); x.lineTo(88, 44); x.lineTo(120, 40); x.lineTo(92, 62); x.lineTo(100, 78); x.lineTo(76, 74);
+    x.lineTo(84, 118); x.lineTo(64, 96); x.lineTo(44, 118); x.lineTo(52, 74); x.lineTo(28, 78); x.lineTo(36, 62); x.lineTo(8, 40); x.lineTo(40, 44); x.lineTo(34, 12); x.lineTo(56, 34);
+    x.closePath(); x.fill();
+    _phoenixTex = new THREE.CanvasTexture(c);
+  }
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: _phoenixTex, transparent: true, opacity: 0, depthWrite: false, depthTest: true, blending: THREE.AdditiveBlending, color: 0xffffff }));
+  sp.position.copy(at).y += 1.1; sp.scale.set(1.25, 1.25, 1); scene.add(sp);
+  const t0 = performance.now(), life = 900;
+  const step = () => {
+    const k = (performance.now() - t0) / life;
+    if (k >= 1) { scene.remove(sp); sp.material.dispose(); return; }
+    sp.position.y = at.y + 1.1 + k * 1.5; sp.scale.setScalar(1.25 + k * 0.6); sp.material.opacity = Math.sin(Math.PI * Math.min(1, k * 1.15)) * 0.7;
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
 function buildDoubleTrouble() {
   // 💥 Sawed-Off -> Double Trouble. A short, chunky double-barrel built out of rectangles and ridges: matte black, brushed steel and bright orange. Two massive barrel
   // housings float a little apart from the central frame, with four armour plates standing off them. Fourteen separate pieces.
@@ -48663,6 +48778,7 @@ const SKIN_SHOT = {};
   G({ shape: 'pixeltrail', c: [0xff2bd6, 0x2bf0ff], min: 0.06 }, 'cyber', ['vector_glitch_exe']);
   G({ shape: 'bolt', c: [0xff1030, 0xff2bd6] }, 'cyber', ['vector_neon_anarchy']);
   G({ shape: 'bolt', c: [0x40f0ff, 0xffffff], k: 1.0 }, null, ['mauser_phantom_circuit']);                                  // PHANTOM CIRCUIT: a cyan bolt
+  G({ shape: 'bolt', c: [0xffc531, 0xc4182a], k: 1.2 }, null, ['ak20_phoenix_reign']);                                       // PHOENIX REIGN: a gold bolt edged in crimson
   G({ shape: 'bolt', c: [0xff3a1a, 0xffb060], k: 1.2 }, null, ['vector_deadlock']);                                       // DEADLOCK: a red-hot round
   G(null, null, ['flamethrower_disco_inferno'], 0xff4fd8);   // the ordinary flames, with a pink glow round the yellow
   G({ shape: 'card', c: [0x15151c, 0xff2a3a], min: 0.05, k: 1.2 }, 'cards', ['throwing_knives_house_of_cards']);
@@ -60027,6 +60143,9 @@ const MODEL_SKINS = [
   { id: 'mauser_phantom_circuit', weapon: 'mauser', name: 'PHANTOM CIRCUIT', rarity: 'legendary',
     sw: ['#2a2d33', '#40f0ff'], build: buildPhantomCircuit,
     blurb: 'A cyber-espionage broomhandle with a cloaking system in its frame: interlocking graphite plates over the receiver and six narrow armour strips that slide into place along the barrel when you draw it. Each shot sends a cyan pulse back along the strips, a digital distortion crawls down the barrel every few seconds, and reload parts the strips to show the glowing frame. Inspect is NOW YOU SEE ME: a scan runs grip to muzzle, the pistol vanishes to a faint outline and snaps back together, CLICK-CLICK-CLICK-CLACK, PHANTOM CIRCUIT // ONLINE. It is never really invisible.' },
+  { id: 'ak20_phoenix_reign', weapon: 'ak20', name: 'PHOENIX REIGN', rarity: 'legendary',
+    sw: ['#0c0c11', '#f2b52a', '#c4182a'], build: buildPhoenixReign,
+    blurb: 'The Season 1 Legend exclusive. Obsidian black, royal gold and crimson, with a golden phoenix across the receiver, glowing gold cracks, a crown on the handguard and victory laurels on the stock. Inspect it and it tilts slowly left and right to show the phoenix; every elimination sends a brief golden phoenix up from the fallen. No damage, no recoil: pure prestige. Awarded to everyone who finishes Season 1 at Legend rank.' },
   { id: 'flamethrower_disco_inferno', weapon: 'flamethrower', name: 'DISCO INFERNO', rarity: 'rare',
     sw: ['#e4e8f4', '#ff2bb0'], build: buildDiscoInferno,
     blurb: 'A nightclub with a pilot light. A disco ball spins over the barrel, the speakers pulse, confetti flies out with the flames, and hold the trigger and four spotlights unfold and sweep. Reload swaps the glowing tank; inspect is DISCO FEVER.' },
@@ -60265,10 +60384,12 @@ GEN2_SUPPORT_MODEL_SKIN_IDS.add('moon_mine_eclipse');   // (no skin is free: ser
 // 🧟 Earned, never bought or pulled: the server hands this over the first time you call for the way out of the Zombie Tower
 // (socket 'zombieTowerWin', mirrored by ZOMBIE_TOWER_SKIN_IDS in server.js). It is in no case and no bundle.
 const TOWER_MODEL_SKIN_IDS = new Set(['ak20_field_radio']);
+// 🏆 Earned at the end of a ranked season by finishing it at Legend rank: never bought, pulled or won any other way (server.js SEASON_SKIN_IDS grants it when the season is closed).
+const SEASON_MODEL_SKIN_IDS = new Set(['ak20_phoenix_reign']);
 // 🐉 Gen 3: the newest skins have their own case. Mirrors GEN3_SKIN_IDS in server.js (no skin is free).
 const GEN3_MODEL_SKIN_IDS = new Set(['railgun_penteract', 'chain_gun_clockwork_dragon', 'ak20_breach_protocol', 'lever_remembrance', 'mauser_phantom_circuit']);
 const GEN3_MELEE_MODEL_SKIN_IDS = new Set(['scythe_deaths_head']);   // Gen 3 holds melee skins too
-const GATED_MODEL_SKIN_IDS = new Set([...GEN1_GATED_MODEL_SKIN_IDS, ...GEN2_MODEL_SKIN_IDS, ...GEN3_MODEL_SKIN_IDS, ...TOWER_MODEL_SKIN_IDS, ...PVP_SHOP_CATALOG.exclusiveSkins]);
+const GATED_MODEL_SKIN_IDS = new Set([...GEN1_GATED_MODEL_SKIN_IDS, ...GEN2_MODEL_SKIN_IDS, ...GEN3_MODEL_SKIN_IDS, ...TOWER_MODEL_SKIN_IDS, ...SEASON_MODEL_SKIN_IDS, ...PVP_SHOP_CATALOG.exclusiveSkins]);
 const GATED_MELEE_MODEL_SKIN_IDS = new Set([...GEN2_MELEE_MODEL_SKIN_IDS, ...GEN2_SUPPORT_MODEL_SKIN_IDS, ...GEN3_MELEE_MODEL_SKIN_IDS]);   // (the lock check is by id, so utilities share it)
 for (const id of GEN1_GATED_MODEL_SKIN_IDS) {
   const ms = MODEL_SKINS.find(m => m.id === id);
@@ -65648,6 +65769,7 @@ const SKIN_FX = {
   flamethrower_disco_inferno: { equip: 'flip', equipMs: 950, equipSfx: ['whoosh', 'chime'],
     inspect: [K(.12, { py: .02, rx: -.15 }), K(.26, { py: .05, pz: -.02, rx: -.50 }), K(.80, { py: .05, pz: -.02, rx: -.50 }), K(.88, { py: .03, rx: -.30 }), K(.94, { py: .015, rx: -.08 }), K(1, {})] },
   mauser_phantom_circuit: { equip: 'unfold', equipMs: 1000, equipSfx: ['whoosh', 'snapin'] },
+  ak20_phoenix_reign: { equip: 'build', equipMs: 900, equipSfx: ['whoosh', 'chime'] },
   vector_deadlock: { equip: 'unfold', equipMs: 950, equipSfx: ['whoosh', 'snapin'] },
   vector_neon_anarchy: { equip: 'glitch', equipMs: 950, equipSfx: ['glitchsfx', 'snapin'],
     inspect: [K(.10, { py: .02 }), K(.20, { py: .06, pz: -.04, rx: .10 }), K(.80, { py: .06, pz: -.04, rx: .10 }), K(.84, { py: .06, pz: -.04, rx: .22 }), K(.92, { py: .03 }), K(1, {})] },
@@ -75151,6 +75273,7 @@ function noteKillInfo(targetId, killerId, weaponId, head, extra = {}) {
     tags: cleanKillfeedTags(extra.tags),
     t: performance.now(),
   };
+  try { if (weaponId === 'ak20' && killerId) phoenixKillFlare(targetId, killerId); } catch (e) {}      // PHOENIX REIGN's flare
 }
 let _botHitHead = false;        // did the bot's shot being resolved right now take our head?
 let _lastBotShotHead = false;   // set by botShotHitsPlayer, picked up when the hit is scheduled
@@ -84522,7 +84645,8 @@ function openItemSkins(kind, id, onClose, alwaysOnClose = false) {
           const legend = isLegendLocked(ms), locked = (GATED_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id)) || legend;
           const note = legend ? ffaLegendProgressText() : GEN3_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id) ? 'Pull from Gen 3 cases.'
             : GEN2_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id) ? 'Pull from Gen 2 cases.'
-            : TOWER_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id) ? 'Escape the Zombie Tower to get this one.' : locked ? 'Open Gen 1 cases in Lobby 13.' : '';
+            : TOWER_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id) ? 'Escape the Zombie Tower to get this one.'
+            : SEASON_MODEL_SKIN_IDS.has(ms.id) && !ownsSkin(ms.id) ? 'Finish a ranked season at Legend rank to get this one.' : locked ? 'Open Gen 1 cases in Lobby 13.' : '';
           return { skinId: ms.id, name: ms.name, sub: ms.blurb, bg: bg(ms.sw), on: onModel === ms.id, locked, note,
             run: () => { if (locked) { alert(note || 'Locked.'); return false; } setModelSkin(id, ms.id); } };
         });
@@ -84955,6 +85079,7 @@ function openWeaponSkinsPanel() {
       if (id && GEN3_MODEL_SKIN_IDS.has(id) && !ownsSkin(id)) { alert('You have not pulled that skin yet. Open Gen 3 cases in Lobby 13.'); return; }
       if (id && GEN2_MODEL_SKIN_IDS.has(id) && !ownsSkin(id)) { alert('You have not pulled that skin yet. Open Gen 2 cases in Lobby 13.'); return; }
       if (id && TOWER_MODEL_SKIN_IDS.has(id) && !ownsSkin(id)) { alert('You have not earned that skin yet. Escape the Zombie Tower to get it.'); return; }
+      if (id && SEASON_MODEL_SKIN_IDS.has(id) && !ownsSkin(id)) { alert('You have not earned that skin yet. Finish a ranked season at Legend rank to get it.'); return; }
       if (isLegendLocked(MODEL_SKINS.find(m => m.id === id))) { alert('FFA Legend skins are earned in FFA: deal 1,000,000 damage or win 5,000 FFA matches.'); return; }
       setModelSkin(cell.dataset.mweapon, id || null);
       openWeaponSkinsPanel();      // redraw so the selection moves

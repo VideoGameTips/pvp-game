@@ -165,6 +165,7 @@ const FFA_WIN_MIN_MS = 30000;
 // TOWER_MODEL_SKIN_IDS in public/game.js (gotcha #4). Not in any case pool or bundle. A real run is twenty-four floors up, a
 // horde of 130 on the roof and twenty-four floors back down, so anything under five minutes did not happen.
 const ZOMBIE_TOWER_SKIN_IDS = ['ak20_field_radio'];
+const SEASON_SKIN_IDS = ['ak20_phoenix_reign'];                    // Season 1 Legend reward: given only by closeSeason(), never sold or dealt
 const TOWER_WIN_MIN_MS = Number(process.env.TOWER_WIN_MIN_MS) || 5 * 60 * 1000;   // (the env override is for the test harness only)
 let _saveSoonTimer = null;
 function saveUsersSoon() {            // damage lands many times a second; the file need not
@@ -1293,6 +1294,30 @@ app.post('/rank/me', (req, res) => {                              // your rating
   if (!u) return res.status(401).json({ error: 'auth failed' });
   res.json({ ok: true, rank: rankView(u) });
 });
+// 👑 SEASONS: an admin closes a season; everyone at Legend (rating >= LEGEND_AT) at that moment gets that season's exclusive skin. Season 1 = AK20 Phoenix Reign.
+const SEASON_FILE = path.join(DATA_DIR, 'season.json');
+function readSeason() { try { return JSON.parse(fs.readFileSync(SEASON_FILE, 'utf8')); } catch (e) { return { current: 1, closed: {} }; } }
+function closeSeason() {
+  const st = readSeason(), n = st.current, skin = SEASON_SKIN_IDS[n - 1], winners = [];
+  if (!skin) return { error: 'no reward is set for season ' + n };
+  for (const [name, u] of Object.entries(users)) {
+    if (!u.rank || u.isAdmin || u.rank.points < RANK.LEGEND_AT) continue;
+    if (!Array.isArray(u.skinInventory)) u.skinInventory = [];
+    if (!u.skinInventory.includes(skin)) u.skinInventory.push(skin);
+    winners.push(name);
+  }
+  st.closed[n] = { at: Date.now(), winners }; st.current = n + 1;
+  try { fs.writeFileSync(SEASON_FILE, JSON.stringify(st, null, 1)); } catch (e) { console.warn('[season] could not save', e.message); }
+  saveUsers();
+  console.log('[season] season ' + n + ' closed; ' + winners.length + ' Legend players got ' + skin);
+  return { ok: true, season: n, skin, winners };
+}
+app.get('/rank/season', (req, res) => { const st = readSeason(); res.json({ ok: true, season: st.current, reward: SEASON_SKIN_IDS[st.current - 1] || null }); });
+app.post('/rank/season/close', (req, res) => {                    // admin only
+  const u = authedUser(req);
+  if (!u || !u.isAdmin) return res.status(403).json({ error: 'admin only' });
+  const r = closeSeason(); res.status(r.ok ? 200 : 400).json(r);
+});
 app.get('/rank/top', (req, res) => {                              // the top 25: players who have played a ranked game
   const rows = Object.entries(users).filter(([, u]) => u.rank && u.rank.games > 0 && !u.isAdmin)
     .map(([name, u]) => ({ name, points: u.rank.points, label: RANK.tierOf(u.rank.points).label, rank: RANK.tierOf(u.rank.points).rank, games: u.rank.games, wins: u.rank.wins }))
@@ -1723,7 +1748,7 @@ app.post('/auth/claim-admin', (req, res) => {
   u.isAdmin = true;
   u.unlocks = Object.values(UNLOCK_CODES);
   u.credits = 999999999;
-  for (const id of [...GEN1_SKIN_IDS, ...DONUT_SKIN_IDS, ...GEN2_SKIN_IDS, ...GEN3_SKIN_IDS, ...ZOMBIE_TOWER_SKIN_IDS]) if (!u.skinInventory.includes(id)) u.skinInventory.push(id);
+  for (const id of [...GEN1_SKIN_IDS, ...DONUT_SKIN_IDS, ...GEN2_SKIN_IDS, ...GEN3_SKIN_IDS, ...ZOMBIE_TOWER_SKIN_IDS, ...SEASON_SKIN_IDS]) if (!u.skinInventory.includes(id)) u.skinInventory.push(id);
   saveUsers();
   console.log('[auth] ' + username + ' became admin through /adminpanel');
   res.json({ ok: true, isAdmin: true, unlocks: u.unlocks, credits: u.credits, skinInventory: u.skinInventory });
