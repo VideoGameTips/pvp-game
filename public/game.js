@@ -35349,6 +35349,141 @@ function buildDiscoInferno() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+// 🛡️ P90 -> IRONCLAD. A complete remodel: a tiny armoured vehicle in the shape of a submachine gun. A boxy armoured housing round the barrel with a hexagonal opening sunk into it, overlapping steel plates on both
+// flanks (three layers, riveted), a long open ammunition cassette on top between two protective rails under a pair of sliding cover plates, an industrial handle with a square trigger guard, a short sloped
+// stock frame, and two locking clamps on the sides. A bolt block shuttles in a window behind the housing when it fires. Reload: the clamps swing open, the cover plates slide apart, the cassette lifts out, a fresh one
+// comes down and locks, the plates close and the clamps snap shut. Inspect: it rolls left and right while the plates and clamps open to show the machinery. Stats are the P90's.
+function buildIronclad() {
+  const g = new THREE.Group();
+  const steel = new THREE.MeshPhongMaterial({ color: 0x5a626c, shininess: 80, specular: 0xaab4c0, flatShading: true });
+  const steel2 = new THREE.MeshPhongMaterial({ color: 0x3e454e, shininess: 70, specular: 0x8a94a0, flatShading: true });
+  const dk = new THREE.MeshPhongMaterial({ color: 0x15181d, shininess: 40, specular: 0x3a3f46, flatShading: true });
+  const orange = new THREE.MeshPhongMaterial({ color: 0xd2842a, emissive: 0x2a1604, shininess: 70, specular: 0xffc880, flatShading: true });
+  const brass = new THREE.MeshPhongMaterial({ color: 0xc89a3c, shininess: 130, specular: 0xffe9a8, flatShading: true });
+  const lamp = new THREE.MeshBasicMaterial({ color: 0xffb030 });
+  const rig = new THREE.Group(); g.add(rig);
+  const box = (m, w, h, d, x, y, z, parent = rig, rx = 0, ry = 0, rz = 0) => gpBox(parent, m, w, h, d, x, y, z, rx, ry, rz);
+  const rivet = (parent, x, y, z) => gpCyl(parent, steel, 0.0016, 0.0016, 0.0024, 5, x, y, z, 0, Math.PI / 2);
+  // ── The core: the P90's own outline (so the hands and the sight sit where they always do), narrower than the armour round it ──
+  gpPlate(rig, dk, [
+    [-0.190, 0.006], [-0.176, 0.026], [-0.120, 0.030], [-0.096, 0.044], [0.044, 0.044],
+    [0.072, 0.030], [0.130, 0.028], [0.140, -0.012], [0.116, -0.030], [0.040, -0.032],
+    [0.020, -0.056], [-0.014, -0.058], [-0.030, -0.032], [-0.086, -0.030], [-0.104, -0.048],
+    [-0.146, -0.048], [-0.160, -0.020], [-0.186, -0.012],
+  ], 0.036, 0);
+  // ── Three layers of armour on each flank, each overlapping the one under it, riveted along the seams ──
+  for (const sd of [-1, 1]) {
+    gpPlate(rig, steel, [[-0.150, 0.034], [0.040, 0.042], [0.118, 0.028], [0.132, 0.014], [0.132, -0.020], [0.030, -0.036], [-0.150, -0.010]], 0.006, sd * 0.0225);
+    gpPlate(rig, steel2, [[-0.100, 0.030], [0.060, 0.036], [0.112, 0.020], [0.112, -0.016], [0.000, -0.028], [-0.100, -0.008]], 0.005, sd * 0.0285);
+    gpPlate(rig, steel, [[-0.040, 0.022], [0.070, 0.026], [0.096, 0.010], [0.090, -0.012], [-0.010, -0.020]], 0.005, sd * 0.0335);
+    for (const [y, z] of [[0.032, -0.140], [0.038, -0.050], [0.038, 0.030], [0.026, 0.120], [-0.016, 0.120], [-0.030, 0.030], [-0.010, -0.140]]) rivet(rig, sd * 0.0262, y, z);
+    for (const [y, z] of [[0.028, -0.090], [0.032, 0.050], [0.010, 0.106], [-0.014, 0.000], [-0.006, -0.094]]) rivet(rig, sd * 0.0316, y, z);
+    for (const [y, z] of [[0.020, -0.030], [0.022, 0.060], [-0.008, 0.050]]) rivet(rig, sd * 0.0362, y, z);
+    box(orange, 0.002, 0.004, 0.030, sd * 0.0316, 0.017, -0.070);               // a hazard stripe on the middle layer
+    box(orange, 0.002, 0.004, 0.030, sd * 0.0316, 0.009, -0.070);
+  }
+  // ── The armoured housing round the barrel, with a hexagonal opening sunk into its face ──
+  box(steel2, 0.046, 0.040, 0.074, 0, 0.008, -0.208);
+  box(steel, 0.046, 0.010, 0.070, 0, 0.034, -0.206, rig, 0.28);                  // the sloped top plate
+  box(steel, 0.050, 0.006, 0.048, 0, -0.014, -0.200);                            // and a skirt underneath
+  for (const sd of [-1, 1]) { box(steel, 0.004, 0.038, 0.060, sd * 0.0235, 0.006, -0.206); for (const z of [-0.232, -0.184]) rivet(rig, sd * 0.0262, 0.022, z); }
+  gpCyl(rig, steel, 0.0225, 0.0225, 0.012, 6, 0, 0.006, -0.242);                  // the hexagonal frame
+  gpCyl(rig, dk, 0.0158, 0.0158, 0.004, 6, 0, 0.006, -0.2485);                    // the opening
+  gpCyl(rig, brass, 0.0052, 0.0052, 0.008, 8, 0, 0.006, -0.2455);                 // the barrel, sunk in it
+  box(lamp, 0.008, 0.004, 0.008, 0, 0.040, -0.226);                              // a lamp on the roof of the housing
+  // ── The side windows: a frame, a dark well, and the bolt block shuttling in it ──
+  const boltWin = [-1, 1].map(sd => {
+    box(dk, 0.0022, 0.020, 0.046, sd * 0.0259, 0.010, -0.125);
+    box(steel, 0.003, 0.003, 0.050, sd * 0.0263, 0.021, -0.125); box(steel, 0.003, 0.003, 0.050, sd * 0.0263, -0.001, -0.125);
+    const b = box(orange, 0.003, 0.011, 0.014, sd * 0.0274, 0.010, -0.125); b._z = b.position.z; return b;
+  });
+  // ── The cassette: long, open, with the rounds showing, between two protective rails ──
+  const cass = new THREE.Group(); rig.add(cass);
+  box(dk, 0.030, 0.016, 0.168, 0, 0.054, -0.010, cass);
+  for (let i = 0; i < 8; i++) gpCyl(cass, brass, 0.0052, 0.0052, 0.028, 8, 0, 0.0625, -0.080 + i * 0.0215, 0, Math.PI / 2);
+  box(steel2, 0.032, 0.006, 0.014, 0, 0.060, 0.080, cass); box(steel2, 0.032, 0.006, 0.014, 0, 0.060, -0.100, cass);   // end caps
+  box(orange, 0.012, 0.004, 0.010, 0, 0.064, 0.080, cass);
+  const rails = [-1, 1].map(sd => {
+    box(steel, 0.006, 0.014, 0.182, sd * 0.0215, 0.058, -0.010);
+    for (let i = 0; i < 10; i++) box(steel2, 0.003, 0.007, 0.009, sd * 0.0252, 0.058, -0.088 + i * 0.0185);   // tread links down the outside
+    box(orange, 0.008, 0.016, 0.008, sd * 0.0215, 0.058, -0.104); box(orange, 0.008, 0.016, 0.008, sd * 0.0215, 0.058, 0.084);
+  });
+  // ── The two cover plates that slide apart for a reload, with a window between them over the rounds ──
+  const covers = [-1, 1].map(sd => {
+    const c = new THREE.Group(); c._sd = sd; rig.add(c);
+    box(steel, 0.011, 0.005, 0.150, sd * 0.0105, 0.0685, -0.010, c);
+    box(steel2, 0.004, 0.004, 0.150, sd * 0.0168, 0.0705, -0.010, c);
+    for (const z of [-0.070, -0.020, 0.030]) box(orange, 0.011, 0.0016, 0.006, sd * 0.0105, 0.0712, z, c);
+    return c;
+  });
+  // ── The clamps on the sides: levers with a hook that bite the cassette rails shut ──
+  const clamps = [-1, 1].map(sd => {
+    const c = new THREE.Group(); c.position.set(sd * 0.0395, 0.024, 0.022); c._sd = sd; rig.add(c);
+    box(steel, 0.006, 0.034, 0.016, 0, -0.017, 0, c);
+    box(orange, 0.007, 0.006, 0.020, 0, -0.037, 0, c);
+    box(steel2, 0.012, 0.005, 0.010, -sd * 0.006, -0.030, 0, c);
+    gpCyl(c, brass, 0.0045, 0.0045, 0.010, 8, 0, 0, 0, 0, Math.PI / 2);
+    return c;
+  });
+  // ── The handle, with a square trigger guard built in ──
+  box(dk, 0.032, 0.046, 0.036, 0, -0.060, 0.004, rig, 0.12);
+  for (let i = 0; i < 4; i++) box(orange, 0.034, 0.003, 0.034, 0, -0.046 - i * 0.011, 0.005 + i * 0.0012, rig, 0.12);
+  box(steel, 0.036, 0.008, 0.044, 0, -0.084, 0.010, rig, 0.12);
+  box(steel, 0.006, 0.030, 0.006, 0, -0.040, -0.040); box(steel, 0.006, 0.006, 0.040, 0, -0.054, -0.024); box(steel, 0.006, 0.020, 0.006, 0, -0.045, -0.006);
+  box(orange, 0.005, 0.016, 0.006, 0, -0.038, -0.018, rig, 0.15);
+  box(orange, 0.014, 0.011, 0.016, 0.019, -0.006, 0.044);                        // selector
+  // ── The stock: a short reinforced frame with a sloped back ──
+  gpPlate(rig, dk, [[0.126, 0.030], [0.176, 0.018], [0.184, -0.026], [0.146, -0.034], [0.126, -0.012]], 0.040, 0);
+  for (const sd of [-1, 1]) gpPlate(rig, steel, [[0.120, 0.034], [0.178, 0.022], [0.188, -0.030], [0.150, -0.038], [0.124, -0.014]], 0.005, sd * 0.0225);
+  box(steel, 0.046, 0.006, 0.060, 0, 0.034, 0.152, rig, 0.2);
+  box(orange, 0.040, 0.050, 0.010, 0, -0.004, 0.190, rig, 0.1);
+  for (const sd of [-1, 1]) { rivet(rig, sd * 0.0262, 0.018, 0.160); rivet(rig, sd * 0.0262, -0.020, 0.170); }
+  // ── The sight: the P90's own, so aiming is exactly where it was ──
+  gpReflexSight(g, 0, 0.094, 0.052, 0.066);
+  g._hasDefaultAimer = true;
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.006, -0.262); g.add(flash);
+  g._flash = flash; g._kickZ = 0.006; g._greebled = true; g._handDetailed = true;
+  g.traverse(o => { if (o.isMesh) o.userData.noSmooth = true; });
+  // ── Motion ──
+  const S = { shot: 0, rp: 0, open: 0, clamp: 0, boltK: 0, cassY: 0, cassZ: 0, cassOn: 1 };
+  const smooth = (a, b, t) => { const x = Math.max(0, Math.min(1, (t - a) / (b - a))); return x * x * (3 - 2 * x); };
+  const lay = () => {
+    covers.forEach(c => { c.position.x = c._sd * 0.032 * S.open; });
+    clamps.forEach(c => { c.rotation.z = c._sd * 1.05 * S.clamp; });
+    cass.position.set(0, S.cassY, S.cassZ); cass.visible = S.cassOn > 0.5;
+    boltWin.forEach(b => { b.position.z = b._z + 0.011 * S.boltK; });
+  };
+  const reset = () => { Object.assign(S, { shot: 0, rp: 0, open: 0, clamp: 0, boltK: 0, cassY: 0, cassZ: 0, cassOn: 1 }); lamp.color.setHex(0xffb030); lay(); };
+  g._calm = reset;
+  g._steamShot = () => { S.shot = 1; };
+  g._S = S; g._covers = covers; g._clamps = clamps; g._cass = cass; g._bolts = boltWin; g._rails = rails;
+  g._tick = (dt, now, assembling) => {
+    if (assembling) { reset(); return; }
+    const inspecting = !!(g._inspectMode && g._reloadStart), reloading = !!(g._reloadStart && !g._inspectMode);
+    const T = g._reloadStart ? Math.max(0, Math.min(1, (Date.now() - g._reloadStart) / (g._reloadDur || (inspecting ? 2600 : 1800)))) : 0;
+    S.shot = Math.max(0, S.shot - dt / 0.10);
+    S.rp += dt * 95 * (0.2 + S.shot);
+    let open = 0, clamp = 0, cassY = 0, cassZ = 0, on = 1, boltK = Math.sin(S.rp) * Math.min(1, S.shot * 1.2);
+    if (reloading) {                                                             // clamps open, covers part, the cassette lifts out, a fresh one drops in and locks, everything closes
+      clamp = smooth(0.0, 0.16, T) * (1 - smooth(0.78, 0.90, T));
+      open = smooth(0.10, 0.28, T) * (1 - smooth(0.70, 0.84, T));
+      if (T < 0.48) { const l = smooth(0.26, 0.46, T); cassY = 0.11 * l; cassZ = 0.05 * l; on = l < 0.97 ? 1 : 0; }
+      else { const d = smooth(0.50, 0.68, T); cassY = 0.11 * (1 - d) - 0.004 * Math.sin(d * Math.PI); cassZ = 0; on = 1; }
+      lamp.color.setHex(T > 0.88 ? 0x66ff88 : (Math.floor(now * 8) % 2 ? 0xffb030 : 0x40240a));
+    } else lamp.color.setHex(S.shot > 0 ? 0xff5a30 : (Math.floor(now * 1.5) % 2 ? 0xffb030 : 0x6a4010));
+    if (inspecting) {                                                            // it rolls left and right while the plates and clamps open to show what is under them
+      const t = T, show = smooth(0.14, 0.30, t) * (1 - smooth(0.80, 0.92, t));
+      open = 0.7 * show; clamp = 0.8 * show;
+      boltK = show * Math.sin(t * 38);
+    }
+    S.open += (open - S.open) * Math.min(1, dt * 16); S.clamp += (clamp - S.clamp) * Math.min(1, dt * 18);
+    S.cassY = cassY; S.cassZ = cassZ; S.cassOn = on; S.boltK = boltK;
+    lay();
+  };
+  reset();
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
 function buildWidowmaker() {
   // 🕷️ Crossbow -> WIDOWMAKER. A mechanical spider that is also a crossbow: eight jointed legs folded along its sides. Aim and the front four unfold into the bow
   // arms while the rear four spread; a shot snaps the front legs in and they reset; a reload sends a little spider crawling along the rail with the next bolt; inspect
@@ -48790,6 +48925,7 @@ const SKIN_SHOT = {};
   G({ shape: 'shard', c: [0xcff4ff, 0x7fd8ff], k: 1.5 }, 'ice', ['pistol_frost']);                            // the Frost Pistol: an icicle on a pale-blue trail
   G({ shape: 'goldbullet', c: [0xffc83d, 0xfff2b8], k: 1.6 }, null, ['revolver_midas']);                       // the Midas Revolver: a gold round on a gold trail
   G({ shape: 'bolt', c: [0x35e8ff, 0xffffff], k: 1.2 }, null, ['machine_pistol_overclocked']);
+  G({ shape: 'bolt', c: [0xd2842a, 0xffe3b0], k: 1.1 }, null, ['p90_ironclad']);
   G({ shape: 'ball', c: [0xff7a1a, 0xfff0d0], k: 1.5 }, 'orbital', ['grenade_launcher_orbital']);                        // Orbital Strike: a glowing orange grenade
   G({ shape: 'ball', c: [0x2a2a30, 0xffb04a], k: 1.8 }, null, ['hand_cannon_broadside']);                                // Broadside: a cannonball on a fiery trail
   G({ shape: 'goldbullet', c: [0xff7a1a, 0xffd08a], k: 1.5 }, null, ['hand_cannon_iron_judge']);                  // The Iron Judge: a molten round                    // Overclocked: a cyan bolt
@@ -60149,6 +60285,9 @@ const MODEL_SKINS = [
   { id: 'flamethrower_disco_inferno', weapon: 'flamethrower', name: 'DISCO INFERNO', rarity: 'rare',
     sw: ['#e4e8f4', '#ff2bb0'], build: buildDiscoInferno,
     blurb: 'A nightclub with a pilot light. A disco ball spins over the barrel, the speakers pulse, confetti flies out with the flames, and hold the trigger and four spotlights unfold and sweep. Reload swaps the glowing tank; inspect is DISCO FEVER.' },
+  { id: 'p90_ironclad', weapon: 'p90', name: 'IRONCLAD', rarity: 'epic',
+    sw: ['#5a626c', '#d2842a'], build: buildIronclad,
+    blurb: 'A tiny armoured vehicle in the shape of a P90. Three layers of riveted plate on each side, a hexagonal opening sunk into an armoured housing, a long open cassette between two rails, and a bolt that shuttles in its window. Reload: the clamps swing open, the cover plates slide apart, the cassette lifts out and a fresh one locks in. Inspect: it rolls side to side while the armour opens up.' },
   { id: 'plasma_carbine_fishbowl', weapon: 'plasma_carbine', name: 'Fishbowl Carbine', rarity: 'rare',
     sw: ['#2a8ae8', '#ff7a1a'], build: buildFishbowlCarbine,
     blurb: 'Fills with water when drawn. Three fish live in it.' },
@@ -60359,7 +60498,7 @@ const GEN2_MODEL_SKIN_IDS = new Set([
   'revolver_donut', 'ak20_donut', 'rpg_donut', 'machine_pistol_donut', 'pistol_donut',
   'sg8_donut', 'srx_donut', 'vector_donut', 'grenade_launcher_donut', 'minigun_donut',
   'mp40_donut', 'deagle_donut', 'shorty_donut',
-  'revolver_midas', 'pistol_frost', 'ak20_xerror', 'revolver_shatterpoint', 'machine_pistol_overclocked', 'hand_cannon_iron_judge', 'hand_cannon_broadside', 'sawed_off_double_trouble', 'sawed_off_classic_shorty', 'grenade_launcher_orbital', 'minigun_redline',            // the Gen 2 case's two new top rarities: EPIC and MYTHIC (server.js GEN2_EPIC_SKIN_IDS / GEN2_NEW_MYTHIC_SKIN_IDS)
+  'revolver_midas', 'pistol_frost', 'ak20_xerror', 'revolver_shatterpoint', 'machine_pistol_overclocked', 'p90_ironclad', 'hand_cannon_iron_judge', 'hand_cannon_broadside', 'sawed_off_double_trouble', 'sawed_off_classic_shorty', 'grenade_launcher_orbital', 'minigun_redline',            // the Gen 2 case's two new top rarities: EPIC and MYTHIC (server.js GEN2_EPIC_SKIN_IDS / GEN2_NEW_MYTHIC_SKIN_IDS)
   'ak20_rainbow', 'ak20_hyperspace', 'ak20_blueprint', 'sg8_portal', 'vector_portal',
   'railgun_portal_detector', 'p90_quantum_scanner', 'freeze_hyperslush', 'firework_showman',
   'shorty_outlaw', 'snub_gunslinger', 'deagle_glitch', 'deagle_phantom', 'vector_glitch_exe', 'vector_neon_anarchy', 'vector_deadlock', 'flamethrower_disco_inferno', 'crossbow_widowmaker', 'throwing_knives_house_of_cards', 'boombow_gravity_end', 'harpoon_octopus',
@@ -65756,6 +65895,8 @@ const SKIN_FX = {
   sawed_off_double_trouble: { equip: 'slam', equipMs: 900, equipSfx: ['whoosh', 'snapin'] },
   hand_cannon_iron_judge: { equip: 'unfold', equipMs: 1000, equipSfx: ['whoosh', 'snapin'] },
   hand_cannon_broadside: { equip: 'unfold', equipMs: 1000, equipSfx: ['whoosh', 'snapin'] },
+  p90_ironclad: { equip: 'slam', equipMs: 900, equipSfx: ['whoosh', 'snapin'], equipBeats: [[.55, 'slam']],
+    inspect: [K(.10, { py: .02, rz: -.35, ry: .25 }), K(.34, { py: .03, rz: -.62, ry: .5 }), K(.60, { py: .03, rz: .62, ry: -.5 }), K(.84, { py: .02, rz: .2, ry: -.15 }), K(1, {})] },
   machine_pistol_overclocked: { equip: 'windup', equipMs: 1000, equipSfx: ['windup', 'ding'] },
   revolver_shatterpoint: { equip: 'assemble', equipMs: 1000, equipSfx: ['snapin', 'chime'] },
   rpg_black_hole: { equip: 'blackhole', equipMs: 1100, equipSfx: ['singularity', 'chime'] },

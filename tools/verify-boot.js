@@ -2998,6 +2998,45 @@ if (ok && process.argv.includes('--missilecam')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+// IRONCLAD (the P90 skin): an epic from the Gen 2 case. Armour that opens: clamps and cover plates, a cassette that lifts out and is replaced on reload, a bolt block that shuttles when it fires, and plates that open on the inspect.
+if (ok && process.argv.includes('--ironclad')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const sk = MODEL_SKINS.find(s => s.id === 'p90_ironclad');
+    if (!sk || sk.weapon !== 'p90' || sk.rarity !== 'epic') return ['the IRONCLAD epic skin of the P90 is missing'];
+    if (!GEN2_MODEL_SKIN_IDS.has(sk.id)) issues.push('IRONCLAD is not dealt by the Gen 2 case (no skin is free)');
+    const fx = SKIN_FX[sk.id];
+    if (!fx || !fx.equip || !fx.inspect) issues.push('no entrance or inspect track');
+    const m = sk.build();
+    if (!m._S || !m._tick || !m._calm || !m._steamShot || !m._flash || !m._covers || !m._clamps || !m._cass || !m._bolts) return issues.concat(['the model is missing its state, tick, calm, shot hook, flash, covers, clamps, cassette or bolts']);
+    const S = m._S; let clk = performance.now() / 1000; const run = (n, dt = 0.016) => { for (let i = 0; i < n; i++) { clk += dt; m._tick(dt, clk, false); } };
+    const rl = f => { m._inspectMode = false; m._reloadStart = Date.now() - f * 1800; m._reloadDur = 1800; run(30); };
+    const insp = f => { m._inspectMode = true; m._reloadStart = Date.now() - f * 2600; m._reloadDur = 2600; run(30); };
+    try {
+      run(3);
+      const z0 = m._bolts[0].position.z;
+      if (m._covers.some(c => Math.abs(c.position.x) > 1e-6) || m._clamps.some(c => Math.abs(c.rotation.z) > 1e-6) || !m._cass.visible) issues.push('idle: closed, clamped and loaded');
+      for (let i = 0; i < 12; i++) { m._steamShot(); run(1, 0.02); }
+      if (!m._bolts.some(b => Math.abs(b.position.z - z0) > 0.003)) issues.push('fire: the bolt should be shuttling');
+      run(60); if (Math.abs(m._bolts[0].position.z - z0) > 0.0005) issues.push('after fire: the bolt should rest');
+      rl(0.20); if (!(m._clamps.every(c => Math.abs(c.rotation.z) > 0.5) && m._covers.every(c => Math.abs(c.position.x) > 0.01))) issues.push('reload: the clamps should be open and the covers parting');
+      rl(0.36); if (!(m._cass.position.y > 0.03 && m._cass.visible)) issues.push('reload: the cassette should be lifting out: ' + m._cass.position.y.toFixed(3));
+      rl(0.47); if (m._cass.visible) issues.push('reload: the old cassette should be gone');
+      rl(0.58); if (!(m._cass.visible && m._cass.position.y > 0.01 && m._cass.position.y < 0.11)) issues.push('reload: the new cassette should be coming down: ' + m._cass.position.y.toFixed(3));
+      rl(0.97); if (!(Math.abs(m._cass.position.y) < 0.003 && m._cass.visible && m._covers.every(c => Math.abs(c.position.x) < 0.003) && m._clamps.every(c => Math.abs(c.rotation.z) < 0.05))) issues.push('reload: locked and closed by the end');
+      m._reloadStart = 0; run(60);
+      if (!(m._covers.every(c => Math.abs(c.position.x) < 1e-3) && m._clamps.every(c => Math.abs(c.rotation.z) < 1e-3) && m._cass.visible && m._cass.position.lengthSq() < 1e-8)) issues.push('after reload: everything home');
+      insp(0.50); if (!(m._covers.every(c => Math.abs(c.position.x) > 0.01) && m._clamps.every(c => Math.abs(c.rotation.z) > 0.3))) issues.push('inspect: the plates and clamps should open');
+      insp(0.99); m._inspectMode = false; m._reloadStart = 0; run(60);
+      if (!(m._covers.every(c => Math.abs(c.position.x) < 1e-3) && m._clamps.every(c => Math.abs(c.rotation.z) < 1e-3))) issues.push('after inspect: closed again');
+      m._calm();
+    } catch (e) { issues.push('threw: ' + (e && e.stack || e)); }
+    return issues;
+  })()`);
+  console.log('IRONCLAD checks: Gen 2 epic, bolt shuttles on fire, clamps/covers/cassette on reload, plates open on inspect');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 // HOUSE OF CARDS (the Throwing Knives skin): a legendary from the Gen 2 case: a fan of three cards and a floating ace that shuffle on every throw, the Impossible Shuffle on inspect (the deck is
 // thrown up, spirals, interleaves, four aces stop in the air, become one knife that lands in the hand), a card for a round, and the ace of spades behind what it kills.
 if (ok && process.argv.includes('--houseofcards')) {
