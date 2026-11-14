@@ -2757,13 +2757,71 @@ const BOT_DIFFICULTY_TUNING = {
   medium: { aimMin: 0.68, aimRand: 0.24, reactMin: 360, reactRand: 320, fireMin: 1080, fireRand: 680, reloadMin: 2050, reloadRand: 800, hitRunChance: 0.00, initialShotDelay: 1450 },
   hard:   { aimMin: 0.92, aimRand: 0.30, reactMin: 220, reactRand: 260, fireMin: 780,  fireRand: 460, reloadMin: 1450, reloadRand: 550, hitRunChance: 0.14, initialShotDelay: 950 },
   expert: { aimMin: 1.14, aimRand: 0.30, reactMin: 130, reactRand: 160, fireMin: 560,  fireRand: 300, reloadMin: 900,  reloadRand: 330, hitRunChance: 0.16, initialShotDelay: 560 },
+  nightmare: { aimMin: 1.5, aimRand: 0.25, reactMin: 105, reactRand: 55, fireMin: 330, fireRand: 170, reloadMin: 650, reloadRand: 200, hitRunChance: 0.22, initialShotDelay: 380 },   // 😈 (reaction 105-160 ms: human-like)
 };
+
+
+// ═══ 😈 NIGHTMARE ═══════════════════════════════════════════════════════════════════════════════════════
+// The tier above Expert. Mechanically it IS Expert (difficulty 'expert' plus bot.nightmare), so every Expert behaviour applies, with: faster and tighter aim (but a reaction
+// time of 105-160 ms: human-like, never an instant lock-on), aim only with a line of sight (a bot that has lost you aims at where it LAST saw you, never through a wall),
+// a Crossbow / Revolver / Scythe loadout, double jumps, a scythe dash to dodge when it is hit or you are aiming at it, a hunt for HIGH GROUND (a ramp top above you with a
+// line of sight to you), an early retreat when it is losing, and a read of how you move: if you keep strafing one way it leads that way; if you stand still it goes for height.
+// Priorities, in order: damage, high ground, staying alive.
+function aiDifficulty(d) { return d === 'nightmare' ? 'expert' : d; }
+function nightmareThink(bot, target, dt, now) {
+  const A = bot._nm || (bot._nm = { bias: 0, still: 0, nextHg: 0 });
+  const tz = target.isPlayer ? camera.position.z : target.z, dx = target.x - bot.x, dz = tz - bot.z, dist = Math.hypot(dx, dz) || 1;
+  if (target.isPlayer) {                                                                   // how the player moves, seen from the bot
+    const vx = playerVelocity.x, vz = playerVelocity.z, sp = Math.hypot(vx, vz);
+    if (sp > 2) { const lateral = Math.max(-1, Math.min(1, (vx * dz - vz * dx) / dist / 6)); A.bias += (lateral - A.bias) * Math.min(1, dt * 0.35); A.still = 0; }
+    else A.still += dt;
+  }
+  bot._nmLeadBias = A.bias;
+  // high ground: the nearest ramp top above the target, close enough, with a line of sight to it
+  if (!bot._hgGoal && now >= A.nextHg && bot.state !== 'cover' && bot.state !== 'melee_charge' && bot.hp > bot.maxHp * 0.45) {
+    A.nextHg = now + (A.still > 3 ? 500 : 1200);
+    const ty = target.isPlayer ? Math.max(0, camera.position.y - PLAYER_EYE_HEIGHT) : (target.y || 0);
+    if ((bot.y || 0) < ty + 1.2) {
+      let best = null, bs = -1e9;
+      for (const r of (MAP_RAMPS[activeMapName] || [])) {
+        if (r.rise < ty + 1.5) continue;
+        const px = r.x0 + r.ux * r.run, pz = r.z0 + r.uz * r.run, db = Math.hypot(px - bot.x, pz - bot.z), dt2 = Math.hypot(target.x - px, tz - pz);
+        if (db > 22 || dt2 > 38 || dt2 < 6) continue;
+        if (!hasLineOfSight(px, pz, target.x, tz)) continue;
+        const s = (r.rise - ty) * 3 - db * 0.4 - Math.abs(dt2 - 20) * 0.2 + (A.still > 3 ? 4 : 0);
+        if (s > bs) { bs = s; best = { x: px, z: pz, y: r.rise, until: now + 4500 }; }
+      }
+      if (best) bot._hgGoal = best;
+    }
+  }
+  const g = bot._hgGoal;
+  if (g && (now > g.until || (bot.y || 0) >= g.y - 0.3 || bot.state === 'cover' || bot.hp <= bot.maxHp * 0.45)) bot._hgGoal = null;
+}
+// the dash: a quick sideways burst (the scythe's), used when hit or when the player's crosshair is on the bot
+function nightmareDash(bot, target, wasHit, now) {
+  if (now < (bot._nextDashAt || 0) || bot.meleeId !== 'scythe' || !target) return;
+  let aimed = false;
+  if (target.isPlayer && !isDead) {
+    const f = new THREE.Vector3(); camera.getWorldDirection(f);
+    const dx = bot.x - camera.position.x, dz = bot.z - camera.position.z, d = Math.hypot(dx, dz) || 1;
+    aimed = d < 35 && (f.x * dx + f.z * dz) / (d * Math.hypot(f.x, f.z) || 1) > 0.9945 && hasLineOfSight(bot.x, bot.z, camera.position.x, camera.position.z);
+  }
+  if (!(wasHit || aimed) || Math.random() > 0.8) return;
+  const tz = target.isPlayer ? camera.position.z : target.z, dx = target.x - bot.x, dz = tz - bot.z, d = Math.hypot(dx, dz) || 1;
+  const side = bot.strafeDir || 1;
+  bot.kbVX = (bot.kbVX || 0) + (-dz / d) * side * DASH_SPEED * 1.7;
+  bot.kbVZ = (bot.kbVZ || 0) + (dx / d) * side * DASH_SPEED * 1.7;
+  bot._nextDashAt = now + 4500 + Math.random() * 2000;
+  bot.strafeDir = -side;
+  try { spawnAbilityAOEFX(new THREE.Vector3(bot.x, 0.3, bot.z), 1.2, 0x9966ff); } catch (e) {}
+}
 
 function botTuning(diff) {
   return BOT_DIFFICULTY_TUNING[diff] || BOT_DIFFICULTY_TUNING.medium;
 }
 
 function botAimProfile(diff) {
+  if (diff === 'nightmare') return { follow: 15, drift: 0.08, settle: 0.55 };
   if (diff === 'expert') return { follow: 11.5, drift: 0.16, settle: 0.88 };
   if (diff === 'hard') return { follow: 8.8, drift: 0.24, settle: 1.05 };
   if (diff === 'medium') return { follow: 6.6, drift: 0.34, settle: 1.28 };
@@ -2783,11 +2841,16 @@ function updateBotAimCrosshair(bot, target, tx, tz, dist, weapon, dt, hasLOS) {
       const recent = playerPosHistory.slice(-4);
       const oldest = recent[0], newest = recent[recent.length - 1];
       const dtH = Math.max(0.05, (newest.t - oldest.t) / 1000);
-      goalX = tx + ((newest.x - oldest.x) / dtH) * travelTime * 0.55;
-      goalZ = tz + ((newest.z - oldest.z) / dtH) * travelTime * 0.55;
+      const lead = bot.nightmare ? 0.95 : 0.55;
+      goalX = tx + ((newest.x - oldest.x) / dtH) * travelTime * lead;
+      goalZ = tz + ((newest.z - oldest.z) / dtH) * travelTime * lead;
+      if (bot.nightmare && bot._nmLeadBias) {                       // you keep strafing one way: lead that way a little more
+        const d2 = Math.hypot(tx - bot.x, tz - bot.z) || 1, k = bot._nmLeadBias * travelTime * 2.2;
+        goalX += (-(tz - bot.z) / d2) * k; goalZ += ((tx - bot.x) / d2) * k;
+      }
     }
   }
-  const prof = botAimProfile(bot.difficulty);
+  const prof = botAimProfile(bot.nightmare ? 'nightmare' : bot.difficulty);
   if (!bot._aimCrosshair || !hasLOS) bot._aimCrosshair = { x: goalX, z: goalZ, err: Infinity };
   const follow = 1 - Math.exp(-prof.follow * Math.max(0, dt));
   bot._aimCrosshair.x += (goalX - bot._aimCrosshair.x) * follow;
@@ -3232,14 +3295,14 @@ function botShouldFlee(bot, dist) {
   const playerHp = players[myId]?.hp ?? 300;
   const targetingPlayer = !isDead;
   // EXPERT bots are confident — much stricter flee thresholds. They want to fight, not run.
-  const expert = bot.difficulty === 'expert';
-  const lowHpThresh    = expert ? 45  : 75;   // sub-15% expert / sub-25% hard
-  const panicDmg       = expert ? 100 : 40;   // huge burst required for expert panic
+  const expert = bot.difficulty === 'expert', nm = !!bot.nightmare;      // 😈 a Nightmare bot values staying alive: it retreats earlier
+  const lowHpThresh    = nm ? 100 : expert ? 45  : 75;   // sub-15% expert / sub-25% hard
+  const panicDmg       = nm ? 70 : expert ? 100 : 40;   // huge burst required for expert panic
   const outnumThresh   = expert ? 3   : 2;    // need 3 enemies close before expert flees
   const outnumHp       = expert ? 110 : 180;
   const lastOneHp      = expert ? 90  : 200;
-  const losingHits     = expert ? 5   : 3;
-  const outmatchedHp   = expert ? 80  : 130;
+  const losingHits     = nm ? 3 : expert ? 5   : 3;
+  const outmatchedHp   = nm ? 120 : expert ? 80  : 130;
   // 1. Critical HP
   if (bot.hp < lowHpThresh) return 'low_hp';
   // 2. Reloading → seek cover
@@ -77037,7 +77100,7 @@ function startBossFight() {
   mesh.scale.setScalar(D.scale); mesh._bodyScale = D.scale; mesh._hitMul = D.hitMul;   // (the hit spheres follow the scale, as the juggernaut's do, and a little more: it is wide)
   const bot = { id, team: 'enemy', weaponId: null, x: BOSS.pos[0], z: BOSS.pos[1], rotY: 0, hp, maxHp: hp, prevHp: hp, dead: false, state: 'boss', boss: true, floor: 0, floorY: 0,
                 y: 0, yVel: 0, frostSlow: 100, kbVX: 0, kbVZ: 0, wanderAngle: 0, wanderTimer: 0, lastShot: 0, stuckTimer: 0, strafeDir: 1, strafeFlipTimer: 0, tacTimer: 0, coverPt: null,
-                difficulty: selectedDifficulty, tune: botTuning(selectedDifficulty), activeSlot: 'primary' };
+                difficulty: aiDifficulty(selectedDifficulty), nightmare: selectedDifficulty === 'nightmare', tune: botTuning(selectedDifficulty), activeSlot: 'primary' };
   gameBots.push(bot);
   socket.emit('spawnBots', [{ id, name: D.name, team: absTeam('enemy'), weaponId: null, spawnX: BOSS.pos[0], spawnZ: BOSS.pos[1], hp, skin: 'default', boss: true }]);
   match.boss = { def: D, bot, robot, mesh, phase: 1, atk: null, nextAt: Date.now() + 3500, nextShield: Date.now() + 8000, shield: false, shieldUntil: 0, rate: 1, lastReflect: 0, proj: [], marks: [], waves: [], pools: [], beam: null, yaw: 0, spin: 0, t: 0, started: Date.now(), done: false };
@@ -78453,10 +78516,12 @@ function spawnGameBots() {
     // signatures are sanitized too, so archived/admin toys never leak into bots.
     // 🎭 Drafted teammate uses their signature loadout; everyone else rolls random.
     const fixedM4Tower = selectedModeConfig.fixedKit === 'm4_tower';
+    const _nmLoad = selectedDifficulty === 'nightmare' && !fixedM4Tower && !_playstyle;       // 😈 a Nightmare bot's own kit: Crossbow, Revolver, Scythe
     let weaponId = chooseBotPrimaryId(_playstyle?.primary);
     if (fixedM4Tower) weaponId = 'm4a1_arena';
-    const botSecondaryId = fixedM4Tower ? null : chooseBotSecondaryId(_playstyle?.secondary);
-    const botMeleeId     = fixedM4Tower ? null : chooseBotMeleeId(_playstyle?.melee);
+    if (_nmLoad) weaponId = 'crossbow';
+    const botSecondaryId = fixedM4Tower ? null : _nmLoad ? 'revolver' : chooseBotSecondaryId(_playstyle?.secondary);
+    const botMeleeId     = fixedM4Tower ? null : _nmLoad ? 'scythe' : chooseBotMeleeId(_playstyle?.melee);
     const botUtilityId   = fixedM4Tower ? 'frag' : chooseBotSupportId(_playstyle?.utility);
 
     // ── Create locally RIGHT NOW (no network round-trip needed) ──────────
@@ -78502,7 +78567,7 @@ function spawnGameBots() {
     let aimSkill   = tune.aimMin + Math.random() * tune.aimRand;
     const reactionMs = tune.reactMin + Math.random() * tune.reactRand;
     // Personality: weapon-matched mostly (70% hard / 80% expert), with off-roll variance for unpredictability
-    let personality = rollPersonality(weaponId, diff);
+    let personality = rollPersonality(weaponId, aiDifficulty(diff));
     // 🎭 Drafted teammate overrides: signature aim + personality (clamped, never below rolled)
     if (_playstyle) {
       if (_playstyle.aim != null) aimSkill = Math.max(aimSkill, _playstyle.aim);
@@ -78527,7 +78592,7 @@ function spawnGameBots() {
                     strafeDir: Math.random() < 0.5 ? 1 : -1,
                     strafeFlipTimer: 0, tacTimer: 0, prevHp: 300, coverPt: null,
                     // Difficulty fields
-                    difficulty: diff, aimSkill, reactionMs, personality, dps: botDPS, tune,
+                    difficulty: aiDifficulty(diff), nightmare: diff === 'nightmare', aimSkill, reactionMs, personality, dps: botDPS, tune,
                     botAmmo: w.mag || 30, botMag: w.mag || 30, botReserve: (w.reserve === 0 ? 99999 : w.reserve) || 90,
                     reloadUntil: 0,
                     firstSeenAt: 0, lastSeenPos: null, lastSeenAt: 0,
@@ -78884,7 +78949,7 @@ function zombieSpawn(o = {}) {
   const bot = { id, team: 'enemy', weaponId: null, x: sp.x, z: sp.z, rotY: 0, hp, maxHp: hp, prevHp: hp, dead: false, state: 'chase', floor: o.floor || 0, floorY: fy,
                 zombie: true, zSpeed: o.speed || zombieSpeedFor(Z.wave), lastAtk: 0, y: fy, yVel: 0, frostSlow: 100, kbVX: 0, kbVZ: 0,
                 wanderAngle: Math.random() * Math.PI * 2, wanderTimer: 0, lastShot: 0, stuckTimer: 0, strafeDir: 1, strafeFlipTimer: 0, tacTimer: 0, coverPt: null,
-                difficulty: selectedDifficulty, tune: botTuning(selectedDifficulty), activeSlot: 'melee' };
+                difficulty: aiDifficulty(selectedDifficulty), nightmare: selectedDifficulty === 'nightmare', tune: botTuning(selectedDifficulty), activeSlot: 'melee' };
   gameBots.push(bot);
   socket.emit('spawnBots', [{ id, name: 'Zombie', team: absTeam('enemy'), weaponId: null, spawnX: sp.x, spawnZ: sp.z, hp, skin: 'default' }]);   // (the server has no use for the skin)
   return bot;
@@ -79019,7 +79084,7 @@ function zombieSpawnSquad(i) {
   if (mesh) { mesh.position.set(x, 0, z); armRemoteMesh(mesh, def.weapon); }
   const bot = { id, team: 'ally', weaponId: def.weapon, x, z, rotY: euler.y, hp: 300, maxHp: 300, prevHp: 300, dead: false, state: 'idle', squad: true, squadIdx: i,
                 y: 0, yVel: 0, frostSlow: 100, kbVX: 0, kbVZ: 0, wanderAngle: 0, wanderTimer: 0, lastShot: 0, stuckTimer: 0, strafeDir: 1, strafeFlipTimer: 0, tacTimer: 0, coverPt: null,
-                difficulty: selectedDifficulty, tune: botTuning(selectedDifficulty), activeSlot: 'primary' };
+                difficulty: aiDifficulty(selectedDifficulty), nightmare: selectedDifficulty === 'nightmare', tune: botTuning(selectedDifficulty), activeSlot: 'primary' };
   gameBots.push(bot);
   socket.emit('spawnBots', [{ id, name: def.name, team: absTeam('ally'), weaponId: def.weapon, spawnX: x, spawnZ: z, hp: 300, skin: 'default' }]);
   return bot;
@@ -81418,7 +81483,7 @@ function updateBotAI(dt,simulation=null) {
             let aimX = target.isPlayer && aimCross ? aimCross.x : tx;
             let aimZ = target.isPlayer && aimCross ? aimCross.z : tz;
             if (target.isPlayer) {
-              const drift = botAimProfile(bot.difficulty).drift * (0.55 + Math.min(1.25, dist / 34));
+              const drift = botAimProfile(bot.nightmare ? 'nightmare' : bot.difficulty).drift * (0.55 + Math.min(1.25, dist / 34));
               aimX += (Math.random() - 0.5) * drift;
               aimZ += (Math.random() - 0.5) * drift;
             }
@@ -81625,6 +81690,23 @@ function updateBotAI(dt,simulation=null) {
         if (Math.random() < jumpChance) { bot.yVel = 13; bot.y = bot.y || 0; }
         const gap = bot.personality === 'aggressor' ? 1100 : 2200;
         bot._nextJumpAt = now + gap + Math.random() * 2000;
+      }
+      if (bot.nightmare && target) {                                   // 😈 the extra movement
+        nightmareThink(bot, target, dt, now);
+        if (onGround) bot._airJumpUsed = false;
+        else if (engaging && !bot._airJumpUsed && (bot.yVel || 0) < 1.5 && (bot.y || 0) > groundY + 0.8 && Math.random() < dt * 6) {     // a double jump at the top of the first
+          bot.yVel = AIR_JUMP_VEL; bot._airJumpUsed = true;
+          const ml = Math.hypot(moveX, moveZ); if (ml > 0.001) { bot._airCarryX = (moveX / ml) * 6; bot._airCarryZ = (moveZ / ml) * 6; bot._airCarryUntil = now + 500; }
+        }
+        if (engaging && onGround) bot._nextJumpAt = Math.min(bot._nextJumpAt || 0, now + 600 + Math.random() * 900);                    // it keeps moving
+        if (engaging && onGround && !(now < (bot._slideUntil || 0))) bot._nextSlideAt = Math.min(bot._nextSlideAt || 0, now + 300 + Math.random() * 500);
+        nightmareDash(bot, target, wasHit, now);
+        const g = bot._hgGoal;
+        if (g) {                                                        // head for the high ground, sliding into the ramp
+          const gx = g.x - bot.x, gz = g.z - bot.z, gd = Math.hypot(gx, gz) || 1, sp = Math.max(Math.hypot(moveX, moveZ), 8 * dt);
+          moveX = (gx / gd) * sp; moveZ = (gz / gd) * sp;
+          if (gd < 9 && onGround && now >= (bot._slideUntil || 0)) { bot._slideUntil = now + 850; bot._nextSlideJumpAt = Math.min(bot._nextSlideJumpAt || 0, now); }
+        }
       }
     }
     // Apply movement + wall collision
@@ -83479,7 +83561,7 @@ function showMapPick(d) {
   const others = d.others || (d.vs ? [d.vs.name] : []);
   const vsBot = d.vsBot !== undefined ? !!d.vsBot : !d.vs;
   const tastes = Object.keys(MAP_BOT_TASTES);
-  const bot = vsBot ? botPickMap(options, tastes[Math.floor(Math.random() * tastes.length)], selectedDifficulty) : null;
+  const bot = vsBot ? botPickMap(options, tastes[Math.floor(Math.random() * tastes.length)], aiDifficulty(selectedDifficulty)) : null;
   const el = document.createElement('div');
   el.id = 'map-pick'; el.setAttribute('data-no-i18n', '');
   el.style.cssText = 'position:fixed;inset:0;z-index:9700;background:rgba(5,9,16,0.96);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:16px;box-sizing:border-box;font-family:"Courier New",monospace;overflow:auto;';
@@ -87681,6 +87763,7 @@ const DIFFICULTY_DESCS = {
   medium: '+ Reloading · Bullet leading · Reaction time · Skill variation · Smarter melee charges',
   hard:   '+ Personalities · Weapon abilities · Focus fire · Low-HP retreat · Last-seen memory',
   expert: '+ Faster aim/fire/reload · Weapon-aware pressure · Team comms · Punishes reloading · Trajectory prediction',
+  nightmare: '😈 Above Expert · Tight aim with human reaction time · Slide jumps, double jumps, scythe dashes · Hunts high ground · Retreats early · Reads how you move',
 };
 function selectDifficulty(diff) {
   selectedDifficulty = diff;
@@ -87690,6 +87773,7 @@ function selectDifficulty(diff) {
       c.style.background = c.dataset.diff === 'easy' ? 'rgba(68,204,255,0.2)'
                           : c.dataset.diff === 'medium' ? 'rgba(255,204,68,0.2)'
                           : c.dataset.diff === 'hard' ? 'rgba(255,68,68,0.2)'
+                          : c.dataset.diff === 'nightmare' ? 'rgba(255,0,60,0.28)'
                           : 'rgba(204,0,255,0.2)';
     } else {
       c.classList.remove('selected');
