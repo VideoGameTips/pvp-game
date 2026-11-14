@@ -34634,6 +34634,207 @@ function buildPenteractRailgun() {
 //   reload   the limb shards spread outward and come back
 //   inspect  the crossbow tilts from side to side and the gaps open wider
 // (looks only: damage, bolt speed, fire rate and behaviour are the Crossbow's.)
+
+// ═══ 🌌 FIVE FLOATING-PARTS SKINS: Event Horizon (SR-X), Seraphim (Crossbow), Clockbreaker (Revolver), Fractured Reality (Katana), The Puppetmaster (Minigun) ═══════════
+// Each looks incomplete or impossible: parts hang in the air round an empty centre. They share one small rig: a part is a group offset by a separation vector s from where
+// it would sit if the weapon were whole (s = 0), drifting a few millimetres. snap pulls every part together (a shot), gap pushes them further apart (an inspect), pull draws
+// them toward a point (the black hole). Everything is looks only: damage, handling and behaviour are the base weapon's.
+function _floatRig(g) {
+  const frags = [];
+  return {
+    frags,
+    add(grp, s, opt = {}) { grp.position.copy(s); g.add(grp); frags.push({ g: grp, s: s.clone(), c: opt.c || null, ph: frags.length * 2.17 + 0.6, a: opt.a || 0.002, tag: opt.tag || '' }); return grp; },
+    place(now, o = {}) {
+      const live = 1 - (o.snap || 0);
+      for (const f of frags) {
+        const k = 1 + (o.gap || 0) + ((o.tags && o.tags[f.tag]) || 0);
+        let x = f.s.x * k, y = f.s.y * k, z = f.s.z * k;
+        if (o.pull && o.target && f.c) { x += (o.target.x - f.c.x - x) * o.pull; y += (o.target.y - f.c.y - y) * o.pull; z += (o.target.z - f.c.z - z) * o.pull; }
+        const dx = Math.sin(now * 0.9 + f.ph) * f.a, dy = Math.sin(now * 1.3 + f.ph * 2) * f.a * 1.2, dz = Math.sin(now * 0.7 + f.ph * 3) * f.a;
+        f.g.position.set((x + dx) * live, (y + dy) * live, (z + dz) * live);
+        f.g.rotation.set(Math.sin(now * 0.8 + f.ph) * 0.01 * live, Math.sin(now * 0.6 + f.ph * 1.7) * 0.01 * live, Math.sin(now * 0.7 + f.ph * 2.3) * 0.012 * live);
+      }
+    },
+  };
+}
+const _fsM = (c, sh = 120, sp = 0xffffff, em = 0) => new THREE.MeshPhongMaterial({ color: c, shininess: sh, specular: sp, emissive: em });
+const _fsBox = (parent, mat, w, h, d, x, y, z, rx = 0, ry = 0, rz = 0) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); m.castShadow = true; parent.add(m); return m; };
+const _fsCyl = (parent, mat, r, h, x, y, z, seg = 12) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, seg), mat); m.rotation.x = Math.PI / 2; m.position.set(x, y, z); parent.add(m); return m; };
+const _GRIP_PTS = [[0.036,-0.028],[0.058,-0.048],[0.060,-0.096],[0.036,-0.104],[0.020,-0.056],[0.018,-0.032]];
+function _fsFire(g, st) { const f = !!(g._flash && g._flash.visible); if (f && !st.was) st.fireK = 1; st.was = f; }
+function _fsReload(g) { const t = g._reloadStart && g._reloadDur ? (Date.now() - g._reloadStart) / g._reloadDur : -1; return { t, insp: !!g._inspectMode && t >= 0 && t < 1, rel: !g._inspectMode && t >= 0 && t < 1 }; }
+
+// 1. POINT OF NO RETURN (Andy's EVENT HORIZON; that name is already the AMR's mythic, so this one is on the SR-X): seven barrel rings that are not connected to anything, a tiny black hole turning in the receiver
+function buildPointOfNoReturn() {
+  const g = new THREE.Group(), rig = _floatRig(g);
+  const dark = _fsM(0x241f3a, 140, 0x8a78c8), steel = _fsM(0x6a6498, 180, 0xe0d8ff), orange = new THREE.MeshBasicMaterial({ color: 0xffa040 });
+  _fsBox(g, dark, 0.040, 0.020, 0.230, 0, 0.032, 0.010); _fsBox(g, dark, 0.040, 0.020, 0.230, 0, -0.008, 0.010);                 // the receiver: two halves with the hole between them
+  _fsBox(g, dark, 0.036, 0.052, 0.140, 0, 0.002, 0.250); _fsBox(g, steel, 0.040, 0.056, 0.012, 0, 0.002, 0.326);                  // stock + butt
+  const grip = new THREE.Group(); g.add(grip);                                                                                         // (the grip + foregrip are where the hands are)
+  { const sh = new THREE.Shape(); _GRIP_PTS.forEach((p, i) => (i ? sh.lineTo(p[0], p[1]) : sh.moveTo(p[0], p[1]))); sh.closePath(); const geo = new THREE.ExtrudeGeometry(sh, { depth: 0.028, bevelEnabled: false }); geo.rotateY(-Math.PI / 2); geo.translate(0.014, 0, 0); grip.add(new THREE.Mesh(geo, dark)); }
+  _fsBox(g, dark, 0.026, 0.044, 0.040, 0, -0.032, -0.090);
+  _fsBox(g, steel, 0.018, 0.018, 0.120, 0, 0.052, 0.010); _fsBox(g, new THREE.MeshBasicMaterial({ color: 0xb36bff }), 0.012, 0.012, 0.004, 0, 0.052, -0.052);     // the optic
+  const hole = new THREE.Group(); hole.position.set(0, 0.012, 0.020); g.add(hole);
+  hole.add(new THREE.Mesh(new THREE.SphereGeometry(0.0105, 14, 10), new THREE.MeshBasicMaterial({ color: 0x000000 })));
+  const disk = new THREE.Mesh(new THREE.TorusGeometry(0.0185, 0.0022, 6, 32), orange); disk.rotation.x = Math.PI / 2 - 0.3; hole.add(disk);
+  const disk2 = new THREE.Mesh(new THREE.TorusGeometry(0.0140, 0.0016, 6, 28), new THREE.MeshBasicMaterial({ color: 0xffe0a0 })); disk2.rotation.x = Math.PI / 2 - 0.3; hole.add(disk2);
+  hole.add(new THREE.Mesh(new THREE.SphereGeometry(0.026, 12, 8), new THREE.MeshBasicMaterial({ color: 0x9a52ff, transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending })));
+  for (let i = 0; i < 7; i++) {                                                                                                       // the barrel: seven rings, snapped together they would be one
+    const ring = new THREE.Group(), tor = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.0055, 8, 24), i % 2 ? steel : dark); ring.add(tor);
+    const zHome = -0.120 - i * 0.030;
+    tor.position.z = zHome; rig.add(ring, new THREE.Vector3(0, 0.012, -i * 0.022), { a: 0.0016, tag: 'ring', c: new THREE.Vector3(0, 0.012, zHome - i * 0.022) });
+    tor.position.y = 0.012;
+  }
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.012, -0.470); g.add(flash);
+  g._flash = flash; g._kickZ = 0.020; g._greebled = true; g._handDetailed = true;
+  const st = { was: false, fireK: 0 };
+  g._calm = () => { st.fireK = 0; rig.place(0, {}); };
+  g._tick = (dt, now, assembling) => {
+    if (assembling) return;
+    _fsFire(g, st); st.fireK = Math.max(0, st.fireK - dt / 0.22);
+    const R = _fsReload(g), pull = R.insp ? Math.sin(Math.PI * R.t) * 0.95 : 0;      // inspect: the hole drags the rings in, then lets go
+    rig.place(now, { snap: Math.min(1, st.fireK * 3), pull, target: hole.position });
+    disk.rotation.z += dt * 6; disk2.rotation.z -= dt * 9; hole.scale.setScalar(1 + 0.08 * Math.sin(now * 5) + (R.insp ? 0.25 * Math.sin(Math.PI * R.t) : 0));
+  };
+  rig.place(0, {}); g.position.set(0.12, -0.1, -0.25); return g;
+}
+// 2. SERAPHIM: a crossbow that is a pair of mechanical angel wings; no string, a bolt of gold light between them
+function buildSeraphim() {
+  const g = new THREE.Group(), white = _fsM(0xf2efe6, 160, 0xffffff), gold = _fsM(0xe0b040, 220, 0xfff0b0, 0x2a1a00), glow = new THREE.MeshBasicMaterial({ color: 0xffd060 });
+  { const sh = new THREE.Shape(); [[-0.250,0.004],[-0.240,0.020],[0.040,0.022],[0.070,0.014],[0.140,0.016],[0.176,-0.004],[0.170,-0.038],[0.096,-0.042],[0.062,-0.030],[0.030,-0.086],[-0.004,-0.088],[0.004,-0.030],[-0.238,-0.014]].forEach((p, i) => (i ? sh.lineTo(p[0], p[1]) : sh.moveTo(p[0], p[1]))); sh.closePath();
+    const geo = new THREE.ExtrudeGeometry(sh, { depth: 0.030, bevelEnabled: false }); geo.rotateY(-Math.PI / 2); geo.translate(0.015, 0, 0); g.add(new THREE.Mesh(geo, white)); }
+  _fsBox(g, gold, 0.026, 0.010, 0.330, 0, 0.026, -0.090); _fsBox(g, gold, 0.006, 0.040, 0.030, 0, -0.026, -0.152); _fsBox(g, gold, 0.040, 0.026, 0.040, 0, 0.016, -0.232);
+  const feathers = [], wings = [];
+  const mk = (sd, i) => {
+    const w = wings[sd > 0 ? 1 : 0] || (wings[sd > 0 ? 1 : 0] = (() => { const p = new THREE.Group(); p.position.set(sd * 0.040, 0.030, -0.200); g.add(p); p.userData.sd = sd; return p; })());
+    for (let k = 0; k < 12; k++) {
+      const th = -0.15 + (k / 11) * 1.9, L = 0.105 + 0.095 * Math.sin((k / 11) * Math.PI) + (k < 6 ? 0 : -0.015), f = new THREE.Group();
+      const m = new THREE.Mesh(new THREE.BoxGeometry(L, 0.003, 0.018), k % 3 === 0 ? gold : white); m.position.set(L / 2, 0, 0); f.add(m);
+      f.rotation.y = -sd * (Math.PI / 2 - th) * 0.0 + (sd > 0 ? -th : th + Math.PI); f.userData = { home: f.rotation.y, k };
+      f.position.y = k * 0.0016; w.add(f); feathers.push({ f, sd, k, off: new THREE.Vector3((Math.sin(k * 12.9898 + sd) * 0.5), Math.sin(k * 78.233) * 0.5 + 0.3, Math.cos(k * 3.7 + sd) * 0.5) });
+    }
+  };
+  mk(-1); mk(1);
+  const bolt = new THREE.Group(); bolt.position.set(0, 0.036, -0.126); g.add(bolt);
+  { const sh = _fsCyl(bolt, glow, 0.0036, 0.180, 0, 0, 0, 8); const hd = new THREE.Mesh(new THREE.ConeGeometry(0.008, 0.026, 6), glow); hd.rotation.x = -Math.PI / 2; hd.position.z = -0.100; bolt.add(hd);
+    const halo = new THREE.Mesh(new THREE.SphereGeometry(0.014, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffc040, transparent: true, opacity: 0.28, depthWrite: false, blending: THREE.AdditiveBlending })); halo.position.set(0, 0, 0.03); bolt.add(halo); }
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.034, -0.262); g.add(flash);
+  g._flash = flash; g._kickZ = 0.006; g._greebled = true; g._handDetailed = true;
+  const st = { was: false, fireK: 0, boltK: 1, spreadK: 0 };
+  const pose = (now, fold, spread, scatter) => {
+    for (const w of wings) w.rotation.set(0, 0, 0);
+    for (const x of feathers) {
+      const sd = x.sd; x.f.rotation.y = x.f.userData.home + sd * (-fold * 0.55 + spread * 0.35);
+      x.f.position.set(x.off.x * scatter * 0.12, x.k * 0.0016 + x.off.y * scatter * 0.10 + Math.sin(now * 1.1 + x.k) * 0.0012, x.off.z * scatter * 0.12);
+      x.f.rotation.z = x.off.y * scatter * 1.4;
+    }
+  };
+  g._calm = () => { st.fireK = 0; st.boltK = 1; pose(0, 0, 0, 0); bolt.scale.setScalar(1); };
+  g._tick = (dt, now, assembling) => {
+    if (assembling) return;
+    _fsFire(g, st); if (st.fireK === 1) st.boltK = 0; st.fireK = Math.max(0, st.fireK - dt / 0.30);
+    const R = _fsReload(g);
+    st.boltK = R.rel ? Math.min(1, Math.max(0, (R.t - 0.55) / 0.35)) : Math.min(1, st.boltK + dt * 2.2);          // the bolt forms between the wings again
+    const fold = st.fireK > 0 ? Math.sin(Math.PI * (1 - st.fireK)) : 0, spread = R.rel ? Math.sin(Math.PI * R.t) : 0;
+    const scatter = R.insp ? Math.sin(Math.PI * Math.min(1, R.t * 1.05)) : 0;                                      // inspect: dozens of loose feathers, then whole again
+    pose(now, fold, spread, scatter);
+    bolt.visible = st.boltK > 0.02; bolt.scale.set(Math.max(0.01, st.boltK), Math.max(0.01, st.boltK), Math.max(0.01, st.boltK));
+  };
+  pose(0, 0, 0, 0); g.position.set(0.12, -0.1, -0.25); return g;
+}
+// 3. CLOCKBREAKER: the cylinder is not there; six bullets orbit the gap, clock gears turn in the air, the hammer is a broken clock hand
+function buildClockbreaker() {
+  const g = new THREE.Group(), bronze = _fsM(0xb07a34, 160, 0xffe0a0), teal = _fsM(0x2a9a9a, 120, 0xa0ffff, 0x042a2a), brass = _fsM(0xe0c060, 220, 0xffffff), dark = _fsM(0x2a1c10, 60, 0x907050);
+  _fsBox(g, bronze, 0.022, 0.044, 0.076, 0, 0.014, 0.020); _fsBox(g, bronze, 0.016, 0.010, 0.130, 0, 0.026, -0.098); _fsCyl(g, bronze, 0.0082, 0.130, 0, 0.012, -0.098, 14); _fsBox(g, dark, 0.004, 0.009, 0.004, 0, 0.036, -0.156);
+  { const sh = new THREE.Shape(); [[0.052,0.004],[0.074,-0.020],[0.080,-0.086],[0.052,-0.098],[0.034,-0.040],[0.032,-0.004]].forEach((p, i) => (i ? sh.lineTo(p[0], p[1]) : sh.moveTo(p[0], p[1]))); sh.closePath(); const geo = new THREE.ExtrudeGeometry(sh, { depth: 0.030, bevelEnabled: false }); geo.rotateY(-Math.PI / 2); geo.translate(0.015, 0, 0); g.add(new THREE.Mesh(geo, dark)); }
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.0034, 6, 12, Math.PI * 1.05), brass); guard.rotation.set(0, Math.PI / 2, -0.4); guard.position.set(0, -0.010, 0.026); g.add(guard);
+  _fsBox(g, brass, 0.004, 0.014, 0.005, 0, -0.004, 0.026, 0.2);
+  _fsBox(g, brass, 0.004, 0.030, 0.004, 0, 0.052, 0.062, 0.5);                               // the hammer: a broken clock hand
+  _fsBox(g, brass, 0.004, 0.012, 0.004, 0, 0.066, 0.052, -0.4); { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.005, 10), brass); c.rotation.z = Math.PI / 2; c.position.set(0, 0.040, 0.066); g.add(c); }
+  const orbit = new THREE.Group(); orbit.position.set(0, 0.012, -0.008); g.add(orbit);   // six bullets round an empty space
+  for (let i = 0; i < 6; i++) { const b = new THREE.Group(); const a = i / 6 * Math.PI * 2; b.position.set(Math.cos(a) * 0.020, Math.sin(a) * 0.020, 0);
+    _fsCyl(b, brass, 0.0046, 0.030, 0, 0, 0, 10); const tip = new THREE.Mesh(new THREE.ConeGeometry(0.0046, 0.010, 10), bronze); tip.rotation.x = -Math.PI / 2; tip.position.z = -0.020; b.add(tip); orbit.add(b); }
+  const gears = [];
+  const gear = (x, y, z, r, teeth, dir) => { const gr = new THREE.Group(); gr.position.set(x, y, z); const body = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.005, 20), teal); body.rotation.z = Math.PI / 2; gr.add(body);
+    for (let i = 0; i < teeth; i++) { const a = i / teeth * Math.PI * 2, t = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.0055, 0.0055), brass); t.position.set(0, Math.sin(a) * (r + 0.002), Math.cos(a) * (r + 0.002)); t.rotation.x = -a; gr.add(t); }
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.008, 8), brass); hub.rotation.z = Math.PI / 2; gr.add(hub); g.add(gr); gears.push({ g: gr, dir }); };
+  gear(-0.046, 0.048, -0.030, 0.018, 12, 1); gear(0.046, 0.044, -0.026, 0.014, 10, -1); gear(-0.046, -0.014, 0.010, 0.012, 9, -1); gear(0.046, -0.012, 0.014, 0.016, 11, 1);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.012, -0.172); g.add(flash);
+  g._flash = flash; g._kickZ = 0.014; g._greebled = true; g._handDetailed = true;
+  const st = { was: false, fireK: 0, ang: 0, target: 0 };
+  g._tick = (dt, now, assembling) => {
+    if (assembling) return;
+    const f = !!(g._flash && g._flash.visible); if (f && !st.was) st.target += Math.PI / 3; st.was = f;
+    const R = _fsReload(g);
+    let speed = 1;                                                                         // gears turn
+    if (R.rel) speed = -3.2 * Math.sin(Math.PI * R.t);                                      // reload: time runs backwards
+    if (R.insp) speed = (R.t > 0.28 && R.t < 0.62) ? 0 : (R.t >= 0.62 ? Math.min(1, (R.t - 0.62) / 0.12) : 1 - Math.min(1, (0.28 - R.t) / 0.1) * 0);   // inspect: every gear stops at once, then runs again
+    for (const x of gears) x.g.rotation.x += x.dir * dt * 1.3 * speed;
+    st.ang += (st.target - st.ang) * Math.min(1, dt * 14) + (R.rel ? -dt * 5 * Math.sin(Math.PI * R.t) : 0.35 * dt * (R.insp && R.t > 0.28 && R.t < 0.62 ? 0 : 1));
+    orbit.rotation.z = st.ang;
+  };
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+// 5. FRACTURED REALITY: a katana whose blade is twelve disconnected mirror shards
+function buildFracturedKatana() {
+  const g = new THREE.Group(), rig = _floatRig(g), dark = _fsM(0x14141a, 80, 0x707080), gold = _fsM(0xc0a050, 200, 0xffffff);
+  _fsCyl(g, dark, 0.0105, 0.160, 0, 0, 0.150, 10); _fsCyl(g, gold, 0.040, 0.008, 0, 0, 0.060, 16);
+  const tints = [0xeaf6ff, 0xfff0f6, 0xf0fff6, 0xf4f0ff, 0xfffaee, 0xeefaff], shards = [];
+  for (let i = 0; i < 12; i++) {
+    const L = 0.026, zc = 0.030 - (i + 0.5) * 0.030, w = 0.020 - i * 0.0006;
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.004, w + 0.010, L), new THREE.MeshPhongMaterial({ color: tints[i % 6], shininess: 400, specular: 0xffffff, emissive: 0x5a6e88 }));
+    m.position.set(0, 0.002, zc); const grp = new THREE.Group(); grp.add(m);
+    rig.add(grp, new THREE.Vector3((Math.sin(i * 7.1) * 0.5) * 0.004, Math.cos(i * 3.3) * 0.004, -i * 0.0022), { a: 0.0012, c: new THREE.Vector3(0, 0.002, zc) }); shards.push({ grp, zc, i });
+  }
+  g._fractureShards = shards.length;
+  const hilt = new THREE.Vector3(0, 0, 0.070);
+  g._tick = (dt, now, assembling) => {
+    if (assembling) return;
+    const ins = (typeof itemInspect !== 'undefined' && itemInspect && itemInspect.model === g) ? Math.min(1, (performance.now() - itemInspect.t0) / itemInspect.ms) : -1;
+    const k = ins >= 0 ? Math.sin(Math.PI * Math.min(1, Math.max(0, (ins - 0.08) / 0.84))) : 0;       // inspect: the blade comes apart, orbits the hilt, comes back
+    rig.place(now, { gap: k * 0.6 });
+    for (const s of shards) {
+      if (k <= 0) continue;
+      const a = now * 3.2 + s.i * (Math.PI * 2 / 12), r = 0.045 * k;
+      s.grp.position.x = Math.cos(a) * r; s.grp.position.y = Math.sin(a) * r; s.grp.position.z = (s.zc - hilt.z) * (1 - k) * 0.0 + (hilt.z - s.zc) * k * 0.85;
+      s.grp.rotation.z = a;
+    }
+  };
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+// 6. THE PUPPETMASTER: six barrels hang round an empty centre on thin red strings from a ring above; they spin round the centre without touching
+function buildPuppetmaster() {
+  const g = buildMinigun(), cl = g._barrelCluster;
+  while (cl.children.length) { const c = cl.children[0]; cl.remove(c); }                       // no clamps, no hub: the barrels float
+  const dark = _fsM(0x2a2a34, 200, 0xe0e0ff), redM = new THREE.MeshBasicMaterial({ color: 0xff2a3a }), ringM = _fsM(0x1c1c24, 180, 0xff8a8a, 0x300408);
+  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2, b = new THREE.Mesh(new THREE.CylinderGeometry(0.0088, 0.0088, 0.300, 10), dark); b.rotation.x = Math.PI / 2; b.position.set(Math.cos(a) * 0.024, Math.sin(a) * 0.024, 0); cl.add(b);
+    const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.0102, 0.0102, 0.018, 10), redM); tip.rotation.x = Math.PI / 2; tip.position.set(Math.cos(a) * 0.024, Math.sin(a) * 0.024, -0.141); cl.add(tip); }
+  const ring = new THREE.Group(); ring.position.set(0, 0.125, -0.190); g.add(ring);                 // the controller, hovering above
+  { const t = new THREE.Mesh(new THREE.TorusGeometry(0.060, 0.0045, 8, 36), ringM); t.rotation.x = Math.PI / 2; ring.add(t); for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2, n = new THREE.Mesh(new THREE.SphereGeometry(0.0055, 8, 6), redM); n.position.set(Math.cos(a) * 0.060, 0, Math.sin(a) * 0.060); ring.add(n); } }
+  const strings = []; for (let i = 0; i < 6; i++) { const s = new THREE.Mesh(new THREE.CylinderGeometry(0.0007, 0.0007, 1, 4), redM); g.add(s); strings.push(s); }
+  const up = new THREE.Vector3(0, 1, 0), p0 = new THREE.Vector3(), p1 = new THREE.Vector3(), dir = new THREE.Vector3();
+  let slack = 0, drop = 0;
+  const strWire = () => {
+    for (let i = 0; i < 6; i++) {
+      const a = i / 6 * Math.PI * 2, b = a + cl.rotation.z;
+      p0.set(Math.cos(a) * 0.060, ring.position.y, ring.position.z + Math.sin(a) * 0.060);        // a node on the ring
+      p1.set(Math.cos(b) * 0.024, cl.position.y + Math.sin(b) * 0.024 - drop, cl.position.z);
+      dir.subVectors(p1, p0); const len = dir.length(); strings[i].position.copy(p0).addScaledVector(dir, 0.5);
+      strings[i].quaternion.setFromUnitVectors(up, dir.multiplyScalar(1 / Math.max(1e-6, len))); strings[i].scale.set(slack > 0.3 ? 0.4 : 1, len, slack > 0.3 ? 0.4 : 1);
+    }
+  };
+  const baseTick = g._tick;
+  g._tick = (dt, now, assembling) => {
+    if (baseTick) baseTick(dt, now, assembling);
+    if (assembling) { strWire(); return; }
+    const R = _fsReload(g);
+    if (R.insp) { slack = R.t > 0.25 && R.t < 0.62 ? 1 : 0; const f = R.t < 0.25 ? 0 : R.t < 0.62 ? Math.min(1, (R.t - 0.25) / 0.2) : Math.max(0, 1 - (R.t - 0.62) / 0.08); drop = 0.012 * f; } else { slack = 0; drop = 0; }
+    cl.position.y = (cl._homeY != null ? cl._homeY : (cl._homeY = cl.position.y)) - drop;
+    ring.rotation.y = Math.sin(now * 0.7) * 0.05; strWire();
+  };
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
 function buildFractureCrossbow() {
   const g = new THREE.Group();
   const obsidian = new THREE.MeshPhongMaterial({ color: 0x151222, shininess: 150, specular: 0xb4a2f0 });
@@ -60942,6 +61143,18 @@ const MODEL_SKINS = [
   { id: 'crossbow_fracture', weapon: 'crossbow', name: 'FRACTURE', rarity: 'legendary',
     sw: ['#0b0a14', '#a066ff'], build: buildFractureCrossbow,
     blurb: 'A crossbow that looks like a broken object hanging in the air: 20 obsidian shards with real gaps between them, three jagged shards a side for limbs, a split rail, a shattered stock and a violet crystal where the receiver should join. They drift, snap together when you fire and come apart again. Same damage, bolt speed and fire rate as the Crossbow.' },
+  { id: 'srx_point_of_no_return', weapon: 'srx', name: 'POINT OF NO RETURN', rarity: 'legendary',
+    sw: ['#12101c', '#ffa040', '#9a52ff'], build: buildPointOfNoReturn,
+    blurb: 'A sniper rifle with no barrel: seven rings hang in a line in the air, not touching anything, and a tiny black hole with a glowing orange disk turns in the open receiver. A shot snaps the rings together for an instant; inspect lets the black hole pull them in and let go. Same damage, range and fire rate as the SR-X.' },
+  { id: 'crossbow_seraphim', weapon: 'crossbow', name: 'SERAPHIM', rarity: 'legendary',
+    sw: ['#f2efe6', '#e0b040'], build: buildSeraphim,
+    blurb: 'A crossbow that is a pair of mechanical angel wings: 24 white and gold feathers, no string, and a bolt of gold light that forms between them. Firing folds the wings in; reloading spreads them while a new bolt of light gathers; inspect scatters the feathers and calls them back. Same damage and speed as the Crossbow.' },
+  { id: 'revolver_clockbreaker', weapon: 'revolver', name: 'CLOCKBREAKER', rarity: 'legendary',
+    sw: ['#b07a34', '#2a9a9a', '#e0c060'], build: buildClockbreaker,
+    blurb: 'A revolver with no cylinder: six bullets circle the empty space and turn one step each shot, four brass gears turn in the air around it, and the hammer is a broken clock hand. Reloading runs time backwards (everything spins the wrong way); inspect stops every gear at once, then starts them again. Same damage and fire rate as the Revolver.' },
+  { id: 'minigun_puppetmaster', weapon: 'minigun', name: 'THE PUPPETMASTER', rarity: 'legendary',
+    sw: ['#2a2a34', '#ff2a3a'], build: buildPuppetmaster,
+    blurb: 'Six barrels hang in the air round an empty centre, each on a thin red string from a ring that hovers above. They spin up without touching anything. Inspect drops the strings slack, then snaps them tight. Same damage and fire rate as the Minigun.' },
   { id: 'crossbow_widowmaker', weapon: 'crossbow', name: 'WIDOWMAKER', rarity: 'legendary', look: { hit: 'web' },
     sw: ['#0e0e12', '#ff2a2a'], build: buildWidowmaker,
     blurb: 'A mechanical spider that is also a crossbow. Eight legs fold along its sides; aim and they unfold into the bow arms. A shot snaps the front legs in, a reload sends a little spider crawling along the rail with the next bolt, and inspect stands it up and walks it across your view. Whoever it kills hangs in a giant red web that then shatters.' },
@@ -61207,8 +61420,8 @@ const TOWER_MODEL_SKIN_IDS = new Set(['ak20_field_radio']);
 // 🏆 Earned at the end of a ranked season by finishing it at Legend rank: never bought, pulled or won any other way (server.js SEASON_SKIN_IDS grants it when the season is closed).
 const SEASON_MODEL_SKIN_IDS = new Set(['ak20_phoenix_reign']);
 // 🐉 Gen 3: the newest skins have their own case. Mirrors GEN3_SKIN_IDS in server.js (no skin is free).
-const GEN3_MODEL_SKIN_IDS = new Set(['crossbow_chronos_engine', 'crossbow_fracture', 'railgun_penteract', 'chain_gun_clockwork_dragon', 'ak20_breach_protocol', 'lever_remembrance', 'mauser_phantom_circuit']);
-const GEN3_MELEE_MODEL_SKIN_IDS = new Set(['scythe_deaths_head']);   // Gen 3 holds melee skins too
+const GEN3_MODEL_SKIN_IDS = new Set(['srx_point_of_no_return', 'crossbow_seraphim', 'revolver_clockbreaker', 'minigun_puppetmaster', 'crossbow_chronos_engine', 'crossbow_fracture', 'railgun_penteract', 'chain_gun_clockwork_dragon', 'ak20_breach_protocol', 'lever_remembrance', 'mauser_phantom_circuit']);
+const GEN3_MELEE_MODEL_SKIN_IDS = new Set(['katana_fractured_reality', 'scythe_deaths_head']);   // Gen 3 holds melee skins too
 const GATED_MODEL_SKIN_IDS = new Set([...GEN1_GATED_MODEL_SKIN_IDS, ...GEN2_MODEL_SKIN_IDS, ...GEN3_MODEL_SKIN_IDS, ...TOWER_MODEL_SKIN_IDS, ...SEASON_MODEL_SKIN_IDS, ...PVP_SHOP_CATALOG.exclusiveSkins]);
 const GATED_MELEE_MODEL_SKIN_IDS = new Set([...GEN2_MELEE_MODEL_SKIN_IDS, ...GEN2_SUPPORT_MODEL_SKIN_IDS, ...GEN3_MELEE_MODEL_SKIN_IDS]);   // (the lock check is by id, so utilities share it)
 for (const id of GEN1_GATED_MODEL_SKIN_IDS) {
@@ -63339,6 +63552,9 @@ function buildTapeMeasureKatana() {
   g.position.set(.10,-.12,-.20);return g;
 }
 const MELEE_MODEL_SKINS = [
+  {id:'katana_fractured_reality',melee:'katana',name:'FRACTURED REALITY',rarity:'legendary',raw:true,hands:true,
+    sw:['#cfe8ff','#14141a','#c0a050'],build:buildFracturedKatana,
+    blurb:'A katana whose blade is twelve separate mirror shards with real gaps between them, each one tinted a little differently and drifting. Inspect breaks it into a spinning ring round the hilt and brings it back. Same damage and speed as the Katana.'},
   {id:'scythe_deaths_head',melee:'scythe',name:"Death's Head",rarity:'legendary',raw:true,
     sw:['#2b2e3b','#a65bff','#cfd6e2'],build:buildDeathsHead,
     blurb:'The blade is the folded wings of a mechanical death\'s-head moth. Drawn, the wings unfold and lock into the crescent; swing and they part, then snap back together; purple lights pulse between the joints. Inspect is THE LAST FLIGHT: the blade folds in, the wings open right out to show their pattern, flutter, and lock shut. CLICK.',
@@ -66602,6 +66818,15 @@ const SKIN_FX = {
     inspect: [K(.10, { py: .02 }), K(.20, { py: .06, pz: -.04, rx: .10 }), K(.80, { py: .06, pz: -.04, rx: .10 }), K(.92, { py: .03 }), K(1, {})] },
   throwing_knives_house_of_cards: { equip: 'unfold', equipMs: 900, equipSfx: ['fold', 'click'],
     inspect: [K(.12, { py: .02 }), K(.9, { py: .02 }), K(1, {})] },
+  srx_point_of_no_return: { equip: 'blackhole', equipMs: 1200, equipSfx: ['singularity', 'chime'],
+    inspect: [K(.10, { py: .02 }), K(.22, { py: .05, pz: -.03, rx: .06 }), K(.50, { py: .05, pz: -.03, rx: .06, rz: .20 }), K(.78, { py: .05, pz: -.03, rx: .06, rz: -.10 }), K(.92, { py: .02 }), K(1, {})] },
+  crossbow_seraphim: { equip: 'unfold', equipMs: 1000, equipSfx: ['fold', 'chime'],
+    inspect: [K(.14, { py: .03 }), K(.30, { py: .05, rz: .20 }), K(.55, { py: .05, rz: -.20 }), K(.80, { py: .04, rz: .08 }), K(.92, { py: .02 }), K(1, {})] },
+  revolver_clockbreaker: { equip: 'assemble', equipMs: 950, equipSfx: ['clack', 'click'],
+    inspect: [K(.12, { py: .02 }), K(.24, { py: .06, pz: -.03, rx: .10 }), K(.70, { py: .06, pz: -.03, rx: .10 }), K(.86, { py: .03 }), K(1, {})] },
+  minigun_puppetmaster: { equip: 'unfold', equipMs: 1000, equipSfx: ['whoosh', 'clack'],
+    inspect: [K(.12, { py: .02 }), K(.25, { py: .05, pz: -.03 }), K(.62, { py: .05, pz: -.03 }), K(.70, { py: .035, pz: -.03 }), K(.86, { py: .02 }), K(1, {})] },
+  katana_fractured_reality: { equip: 'assemble', equipMs: 950, equipSfx: ['crystal', 'chime'] },
   crossbow_fracture: { equip: 'build', equipMs: 900, equipSfx: ['whoosh', 'snapin'],
     inspect: [K(.14, { py: .03 }), K(.30, { py: .045, rz: .40 }), K(.50, { py: .045, rz: -.40 }), K(.70, { py: .045, rz: .35 }), K(.88, { py: .02, rz: -.15 }), K(1, {})] },
   crossbow_widowmaker: { equip: 'unfold', equipMs: 1000, equipSfx: ['fold', 'click'],
