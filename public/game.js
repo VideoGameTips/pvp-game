@@ -22919,11 +22919,13 @@ function triggerMuzzleBlast(model, opts = {}) {
   if (!model || !model._flash) return;
   ejectFiredCase(model);
   indexCylinder(model);
+  const CFX = window.PVP_COMBAT_FX;                                   // the player's own muzzle-flash settings (combat-visuals.js): 0 = no flash at all
+  if (CFX && CFX.muzzle <= 0) return;
   const flash = model._flash;
   const st = muzzleStyleFor(opts.weapon);
   const tint = opts.color || (flash.material && flash.material.color ? flash.material.color.getHex() : 0xffcc66);
   // No two shots look alike: random roll and a size jitter.
-  const s0 = (opts.scale || 1) * hyperrealismFactor('muzzle') * (1.12 + Math.random() * 0.46) * 1.3;   // steadier, harder: less size lottery (and 30% bigger: turned up on purpose)
+  const s0 = (opts.scale || 1) * hyperrealismFactor('muzzle') * (1.12 + Math.random() * 0.46) * 1.3 * (CFX ? CFX.muzzle : 1);   // steadier, harder: less size lottery (and 30% bigger: turned up on purpose)
   flash.visible = true;
   flash.rotation.z = Math.random() * Math.PI * 2;
   flash.scale.set(s0 * st.wid, s0 * st.wid, s0 * st.len);
@@ -22935,9 +22937,9 @@ function triggerMuzzleBlast(model, opts = {}) {
   light.position.copy(world);
 
   // Sparks thrown forward and (on the loud guns) the blast front racing out ahead of the muzzle.
-  try { spawnMuzzleSparks(world, fwd, st, tint, opts.scale || 1); spawnMuzzleRing(world, fwd, st, tint); } catch (e) {}
+  try { if (!CFX || CFX.quality !== 'low') spawnMuzzleSparks(world, fwd, st, tint, opts.scale || 1); if (!CFX || CFX.quality === 'high') spawnMuzzleRing(world, fwd, st, tint); } catch (e) {}
 
-  const dur = opts.duration || 66;   // a spike: shorter than it was (62) so it reads as a flash, not a glow
+  const dur = opts.duration || 55;   // a spike: shorter than it was (62) so it reads as a flash, not a glow
   const start = performance.now();
   const step = () => {
     const t = (performance.now() - start) / dur;
@@ -22991,8 +22993,9 @@ function triggerMuzzleBlast(model, opts = {}) {
     };
     requestAnimationFrame(smoke);
   };
+  if (CFX && CFX.quality === 'low') return;                           // (low quality: the flash and its light, no smoke)
   if (st.puffs >= 1) runPuff(_getSmokePuff(), { start: 0.05, op: 0.42 * Math.min(1.3, st.smoke), dur: 520, grow: 0.26 * st.smoke, drift: 0.011, rise: 0.0018, color: 0x9a9a9a });
-  if (st.puffs >= 2) runPuff(_getSmokePuff(), { start: 0.16, op: 0.24, dur: 760, grow: 0.34 * st.smoke, drift: 0.006, rise: 0.0026, color: 0x7c7c7c });
+  if (st.puffs >= 2 && !(CFX && CFX.quality === 'medium')) runPuff(_getSmokePuff(), { start: 0.16, op: 0.24, dur: 760, grow: 0.34 * st.smoke, drift: 0.006, rise: 0.0026, color: 0x7c7c7c });
 }
 function makeMuzzleFlash() {
   // 💥 A muzzle flash is burning propellant leaving the bore, so it is a jet
@@ -49443,6 +49446,7 @@ function makeBulletMesh(color, size, weaponId, own, lookArg) {
   // 'bullet' — a metal round: the cartridge itself, trailing its afterburn (see _bulletFor).
   const tint = color || 0xff8a1e;
   const rifle = /\bAR\b|Rifle|Sniper|Marksman|LMG|\bMG\b|Gatling|Anti-Material|Chain Gun|Mounted|Battle|Heavy/i.test((weapon && weapon.type) || '');
+  if (window.PVP_COMBAT_FX && window.PVP_COMBAT_FX.tracer === 'streak' && window.PVP_COMBAT_FX.buildStreak) return window.PVP_COMBAT_FX.buildStreak(tint, r, rifle);   // the thin warm-white tracer (combat-visuals.js); 'classic' keeps the cartridge below
   const p = _bulletFor(tint, r, rifle);
   const g = new THREE.Group();
   // local +Y is the flight direction (spawnLocalBullet turns it); the bullet's base sits behind the origin, its tip ahead
@@ -66562,6 +66566,8 @@ function spawnLocalBullet(origin, dir, id, isOwn, speed, color, size, weaponId, 
   // The skin's look: yours from what you wear, somebody else's from the skin id their shot carried (opts.skinId, see the bulletFired handler).
   const skinLook = isOwn ? ((typeof _modelSkinLook !== 'undefined' && _modelSkinLook[weaponId]) || null) : (opts.skinId ? skinLookById(opts.skinId) : null);
   let mesh = makeBulletMesh(color, size, weaponId, isOwn, skinLook);
+  // A metal round's drawing can be switched off or thinned out (combat-visuals.js); the round itself still flies and hits exactly the same.
+  if (window.PVP_COMBAT_FX && !skinLook?.shot && projectileKind(weaponId) === 'bullet' && !window.PVP_COMBAT_FX.tracerVisible(weaponId, isOwn, opts.botId || opts.ownerId)) mesh.visible = false;
   if (weaponId === 'spear_throw' && (opts.trident || opts.skinId === 'spear_trident')) { mesh = _buildTridentShot(); opts = Object.assign({}, opts, { trident: true }); }   // the Trident skin: a trident in flight, not a spear
   mesh.position.copy(origin);
   const flightDir = dir.clone();
