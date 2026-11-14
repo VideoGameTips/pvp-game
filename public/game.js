@@ -66513,6 +66513,7 @@ function updateDonutCoreReload(model, t) {
 function updateReloadAnim() {
   const model = weaponModels[currentWeaponIdx];
   updateActiveReloadHUD();
+  try { updateReloadProgress(); } catch (e) {}
   if (!model) return;
   const donutReload = _activeModelSkin[WEAPONS[currentWeaponIdx]?.id]?.rarity === 'donut' && !model._inspectMode && model._reloadStart && model._reloadDur;
   if (!donutReload || Date.now()-model._reloadStart>=model._reloadDur) resetDonutCoreReload(model);
@@ -75329,11 +75330,11 @@ function runCountdown(seconds, onDone) {
       return;
     }
     if (remaining <= 0) {
-      overlay.style.display = 'none';
       countdownActive = false;
       syncLiveLoadoutButton();
       { const st=document.getElementById('live-loadout-status'); if(st)st.textContent='ROUND LIVE'; }
       onDone();
+      try { polishCountdownGo(overlay, generation); } catch (e) { overlay.style.display = 'none'; }     // GO! on screen while the round is live
       return;
     }
     overlay.style.display = 'flex';
@@ -75346,7 +75347,8 @@ function runCountdown(seconds, onDone) {
     newNum.textContent = remaining;
     parent.replaceChild(newNum, oldNum);
 
-    lblEl.textContent = remaining === 1 ? 'GO!' : 'GET READY';
+    lblEl.textContent = 'GET READY';
+    try { polishCountdownNumber(newNum, remaining); } catch (e) {}
     syncLiveLoadoutButton();
     { const st=document.getElementById('live-loadout-status'); if(st)st.textContent='ROUND STARTS IN '+remaining; }
     remaining--;
@@ -76260,6 +76262,112 @@ function pushKillfeed(targetId, killerId) {
   } catch (e) {}
 }
 
+// ═══ ✨ POLISH: reload progress, multi-kill banners, last-hit recap, a proper 3-2-1-GO, and buttons that react ═══════════════════════════════
+// All of it is feedback and finish: none of it changes timing, damage or what a weapon does. (The countdown's GO! shows while the round is already live,
+// at the same moment onDone ran before.) The styles live here, so the page needs no new markup.
+(function injectPolishCss() {
+  if (document.getElementById('polish-css')) return;
+  const s = document.createElement('style'); s.id = 'polish-css';
+  s.textContent = `
+    .pol-rp { position: fixed; left: 50%; top: calc(50% + 70px); width: 84px; height: 4px; margin-left: -42px; background: rgba(255,255,255,0.2); border-radius: 2px; z-index: 90; pointer-events: none; opacity: 0; transition: opacity 0.12s; }
+    .pol-rp.on { opacity: 1; }
+    .pol-rp i { display: block; height: 100%; width: 0; background: #fff; border-radius: 2px; }
+    .pol-rp.ready i { background: #7dff9a; box-shadow: 0 0 8px #7dff9a; }
+    .pol-mk { position: fixed; left: 50%; top: 21%; transform: translateX(-50%); z-index: 93; pointer-events: none; text-align: center; font-family: 'Courier New', monospace; animation: polMk 1.9s ease-out forwards; }
+    .pol-mk b { display: block; font-size: 34px; letter-spacing: 6px; color: var(--c); text-shadow: 0 0 18px var(--c), 2px 2px 0 #000; }
+    .pol-mk i { display: block; font-size: 13px; letter-spacing: 4px; color: #fff; opacity: 0.85; margin-top: 4px; font-style: normal; text-shadow: 1px 1px 0 #000; }
+    @keyframes polMk { 0% { opacity: 0; transform: translateX(-50%) scale(1.6); } 12% { opacity: 1; transform: translateX(-50%) scale(1); } 78% { opacity: 1; } 100% { opacity: 0; transform: translateX(-50%) translateY(-14px) scale(0.96); } }
+    .pol-recap { position: fixed; left: 50%; top: 64%; transform: translateX(-50%); z-index: 9400; pointer-events: none; text-align: center; font-family: 'Courier New', monospace; min-width: 260px; max-width: 90vw; padding: 10px 18px; background: rgba(12,6,8,0.78); border: 1px solid #7a2a2a; border-left: 4px solid #ff5a5a; border-radius: 4px; animation: polRecap 4.6s ease-out forwards; }
+    .pol-recap small { display: block; font-size: 10px; letter-spacing: 4px; color: #ff9a9a; }
+    .pol-recap b { display: block; font-size: 17px; letter-spacing: 2px; color: #fff; margin: 3px 0; }
+    .pol-recap span { display: block; font-size: 12px; letter-spacing: 1px; color: #ffd0c8; }
+    @keyframes polRecap { 0% { opacity: 0; transform: translateX(-50%) translateY(10px); } 8% { opacity: 1; transform: translateX(-50%); } 88% { opacity: 1; } 100% { opacity: 0; } }
+    #countdown-number.cd-go { color: #7dff9a; text-shadow: 0 0 70px #7dff9a, 2px 2px 0 #000; animation: cdGo 0.7s ease-out forwards; }
+    @keyframes cdGo { 0% { transform: scale(0.5); opacity: 0; } 25% { transform: scale(1.3); opacity: 1; } 55% { transform: scale(1); opacity: 1; } 100% { transform: scale(1.1); opacity: 0; } }
+    #ammo.low #ammo-count { animation: polAmmo 0.55s ease-out 1; display: inline-block; }
+    @keyframes polAmmo { 0% { transform: scale(1.35); } 100% { transform: scale(1); } }
+    @media (max-width: 600px) { .pol-mk b { font-size: 24px; } }
+    @media (hover: hover) {
+      div[id$="-panel"] button, #mode-screen button, #shop-screen button, #match-over-screen button, #death-screen button, #loadout-screen button, #login-screen button, #waiting-screen button { transition: filter 0.12s ease, box-shadow 0.12s ease; }
+      div[id$="-panel"] button:hover:not(:disabled), #mode-screen button:hover:not(:disabled), #shop-screen button:hover:not(:disabled), #match-over-screen button:hover:not(:disabled), #death-screen button:hover:not(:disabled), #loadout-screen button:hover:not(:disabled), #login-screen button:hover:not(:disabled), #waiting-screen button:hover:not(:disabled) { filter: brightness(1.2); box-shadow: 0 0 0 1px rgba(136,255,204,0.5), 0 0 12px rgba(136,255,204,0.22); }
+      div[id$="-panel"] button:active:not(:disabled), #mode-screen button:active:not(:disabled), #shop-screen button:active:not(:disabled), #match-over-screen button:active:not(:disabled), #loadout-screen button:active:not(:disabled) { filter: brightness(0.9); }
+      .skin-card, .map-card { transition: filter 0.12s ease; } .skin-card:hover, .map-card:hover { filter: brightness(1.14); }
+    }
+    @media (prefers-reduced-motion: reduce) { .pol-mk, .pol-recap, #countdown-number.cd-go, #ammo.low #ammo-count { animation-duration: 0.01s; } div[id$="-panel"] button { transition: none; } }`;
+  document.head.appendChild(s);
+})();
+const _pol = { mk: { n: 0, last: 0 }, mkEl: null, rp: null };
+function _polBeep(f0, f1, dur, vol) {                                                  // a short synthetic blip (through the master volume like everything else)
+  try {
+    const c = getAudioCtx(); if (!c || c.state !== 'running') return;
+    const o = c.createOscillator(), g = c.createGain(), t = c.currentTime;
+    o.type = 'triangle'; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(Math.max(40, f1), t + dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+    o.connect(g); g.connect(c.destination); o.start(t); o.stop(t + dur + 0.02);
+  } catch (e) {}
+}
+// 🔥 multi-kills: kills of yours less than four seconds apart add up
+const _MK_TIERS = { 2: ['DOUBLE KILL', '#ffe66b'], 3: ['TRIPLE KILL', '#ffb347'], 4: ['QUAD KILL', '#ff7a59'], 5: ['PENTA KILL', '#ff4a8a'], 6: ['HEXA KILL', '#c06bff'] };
+function polishMyKill(targetId) {
+  const team = (players[targetId] && players[targetId].team) ?? (resolveBot(targetId) && resolveBot(targetId).team);
+  if (team === 'ally') return;                                                            // a team kill is not part of a streak
+  const now = performance.now(), m = _pol.mk;
+  m.n = (now - m.last < 4000) ? m.n + 1 : 1; m.last = now;
+  if (m.n < 2) return;
+  const t = _MK_TIERS[Math.min(m.n, 6)], big = m.n > 6;
+  let el = _pol.mkEl; if (el) el.remove();
+  el = document.createElement('div'); el.className = 'pol-mk'; el.setAttribute('data-no-i18n', ''); el.style.setProperty('--c', big ? '#6be6ff' : t[1]);
+  el.innerHTML = '<b></b><i></i>'; el.firstChild.textContent = big ? 'UNSTOPPABLE' : t[0]; el.lastChild.textContent = m.n + ' KILLS IN A ROW';
+  document.body.appendChild(el); _pol.mkEl = el;
+  setTimeout(() => { if (_pol.mkEl === el) { el.remove(); _pol.mkEl = null; } }, 1900);
+  _polBeep(420 + 90 * Math.min(m.n, 8), 900 + 120 * Math.min(m.n, 8), 0.16, 0.1);
+}
+// 💀 last hit: what finished you (the killer, the weapon, a headshot, how far away, and any tags the kill feed gave it)
+function polishMyDeath(killerId) {
+  _pol.mk.n = 0;
+  const info = _killInfo[myId]; if (!info) return;
+  const hazard = info.cause === 'hazard' || !killerId;
+  let who = killerId && killerId !== myId ? ((players[killerId] && players[killerId].name) || (resolveBot(killerId) && resolveBot(killerId).name) || 'Enemy') : null;
+  const head = hazard ? (info.label || 'ELIMINATED') : killerId === myId ? 'YOUR OWN DOING' : 'ELIMINATED BY ' + who;
+  const parts = [];
+  if (info.weapon) { try { parts.push(weaponDisplayName(info.weapon)); } catch (e) {} } else if (info.label && !hazard) parts.push(info.label);
+  if (info.head) parts.push('HEADSHOT');
+  if (killerId && killerId !== myId) {
+    const km = remoteMeshes[killerId], b = resolveBot(killerId), kx = km ? km.position.x : b && b.x, kz = km ? km.position.z : b && b.z;
+    if (Number.isFinite(kx) && Number.isFinite(kz)) parts.push(Math.round(Math.hypot(camera.position.x - kx, camera.position.z - kz)) + ' m');
+  }
+  for (const tg of (info.tags || []).slice(0, 3)) { const s = String(tg).toUpperCase(); if (s && !parts.includes(s) && s !== 'HEADSHOT') parts.push(s); }
+  const old = document.querySelector('.pol-recap'); if (old) old.remove();
+  const el = document.createElement('div'); el.className = 'pol-recap'; el.setAttribute('data-no-i18n', '');
+  el.innerHTML = '<small>LAST HIT</small><b></b><span></span>'; el.querySelector('b').textContent = head; el.querySelector('span').textContent = parts.join(' · ');
+  document.body.appendChild(el); setTimeout(() => el.remove(), 4700);
+}
+// ⏱ reload progress: a thin bar under the crosshair for every reload; it turns green for the last tenth. (A weapon with an active-reload marker shows that instead.)
+function updateReloadProgress() {
+  const st = _reloadSt, ar = document.getElementById('active-reload');
+  const live = reloading && st && st.dur > 0 && !st.done && !isDead && (activeSlot === 'primary' || activeSlot === 'secondary') && !(ar && ar._shownBar);
+  let el = _pol.rp;
+  if (!live) { if (el && el._on) { el._on = false; el.classList.remove('on', 'ready'); } return; }
+  if (!el) { el = document.createElement('div'); el.className = 'pol-rp'; el.innerHTML = '<i></i>'; document.body.appendChild(el); _pol.rp = el; }
+  if (!el._on) { el._on = true; el.classList.add('on'); }
+  const p = Math.max(0, Math.min(1, (Date.now() - st.start) / st.dur));
+  el.firstChild.style.width = (p * 100).toFixed(1) + '%'; el.classList.toggle('ready', p > 0.9);
+}
+// 3, 2, 1, GO!
+const _CD_COL = { 3: '#ffe66b', 2: '#ffb347', 1: '#ff7a59' };
+function polishCountdownNumber(el, n) {
+  const c = _CD_COL[n] || '#fff';
+  el.style.color = c; el.style.textShadow = '0 0 60px ' + c + ', 2px 2px 0 #000';
+  _polBeep(520, 520, 0.09, 0.07);
+}
+function polishCountdownGo(overlay, generation) {
+  const num = document.getElementById('countdown-number'), lbl = document.getElementById('countdown-label');
+  overlay.style.display = 'flex'; if (lbl) lbl.textContent = '';
+  if (num && num.parentNode) { const n2 = document.createElement('div'); n2.id = 'countdown-number'; n2.className = 'cd-go'; n2.textContent = 'GO!'; num.parentNode.replaceChild(n2, num); }
+  _polBeep(780, 1560, 0.22, 0.1);
+  setTimeout(() => { if (countdownGeneration === generation) overlay.style.display = 'none'; }, 700);
+}
+
 function onEntityDied(targetId, killerId) {
   ragdollDeath(targetId);
   if (!match || match.over) return;
@@ -76272,8 +76380,8 @@ function onEntityDied(targetId, killerId) {
   }
   pushKillfeed(targetId, killerId);
   if (match.type === 'campaign') { window.PVP_UNDERWORLD?.death(targetId); return; }
-  if (killerId === myId && targetId !== myId) contractsOnKill(targetId);
-  if (targetId === myId) contractsOnDeath();
+  if (killerId === myId && targetId !== myId) { contractsOnKill(targetId); try { polishMyKill(targetId); } catch (e) {} }
+  if (targetId === myId) { contractsOnDeath(); try { polishMyDeath(killerId); } catch (e) {} }
   if (killerId && killerId !== targetId) matchScore[killerId] = (matchScore[killerId] || 0) + 1;
   if (targetId) matchDeaths[targetId] = (matchDeaths[targetId] || 0) + 1;
   if (match.tiebreaker) {
