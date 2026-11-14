@@ -4592,7 +4592,7 @@ function gunBus(ctx) {
 // sharing a file with a lighter one plays it a little lower), `gain` is the level against the others (solved by rendering each through the game's own sound code and matching the loudness of the first 0.3 s to a target for that kind of gun: snipers loudest, then rockets and big pistols, then the launcher; the arc rifle fires too fast to be loud).
 // A name in an ability's own id (hand_cannon_ab, barrett_ab ...) is not listed on purpose: the big shots keep their own sound, so you can hear them coming.
 const SAMPLE_FILES = {
-  headshot:  'sounds/headshot-ding.mp3',    // a short bright ding (ElevenLabs), played up 8 semitones (rate 1.6) as the headshot sound; the 2.6 s of silence after it is cut off
+  headshot:  'sounds/headshot-ding.mp3',    // a short bright ding (ElevenLabs), played as it was recorded, as the headshot sound; the 2.6 s of silence after it is cut off
   stealth: 'sounds/stealth-shot.mp3',
   vector:    'sounds/vector-shot.mp3',      // a sharp crack, over in a third of a second
   thump:     'sounds/thump-shot.mp3',       // a big dull thud, nearly all low end: a large-bore pistol
@@ -4786,13 +4786,13 @@ function weaponSamplesPreload(ctx) {                                // (one fetc
 // pops of a map gimmick (volume 0.4 to 0.8) keep the made-up boom, a 3 s roll under every one of them would be a lot. One of the clips, never the same one twice running.
 // `dedupe`: spawnExplosion and rocketExplode both announce the same rocket, one roar is enough.
 const EVENT_SAMPLES = {
-  // 🎯 What a headshot HIT sounds like (the hitmarker's head click): the ding, up 8 semitones. Same clip as the 'headshot' event below.
+  // 🎯 What a headshot HIT sounds like (the hitmarker's head click): the ding at its normal pitch. Same clip as the 'headshot' event below.
   hm_head: { min: 0, dedupe: 0, clips: [
-    { file: 'headshot', gain: 1.0, from: 0.10, len: 0.22, fade: 0.10, rate: [1.6, 1.6] },
+    { file: 'headshot', gain: 0.6, from: 0.10, len: 0.35, fade: 0.12, rate: [1, 1] },   // the ding as it was recorded: normal pitch, about the loudness of a gun shot
   ] },
-  // 🎯 The headshot: the ding, up 8 semitones (rate 1.6). No tier changes it, the click that goes with every hit is the hitmarker's.
+  // 🎯 The headshot: the ding at its normal pitch. No tier changes it, the click that goes with every hit is the hitmarker's.
   headshot: { min: 0, dedupe: 0, clips: [
-    { file: 'headshot', gain: 1.0, from: 0.10, len: 0.22, fade: 0.10, rate: [1.6, 1.6] },   // gain 1.0: about 150% of a gun shot's loudness (measured: the Vector's first 0.3 s has an RMS of 0.035, this 0.052)
+    { file: 'headshot', gain: 0.6, from: 0.10, len: 0.35, fade: 0.12, rate: [1, 1] },   // the ding as it was recorded: normal pitch, about the loudness of a gun shot
   ] },
   explosion: { min: 0.85, dedupe: 150, clips: [
     { file: 'boomCrack', gain: 0.124, from: 0.03, len: 2.8, fade: 1.2, rate: [1, 1] },
@@ -66943,9 +66943,9 @@ function playHitConfirmSound(kind, tier) {
   const crowd = _hmSoundLog.length;
   if (kind !== 'kill' && kind !== 'head' && crowd >= 8) return false;          // (a headshot is always heard: holding the trigger on a head must not mute the ding)
   _hmSoundLog.push(now);
-  const base = kind === 'kill' ? 0.9 : kind === 'head' ? 0.85 : 0.7, duck = kind === 'kill' ? 1 : 1 / (1 + (kind === 'head' ? 0.04 : 0.16) * crowd);
+  const base = kind === 'kill' ? 0.9 : kind === 'head' ? 0.85 : 0.7, duck = kind === 'kill' || kind === 'head' ? 1 : 1 / (1 + 0.16 * crowd);          // (a headshot ding is never ducked)
   playSoundEvent(kind === 'kill' ? 'hm_kill' : kind === 'head' ? 'hm_head' : 'hm_body',
-    { volume: base * vol * duck, minGap: kind === 'kill' ? 120 : kind === 'head' ? 45 : 70, tier });
+    { volume: base * vol * duck, minGap: kind === 'kill' ? 120 : kind === 'head' ? 0 : 70, tier });          // (head: no gap at all, one ding per hit, and they stack)
   return true;
 }
 // A confirmed hit that is not a kill: marker, click, number (the number is what was actually taken off).
@@ -66980,7 +66980,7 @@ function hitConfirmFromServer(data, knownHpBefore) {
   const dealt = Number.isFinite(data.dealt) ? data.dealt : (Number.isFinite(knownHpBefore) && Number.isFinite(data.hp) ? knownHpBefore - data.hp : 0);
   if (!(dealt > 0)) return false;
   const head = !!data.headshot;
-  if (data.hp <= 0) { addHitNumber(dealt, head); return true; }
+  if (data.hp <= 0) { if (head) playHitConfirmSound('head', _hmTiers.get(data.bulletId)); addHitNumber(dealt, head); return true; }
   hitConfirmed(head ? 'head' : 'hit', { tier: _hmTiers.get(data.bulletId), damage: dealt });
   return true;
 }
@@ -67978,7 +67978,7 @@ function hitFeedback(targetId, mesh, hitPos, damage, headshot, falloff, headMiss
   if (damage > 0 && !quiet) {
     const crit = headshot;
     playSoundEvent(crit ? 'headshot' : 'hitmarker', {
-      volume: crit ? 1.1 : 0.8, minGap: crit ? 60 : 35, tier,
+      volume: crit ? 1.1 : 0.8, minGap: crit ? 0 : 35, tier,
     });
   }
   return tier;
@@ -68255,7 +68255,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
         const kc = document.getElementById('kill-count');
         if (kc) kc.textContent = `Kills: ${myKills}`;
         const botName = players[pid]?.name || 'Bot';
-        if (firstCount) addHitNumber(dealtToBot, headshot);       // (the gold marker and the tone are confirmKill's)
+        if (firstCount) { if (headshot && dealtToBot > 0) playHitConfirmSound('head', hitTier); addHitNumber(dealtToBot, headshot); }       // (the gold marker and the tone are confirmKill's; a killing headshot rings the ding first)
         if (confirmKill(pid, botName)) showAnnouncement('ELIMINATED', botName, '#ff4444', 1200);
         onEntityDied(pid, myId);
         // Schedule local respawn after 3s (in case server isn't responding)
