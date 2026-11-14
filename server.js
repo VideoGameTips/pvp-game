@@ -2940,6 +2940,15 @@ io.on('connection', (socket) => {
     if (!p || p.dead || p.matchId === HUB_MATCH || !config || p.weaponId !== data.weapon || now < (p._nextDeflectAt || 0)) return;
     p._nextDeflectAt = now + config.cooldown;
     p._deflectGuard = { weapon: data.weapon, until: now + config.duration, extendLeft: config.maxExtend, lastExtend: -Infinity, hits: new Set() };
+    emitToMatchExcept(p.matchId, socket.id, 'deflectState', { id: socket.id, weapon: data.weapon, ms: config.duration });   // the others see the blade glow while it holds
+  });
+
+  // 🔭 A scoped weapon raised (the SR-X, the crossbow): everyone else in the match gets a glint off the glass. Rate limited, and only for a scoped weapon in hand.
+  socket.on('scopeState', data => {
+    const p = players[socket.id], now = Date.now();
+    if (!p || p.dead || p.matchId === HUB_MATCH || !data || data.on !== true || !/^(srx|crossbow)(_|$)/.test(p.weaponId || '') || now - (p._scopeAt || 0) < 250) return;
+    p._scopeAt = now;
+    emitToMatchExcept(p.matchId, socket.id, 'scopeState', { id: socket.id, on: true });
   });
 
   // ── 🌐 PvP matchmaking: player wants to find others playing the same elim mode ──

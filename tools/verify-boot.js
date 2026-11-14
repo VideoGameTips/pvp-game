@@ -376,6 +376,96 @@ if (ok && process.argv.includes('--hitmarker')) {
   else console.log('hitmarker: X look and timing, restart not stack, priority, confirmed hits only (server for players, local for bots), three sounds and the spam limit, damage numbers, saved settings');
 }
 
+if (ok && process.argv.includes('--tells')) {
+  // What the others see of a weapon: a bright glint when somebody scopes in (the SR-X and the crossbow), a flash and a halo on a katana
+  // while its Deflect is on. Lives for a moment, is bounded, is a fixed pair of sprites, and the right events carry it.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const saved = { cam: camera.position.clone(), emit: socket.emit, isDead, activeSlot, ads: isADS, myId };
+    const sent = [];
+    const mkBody = (x, z, id) => { const b = new THREE.Group(); b.position.set(x, 0, z); const g = new THREE.Group(); g.add(new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 1.1), new THREE.MeshBasicMaterial())); b.add(g); b._gun = g; b._gunId = id; scene.add(b); return b; };
+    const bodies = [];
+    try {
+      camera.position.set(0, 1.65, 0); clearWorldTells();
+      const near = mkBody(0, -10, 'srx'), far = mkBody(0, -100, 'srx'); bodies.push(near, far);
+      const base = scene.children.length;
+      // the scope glint
+      const a = scopeGlint(near), b = scopeGlint(far);
+      if (!a || !b || _worldTells.length !== 2) issues.push('a scope glint should be made for a body with a scoped gun');
+      if (a.sprites.length !== 3 || !a.sprites.some(s => s.material.blending === THREE.AdditiveBlending) || !a.sprites.some(s => s.material.blending === THREE.NormalBlending && s.material.color.getHex() !== 0) || a.sprites.some(s => !s.material.transparent)) issues.push('a glint is a dark disc under a solid star and a glowing one (an added glow alone vanishes on sand)');
+      if (a.sprites.some(s => s.material.depthTest === false)) issues.push('a glint shows through walls (depth test off)');
+      if (a.ms < 350 || a.ms > 700) issues.push('a glint should last about half a second: ' + a.ms);
+      updateWorldTells(a.t0 + 120);
+      const sNear = a.sprites[1].scale.x, sFar = b.sprites[1].scale.x;
+      if (!(sFar > sNear * 2)) issues.push('a glint far away should be drawn larger so it can still be seen: near ' + sNear.toFixed(2) + ', far ' + sFar.toFixed(2));
+      if (!(a.sprites[1].material.opacity > 0.5)) issues.push('a glint should be bright early on: ' + a.sprites[1].material.opacity);
+      updateWorldTells(a.t0 + a.ms - 30); if (!(a.sprites[1].material.opacity < 0.2 && a.sprites[1].material.opacity >= 0)) issues.push('a glint should have almost faded by its end');
+      updateWorldTells(a.t0 + a.ms + 1); updateWorldTells(b.t0 + b.ms + 1);
+      if (_worldTells.length) issues.push('a glint is still there after its time');
+      if (scene.children.length !== base) issues.push('a glint left its sprites in the scene (' + (scene.children.length - base) + ' extra)');
+      const hidden = mkBody(5, -5, 'srx'); hidden.visible = false; bodies.push(hidden);
+      if (scopeGlint(hidden) !== null) issues.push('a body that is not shown should not glint');
+      for (let i = 0; i < 40; i++) scopeGlint(near);
+      if (_worldTells.length > 12) issues.push('too many glints at once: ' + _worldTells.length);
+      clearWorldTells(); if (_worldTells.length) issues.push('clearWorldTells left effects behind');
+      // a bot sniper: one glint as it settles on a target, again only after it has lost them for a while
+      const bot = { id: 'tellbot' }; remoteMeshes.tellbot = near; const srx = WEAPONS.find(w => w.id === 'srx'), ak = WEAPONS.find(w => w.id === 'ak20');
+      botScopeTell(bot, srx, true, 1000); botScopeTell(bot, srx, true, 1100); botScopeTell(bot, srx, true, 1200);
+      if (_worldTells.length !== 1) issues.push('a sniper bot should glint once as it takes aim, not ' + _worldTells.length);
+      botScopeTell(bot, srx, false, 1800); botScopeTell(bot, srx, true, 1900); if (_worldTells.length !== 1) issues.push('a short loss of the target should not make the bot glint again');
+      botScopeTell(bot, srx, false, 4000); botScopeTell(bot, srx, true, 4100); if (_worldTells.length !== 2) issues.push('a sniper bot should glint again when it takes aim anew');
+      clearWorldTells(); botScopeTell({ id: 'tellbot2' }, ak, true, 5000); if (_worldTells.length) issues.push('a bot with an ordinary gun glinted');
+      delete remoteMeshes.tellbot;
+      // the katana's Deflect
+      const kat = mkBody(3, -12, 'katana'); bodies.push(kat);
+      const T = performance.now();
+      if (!startDeflectGlow(kat, 1000, T)) issues.push('a katana whose Deflect started should glow');
+      const glow = _worldTells.find(f => f.kind === 'deflect');
+      if (!glow || glow.sprites.length !== 2 || glow.sprites.some(s => !s.parent)) issues.push('the glow should be two sprites by the blade');
+      if (!_worldTells.some(f => f.kind === 'flash')) issues.push('Deflect starting should flash');
+      startDeflectGlow(kat, 800, T + 100); startDeflectGlow(kat, 1500, T + 200);
+      if (_worldTells.filter(f => f.kind === 'deflect').length !== 1) issues.push('a second call should extend the glow, not add another');
+      if (!(glow.until >= T + 1700)) issues.push('each return should hold the glow open longer: ' + (glow.until - T));
+      updateWorldTells(T + 400);
+      if (!(glow.sprites[0].material.opacity > 0.2)) issues.push('the halo should be visible while the guard holds: ' + glow.sprites[0].material.opacity);
+      updateWorldTells(T + 1700 - 20); if (!(glow.sprites[0].material.opacity < 0.4)) issues.push('the halo should fade out as the guard ends');
+      updateWorldTells(T + 1701); if (_worldTells.some(f => f.kind === 'deflect') || glow.sprites.some(s => s.parent)) issues.push('the glow should be gone when the guard ends');
+      for (const wid of ['ak20', 'knife']) { kat._gunId = wid; if (startDeflectGlow(kat, 1000, T)) issues.push(wid + ' has no Deflect to show'); }
+      kat._gunId = 'katana'; startDeflectGlow(kat, 5000, T + 3000); const old = kat._gun; const fresh = new THREE.Group(); kat.add(fresh); kat._gun = fresh;
+      updateWorldTells(T + 3100); if (_worldTells.some(f => f.kind === 'deflect')) issues.push('the glow should go when the body is given a different gun');
+      clearWorldTells();
+      // the messages: somebody else's scope and Deflect show; mine do not (I am in the view model)
+      myId = 'me_tells'; remoteMeshes.other_s = mkBody(0, -20, 'srx'); bodies.push(remoteMeshes.other_s); remoteMeshes.other_k = mkBody(2, -20, 'katana'); bodies.push(remoteMeshes.other_k);
+      onScopeStateMsg({ id: 'me_tells', on: true }); if (_worldTells.length) issues.push('my own scope glinted for me');
+      onScopeStateMsg({ id: 'other_s', on: false }); if (_worldTells.length) issues.push('lowering a scope glinted');
+      onScopeStateMsg({ id: 'other_s', on: true }); if (_worldTells.length !== 1) issues.push('somebody elses scope should glint');
+      clearWorldTells();
+      onDeflectStateMsg({ id: 'other_k', weapon: 'katana', ms: 1000 }); if (!_worldTells.some(f => f.kind === 'deflect')) issues.push('somebody elses Deflect should glow');
+      clearWorldTells(); onDeflectStateMsg({ id: 'other_k', weapon: 'tennis_racket', ms: 1000 }); if (_worldTells.length) issues.push('only the katans Deflect is shown');
+      clearWorldTells(); onDeflectStateMsg({ id: 'me_tells', weapon: 'katana', ms: 1000 }); if (_worldTells.length) issues.push('my own Deflect glowed for me');
+      delete remoteMeshes.other_s; delete remoteMeshes.other_k;
+      // scoping in tells the server: once, and only with a scoped weapon in hand
+      socket.emit = (ev, d) => { sent.push([ev, d]); };
+      isDead = false; activeSlot = 'primary';
+      const idx = WEAPONS.findIndex(w => w.id === 'srx'), idx2 = WEAPONS.findIndex(w => w.id === 'ak20'), keepIdx = currentWeaponIdx, keepW = currentWeapon;
+      try {
+        currentWeaponIdx = idx; currentWeapon = WEAPONS[idx]; isADS = false; sent.length = 0; setADS(true); setADS(true);
+        const sc = sent.filter(x => x[0] === 'scopeState'); if (sc.length !== 1 || sc[0][1].on !== true) issues.push('scoping in with the SR-X should send scopeState once (sent ' + sc.length + ')');
+        setADS(false); sent.length = 0; setADS(false); if (sent.some(x => x[0] === 'scopeState')) issues.push('lowering the scope sent scopeState');
+        currentWeaponIdx = idx2; currentWeapon = WEAPONS[idx2]; isADS = false; sent.length = 0; setADS(true); if (sent.some(x => x[0] === 'scopeState')) issues.push('aiming an ordinary gun sent scopeState');
+      } finally { currentWeaponIdx = keepIdx; currentWeapon = keepW; isADS = false; }
+    } catch (e) {
+      issues.push('threw: ' + (e && e.stack ? e.stack.split('\\n').slice(0, 3).join(' | ') : e));
+    } finally {
+      socket.emit = saved.emit; camera.position.copy(saved.cam); isDead = saved.isDead; activeSlot = saved.activeSlot; isADS = saved.ads; myId = saved.myId;
+      clearWorldTells(); for (const b of bodies) scene.remove(b);
+    }
+    return issues;
+  })()`);
+  if (issues.length) { ok = false; console.log('weapon tells failures:\n' + issues.join('\n')); }
+  else console.log('weapon tells: scope glint (bright, bigger with distance, short, bounded, seen by others only), sniper bots glint as they take aim, katana Deflect glows and is extended, the messages and the events');
+}
+
 if (ok && process.argv.includes('--action-wind')) {
   const issues = vm.runInThisContext(`(() => {
     const issues=[], saved={gameStarted,isDead,activeSlot,velocity:playerVelocity.clone()};

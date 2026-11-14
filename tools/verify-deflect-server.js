@@ -5,14 +5,14 @@ const stats = JSON.parse(fs.readFileSync(path.join(root, 'public/weapon-stats.js
 const handlers = {}, events = [], players = {};let clock=100000;
 const ctx = {fs,path,__dirname:root,players,Math,Number,String,Set,Map,Object,Infinity,Date:{now:()=>clock},
   socket:{id:'defender',on:(name,fn)=>handlers[name]=fn},HUB_MATCH:'lobby',
-  emitToMatch:(room,event,data)=>events.push({room,event,data}),shielded:p=>!!p.shield,
+  emitToMatch:(room,event,data)=>events.push({room,event,data}),emitToMatchExcept:(room,except,event,data)=>events.push({room,event,data,except}),shielded:p=>!!p.shield,
   blocksFriendlyFire:(a,b)=>a.team===b.team,creditFfaDamage:()=>{},cleanKillTags:()=>[],cleanSkinId:()=>undefined,
   hellfireWeapon:()=>false,canUseHellfire:()=>false,isFrozen:()=>false,freezeRayHit:()=>{},
   WEAPON_DAMAGE:Object.fromEntries([...stats.guns,...stats.melees].map(w=>[w.id,w.damage])),WEAPON_HS_MULT:{},DAMAGE_OVERRIDE_CAPS:{},
   falloffMultiplier:()=>1,dist3:()=>10};
 vm.createContext(ctx);
 vm.runInContext(source.slice(source.indexOf('const DEFLECT_GUARDS'),source.indexOf('// Damage drop-off by range')),ctx);
-for(const name of ['setWeapon','deflectGuard','hit','botHitMe']){
+for(const name of ['setWeapon','deflectGuard','scopeState','hit','botHitMe']){
   const start=source.indexOf(`socket.on('${name}',`),end=source.indexOf('\n  });',start)+7;
   assert(start>0&&end>start);vm.runInContext(source.slice(start,end),ctx);
 }
@@ -58,4 +58,16 @@ reset();players.defender._deflectGuard=null;hit('plain');
 {const ph=events.find(e=>e.event==='playerHit'&&e.data.targetId==='defender');assert(ph,'A plain hit sent no playerHit');assert.equal(ph.data.dealt,40,'playerHit.dealt is not what the hit took');assert.equal(ph.data.shooterId,'shooter');}
 reset();hit('deflected');assert(!events.some(e=>e.event==='playerHit'&&e.data.targetId==='defender'),'A deflected shot was reported to its shooter as a hit on the defender');
 reset();players.defender.shield=true;hit('blocked');assert(!events.some(e=>e.event==='playerHit'&&e.data.targetId==='defender'),'A shielded hit was reported as damage');
+// what the OTHERS are shown (public/game.js startDeflectGlow / scopeGlint): a katana's Deflect starting, a scope being raised
+reset();{const ds=events.filter(e=>e.event==='deflectState');assert.equal(ds.length,1,'Deflect starting was not announced');assert.equal(ds[0].data.id,'defender');assert.equal(ds[0].data.weapon,'katana');assert.equal(ds[0].data.ms,1000);assert.equal(ds[0].except,'defender','the defender is told about their own guard');}
+reset();ctx.socket.id='defender';events.length=0;handlers.deflectGuard({weapon:'katana'});assert(!events.some(e=>e.event==='deflectState'),'A Deflect still on cooldown was announced again');ctx.socket.id='shooter';
+reset();ctx.socket.id='defender';events.length=0;players.defender._deflectGuard=null;handlers.deflectGuard({weapon:'tennis_racket'});assert(!events.some(e=>e.event==='deflectState'),'A weapon that is not in hand was announced');ctx.socket.id='shooter';
+reset();ctx.socket.id='defender';players.defender.weaponId='srx';events.length=0;handlers.scopeState({on:true});
+{const sc=events.filter(e=>e.event==='scopeState');assert.equal(sc.length,1,'A raised scope was not announced');assert.equal(sc[0].data.id,'defender');assert.equal(sc[0].except,'defender');}
+events.length=0;handlers.scopeState({on:true});assert.equal(events.length,0,'Scoping in twice in a blink was announced twice');
+clock+=300;handlers.scopeState({on:true});assert.equal(events.filter(e=>e.event==='scopeState').length,1,'A second scope-in a moment later was not announced');
+clock+=300;events.length=0;handlers.scopeState({on:false});assert.equal(events.length,0,'Lowering the scope was announced as a glint');
+players.defender.weaponId='katana';clock+=300;handlers.scopeState({on:true});assert.equal(events.length,0,'A katana scoped in');
+players.defender.weaponId='crossbow';clock+=300;handlers.scopeState({on:true});assert.equal(events.filter(e=>e.event==='scopeState').length,1,'The crossbow scope was not announced');
+players.defender.dead=true;clock+=300;events.length=0;handlers.scopeState({on:true});assert.equal(events.length,0,'A dead player scoped in');
 console.log('PASS: PvP return damage only while Deflect is on (an idle katana returns nothing), lethal blocks, kill credit, deduplication, piercers/explosives, cooldown, expiry, weapon switches, team/match isolation, shields, racket, bot headshots');

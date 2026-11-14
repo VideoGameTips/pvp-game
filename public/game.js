@@ -52946,6 +52946,138 @@ function toggleADS() {
 const SCOPED_WEAPONS = new Set(['srx', 'crossbow']);
 function isScopedWeapon(w) { return !!w && SCOPED_WEAPONS.has(w.baseId || w.id); }
 
+// ── 👁 Seeing what somebody else's weapon is doing ───────────────────────────────────────────────────────────────────
+// Raising a scope is a thing you do with your face in a lens, and nobody else could tell: a sniper was invisible right up
+// to the shot. Now whoever scopes in throws a bright glint off the glass (everyone else in the match sees it; the server
+// relays 'scopeState'), and a katana whose Deflect is on glows (a flash as it starts, then a pulsing halo round the blade
+// for as long as the guard holds; 'deflectState' from the server, kept going by 'projectileDeflected'). Bots do the same
+// from their own sim: a sniper bot glints the moment it settles on a target, a bot katana glows through its guard.
+// Each is a few sprites made from two small textures, culled by walls like anything else, gone in half a second (the glow,
+// when the guard ends). A glint is a soft dark disc under a white star as well as a glow, because a glow added to a bright
+// map (sand, snow) vanishes; and it grows with distance so that a glint 100 m away is still a glint. Tune the look here.
+const DEFLECT_GLOW_WEAPONS = new Set(['katana']);                  // whose Deflect is shown (the Tennis Racket's would be one word more)
+const SCOPE_GLINT = { size: 1.8, ms: 560, color: 0xfff3cf };       // world size at close range, how long, the warm white of the star
+const DEFLECT_FLASH = { ms: 360, color: 0xe4f3ff };               // the flash as a Deflect starts
+const DEFLECT_GLOW = { color: 0x8fc8ff, opacity: 0.95, pulseHz: 7 };
+let _tellTex = null, _tellDarkTex = null;
+function _tellTexture() {
+  if (_tellTex) return _tellTex;
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d');
+  const halo = g.createRadialGradient(64, 64, 0, 64, 64, 60);
+  halo.addColorStop(0, 'rgba(255,255,255,1)'); halo.addColorStop(0.1, 'rgba(255,255,255,0.95)');
+  halo.addColorStop(0.28, 'rgba(255,255,255,0.35)'); halo.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = halo; g.fillRect(0, 0, 128, 128);
+  const h = g.createLinearGradient(2, 64, 126, 64); h.addColorStop(0, 'rgba(255,255,255,0)'); h.addColorStop(0.5, 'rgba(255,255,255,1)'); h.addColorStop(1, 'rgba(255,255,255,0)');
+  const v = g.createLinearGradient(64, 2, 64, 126); v.addColorStop(0, 'rgba(255,255,255,0)'); v.addColorStop(0.5, 'rgba(255,255,255,1)'); v.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = h; g.fillRect(2, 60, 124, 8);                       // the four long points of the star
+  g.fillStyle = v; g.fillRect(60, 2, 8, 124);
+  _tellTex = new THREE.CanvasTexture(c);
+  return _tellTex;
+}
+function _tellDarkTexture() {
+  if (_tellDarkTex) return _tellDarkTex;
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d'), d = g.createRadialGradient(32, 32, 0, 32, 32, 31);
+  d.addColorStop(0, 'rgba(0,0,0,0.6)'); d.addColorStop(0.55, 'rgba(0,0,0,0.3)'); d.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = d; g.fillRect(0, 0, 64, 64);
+  _tellDarkTex = new THREE.CanvasTexture(c);
+  return _tellDarkTex;
+}
+const _worldTells = [], _tellToward = new THREE.Vector3(), _tellAt = new THREE.Vector3(), _tellScale = new THREE.Vector3();
+// k: size relative to the effect's, am: its share of the effect's opacity, spin: which way it turns
+function _tellSprite({ color = 0xffffff, rot = 0, k = 1, am = 1, spin = 1, add = false, dark = false } = {}) {
+  const m = new THREE.SpriteMaterial({ map: dark ? _tellDarkTexture() : _tellTexture(), color, transparent: true, opacity: 0, blending: add ? THREE.AdditiveBlending : THREE.NormalBlending, depthWrite: false, fog: false });
+  m.rotation = rot;
+  const s = new THREE.Sprite(m); s.renderOrder = 998; Object.assign(s.userData, { k, am, spin, rot0: rot });
+  return s;
+}
+function _removeTell(fx) {
+  for (const s of fx.sprites) { if (s.parent) s.parent.remove(s); if (s.material) s.material.dispose(); }
+}
+// Where somebody's weapon is, in the world: the gun in their hands, else a body's chest height.
+function _tellAnchor(mesh) {
+  const v = new THREE.Vector3();
+  if (mesh && mesh._gun && mesh._gun.parent) { mesh._gun.updateWorldMatrix(true, false); mesh._gun.getWorldPosition(v); return v; }
+  if (mesh) return v.copy(mesh.position).setY(mesh.position.y + 1.35);
+  return null;
+}
+// A bright star at a point that grows and fades: far=true makes it larger the further it is from you, so a glint 100 m away is still a glint.
+function spawnTellFlash(pos, { size = 1, ms = 400, color = 0xffffff, far = true } = {}) {
+  if (!pos) return null;
+  const fx = { kind: 'flash', t0: performance.now(), ms, size, far, sprites: [
+    _tellSprite({ dark: true, k: 1.9, am: 0.55, spin: 0 }),                       // a soft dark disc: the star stands out on sand and snow
+    _tellSprite({ color, k: 1, am: 1 }),                                          // the star itself, solid
+    _tellSprite({ color: 0xffffff, rot: Math.PI / 4, k: 0.74, am: 1, spin: -1, add: true }),   // a second star across it, glowing
+  ] };
+  fx.base = pos.clone();
+  for (const s of fx.sprites) { s.position.copy(pos); scene.add(s); }
+  let flashes = 0; for (const f of _worldTells) if (f.kind === 'flash') flashes++;
+  if (flashes >= 12) { const i = _worldTells.findIndex(f => f.kind === 'flash'); _removeTell(_worldTells[i]); _worldTells.splice(i, 1); }   // a crowd of snipers is still only a dozen stars
+  _worldTells.push(fx);
+  return fx;
+}
+function scopeGlint(mesh) {
+  if (!mesh || mesh.visible === false) return null;
+  return spawnTellFlash(_tellAnchor(mesh), SCOPE_GLINT);
+}
+// Somebody's katana is guarding: a flash, then a halo on the blade until `ms` from now. A second call only extends it.
+function startDeflectGlow(mesh, ms, now = performance.now()) {
+  const gun = mesh && mesh._gun;
+  if (!gun || !DEFLECT_GLOW_WEAPONS.has(mesh._gunId) || !(ms > 0)) return false;
+  let fx = _worldTells.find(f => f.kind === 'deflect' && f.mesh === mesh && f.gun === gun);
+  if (fx) { fx.until = Math.max(fx.until, now + ms); return true; }
+  gun.updateWorldMatrix(true, true);
+  const box = new THREE.Box3().setFromObject(gun), sz = box.getSize(new THREE.Vector3()), wc = box.getCenter(new THREE.Vector3());
+  const ws = gun.getWorldScale(new THREE.Vector3()).x || 1;
+  const L = Math.max(0.9, Math.max(sz.x, sz.y, sz.z) / ws);          // about the blade's length, in the gun's own units
+  fx = { kind: 'deflect', mesh, gun, t0: now, until: now + ms, L, sprites: [_tellSprite({ color: DEFLECT_GLOW.color, k: 1, am: 1 }), _tellSprite({ color: 0xffffff, rot: Math.PI / 4, k: 0.7, am: 0.8, spin: -1, add: true })] };
+  fx.local = gun.worldToLocal(wc.clone());
+  for (const s of fx.sprites) { s.position.copy(wc); scene.add(s); }
+  _worldTells.push(fx);
+  spawnTellFlash(wc, { size: Math.max(1.2, L * 2), ms: DEFLECT_FLASH.ms, color: DEFLECT_FLASH.color });
+  return true;
+}
+function updateWorldTells(now = performance.now()) {
+  for (let i = _worldTells.length - 1; i >= 0; i--) {
+    const fx = _worldTells[i];
+    if (fx.kind === 'flash') {
+      const t = now - fx.t0;
+      if (t >= fx.ms) { _removeTell(fx); _worldTells.splice(i, 1); continue; }
+      const a = t < 50 ? t / 50 : Math.pow(1 - (t - 50) / (fx.ms - 50), 1.6);
+      const grow = 0.55 + 0.9 * (1 - Math.pow(1 - Math.min(1, t / 160), 3));
+      const dist = camera.position.distanceTo(fx.base), d = fx.far ? Math.min(16, Math.max(0.7, dist * 0.1)) : 1;
+      _tellToward.copy(camera.position).sub(fx.base).normalize().multiplyScalar(Math.min(1.5, Math.max(0.35, dist * 0.02)));   // a little in front of whoever holds it, or their body hides most of it
+      for (const s of fx.sprites) {
+        const sc = fx.size * d * grow * s.userData.k;
+        s.position.copy(fx.base).add(_tellToward);
+        s.scale.set(sc, sc, 1); s.material.opacity = a * s.userData.am; s.material.rotation = s.userData.rot0 + t * 0.0016 * s.userData.spin;
+      }
+    } else if (fx.kind === 'deflect') {
+      const left = fx.until - now;
+      if (left <= 0 || !fx.gun.parent || fx.mesh._gun !== fx.gun || fx.mesh.visible === false) { _removeTell(fx); _worldTells.splice(i, 1); continue; }
+      const fade = Math.min(1, left / 180), pulse = 0.78 + 0.22 * Math.sin(now * 0.001 * DEFLECT_GLOW.pulseHz * Math.PI * 2);
+      fx.gun.updateWorldMatrix(true, false); _tellAt.copy(fx.local); fx.gun.localToWorld(_tellAt);
+      _tellToward.copy(camera.position).sub(_tellAt).normalize().multiplyScalar(0.3);
+      const ws = fx.gun.getWorldScale(_tellScale).x || 1;
+      for (const s of fx.sprites) {
+        const sc = fx.L * ws * (1.7 + 0.2 * pulse) * (s.userData.k < 1 ? 1.5 : 1);
+        s.position.copy(_tellAt).add(_tellToward); s.scale.set(sc, sc, 1); s.material.opacity = DEFLECT_GLOW.opacity * s.userData.am * fade * pulse;
+        s.material.rotation = s.userData.rot0 + now * 0.0009 * s.userData.spin;
+      }
+    }
+  }
+}
+function clearWorldTells() { for (const fx of _worldTells) _removeTell(fx); _worldTells.length = 0; }
+// A sniper bot lowers its eye to the glass when it settles on somebody far enough away to need it, and again each time it has lost them for a moment and found them again.
+function botScopeTell(bot, w, engaged, now) {
+  if (!isScopedWeapon(w)) return;
+  if (engaged) {
+    if (!bot._scopedAt) { bot._scopedAt = now; scopeGlint(remoteMeshes[bot.id]); }
+    bot._scopeSeen = now;
+  } else if (bot._scopedAt && now - (bot._scopeSeen || 0) > 1500) bot._scopedAt = 0;
+}
+
 function setADS(on) {
   if (isDead) return;
   // Aiming is a GUN action. This function ends by forcing
@@ -52958,7 +53090,9 @@ function setADS(on) {
     if(on)fireHellfireCore();
     isADS=false;return;
   }
+  const wasADS = isADS;
   isADS = !!on;
+  if (isADS && !wasADS && isScopedWeapon(currentWeapon)) { try { socket.emit('scopeState', { on: true }); } catch (e) {} }   // everybody else sees the glint off the glass
   targetFOV = isADS ? currentWeapon.adsZoom : baseFOV();
   setWeaponADSPos(isADS);
   const isSniperADS = isADS && isScopedWeapon(currentWeapon);
@@ -70937,7 +71071,7 @@ function clearCombatFeedback() {
   for (const entry of damageDirectionEntries) entry.el.remove();
   damageDirectionEntries.length = 0;
   hitmarkerPriority = 0; hitmarkerPriorityUntil = 0;
-  HITMARKER_VIEW.clear(); HITMARKER_NUMBERS.clear();
+  HITMARKER_VIEW.clear(); HITMARKER_NUMBERS.clear(); clearWorldTells();
   for (const id of ['hitmarker','dmg-edge']) {
     const el = document.getElementById(id);
     if (el) { clearTimeout(el._t); el.style.opacity = '0'; }
@@ -71864,6 +71998,11 @@ socket.on('weaponChanged', ({ id, weaponId, skin }) => {
   const m = remoteMeshes[id];
   if (m) armRemoteMesh(m, armableWeaponOf(players[id] || { weaponId }), skin || null);
 });
+// Somebody raised a scope (a glint everyone else sees), somebody's katana started guarding (a flash and a halo on the blade).
+function onScopeStateMsg({ id, on } = {}) { if (id !== myId && on) scopeGlint(remoteMeshes[id]); }
+function onDeflectStateMsg({ id, weapon, ms } = {}) { if (id !== myId && DEFLECT_GLOW_WEAPONS.has(weapon)) startDeflectGlow(remoteMeshes[id], ms); }
+socket.on('scopeState', onScopeStateMsg);
+socket.on('deflectState', onDeflectStateMsg);
 socket.on('skinChanged', ({ id, skin, isAdmin, skinData, hair, finisher }) => {
   if (players[id]) players[id].finisher = FINISHER_IDS.includes(finisher) ? finisher : 'auto';   // how this player finishes people
   if (id === myId) return; // local player has no body mesh
@@ -71972,7 +72111,10 @@ socket.on('projectileDeflected', data => {
     if (meleeAbilityBuff?.type === 'deflect' && Number.isFinite(data.remainingMs)) {
       meleeAbilityBuff.endTime=Date.now()+data.remainingMs;meleeAbilityBuff.extendLeft=data.extendLeft;
     }
-  } else { spawnHitParticle(start);playSoundEvent('deflect_ping',{position:start,remote:true,minGap:18}); }
+  } else {
+    spawnHitParticle(start);playSoundEvent('deflect_ping',{position:start,remote:true,minGap:18});
+    if (Number.isFinite(data.remainingMs)) startDeflectGlow(remoteMeshes[data.defenderId], data.remainingMs);   // each return holds the guard open a little longer: the halo keeps up
+  }
   const w = projectileWeaponSpec(data.weapon);
   if (w) spawnLocalBullet(start,end.sub(start).normalize(),`reflected_${data.bulletId}`,false,w.bulletSpeed,w.bulletColor,w.bulletSize,w.id,{visualOnly:true,_arc:0});
 });
@@ -79850,6 +79992,7 @@ function tickBotMeleeAbility(bot,target,dt,now,live) {
         bot._deflectUntil=now+(ab.duration||1000);bot._meleeAbilityAt=now+(ab.cd||4000);
         a=bot._regularMelee={guard:true,item:item.id,start:now,duration:ab.duration||1000,delay:Infinity};
         armRemoteMesh(remoteMeshes[bot.id],item.id);
+        startDeflectGlow(remoteMeshes[bot.id],ab.duration||1000);
         playSoundEvent('katana_deflect',{position:new THREE.Vector3(bot.x,(bot.y||0)+1,bot.z),remote:true,minGap:50});
       }
       else if(ab.heal&&bot.hp<maxHp*.55){bot.hp=Math.min(maxHp,bot.hp+ab.heal);bot._meleeAbilityAt=now+Math.max(1500,ab.cd||8000);}
@@ -80676,6 +80819,7 @@ function updateBotAI(dt,simulation=null) {
         const aimCross = updateBotAimCrosshair(bot, target, tx, tz, dist, w, dt, hasLOS);
         const aimReady = !target.isPlayer || (aimCross && aimCross.settled);
         if (hasLOS && aimCross) bot.rotY = Math.atan2(-(aimCross.x - bot.x), -(aimCross.z - bot.z));
+        botScopeTell(bot, w, hasLOS && dist > 14, now);                      // a sniper bot glints as it takes aim
 
         if(!window.PVP_BATTLE_SIM?.active&&!inLobby){
           const decision=botAbilityDecision(bot,w,target,dist,now,hasLOS&&reactionDone&&aimReady&&roundLive&&canShoot);
@@ -81436,6 +81580,7 @@ function loop() {
   updateWeaponSelector();
   updateTrashcanProximity();
   updateDamageNumbers();
+  updateWorldTells();
   updateDamageDirections();
   // Spin barrel clusters around the forward (Z) axis. The minigun now visibly
   // spools before it fires, and E-bracing holds it at full speed.
