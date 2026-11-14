@@ -2827,6 +2827,9 @@ io.on('connection', (socket) => {
     emitToMatch(p.matchId, 'playerWrap', { id: socket.id, wrap: p.wrap });
   });
 
+  // 📈 The client's ping readout (🎛 PRESETS & DISPLAY): answer at once, and it times the round trip.
+  socket.on('pingCheck', (cb) => { if (typeof cb === 'function') cb(); });
+
   // 👁 How this player is looking (first / second / third person), so whoever they kill can watch through the same view.
   socket.on('setView', (data) => {
     const p = players[socket.id];

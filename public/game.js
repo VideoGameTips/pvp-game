@@ -4017,7 +4017,7 @@ function saveShootFx() { try { localStorage.setItem('pvp_shoot_fx', JSON.stringi
 function getAudioCtx() {
   const Ctx = window.AudioContext || window.webkitAudioContext;
   if (!Ctx) return null;
-  if (!audioCtx) audioCtx = new Ctx();
+  if (!audioCtx) { audioCtx = new Ctx(); installMasterVolume(audioCtx); }       // (the master volume sits in front of the output)
   return audioCtx;
 }
 function unlockAudio() {
@@ -49828,6 +49828,7 @@ function kickWeaponVisual(w, pellets = 1) {
 }
 
 document.addEventListener('mousemove', e => {
+  if (window.PVP_AIMLAB) return;                    // the aim lab has the mouse
   if (SOCIAL_VIEW.mode) {
     if (pointerLocked && SOCIAL_VIEW.mode === 'free') {
       SOCIAL_VIEW.look.y -= e.movementX * SENS * lookSensMult();
@@ -49890,6 +49891,7 @@ let GAMEPLAY_SETTINGS = {
   customSkins: false, // ⚙ → PLAYER-MADE SKINS: see the skins other players have painted (OFF unless you turn it on: everyone is in the standard skins)
   music: 0.5,      // ⚙ → MUSIC: the lobby's theme and a few maps' own (0 = off)
   enemyFootsteps: true, // ⚙ → ENEMY FOOTSTEPS: hear other people's steps, from the side they are on
+  fov: 75, resScale: 1, fpsCap: 0, brightness: 1, shadows: true, masterVol: 1, perfOverlay: false, settingsPreset: 'custom',   // ⚙ → 🎛 PRESETS & DISPLAY (see DISPLAY_DEFAULTS)
 };
 try {
   const saved = JSON.parse(localStorage.getItem('pvp_gameplay_settings') || 'null');
@@ -52490,7 +52492,7 @@ function switchWeapon(idx) {
   ammo    = weaponAmmo[idx].ammo;
   reserve = weaponAmmo[idx].reserve;
   syncHeldAmmoModelForIndex(idx);
-  if (isADS) { isADS=false; targetFOV=75; setWeaponADSPos(false); }
+  if (isADS) { isADS=false; targetFOV=baseFOV(); setWeaponADSPos(false); }
   updateAmmoHUD();
   updateWeaponHUD();
 }
@@ -52648,7 +52650,7 @@ function resetCombatResources() {
   const harpoonIdx=WEAPONS.findIndex(w=>w.id==='harpoon_gun');
   weaponAmmo[harpoonIdx]={ammo:WEAPONS[harpoonIdx].mag,reserve:0};
   supportUses[selectedSupportIdx] = isObby ? 0 : SUPPORT_ITEMS[selectedSupportIdx].uses;
-  reloading = false; shooting = false; isADS = false; targetFOV = 75;
+  reloading = false; shooting = false; isADS = false; targetFOV = baseFOV();
   abilityBuff = null; meleeAbilityBuff = null; pendingFanFire = null;
   minigunBraceHeld = false; resetMinigunSpool();
   chainGunSpin = 0; chainGunLastShotAt = 0;
@@ -52676,7 +52678,7 @@ function applyM4TowerKit() {
   weaponAmmo[selectedPrimaryIdx] = { ammo: 250, reserve: 250 };
   weaponAmmo[selectedSecondaryIdx] = { ammo: 0, reserve: 0 };
   supportUses[selectedSupportIdx] = SUPPORT_ITEMS[selectedSupportIdx]?.uses || 2;
-  reloading = false; shooting = false; isADS = false; targetFOV = 75;
+  reloading = false; shooting = false; isADS = false; targetFOV = baseFOV();
   activeSlot = 'primary';
   weaponModels.forEach(m => m.visible = false);
   meleeModels.forEach(m => m.visible = false);
@@ -52700,7 +52702,7 @@ function applyObbyKit() {
   weaponAmmo[selectedPrimaryIdx] = { ammo: 0, reserve: 0 };
   weaponAmmo[selectedSecondaryIdx] = { ammo: 0, reserve: 0 };
   supportUses[selectedSupportIdx] = 0;
-  reloading = false; shooting = false; isADS = false; targetFOV = 75;
+  reloading = false; shooting = false; isADS = false; targetFOV = baseFOV();
   activeSlot = 'melee';
   weaponModels.forEach(m => m.visible = false);
   meleeModels.forEach(m => m.visible = false);
@@ -52899,7 +52901,7 @@ function equipActiveSlot() {
   weaponModels.forEach(m => m.visible = false);
   meleeModels.forEach(m => m.visible = false);
   supportModels.forEach(m => m.visible = false);
-  if (isADS) { isADS = false; targetFOV = 75; setWeaponADSPos(false); }
+  if (isADS) { isADS = false; targetFOV = baseFOV(); setWeaponADSPos(false); }
 
   if (!_kitHeld) {
     // nothing in the hands: every model is already hidden
@@ -52957,7 +52959,7 @@ function setADS(on) {
     isADS=false;return;
   }
   isADS = !!on;
-  targetFOV = isADS ? currentWeapon.adsZoom : 75;
+  targetFOV = isADS ? currentWeapon.adsZoom : baseFOV();
   setWeaponADSPos(isADS);
   const isSniperADS = isADS && isScopedWeapon(currentWeapon);
   const overlay = document.getElementById('scope-overlay');
@@ -54484,7 +54486,7 @@ function updateMovement(dt, socialBlocked = false) {
       camera.quaternion.setFromEuler(euler);
     }
     // Slide FOV kick for a sense of speed (don't fight ADS zoom).
-    if (!isADS) targetFOV = sliding ? 84 : 75;
+    if (!isADS) targetFOV = sliding ? baseFOV() + 9 : baseFOV();
   }
 
   // Smooth FOV for ADS / slide kick, plus the little widening each shot adds (the
@@ -71312,7 +71314,7 @@ function killLocalOutOfBounds(killerId = null) {
   if (me) { me.hp = 0; me.dead = true; }
   updateHealthHUD(0);
   isDead = true;
-  isADS = false; targetFOV = 75; shooting = false; reloading = false;
+  isADS = false; targetFOV = baseFOV(); shooting = false; reloading = false;
   abilityBuff = null; meleeAbilityBuff = null; pendingFanFire = null;
   tellServerIDied(killerId, meta);
   playSoundEvent('air_launch', { volume: 1.0, minGap: 80 });
@@ -71465,7 +71467,7 @@ function applyBotDamageToPlayer(weaponId, botId, damageOverride, reflectedDamage
   if (me.hp <= 0 && !isDead) {
     isDead = true;
     tellServerIDied(botId, { weapon: weaponId, headshot: _botHitHead });
-    isADS = false; targetFOV = 75; shooting = false;
+    isADS = false; targetFOV = baseFOV(); shooting = false;
     reloading = false;
     // Clear any active buffs so bots stop reacting to a dead player's lingering effects
     abilityBuff = null; meleeAbilityBuff = null; pendingFanFire = null;
@@ -72176,7 +72178,7 @@ socket.on('playerDied', data => {
   if (echoOfMine && match && !match.over) match.deaths++;
   if (data.targetId===myId && !echoOfMine) {
     if (match && !match.over) match.deaths++;
-    isDead=true; isADS=false; targetFOV=75; shooting=false;
+    isDead=true; isADS=false; targetFOV=baseFOV(); shooting=false;
     reloading=false;
     // Clear lingering buffs so bots resume normal AI
     abilityBuff=null; meleeAbilityBuff=null; pendingFanFire=null;
@@ -81241,7 +81243,12 @@ function safeLoopStep(name, fn) {
 function loop() {
   requestAnimationFrame(loop);
   const now = performance.now();
+  if (_fpsCapMs) {                                                           // the FPS limit (🎛 PRESETS & DISPLAY): a time budget, so a 144 Hz screen under a 60 cap really gets 60
+    if (now < _lastCapFrame - 0.5) return;
+    _lastCapFrame = (now - _lastCapFrame > _fpsCapMs) ? now + _fpsCapMs : _lastCapFrame + _fpsCapMs;
+  }
   updateFPSCounter(now);
+  updatePerfOverlay(now);
   safeLoopStep('smoke-blind', () => updateSmokeBlind(Math.min((now - lastTime) / 1000, 0.05)));   // ahead of the early returns below, so entering a finale or dying clears it
   const dt = Math.min((now-lastTime)/1000, 0.05);
   lastTime = now;
@@ -83977,7 +83984,7 @@ document.addEventListener('langchange', () => {
 // One dialog at a time (#21): each of these used to open on top of whatever was already open, all in
 // different sizes. Closing is only hiding — every dialog rebuilds from current state when it opens.
 // index.html gives them one shared frame.
-const DIALOG_IDS = ['player-record-panel', 'stealth-panel', 'settings-hub-panel', 'controls-panel', 'touch-controls-panel', 'crosshair-panel', 'hitmarker-panel', 'shoot-fx-panel', 'aim-assist-panel', 'weapon-skins-panel', 'item-skins-panel',
+const DIALOG_IDS = ['player-record-panel', 'stealth-panel', 'settings-hub-panel', 'controls-panel', 'touch-controls-panel', 'crosshair-panel', 'display-settings-panel', 'aimlab-overlay', 'hitmarker-panel', 'shoot-fx-panel', 'aim-assist-panel', 'weapon-skins-panel', 'item-skins-panel',
                     'skins-panel', 'kill-log-panel', 'char-chat-panel', 'map-dialog', 'diff-dialog', 'duel-panel', 'lobby-service-panel','weapon-inspect-panel'];
 function anyDialogOpen() {
   return DIALOG_IDS.some(id => { const el = document.getElementById(id); return el && getComputedStyle(el).display !== 'none'; });
@@ -83999,6 +84006,400 @@ async function leaveMatch(to) {
   if (match && !match.over) socket.emit('leaveMatch');
   closeOtherDialogs();
   if (to === 'lobby') { teardownMatchWorld(); selectMode('lobby13'); } else openModeMenu();
+}
+// ═══ 🎛 PRESETS & DISPLAY ═══════════════════════════════════════════════════════════════════════════════
+// Settings change how the game is SHOWN to you, never how strong you are: field of view, resolution, frame rate, brightness, shadows, how much the screen
+// shakes, how loud it is. Nothing here touches damage, accuracy, recoil, movement or what an enemy can do. Everything is clamped to a range that cannot
+// remove cover or hide a player. Presets set the look-and-feel values together; "Custom" is whatever you last saved.
+const DISPLAY_DEFAULTS = { fov: 75, resScale: 1, fpsCap: 0, brightness: 1, shadows: true, cameraShake: 1, screenFx: 1, weatherFx: true, hyperrealistic: false, perfOverlay: false };
+const DISPLAY_PRESETS = {
+  competitive: { ...DISPLAY_DEFAULTS, fov: 90, brightness: 1.1, shadows: false, cameraShake: 0.25, screenFx: 0.5, weatherFx: false, perfOverlay: true },
+  highvis:     { ...DISPLAY_DEFAULTS, fov: 90, brightness: 1.2, cameraShake: 0, screenFx: 0.25, weatherFx: false },
+  cinematic:   { ...DISPLAY_DEFAULTS, fov: 80, fpsCap: 60 },
+};
+const DISPLAY_PRESET_NAMES = { competitive: 'COMPETITIVE', highvis: 'HIGH VISIBILITY', cinematic: 'CINEMATIC', custom: 'CUSTOM' };
+const DISPLAY_KEYS = Object.keys(DISPLAY_DEFAULTS);
+const DISPLAY_LIMITS = { fov: [60, 110], resScale: [0.5, 1], fpsCap: [0, 240], brightness: [0.8, 1.3], cameraShake: [0, 1.5], screenFx: [0, 1.5], masterVol: [0, 1], lookSens: [0.3, 2.5] };
+const _dClamp = (k, v) => { const L = DISPLAY_LIMITS[k]; v = Number(v); if (!Number.isFinite(v)) return DISPLAY_DEFAULTS[k] ?? 1; return L ? Math.max(L[0], Math.min(L[1], v)) : v; };
+function baseFOV() { return _dClamp('fov', GAMEPLAY_SETTINGS.fov); }                       // what the camera's field of view rests at (aiming and sliding move it from here)
+let _fpsCapMs = 0, _lastCapFrame = 0;
+function masterVolume() { return _dClamp('masterVol', typeof GAMEPLAY_SETTINGS !== 'undefined' && GAMEPLAY_SETTINGS.masterVol != null ? GAMEPLAY_SETTINGS.masterVol : 1); }
+function applyMasterVolume() { const c = (typeof audioCtx !== 'undefined') ? audioCtx : null; if (c && c.__master) { try { c.__master.gain.setTargetAtTime(masterVolume(), c.currentTime, 0.05); } catch (e) {} } }
+// Everything the game plays is connected to ctx.destination, so that name now leads to one master volume knob in front of the real output.
+function installMasterVolume(ctx) {
+  try {
+    const master = ctx.createGain(); master.gain.value = masterVolume(); master.connect(ctx.destination);
+    Object.defineProperty(ctx, 'destination', { configurable: true, get: () => master });
+    ctx.__master = master;
+  } catch (e) { console.warn('[master volume]', e); }
+}
+function applyDisplaySettings() {
+  const S = GAMEPLAY_SETTINGS;
+  _fpsCapMs = _dClamp('fpsCap', S.fpsCap) > 0 ? 1000 / _dClamp('fpsCap', S.fpsCap) : 0;
+  const ratio = Math.min(window.devicePixelRatio || 1, 2) * _dClamp('resScale', S.resScale);
+  if (Math.abs(renderer.getPixelRatio() - ratio) > 0.001) { renderer.setPixelRatio(ratio); renderer.setSize(window.innerWidth, window.innerHeight); }
+  const b = _dClamp('brightness', S.brightness);
+  renderer.domElement.style.filter = Math.abs(b - 1) < 0.001 ? '' : 'brightness(' + b + ')';
+  const sh = S.shadows !== false;
+  if (renderer.shadowMap.enabled !== sh) {
+    renderer.shadowMap.enabled = sh;
+    scene.traverse(o => { if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { m.needsUpdate = true; }); });
+  }
+  if (!isADS) targetFOV = baseFOV();
+  applyMasterVolume();
+  if (!S.perfOverlay && _perf.el) _perf.el.style.display = 'none';
+}
+// 📈 PERFORMANCE: frame time, FPS, and the round trip to the server, so a settings problem and a connection problem look different.
+const _perf = { el: null, txt: null, cv: null, ft: new Float32Array(120), n: 0, last: 0, lastDraw: 0, lastPing: 0, ping: null, pings: [], hist: [], got: 0, sent: 0 };
+function _perfEl() {
+  if (_perf.el) return _perf.el;
+  const el = document.createElement('div'); el.id = 'perf-overlay'; el.setAttribute('data-no-i18n', '');
+  el.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:95;padding:6px 8px;background:rgba(6,14,12,0.72);border:1px solid #2a6b57;border-radius:4px;font:700 11px/1.35 "Courier New",monospace;color:#bfeede;pointer-events:none;user-select:none;';
+  el.innerHTML = '<div class="pf-t"></div><canvas class="pf-g" width="120" height="30" style="display:block;margin-top:3px;"></canvas>';
+  document.body.appendChild(el);
+  _perf.el = el; _perf.txt = el.querySelector('.pf-t'); _perf.cv = el.querySelector('.pf-g');
+  return el;
+}
+function _pingServer() {
+  if (typeof socket === 'undefined' || !socket.connected) { _perf.ping = null; return; }
+  const t0 = performance.now(); let done = false; _perf.sent++;
+  const to = setTimeout(() => { if (!done) { _perf.hist.push(1); if (_perf.hist.length > 20) _perf.hist.shift(); } }, 2500);
+  socket.emit('pingCheck', () => {
+    done = true; clearTimeout(to); _perf.got++;
+    const rtt = performance.now() - t0; _perf.ping = rtt; _perf.pings.push(rtt); if (_perf.pings.length > 10) _perf.pings.shift();
+    _perf.hist.push(0); if (_perf.hist.length > 20) _perf.hist.shift();
+  });
+}
+function updatePerfOverlay(now) {
+  if (!GAMEPLAY_SETTINGS.perfOverlay) { _perf.last = now; return; }
+  const el = _perfEl(); el.style.display = 'block';
+  const ms = _perf.last ? now - _perf.last : 16.7; _perf.last = now;
+  _perf.ft[_perf.n++ % 120] = Math.min(ms, 200);
+  if (now - _perf.lastPing > 2000) { _perf.lastPing = now; _pingServer(); }
+  if (now - _perf.lastDraw < 250) return;
+  _perf.lastDraw = now;
+  const k = Math.min(_perf.n, 120), arr = Array.from(_perf.ft.subarray(0, k)).sort((a, b) => a - b);
+  const avg = arr.reduce((a, b) => a + b, 0) / Math.max(1, k), p95 = arr[Math.min(k - 1, Math.floor(k * 0.95))] || 0;
+  const pcOk = p95 < 34 && avg < 28;
+  const supported = _perf.sent < 3 || _perf.got > 0;                                   // an older server that does not answer pings: say nothing about the network
+  const loss = _perf.hist.length ? Math.round(100 * _perf.hist.reduce((a, b) => a + b, 0) / _perf.hist.length) : 0;
+  const jit = _perf.pings.length > 2 ? Math.round(Math.max(..._perf.pings) - Math.min(..._perf.pings)) : 0;
+  const netOk = !supported || ((_perf.ping == null || _perf.ping < 120) && loss < 5 && jit < 60);
+  const pingTxt = !supported ? 'n/a' : _perf.ping == null ? '...' : Math.round(_perf.ping) + ' ms';
+  const col = ok => ok ? '#7dffb0' : '#ff8a7a';
+  _perf.txt.innerHTML = Math.round(1000 / Math.max(1, avg)) + ' FPS · ' + avg.toFixed(1) + ' ms · PING ' + pingTxt + (supported ? ' · LOSS ' + loss + '% · JITTER ' + jit + ' ms' : '')
+    + '<br><span style="color:' + col(pcOk) + '">YOUR DEVICE: ' + (pcOk ? 'OK' : 'SLOW (lower the settings)') + '</span> · <span style="color:' + col(netOk) + '">NETWORK: ' + (netOk ? 'OK' : 'POOR (not your settings)') + '</span>';
+  const cv = _perf.cv, g = cv.getContext('2d'); g.clearRect(0, 0, 120, 30);
+  g.fillStyle = 'rgba(255,255,255,0.12)'; g.fillRect(0, 30 - 30 * 16.7 / 50, 120, 1);   // the 60 fps line
+  for (let i = 0; i < k; i++) { const v = _perf.ft[(_perf.n - k + i + 120) % 120]; g.fillStyle = v < 20 ? '#4fe3a0' : v < 34 ? '#ffd24a' : '#ff6a5a'; g.fillRect(i, 30 - Math.min(30, 30 * v / 50), 1, Math.min(30, 30 * v / 50)); }
+}
+// 🎛 the panel
+function _displayMatches(p) { return DISPLAY_KEYS.every(k => typeof p[k] === 'boolean' ? !!GAMEPLAY_SETTINGS[k] === p[k] : Math.abs(Number(GAMEPLAY_SETTINGS[k]) - p[k]) < 0.005); }
+function currentDisplayPreset() { for (const n of Object.keys(DISPLAY_PRESETS)) if (_displayMatches(DISPLAY_PRESETS[n])) return n; return 'custom'; }
+let _dSession = null;
+function applyDisplayPreset(vals) {
+  for (const k of DISPLAY_KEYS) if (k in vals) GAMEPLAY_SETTINGS[k] = typeof DISPLAY_DEFAULTS[k] === 'boolean' ? !!vals[k] : _dClamp(k, vals[k]);
+  GAMEPLAY_SETTINGS.settingsPreset = currentDisplayPreset(); saveGameplaySettings(); applyDisplaySettings();
+}
+function _customDisplay() { try { const v = JSON.parse(localStorage.getItem('pvp_settings_custom') || 'null'); return v && typeof v === 'object' ? v : null; } catch (e) { return null; } }
+const DISPLAY_RESET_DEFAULTS = { ...DISPLAY_DEFAULTS, masterVol: 1, lookSens: 1 };
+const _dUndo = [];                                                                     // snapshots of everything this panel changes, newest last
+function _dSnap() { const o = {}; for (const k of [...DISPLAY_KEYS, 'masterVol', 'lookSens', 'adsMode']) o[k] = GAMEPLAY_SETTINGS[k]; o.crosshair = { ...CROSSHAIR }; return o; }
+function _dPush() { _dUndo.push(_dSnap()); if (_dUndo.length > 30) _dUndo.shift(); }
+const _XH_LIMITS = { opacity: [0.1, 1], size: [1, 60], thickness: [1, 12], gap: [0, 30], dot: [0, 12] };      // a crosshair from a code or a snapshot can never be 9000 px
+function _saneCrosshair(c) {
+  const out = {}; if (!c || typeof c !== 'object') return out;
+  for (const k of Object.keys(CROSSHAIR_DEFAULT)) {
+    if (!(k in c)) continue; const v = c[k];
+    if (_XH_LIMITS[k]) { const n = Number(v); if (Number.isFinite(n)) out[k] = Math.max(_XH_LIMITS[k][0], Math.min(_XH_LIMITS[k][1], n)); }
+    else if (k === 'color') { if (/^#[0-9a-f]{6}$/i.test(String(v))) out[k] = String(v); }
+    else if (typeof CROSSHAIR_DEFAULT[k] === 'boolean') out[k] = !!v;
+    else if (typeof v === 'string' && v.length < 20) out[k] = v;
+  }
+  return out;
+}
+function applyConfigObject(o) {                                                         // one place that applies a settings object (a code, a preset, an undo), clamping everything
+  applyDisplayPreset(o);
+  if ('masterVol' in o) GAMEPLAY_SETTINGS.masterVol = _dClamp('masterVol', o.masterVol);
+  if ('lookSens' in o) GAMEPLAY_SETTINGS.lookSens = _dClamp('lookSens', o.lookSens);
+  if (o.adsMode === 'hold' || o.adsMode === 'toggle') GAMEPLAY_SETTINGS.adsMode = o.adsMode;
+  if (o.crosshair) { try { Object.assign(CROSSHAIR, _saneCrosshair(o.crosshair)); localStorage.setItem('pvp_crosshair', JSON.stringify(CROSSHAIR)); } catch (e) {} }
+  saveGameplaySettings(); applyDisplaySettings();
+}
+function exportSettingsCode() {
+  const o = {}; for (const k of [...DISPLAY_KEYS, 'masterVol', 'lookSens', 'adsMode']) o[k] = GAMEPLAY_SETTINGS[k];
+  o.crosshair = CROSSHAIR;
+  return 'PVP1:' + btoa(unescape(encodeURIComponent(JSON.stringify(o))));
+}
+function importSettingsCode(code) {
+  const m = /^PVP1:(.+)$/.exec(String(code || '').trim()); if (!m) return false;
+  let o; try { o = JSON.parse(decodeURIComponent(escape(atob(m[1])))); } catch (e) { return false; }
+  if (!o || typeof o !== 'object') return false;
+  _dPush(); applyConfigObject(o); return true;
+}
+function openDisplayPanel() {
+  closeOtherDialogs('display-settings-panel');
+  let panel = document.getElementById('display-settings-panel');
+  if (!panel) {
+    panel = document.createElement('div'); panel.id = 'display-settings-panel';
+    panel.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9900;background:#0f1a18;border:2px solid #44cc99;border-radius:8px;padding:20px;color:#fff;font-family:"Courier New",monospace;width:min(480px,94vw);max-height:92vh;overflow:auto;box-sizing:border-box;';
+    document.body.appendChild(panel);
+  }
+  panel.style.display = 'block';
+  const S = GAMEPLAY_SETTINGS, cur = currentDisplayPreset();
+  if (!_dSession) { _dSession = _dSnap(); try { localStorage.setItem('pvp_settings_prev', JSON.stringify(_dSession)); } catch (e) {} }     // the settings as they were when you first came in
+  const rst = key => `<button data-dp-reset="${key}" title="Reset this setting" style="margin-left:8px;padding:0 6px;cursor:pointer;font-family:inherit;font-size:11px;color:#88ccb4;background:transparent;border:1px solid #2a6b57;border-radius:3px;">↺</button>`;
+  const row = 'margin:9px 0;padding:9px 10px;background:rgba(255,255,255,0.035);border:1px solid #244c42;border-radius:6px;';
+  const lab = 'display:flex;justify-content:space-between;font-size:12px;letter-spacing:2px;color:#d8fff2;';
+  const slider = (key, label, min, max, step, fmt) => `<div style="${row}"><div style="${lab}"><span>${label}${rst(key)}</span><span id="dp-${key}-v" style="color:#88ffcc;">${fmt(Number(S[key] ?? DISPLAY_RESET_DEFAULTS[key]))}</span></div><input data-dp-range="${key}" type="range" min="${min}" max="${max}" step="${step}" value="${S[key] ?? DISPLAY_RESET_DEFAULTS[key]}" style="width:100%;margin-top:7px;"></div>`;
+  const tog = (key, label, note) => `<div style="${row}display:flex;align-items:center;justify-content:space-between;gap:12px;"><div><div style="font-size:12px;letter-spacing:2px;color:#d8fff2;">${label}${rst(key)}</div>${note ? `<div style="font-size:10px;color:#89b5a8;margin-top:3px;line-height:1.35;">${note}</div>` : ''}</div><button data-dp-toggle="${key}" style="min-width:64px;padding:7px 10px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:bold;letter-spacing:2px;border-radius:4px;background:${S[key] ? '#1f5a3a' : '#2a1f1f'};color:${S[key] ? '#aaffdd' : '#ff9a9a'};border:1px solid ${S[key] ? '#44cc99' : '#7a3a34'};">${S[key] ? 'ON' : 'OFF'}</button></div>`;
+  const pbtn = (id, text, on) => `<button data-dp-preset="${id}" style="padding:10px 6px;cursor:pointer;font-family:inherit;font-size:11px;font-weight:bold;letter-spacing:1px;border-radius:5px;background:${on ? '#1f5a3a' : '#132a24'};color:${on ? '#aaffdd' : '#88ccb4'};border:2px solid ${on ? '#44ffaa' : '#2a6b57'};">${text}</button>`;
+  const caps = [60, 120, 144, 0].map(c => `<button data-dp-cap="${c}" style="flex:1;padding:8px 4px;cursor:pointer;font-family:inherit;font-size:11px;font-weight:bold;border-radius:4px;background:${Number(S.fpsCap || 0) === c ? '#1f5a3a' : '#132a24'};color:${Number(S.fpsCap || 0) === c ? '#aaffdd' : '#88ccb4'};border:1px solid ${Number(S.fpsCap || 0) === c ? '#44ffaa' : '#2a6b57'};">${c ? c : 'UNCAPPED'}</button>`).join('');
+  const pct = v => Math.round(v * 100) + '%';
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;border-bottom:1px solid #276b55;padding-bottom:10px;">
+      <div style="font-size:17px;letter-spacing:3px;color:#88ffcc;">🎛 PRESETS & DISPLAY</div>
+      <button id="dp-close" style="background:#1f2a27;color:#ffaaaa;border:1px solid #ff6666;padding:4px 10px;cursor:pointer;font-family:inherit;border-radius:3px;">✕</button>
+    </div>
+    <div style="font-size:10px;letter-spacing:1px;color:#89b5a8;margin-bottom:8px;line-height:1.4;">These change how the game looks and sounds to you. They never change damage, accuracy, movement or what enemies can do.</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:6px;">${pbtn('competitive', 'COMPETITIVE', cur === 'competitive')}${pbtn('highvis', 'HIGH VISIBILITY', cur === 'highvis')}${pbtn('cinematic', 'CINEMATIC', cur === 'cinematic')}${pbtn('custom', 'CUSTOM', cur === 'custom')}</div>
+    ${slider('fov', 'FIELD OF VIEW', 60, 110, 1, v => Math.round(v) + '°')}
+    ${slider('brightness', 'BRIGHTNESS', 0.8, 1.3, 0.05, pct)}
+    ${slider('resScale', 'RESOLUTION SCALE', 0.5, 1, 0.05, pct)}
+    <div style="${row}"><div style="${lab}"><span>FPS LIMIT${rst('fpsCap')}</span></div><div style="display:flex;gap:6px;margin-top:7px;">${caps}</div></div>
+    ${tog('shadows', 'SHADOWS', 'Off is faster. Nothing is hidden by it either way.')}
+    ${tog('weatherFx', 'WEATHER & PARTICLES', 'Blown sand, snow, ash and rain in the air.')}
+    ${slider('lookSens', 'MOUSE SENSITIVITY', 0.3, 2.5, 0.05, v => v.toFixed(2) + 'x')}
+    ${slider('cameraShake', 'CAMERA SHAKE', 0, 1.5, 0.05, pct)}
+    ${slider('screenFx', 'SCREEN EFFECTS', 0, 1.5, 0.05, pct)}
+    ${slider('masterVol', 'MASTER VOLUME', 0, 1, 0.05, pct)}
+    ${tog('perfOverlay', 'PERFORMANCE OVERLAY', 'FPS, frame time, ping, packet loss, and whether a problem is your device or your connection.')}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;">
+      <button id="dp-aim" style="grid-column:1/3;padding:13px;background:#1a2a3a;color:#8fd0ff;border:1px solid #5aa8e8;cursor:pointer;font-family:inherit;font-size:13px;letter-spacing:2px;border-radius:5px;">🎯 AIM LAB · FLICK, MOVING, TRACKING + STATS</button>
+      <button id="dp-undo" style="padding:10px;background:#132a24;color:#88ffcc;border:1px solid #2a6b57;cursor:pointer;font-family:inherit;font-size:11px;letter-spacing:1px;border-radius:4px;${_dUndo.length ? '' : 'opacity:0.4;'}">↶ UNDO (${_dUndo.length})</button>
+      <button id="dp-prev" style="padding:10px;background:#132a24;color:#88ffcc;border:1px solid #2a6b57;cursor:pointer;font-family:inherit;font-size:11px;letter-spacing:1px;border-radius:4px;">⏮ RESTORE PREVIOUS</button>
+      <button id="dp-test" style="grid-column:1/3;padding:13px;background:#2a2410;color:#ffd866;border:1px solid #ffcc44;cursor:pointer;font-family:inherit;font-size:13px;letter-spacing:2px;border-radius:5px;">🎯 TEST SETTINGS · PRACTICE RANGE</button>
+      <button id="dp-save" style="padding:10px;background:#132a24;color:#88ffcc;border:1px solid #2a6b57;cursor:pointer;font-family:inherit;font-size:11px;letter-spacing:1px;border-radius:4px;">💾 SAVE AS CUSTOM</button>
+      <button id="dp-reset" style="padding:10px;background:#2a1f1f;color:#ffb3a8;border:1px solid #7a3a34;cursor:pointer;font-family:inherit;font-size:11px;letter-spacing:1px;border-radius:4px;">↺ RESET</button>
+      <button id="dp-copy" style="padding:10px;background:#10203a;color:#8fbfff;border:1px solid #5599ff;cursor:pointer;font-family:inherit;font-size:11px;letter-spacing:1px;border-radius:4px;">📋 COPY CONFIGURATION</button>
+      <button id="dp-paste" style="padding:10px;background:#10203a;color:#8fbfff;border:1px solid #5599ff;cursor:pointer;font-family:inherit;font-size:11px;letter-spacing:1px;border-radius:4px;">📥 PASTE CONFIGURATION</button>
+    </div>
+    <div id="dp-msg" style="min-height:16px;margin-top:8px;font-size:11px;color:#88ffcc;letter-spacing:1px;"></div>`;
+  const msg = t => { const m = document.getElementById('dp-msg'); if (m) m.textContent = t; };
+  document.getElementById('dp-close').addEventListener('click', () => { panel.style.display = 'none'; });
+  panel.querySelectorAll('[data-dp-preset]').forEach(b => b.addEventListener('click', () => {
+    const id = b.dataset.dpPreset; _dPush();
+    if (id === 'custom') { const c = _customDisplay(); if (c) applyDisplayPreset(c); else msg('No custom set saved yet: change things, then press SAVE AS CUSTOM.'); }
+    else applyDisplayPreset(DISPLAY_PRESETS[id]);
+    openDisplayPanel();
+  }));
+  const fade = on => { panel.style.opacity = on ? '0.16' : '1'; };                    // live preview: while a slider is held the panel gets out of the way so you see the change on the game behind it
+  panel.querySelectorAll('[data-dp-range]').forEach(inp => {
+    let pushed = false;
+    const down = () => { if (!pushed) { pushed = true; _dPush(); } fade(true); };
+    inp.addEventListener('pointerdown', down); inp.addEventListener('keydown', () => { if (!pushed) { pushed = true; _dPush(); } });
+    ['pointerup', 'pointercancel', 'change', 'blur'].forEach(ev => inp.addEventListener(ev, () => { fade(false); }));
+  });
+  panel.querySelectorAll('[data-dp-range]').forEach(inp => inp.addEventListener('input', () => {
+    const k = inp.dataset.dpRange; S[k] = _dClamp(k, parseFloat(inp.value));
+    const lbl = document.getElementById('dp-' + k + '-v'); if (lbl) lbl.textContent = k === 'fov' ? Math.round(S[k]) + '°' : k === 'lookSens' ? S[k].toFixed(2) + 'x' : Math.round(S[k] * 100) + '%';
+    S.settingsPreset = currentDisplayPreset(); saveGameplaySettings(); applyDisplaySettings();
+  }));
+  panel.querySelectorAll('[data-dp-range]').forEach(inp => inp.addEventListener('change', () => openDisplayPanel()));   // (re-lights the preset that now matches)
+  panel.querySelectorAll('[data-dp-toggle]').forEach(b => b.addEventListener('click', () => { _dPush(); const k = b.dataset.dpToggle; S[k] = !(S[k] !== false && S[k]); S.settingsPreset = currentDisplayPreset(); saveGameplaySettings(); applyDisplaySettings(); openDisplayPanel(); }));
+  panel.querySelectorAll('[data-dp-cap]').forEach(b => b.addEventListener('click', () => { _dPush(); S.fpsCap = Number(b.dataset.dpCap); S.settingsPreset = currentDisplayPreset(); saveGameplaySettings(); applyDisplaySettings(); openDisplayPanel(); }));
+  document.getElementById('dp-save').addEventListener('click', () => { const o = {}; for (const k of DISPLAY_KEYS) o[k] = S[k]; try { localStorage.setItem('pvp_settings_custom', JSON.stringify(o)); } catch (e) {} msg('Saved as your Custom set.'); });
+  document.getElementById('dp-reset').addEventListener('click', () => { _dPush(); applyConfigObject(DISPLAY_RESET_DEFAULTS); openDisplayPanel(); });
+  panel.querySelectorAll('[data-dp-reset]').forEach(b => b.addEventListener('click', () => {                 // reset ONE setting
+    const k = b.dataset.dpReset; _dPush(); S[k] = DISPLAY_RESET_DEFAULTS[k]; S.settingsPreset = currentDisplayPreset(); saveGameplaySettings(); applyDisplaySettings(); openDisplayPanel();
+  }));
+  document.getElementById('dp-undo').addEventListener('click', () => { const s = _dUndo.pop(); if (!s) { msg('Nothing to undo.'); return; } applyConfigObject(s); openDisplayPanel(); });
+  document.getElementById('dp-prev').addEventListener('click', () => {
+    let s = _dSession; try { s = JSON.parse(localStorage.getItem('pvp_settings_prev') || 'null') || _dSession; } catch (e) {}
+    if (!s) { msg('No previous configuration saved.'); return; }
+    _dPush(); applyConfigObject(s); openDisplayPanel();
+  });
+  document.getElementById('dp-aim').addEventListener('click', () => { panel.style.display = 'none'; openAimLab(); });
+  document.getElementById('dp-copy').addEventListener('click', async () => {
+    const code = exportSettingsCode();
+    try { await navigator.clipboard.writeText(code); msg('Copied. Paste it on another device to get the same settings and crosshair.'); } catch (e) { window.prompt('Copy this configuration code:', code); }
+  });
+  document.getElementById('dp-paste').addEventListener('click', () => {
+    const code = window.prompt('Paste a configuration code (PVP1:...):', '');
+    if (code == null) return;
+    if (importSettingsCode(code)) { openDisplayPanel(); const m = document.getElementById('dp-msg'); if (m) m.textContent = 'Imported.'; } else msg('That is not a valid configuration code.');
+  });
+  document.getElementById('dp-test').addEventListener('click', async () => {
+    if (inLiveMatch() && !await uiConfirm("Leave this match to test your settings in the practice range? It won't count.")) return;
+    if (match && !match.over && inLiveMatch()) socket.emit('leaveMatch');
+    closeOtherDialogs(); enterShootingRange();
+  });
+}
+applyDisplaySettings();
+
+
+// ═══ 🎯 AIM LAB ═══════════════════════════════════════════════════════════════════════════════════════════
+// A calibration room that needs no match: it takes the mouse the way the game does (movement x 0.002 x your sensitivity, at your field of view), so what feels right
+// here feels right there. Three drills (FLICK: one target at a time; MOVING: targets strafing across; TRACKING: keep the crosshair on a target that never stops),
+// real numbers for each (accuracy, time to hit, time on target), and a table that compares your runs by sensitivity so the setting is picked from results, not a guess.
+// Nothing in a drill touches your account, ranked points or the match you may have open behind it.
+const AIMLAB_KEY = 'pvp_aimlab';
+function _labRuns() { try { const v = JSON.parse(localStorage.getItem(AIMLAB_KEY) || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; } }
+function _labSave(run) { const all = _labRuns(); all.push(run); while (all.length > 80) all.shift(); try { localStorage.setItem(AIMLAB_KEY, JSON.stringify(all)); } catch (e) {} }
+function aimLabCompare() {                                                              // runs grouped by drill and sensitivity: how many, and the averages
+  const g = {};
+  for (const r of _labRuns()) { const key = r.mode + '|' + r.sens.toFixed(2); const o = g[key] || (g[key] = { mode: r.mode, sens: r.sens, n: 0, acc: 0, ms: 0, on: 0 }); o.n++; o.acc += r.acc; o.ms += r.avgMs || 0; o.on += r.onTarget || 0; }
+  return Object.values(g).map(o => ({ mode: o.mode, sens: o.sens, n: o.n, acc: o.acc / o.n, avgMs: o.ms / o.n, onTarget: o.on / o.n }));
+}
+function openAimLab() {
+  closeOtherDialogs('aimlab-overlay');
+  const old = document.getElementById('aimlab-overlay'); if (old) old.remove();
+  try { document.exitPointerLock && document.exitPointerLock(); } catch (e) {}
+  const ov = document.createElement('div'); ov.id = 'aimlab-overlay'; ov.setAttribute('data-no-i18n', '');
+  ov.style.cssText = 'position:fixed;inset:0;z-index:9950;background:#04070c;color:#e8fff6;font-family:"Courier New",monospace;user-select:none;';
+  ov.innerHTML = `<canvas id="al-cv" style="position:absolute;inset:0;width:100%;height:100%;"></canvas>
+    <div id="al-bar" style="position:absolute;top:0;left:0;right:0;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 12px;background:rgba(6,16,14,0.82);border-bottom:1px solid #2a6b57;">
+      <b style="letter-spacing:3px;color:#88ffcc;">🎯 AIM LAB</b>
+      <button data-m="flick" class="al-m"></button><button data-m="moving" class="al-m"></button><button data-m="tracking" class="al-m"></button>
+      <span style="display:flex;align-items:center;gap:6px;margin-left:10px;">SENS <input id="al-sens" type="range" min="0.3" max="2.5" step="0.05" style="width:130px;"><b id="al-sensv"></b></span>
+      <span id="al-fov" style="opacity:0.8;"></span>
+      <span style="flex:1"></span>
+      <button id="al-start" style="padding:7px 16px;background:#1f5a3a;color:#aaffdd;border:2px solid #44ffaa;cursor:pointer;font:inherit;font-weight:bold;letter-spacing:2px;border-radius:4px;">START</button>
+      <button id="al-exit" style="padding:7px 12px;background:#2a1f1f;color:#ffb3a8;border:1px solid #7a3a34;cursor:pointer;font:inherit;border-radius:4px;">✕ EXIT</button>
+    </div>
+    <div id="al-hud" style="position:absolute;top:56px;left:0;right:0;text-align:center;font-size:15px;letter-spacing:2px;color:#bfeede;text-shadow:0 1px 3px #000;pointer-events:none;"></div>
+    <div id="al-res" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:none;min-width:min(520px,92vw);max-height:80vh;overflow:auto;background:rgba(8,18,16,0.95);border:2px solid #44cc99;border-radius:8px;padding:18px;"></div>`;
+  document.body.appendChild(ov);
+  const cv = ov.querySelector('#al-cv'), g = cv.getContext('2d');
+  const D2R = Math.PI / 180;
+  const st = { mode: 'flick', running: false, locked: false, yaw: 0, pitch: 0, targets: [], t0: 0, shots: 0, hits: 0, times: [], onT: 0, tTot: 0, errSum: 0, errN: 0, spawned: 0, lastT: 0, flash: [], done: false };
+  const MODES = { flick: { name: 'FLICK', desc: '30 targets, one at a time. Click each as fast as you can.' }, moving: { name: 'MOVING', desc: '20 strafing targets. Click them before they leave.' }, tracking: { name: 'TRACKING', desc: '15 s. Keep the crosshair on the target, which never stops.' } };
+  const radPerPx = () => SENS * lookSensMult();
+  const lockCv = () => { try { const r = cv.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) {} };    // (a refused lock is not an error)
+  const fit = () => { cv.width = window.innerWidth; cv.height = window.innerHeight; };
+  fit(); window.addEventListener('resize', fit);
+  const setMode = m => { st.mode = m; ov.querySelectorAll('.al-m').forEach(b => { const on = b.dataset.m === m; b.textContent = MODES[b.dataset.m].name; b.style.cssText = `padding:6px 12px;cursor:pointer;font:inherit;font-weight:bold;letter-spacing:1px;border-radius:4px;background:${on ? '#1f5a3a' : '#132a24'};color:${on ? '#aaffdd' : '#88ccb4'};border:1px solid ${on ? '#44ffaa' : '#2a6b57'};`; }); hud(MODES[m].desc); };
+  const hud = t => { ov.querySelector('#al-hud').textContent = t; };
+  const sensEl = ov.querySelector('#al-sens'), sensV = ov.querySelector('#al-sensv');
+  const syncSens = () => { sensEl.value = GAMEPLAY_SETTINGS.lookSens; sensV.textContent = Number(GAMEPLAY_SETTINGS.lookSens).toFixed(2) + 'x'; ov.querySelector('#al-fov').textContent = 'FOV ' + Math.round(baseFOV()) + '°'; };
+  sensEl.addEventListener('input', () => { GAMEPLAY_SETTINGS.lookSens = _dClamp('lookSens', parseFloat(sensEl.value)); sensV.textContent = GAMEPLAY_SETTINGS.lookSens.toFixed(2) + 'x'; saveGameplaySettings(); });
+  // geometry: a direction is (yaw, pitch); the view looks along (st.yaw, st.pitch)
+  const dirOf = (y, p) => [Math.cos(p) * Math.sin(y), Math.sin(p), Math.cos(p) * Math.cos(y)];
+  const basis = () => { const y = st.yaw, p = st.pitch; return { F: dirOf(y, p), R: [Math.cos(y), 0, -Math.sin(y)], U: [-Math.sin(p) * Math.sin(y), Math.cos(p), -Math.sin(p) * Math.cos(y)] }; };
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const proj = (tv, B) => { const z = dot(tv, B.F); if (z <= 0.01) return null; const f = (cv.height / 2) / Math.tan(baseFOV() * D2R / 2); return { x: cv.width / 2 + f * dot(tv, B.R) / z, y: cv.height / 2 - f * dot(tv, B.U) / z, f }; };
+  const angTo = (t, B) => Math.acos(Math.max(-1, Math.min(1, dot(dirOf(t.yaw, t.pitch), B.F))));
+  const spawnFlick = () => {
+    let y, p; do { y = (Math.random() * 70 - 35) * D2R; p = (Math.random() * 40 - 18) * D2R; } while (Math.hypot((y - (st.lastY || 0)) / D2R, (p - (st.lastP || 0)) / D2R) < 14);
+    st.lastY = y; st.lastP = p; st.targets = [{ yaw: y, pitch: p, r: 1.7 * D2R, born: performance.now() }]; st.spawned++;
+  };
+  const spawnMoving = () => {
+    const dir = Math.random() < 0.5 ? 1 : -1, p = (Math.random() * 28 - 10) * D2R;
+    st.targets.push({ yaw: -dir * 32 * D2R, pitch: p, r: 2.0 * D2R, vy: dir * (18 + Math.random() * 14) * D2R, born: performance.now(), life: 3200 }); st.spawned++;
+  };
+  const trackPos = t => ({ yaw: (22 * Math.sin(0.7 * t) + 9 * Math.sin(1.9 * t + 1)) * D2R, pitch: (9 * Math.sin(0.9 * t + 2) + 3 * Math.sin(2.3 * t)) * D2R });
+  const start = () => {
+    Object.assign(st, { running: true, done: false, yaw: 0, pitch: 0, targets: [], shots: 0, hits: 0, times: [], onT: 0, tTot: 0, errSum: 0, errN: 0, spawned: 0, t0: performance.now(), lastT: performance.now(), flash: [], lastY: 0, lastP: 0 });
+    ov.querySelector('#al-res').style.display = 'none';
+    if (st.mode === 'flick') spawnFlick(); else if (st.mode === 'tracking') { const q = trackPos(0); st.targets = [{ yaw: q.yaw, pitch: q.pitch, r: 2.4 * D2R, track: true }]; }
+    lockCv();
+  };
+  const finish = () => {
+    st.running = false; st.done = true; const secs = (performance.now() - st.t0) / 1000;
+    const run = { t: Date.now(), mode: st.mode, sens: Number(GAMEPLAY_SETTINGS.lookSens), fov: Math.round(baseFOV()) };
+    if (st.mode === 'tracking') { run.onTarget = st.tTot ? st.onT / st.tTot : 0; run.acc = run.onTarget; run.avgErr = st.errN ? st.errSum / st.errN / D2R : 0; }
+    else { run.shots = st.shots; run.hits = st.hits; run.acc = st.shots ? st.hits / st.shots : 0; run.avgMs = st.times.length ? st.times.reduce((a, b) => a + b, 0) / st.times.length : 0; run.secs = secs; }
+    _labSave(run); try { document.exitPointerLock(); } catch (e) {}
+    const best = {}; for (const c of aimLabCompare()) { const sc = c.mode === 'tracking' ? c.onTarget : c.acc * 1000 - c.avgMs * 0.05; if (!best[c.mode] || sc > best[c.mode].sc) best[c.mode] = { sc, sens: c.sens }; }
+    const rows = aimLabCompare().sort((a, b) => a.mode.localeCompare(b.mode) || a.sens - b.sens).map(c => `<tr style="${best[c.mode] && best[c.mode].sens === c.sens ? 'color:#7dffb0;font-weight:bold;' : ''}"><td>${MODES[c.mode].name}</td><td>${c.sens.toFixed(2)}x</td><td>${c.n}</td><td>${Math.round(c.acc * 100)}%</td><td>${c.mode === 'tracking' ? '-' : Math.round(c.avgMs) + ' ms'}</td></tr>`).join('');
+    const main = st.mode === 'tracking'
+      ? `<div style="font-size:22px;color:#7dffb0;">${Math.round(run.onTarget * 100)}% ON TARGET</div><div>Average error ${run.avgErr.toFixed(1)}° · sensitivity ${run.sens.toFixed(2)}x · FOV ${run.fov}°</div>`
+      : `<div style="font-size:22px;color:#7dffb0;">${Math.round(run.acc * 100)}% ACCURACY · ${Math.round(run.avgMs)} ms</div><div>${run.hits} hits of ${run.shots} shots · ${run.secs.toFixed(1)} s · sensitivity ${run.sens.toFixed(2)}x · FOV ${run.fov}°</div>`;
+    const res = ov.querySelector('#al-res'); res.style.display = 'block';
+    res.innerHTML = `<div style="font-size:15px;letter-spacing:3px;color:#88ffcc;margin-bottom:8px;">${MODES[st.mode].name} COMPLETE</div>${main}
+      <div style="margin:14px 0 6px;color:#89b5a8;font-size:11px;letter-spacing:1px;">YOUR RUNS BY SENSITIVITY (best in green). Change SENS above and run again to compare.</div>
+      <table style="width:100%;font-size:12px;border-collapse:collapse;"><tr style="color:#89b5a8;text-align:left;"><th>DRILL</th><th>SENS</th><th>RUNS</th><th>ACC / ON TARGET</th><th>AVG HIT TIME</th></tr>${rows}</table>
+      <div style="margin-top:12px;display:flex;gap:8px;"><button id="al-again" style="flex:1;padding:10px;background:#1f5a3a;color:#aaffdd;border:2px solid #44ffaa;cursor:pointer;font:inherit;font-weight:bold;letter-spacing:2px;border-radius:4px;">RUN AGAIN</button><button id="al-clear" style="padding:10px;background:#2a1f1f;color:#ffb3a8;border:1px solid #7a3a34;cursor:pointer;font:inherit;border-radius:4px;">CLEAR RUNS</button></div>`;
+    ov.querySelector('#al-again').addEventListener('click', start);
+    ov.querySelector('#al-clear').addEventListener('click', () => { try { localStorage.removeItem(AIMLAB_KEY); } catch (e) {} res.style.display = 'none'; hud('Runs cleared.'); });
+    hud('');
+  };
+  const onMove = e => {
+    if (!st.locked) return;
+    st.yaw += e.movementX * radPerPx(); st.pitch = Math.max(-1.45, Math.min(1.45, st.pitch - e.movementY * radPerPx()));
+  };
+  const onDown = e => {
+    if (e.button !== 0) return;
+    if (!st.running || !st.locked || st.mode === 'tracking') return;
+    const B = basis(); st.shots++;
+    let hit = -1, bestA = 1e9; st.targets.forEach((t, i) => { const a = angTo(t, B); if (a <= t.r && a < bestA) { bestA = a; hit = i; } });
+    if (hit >= 0) {
+      const t = st.targets[hit]; st.hits++; st.times.push(performance.now() - t.born); st.flash.push({ yaw: t.yaw, pitch: t.pitch, at: performance.now() }); st.targets.splice(hit, 1);
+      if (st.mode === 'flick') { if (st.hits >= 30) finish(); else spawnFlick(); }
+      else if (st.hits >= 20 || (st.spawned >= 20 && !st.targets.length)) finish();
+    }
+  };
+  const swallow = e => { if (e.type === 'mousedown') onDown(e); e.stopImmediatePropagation(); if (e.type === 'contextmenu') e.preventDefault(); };
+  const keys = e => { if (e.code === 'Escape') return; e.stopImmediatePropagation(); if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault(); };
+  const lockChange = () => { st.locked = document.pointerLockElement === cv; if (!st.locked && st.running) { hud('Paused: click the screen to carry on'); } else if (st.locked) hud(''); };
+  cv.addEventListener('click', () => { if (!st.locked && !document.getElementById('al-res').style.display.includes('block')) lockCv(); });
+  document.addEventListener('pointerlockchange', lockChange);
+  document.addEventListener('mousemove', onMove);
+  const winHandlers = [];                                                                // (everything added to the window is taken off again in close())
+  const addWin = (ev, fn) => { window.addEventListener(ev, fn, true); winHandlers.push([ev, fn]); };
+  ['mousedown', 'mouseup', 'contextmenu', 'wheel'].forEach(ev => addWin(ev, e => { if (window.PVP_AIMLAB) swallow(e); }));
+  ['keydown', 'keyup'].forEach(ev => addWin(ev, e => { if (window.PVP_AIMLAB) keys(e); }));
+  window.PVP_AIMLAB = true;
+  let raf = 0;
+  const draw = now => {
+    raf = requestAnimationFrame(draw);
+    const W = cv.width, H = cv.height, B = basis(), dt = Math.min(0.05, (now - (st.lastT || now)) / 1000); st.lastT = now;
+    // the drill
+    if (st.running && st.locked) {
+      if (st.mode === 'moving') {
+        for (const t of st.targets) t.yaw += t.vy * dt;
+        st.targets = st.targets.filter(t => Math.abs(t.yaw) < 36 * D2R && now - t.born < t.life);
+        if (st.spawned < 20 && st.targets.length < 2 && Math.random() < dt * 1.6) spawnMoving();
+        if (st.spawned >= 20 && !st.targets.length) finish();
+      } else if (st.mode === 'tracking') {
+        const q = trackPos((now - st.t0) / 1000), t = st.targets[0]; t.yaw = q.yaw; t.pitch = q.pitch;
+        const a = angTo(t, B); st.tTot += dt; st.errSum += a; st.errN++; if (a <= t.r) st.onT += dt;
+        hud('TRACKING ' + Math.max(0, 15 - (now - st.t0) / 1000).toFixed(1) + ' s · on target ' + Math.round(100 * st.onT / Math.max(0.001, st.tTot)) + '%');
+        if ((now - st.t0) / 1000 >= 15) finish();
+      } else hud('FLICK ' + st.hits + ' / 30 · accuracy ' + (st.shots ? Math.round(100 * st.hits / st.shots) : 100) + '%');
+      if (st.mode === 'moving') hud('MOVING ' + st.hits + ' hit · ' + st.shots + ' shots');
+    }
+    // the picture: a dark wall with reference dots every 10 degrees, so turning is visible
+    const gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, '#0a1420'); gr.addColorStop(1, '#05080f'); g.fillStyle = gr; g.fillRect(0, 0, W, H);
+    g.fillStyle = 'rgba(120,200,180,0.35)';
+    for (let yy = -90; yy <= 90; yy += 10) for (let pp = -40; pp <= 60; pp += 10) { const q = proj(dirOf(yy * D2R, pp * D2R), B); if (q && q.x > -10 && q.x < W + 10 && q.y > -10 && q.y < H + 10) g.fillRect(q.x - 1.5, q.y - 1.5, 3, 3); }
+    for (const t of st.targets) {
+      const q = proj(dirOf(t.yaw, t.pitch), B); if (!q) continue; const r = Math.max(5, q.f * Math.tan(t.r));
+      g.beginPath(); g.arc(q.x, q.y, r, 0, 7); g.fillStyle = t.track ? '#ffb347' : '#ff5a6a'; g.fill(); g.lineWidth = 2; g.strokeStyle = '#fff'; g.stroke();
+      g.beginPath(); g.arc(q.x, q.y, r * 0.45, 0, 7); g.fillStyle = 'rgba(255,255,255,0.8)'; g.fill();
+    }
+    st.flash = st.flash.filter(f => now - f.at < 260);
+    for (const f of st.flash) { const q = proj(dirOf(f.yaw, f.pitch), B); if (!q) continue; const k = (now - f.at) / 260; g.beginPath(); g.arc(q.x, q.y, 10 + 40 * k, 0, 7); g.strokeStyle = `rgba(125,255,176,${1 - k})`; g.lineWidth = 3; g.stroke(); }
+    // your crosshair
+    const C = CROSSHAIR, cx = W / 2, cy = H / 2, s = Number(C.size) || 10, gap = Number(C.gap) || 0, th = Number(C.thickness) || 2;
+    g.globalAlpha = Number(C.opacity) || 0.85; g.fillStyle = C.color || '#fff';
+    g.fillRect(cx - th / 2, cy - gap - s, th, s); g.fillRect(cx - th / 2, cy + gap, th, s); g.fillRect(cx - gap - s, cy - th / 2, s, th); g.fillRect(cx + gap, cy - th / 2, s, th);
+    if (Number(C.dot) > 0) { g.beginPath(); g.arc(cx, cy, Number(C.dot), 0, 7); g.fill(); }
+    g.globalAlpha = 1;
+  };
+  const close = () => {
+    cancelAnimationFrame(raf); window.PVP_AIMLAB = false; window.removeEventListener('resize', fit);
+    document.removeEventListener('pointerlockchange', lockChange); document.removeEventListener('mousemove', onMove);
+    try { document.exitPointerLock(); } catch (e) {}
+    for (const [ev, fn] of winHandlers) window.removeEventListener(ev, fn, true);
+    ov.remove();
+  };
+  ov.querySelector('#al-exit').addEventListener('click', close);
+  ov.querySelector('#al-start').addEventListener('click', start);
+  ov.querySelectorAll('.al-m').forEach(b => b.addEventListener('click', () => { if (!st.running) setMode(b.dataset.m); }));
+  setMode('flick'); syncSens();
+  window.__aimlab = { st, start, finish, basis, angTo, onDown, close, spawnMoving };
+  raf = requestAnimationFrame(draw);
 }
 function openSettingsHub() {
   closeOtherDialogs('settings-hub-panel');
@@ -84066,6 +84467,7 @@ function openSettingsHub() {
       <button id="settings-controls" style="padding:12px;background:#10203a;color:#8fbfff;border:1px solid #5599ff;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">🎮 CONTROLS</button>
       <button id="settings-crosshair" style="padding:12px;background:#2a2410;color:#ffd866;border:1px solid #ffcc44;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">🎯 CROSSHAIR</button>
     </div>
+    <button id="settings-display" style="display:block;width:100%;margin:8px 0;padding:12px;background:#0f2a24;color:#88ffcc;border:1px solid #44cc99;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">🎛 PRESETS & DISPLAY</button>
     <button id="settings-hitmarker" style="display:block;width:100%;margin:8px 0;padding:12px;background:#2a2410;color:#ffd866;border:1px solid #ffcc44;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">💥 HITMARKER</button>
     <button id="settings-shoot-fx" style="display:block;width:100%;margin:8px 0;padding:12px;background:#2a1a3a;color:#cc99ff;border:1px solid #aa77ff;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">🔊 SHOOT FX</button>
     <button id="settings-aim-assist" style="display:block;width:100%;margin:8px 0;padding:12px;background:#3a1a1a;color:#ff9988;border:1px solid #ff5544;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">🎯 AIM ASSIST</button>
@@ -84106,6 +84508,7 @@ function openSettingsHub() {
   });
   document.getElementById('settings-controls').addEventListener('click', () => { panel.style.display = 'none'; if (isTouchUI()) openTouchControlsPanel(); else openControlsPanel(); });  // a phone has no keys to rebind
   document.getElementById('settings-crosshair').addEventListener('click', () => { panel.style.display = 'none'; openCrosshairPanel(); });
+  document.getElementById('settings-display').addEventListener('click', () => { panel.style.display = 'none'; openDisplayPanel(); });
   document.getElementById('settings-hitmarker').addEventListener('click', () => { panel.style.display = 'none'; openHitmarkerPanel(); });
   document.getElementById('settings-shoot-fx').addEventListener('click', () => { panel.style.display = 'none'; openShootFxPanel(); });
   document.getElementById('settings-aim-assist').addEventListener('click', () => { panel.style.display = 'none'; openAimAssistPanel(); });
