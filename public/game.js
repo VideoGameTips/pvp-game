@@ -4786,6 +4786,10 @@ function weaponSamplesPreload(ctx) {                                // (one fetc
 // pops of a map gimmick (volume 0.4 to 0.8) keep the made-up boom, a 3 s roll under every one of them would be a lot. One of the clips, never the same one twice running.
 // `dedupe`: spawnExplosion and rocketExplode both announce the same rocket, one roar is enough.
 const EVENT_SAMPLES = {
+  // 🎯 What a headshot HIT sounds like (the hitmarker's head click): the ding, up 8 semitones. Same clip as the 'headshot' event below.
+  hm_head: { min: 0, dedupe: 0, clips: [
+    { file: 'headshot', gain: 1.0, from: 0.10, len: 0.22, fade: 0.10, rate: [1.6, 1.6] },
+  ] },
   // 🎯 The headshot: the ding, up 8 semitones (rate 1.6). No tier changes it, the click that goes with every hit is the hitmarker's.
   headshot: { min: 0, dedupe: 0, clips: [
     { file: 'headshot', gain: 1.0, from: 0.10, len: 0.22, fade: 0.10, rate: [1.6, 1.6] },   // gain 1.0: about 150% of a gun shot's loudness (measured: the Vector's first 0.3 s has an RMS of 0.035, this 0.052)
@@ -66937,11 +66941,11 @@ function playHitConfirmSound(kind, tier) {
   const now = performance.now();
   while (_hmSoundLog.length && now - _hmSoundLog[0] > 500) _hmSoundLog.shift();
   const crowd = _hmSoundLog.length;
-  if (kind !== 'kill' && crowd >= 8) return false;
+  if (kind !== 'kill' && kind !== 'head' && crowd >= 8) return false;          // (a headshot is always heard: holding the trigger on a head must not mute the ding)
   _hmSoundLog.push(now);
-  const base = kind === 'kill' ? 0.9 : kind === 'head' ? 0.85 : 0.7, duck = kind === 'kill' ? 1 : 1 / (1 + 0.16 * crowd);
+  const base = kind === 'kill' ? 0.9 : kind === 'head' ? 0.85 : 0.7, duck = kind === 'kill' ? 1 : 1 / (1 + (kind === 'head' ? 0.04 : 0.16) * crowd);
   playSoundEvent(kind === 'kill' ? 'hm_kill' : kind === 'head' ? 'hm_head' : 'hm_body',
-    { volume: base * vol * duck, minGap: kind === 'kill' ? 120 : kind === 'head' ? 80 : 70, tier });
+    { volume: base * vol * duck, minGap: kind === 'kill' ? 120 : kind === 'head' ? 45 : 70, tier });
   return true;
 }
 // A confirmed hit that is not a kill: marker, click, number (the number is what was actually taken off).
