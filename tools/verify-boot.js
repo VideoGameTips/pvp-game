@@ -466,6 +466,223 @@ if (ok && process.argv.includes('--tells')) {
   else console.log('weapon tells: scope glint (bright, bigger with distance, short, bounded, seen by others only), sniper bots glint as they take aim, katana Deflect glows and is extended, the messages and the events');
 }
 
+if (ok && process.argv.includes('--killreplay')) {
+  // The dramatic replay: recorded 20 times a second while alive, frozen on death, played from the killer's exact eyes, slowed for the
+  // kill, then held, flashed and faded into the death screen; everything it touched is put back; and it knows when not to play.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const R = KILLREPLAY, L = KILLREPLAY_LOOK;
+    const saved = { dead: isDead, started: gameStarted, lobby: inLobby, myId, mode: KILLREPLAY_SETTINGS.mode, over: match, cam: camera.position.clone(), eul: euler.clone(), fov: camera.fov, me: players[myId], matchObj: match };
+    const body = (x, z, yaw) => { const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = yaw + Math.PI; g.visible = true; scene.add(g); return g; };
+    const bodies = [], keepSound = playSoundEvent; playSoundEvent = () => {};
+    let T = 1000;
+    try {
+      myId = 'rp_me'; gameStarted = true; isDead = false; inLobby = false; match = null; KILLREPLAY_SETTINGS.mode = 'replay';
+      R.buf.length = 0; R.hits.length = 0; R.hpSeen = null; R.firedAt = {};
+      players.rp_me = { id: 'rp_me', hp: 300 }; players.rp_k = { id: 'rp_k', name: 'Killer', rotX: -0.2, weaponId: 'ak20' }; players.rp_o = { id: 'rp_o', name: 'Other', rotX: 0 };
+      remoteMeshes.rp_k = body(0, -30, 0.5); remoteMeshes.rp_o = body(9, -9, 0); bodies.push(remoteMeshes.rp_k, remoteMeshes.rp_o);
+      // ── speed profile and length
+      if (replaySpeed(L.clipMs) !== 1 || replaySpeed(L.slowFrom + 1) !== 1) issues.push('the clip should run in real time until the slow-down');
+      let prev = 1; for (let left = L.slowFrom; left >= 0; left -= 20) { const v = replaySpeed(left); if (v > prev + 1e-9) issues.push('the replay speeds up again on the way into the slow motion'); prev = v; }
+      if (Math.abs(replaySpeed(0) - L.slowSpeed) > 1e-9 || Math.abs(replaySpeed(L.slowTo) - L.slowSpeed) > 1e-9) issues.push('the last moments should crawl at the slow speed');
+      if (!(L.slowSpeed <= 0.35)) issues.push('the slow motion is not slow: ' + L.slowSpeed);
+      const wall = replayWallMs(3600); if (wall < 4500 || wall > 9500) issues.push('a short replay should take 4.5 to 9.5 s, takes ' + Math.round(wall));
+      // ── recorder
+      camera.position.set(0, PLAYER_EYE_HEIGHT, 0); euler.set(0.1, 0.3, 0, 'YXZ');
+      for (let i = 0; i < 130; i++) { T += 50; remoteMeshes.rp_k.position.z = -30 + i * 0.1; replaySample(T); }
+      if (R.buf.length !== R.capacity) issues.push('the recorder should keep five seconds (' + R.capacity + ' samples), has ' + R.buf.length);
+      const last = R.buf[R.buf.length - 1], ik = last.ids.indexOf('rp_k') * 6, im = last.ids.indexOf('rp_me') * 6;
+      if (ik < 0 || im < 0 || !last.ids.includes('rp_o')) issues.push('everybody in the scene should be recorded');
+      else {
+        if (Math.abs(last.d[ik + 3] - 0.5) > 1e-4 || Math.abs(last.d[ik + 4] + 0.2) > 1e-4) issues.push('a body is recorded with the yaw and pitch it looks along: ' + last.d[ik + 3].toFixed(3) + ', ' + last.d[ik + 4].toFixed(3));
+        if (Math.abs(last.d[im + 3] - 0.3) > 1e-4 || Math.abs(last.d[im + 4] - 0.1) > 1e-4) issues.push('my own view is recorded as it is: ' + last.d[im + 3] + ', ' + last.d[im + 4]);
+        if (Math.abs(last.d[im + 1]) > 1e-4) issues.push('feet, not eyes, are recorded: ' + last.d[im + 1]);
+      }
+      const n0 = R.buf.length; isDead = true; T += 50; replaySample(T + 1); if (R.buf.length !== n0) issues.push('the recorder should freeze when I die');
+      isDead = false;
+      // shots they fired, a bot that aims at me, hits on me
+      R.firedAt.rp_k = T + 10; T += 50; replaySample(T + 20); { const f = R.buf[R.buf.length - 1]; if (!f.d[f.ids.indexOf('rp_k') * 6 + 5]) issues.push('a shot should be recorded as fired'); }
+      T += 100; replaySample(T); { const f = R.buf[R.buf.length - 1]; if (f.d[f.ids.indexOf('rp_k') * 6 + 5]) issues.push('one shot should not be recorded in two samples'); }
+      players.rp_me.hp = 250; T += 50; replaySample(T); if (R.hits.length !== 1 || Math.abs(R.hits[0].dmg - 50) > 1e-6) issues.push('health coming off should be recorded as a hit: ' + JSON.stringify(R.hits));
+      T += 50; replaySample(T); if (R.hits.length !== 1) issues.push('a hit should be recorded once');
+      T += 2000; replaySample(T); if (R.buf.length !== 1) issues.push('after a long gap (a respawn) the old frames are dropped: ' + R.buf.length);
+      for (let i = 0; i < 90; i++) { T += 50; remoteMeshes.rp_k.position.z += 0.1; replaySample(T); }
+      // ── interpolation: halfway between two samples, and across the turn of an angle
+      { const a = { t: 0, ids: ['x'], d: Float32Array.from([0, 0, 0, 3.0, 0, 0]) }, b = { t: 100, ids: ['x'], d: Float32Array.from([10, 0, 0, -3.0, 0.2, 0]) };
+        const m = replayAt({ frames: [a, b] }, 'x', 50);
+        if (Math.abs(m.x - 5) > 1e-4 || Math.abs(m.pitch - 0.1) > 1e-4) issues.push('positions are not interpolated: ' + m.x);
+        if (Math.abs(Math.sin(m.yaw)) > 0.05 || Math.cos(m.yaw) > -0.9) issues.push('the angle should turn the short way round (through pi), not back through zero: ' + m.yaw.toFixed(2));
+        if (replayAt({ frames: [a, b] }, 'nobody', 50) !== null) issues.push('somebody who was not recorded has no position'); }
+      // ── when it must not play
+      const frames = R.buf.length; if (frames < 40) issues.push('test set-up: not enough frames (' + frames + ')');
+      isDead = true; const baseKids = camera.children.length;
+      for (const [label, fn] of [
+        ['replay mode off', () => { KILLREPLAY_SETTINGS.mode = 'off'; }], ['live view mode', () => { KILLREPLAY_SETTINGS.mode = 'live'; }],
+        ['a match that is over', () => { match = { over: true }; }], ['alive', () => { isDead = false; }]]) {
+        KILLREPLAY_SETTINGS.mode = 'replay'; match = null; isDead = true; fn();
+        if (startKillReplay('rp_k', 'ak20')) issues.push('the replay played with ' + label);
+        R.active && endKillReplay(); KILLCAM.active = false;
+      }
+      KILLREPLAY_SETTINGS.mode = 'replay'; match = null; isDead = true;
+      if (startKillReplay(myId, 'ak20')) issues.push('a death with no killer (yours) played a replay');
+      if (startKillReplay('rp_ghost', 'ak20')) issues.push('a killer who was never recorded played a replay');
+      const keepBuf = R.buf.splice(0, R.buf.length - 6); if (startKillReplay('rp_k', 'ak20')) issues.push('six frames is not a replay'); R.buf.unshift(...keepBuf);
+      // ── playing: exact eyes, slow-mo, hold, fade, put back
+      const kidsBefore = camera.children.filter(c => c.visible).length, deathEl = document.getElementById('death-screen');
+      let jobRan = 0; _afterKillcam.push(() => { jobRan++; });
+      if (!startKillReplay('rp_k', 'ak20')) issues.push('a replay with a full recording should play');
+      else {
+        if (!KILLCAM.active || !R.active || !window.PVP_KILLER_VIEW) issues.push('the replay should hold the killcam state (so nothing else opens over it)');
+        if (remoteMeshes.rp_k.visible || remoteMeshes.rp_o.visible) issues.push('other bodies should be hidden while it plays');
+        if (camera.children.some(c => c.visible && !c.isLight && c !== R.gun)) issues.push('my own gun should be hidden while it plays');
+        if (!R.ghost || !scene.children.includes(R.ghost)) issues.push('I should appear in it as a body');
+        let t = performance.now(), phases = new Set(), frame = 0, killedAt = -1, maxSlow = 1, tFirst = t;
+        const killerLast = R.clip.frames[R.clip.frames.length - 1], kI = killerLast.ids.indexOf('rp_k') * 6;
+        updateKillReplay(t + 16);
+        { const f0 = R.clip.frames[0], k0 = f0.ids.indexOf('rp_k') * 6;
+          if (Math.abs(camera.position.x - f0.d[k0]) > 0.5 || Math.abs(camera.position.z - f0.d[k0 + 2]) > 0.5 || Math.abs(camera.position.y - (f0.d[k0 + 1] + PLAYER_EYE_HEIGHT)) > 0.05) issues.push('the camera is not at the killers eyes at the start');
+          if (Math.abs(camera.rotation.y - f0.d[k0 + 3]) > 0.05 || Math.abs(camera.rotation.x - f0.d[k0 + 4]) > 0.05) issues.push('the camera does not look where the killer looked'); }
+        for (let i = 0; i < 2000 && R.active; i++) {
+          t += 16; frame++; phases.add(R.phase);
+          if (R.phase === 'play') { const sp = replaySpeed(R.clip.ms - R.u); if (sp < maxSlow) maxSlow = sp; }
+          if (R.phase === 'hold' && killedAt < 0) killedAt = t;
+          updateKillReplay(t);
+        }
+        if (R.active || KILLCAM.active) issues.push('the replay never ended');
+        if (!phases.has('play') || !phases.has('hold') || !phases.has('fade')) issues.push('it should play, hold on the kill, and fade: ' + [...phases]);
+        const wallMs = t - tFirst; if (wallMs < 4500 || wallMs > 10000) issues.push('the replay took ' + Math.round(wallMs) + ' ms of frames');
+        if (maxSlow > L.slowSpeed + 0.02) issues.push('it never reached the slow motion: ' + maxSlow);
+        if (HITMARKER_VIEW.kind !== 'kill') issues.push('the kill should draw the gold hitmarker, not ' + HITMARKER_VIEW.kind);
+        if (R.killerName !== 'KILLER' || !R.dist) issues.push('the killer and the distance should be named: ' + R.killerName + ' ' + R.dist);
+      }
+      if (remoteMeshes.rp_k.visible !== true || remoteMeshes.rp_o.visible !== true) issues.push('the bodies should be shown again afterwards');
+      if (camera.children.filter(c => c.visible).length !== kidsBefore) issues.push('my own gun should be shown again afterwards');
+      if (window.PVP_KILLER_VIEW) issues.push('the killer-view flag was left on');
+      if (Math.abs(camera.fov - (targetFOV || 75)) > 0.01) issues.push('the field of view was not put back: ' + camera.fov);
+      if (jobRan !== 1) issues.push('what the death held back (the loadout, spectating) should run exactly once afterwards: ' + jobRan);
+      if (R.ghost || R.ui) issues.push('the replay left its body or its screens behind');
+      // skipped part-way, and cut short by a respawn
+      for (let i = 0; i < 90; i++) { T += 50; remoteMeshes.rp_k.position.z -= 0.05; isDead = false; replaySample(T); }
+      isDead = true;
+      if (!startKillReplay('rp_k', 'ak20')) issues.push('second replay did not play'); else {
+        let t = performance.now(); for (let i = 0; i < 20; i++) updateKillReplay(t += 16);
+        stopKillcam(); if (R.active || KILLCAM.active || !remoteMeshes.rp_k.visible) issues.push('skipping should end it and put everything back');
+      }
+      for (let i = 0; i < 90; i++) { T += 50; isDead = false; replaySample(T); }
+      isDead = true;
+      if (startKillReplay('rp_k', 'ak20')) { let t = performance.now(); updateKillReplay(t += 16); isDead = false; updateKillReplay(t += 16); if (R.active || KILLCAM.active) issues.push('a respawn should end the replay'); }
+      // ── the entry point: replay, live view, off
+      for (let i = 0; i < 90; i++) { T += 50; isDead = false; replaySample(T); }
+      isDead = true; KILLCAM.active = false;
+      KILLREPLAY_SETTINGS.mode = 'replay'; startKillcam('rp_k', 'ak20'); if (!R.active) issues.push('startKillcam should start the replay'); stopKillcam();
+      KILLREPLAY_SETTINGS.mode = 'off'; startKillcam('rp_k', 'ak20'); if (R.active || KILLER_VIEW.active) issues.push('with the killcam off nothing should play');
+      KILLREPLAY_SETTINGS.mode = 'live'; startKillcam('rp_k', 'ak20'); if (R.active) issues.push('in live-view mode the replay must not play'); if (KILLER_VIEW.active) stopKillerView();
+      // ── settings are saved
+      KILLREPLAY_SETTINGS.mode = 'live'; saveKillReplaySettings(); if (JSON.parse(localStorage.getItem('pvp_killreplay')).mode !== 'live') issues.push('the killcam mode is not saved');
+      if (KILLREPLAY_DEFAULT.mode !== 'replay') issues.push('the replay should be the default');
+    } catch (e) {
+      issues.push('threw: ' + (e && e.stack ? e.stack.split('\\n').slice(0, 4).join(' | ') : e));
+    } finally {
+      playSoundEvent = keepSound; try { if (R.active) endKillReplay(); } catch (e) {} KILLCAM.active = false; R.buf.length = 0; R.hits.length = 0; _afterKillcam.length = 0;
+      isDead = saved.dead; gameStarted = saved.started; inLobby = saved.lobby; myId = saved.myId; match = saved.matchObj; KILLREPLAY_SETTINGS.mode = 'replay';
+      camera.position.copy(saved.cam); euler.copy(saved.eul); camera.fov = saved.fov;
+      for (const b of bodies) scene.remove(b); for (const id of ['rp_k', 'rp_o']) { delete remoteMeshes[id]; delete players[id]; } delete players.rp_me;
+      if (saved.me) players[saved.myId] = saved.me;
+    }
+    return issues;
+  })()`);
+  if (issues.length) { ok = false; console.log('killcam replay failures:\n' + issues.join('\n')); }
+  else console.log('killcam replay: recorded 20 times a second and frozen on death, played from the killer\'s exact eyes, slowed for the kill, held, faded, put back; off / live view / skip / respawn');
+}
+
+if (ok && process.argv.includes('--range2')) {
+  // Practice Range 2.0: layouts and speed, unlimited ammo, instant switching, the accuracy tracker (every real hit, every pellet), the DPS test on a dummy
+  // that cannot die, the best-per-weapon record, saved settings, and that none of it changes anything outside the range.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const saved = { match, now: performance.now, sound: playSoundEvent, targets: rangeTargets, bots: gameBots.slice(), session: JSON.stringify(RANGE_SESSION), r2: { ...RANGE2 }, idx: currentWeaponIdx, w: currentWeapon, slot: activeSlot, reloading, myId, announce: showAnnouncement, spies: [spawnHitNumber, trackTotalDamage, skinHitFX], emit: socket.emit };
+    let T = 100000; try { performance.now = () => T; } catch (e) { issues.push('could not drive the clock'); }
+    playSoundEvent = () => {}; showAnnouncement = () => {}; spawnHitNumber = () => {}; trackTotalDamage = () => {}; skinHitFX = () => {}; socket.emit = () => {};
+    const store = localStorage;
+    try {
+      match = { type: 'range', cfg: {} }; myId = 'rg_me'; reloading = false; activeSlot = 'primary';
+      RANGE2 = { ...RANGE2_DEFAULT }; rangeSessionReset(); RANGE_DPS.state = 'idle';
+      // settings: clamped, saved
+      const bad = sanitizeRange2({ layout: 'zigzag', speed: 99, unlimited: 0, instant: 1 });
+      if (bad.layout !== 'mixed' || bad.speed !== 14 || bad.unlimited !== false || bad.instant !== true) issues.push('range settings are not clamped: ' + JSON.stringify(bad));
+      if (sanitizeRange2({ speed: -4 }).speed !== 1) issues.push('a negative speed should clamp to the minimum');
+      RANGE2 = { layout: 'moving', speed: 7.5, unlimited: false, instant: false }; saveRange2();
+      const st = JSON.parse(store.getItem('pvp_range2')); if (st.layout !== 'moving' || st.speed !== 7.5 || st.unlimited !== false) issues.push('range settings are not saved: ' + JSON.stringify(st));
+      RANGE2 = { ...RANGE2_DEFAULT };
+      // targets: a layout of boards and a dummy that never moves
+      rangeTargets = []; gameBots.length = 0;
+      for (let i = 0; i < 6; i++) { const id = 'rg_t' + i; rangeTargets.push({ id, baseX: i * 4 - 10, z: 10, moving: i < 2, mixedMoving: i < 2, dummy: i === 5, dir: 1, speed: 3, respawnAt: 0 }); gameBots.push({ id, team: 'enemy', x: i * 4 - 10 + (i === 5 ? 0 : 3), z: 10, hp: i === 5 ? 9999999 : 100, dead: false, isBot: true }); remoteMeshes[id] = { position: new THREE.Vector3(i * 4 - 10 + 3, 0, 10), visible: true, rotation: { x: 0, y: 0, z: 0 } }; players[id] = { id, isBot: true, hp: gameBots[i].hp, team: 'enemy', name: 'T' + i }; }
+      RANGE2.layout = 'static'; applyRangeLayout();
+      if (rangeTargets.some(r => r.moving)) issues.push('STILL should stop every board');
+      if (gameBots.some((b, i) => Math.abs(b.x - rangeTargets[i].baseX) > 1e-6) || Math.abs(remoteMeshes.rg_t0.position.x - rangeTargets[0].baseX) > 1e-6) issues.push('boards that stop should go back to their place');
+      RANGE2.layout = 'mixed'; applyRangeLayout(); if (rangeTargets.filter(r => r.moving).length !== 2) issues.push('MIXED is the old mix of two moving boards: ' + rangeTargets.filter(r => r.moving).length);
+      RANGE2.layout = 'moving'; RANGE2.speed = 8; applyRangeLayout();
+      if (rangeTargets.filter(r => !r.dummy).some(r => !r.moving) || rangeTargets.find(r => r.dummy).moving) issues.push('ALL MOVING moves every board but never the dummy');
+      if (rangeTargets.filter(r => !r.dummy).some(r => r.speed < 8 * 0.7 || r.speed > 8 * 1.5)) issues.push('target speeds are not around the one set: ' + rangeTargets.map(r => r.speed.toFixed(1)));
+      if (new Set(rangeTargets.filter(r => !r.dummy).map(r => r.speed.toFixed(2))).size < 3) issues.push('moving boards should not all share one speed');
+      RANGE2.speed = 2; applyRangeLayout(); if (rangeTargets.filter(r => !r.dummy).some(r => r.speed > 2 * 1.5)) issues.push('the speed slider does not slow the boards');
+      // ammo and equip time
+      const srxIdx = WEAPONS.findIndex(w => w.id === 'srx'); currentWeaponIdx = srxIdx; currentWeapon = WEAPONS[srxIdx]; const pool = weaponAmmo[srxIdx];
+      RANGE2.unlimited = true; pool.ammo = 0; pool.reserve = 0; updateRange2(0.016);
+      if (pool.ammo !== currentWeapon.mag || pool.reserve !== currentWeapon.reserve) issues.push('unlimited ammo should top the gun up: ' + pool.ammo + '/' + pool.reserve);
+      RANGE2.unlimited = false; pool.ammo = 0; updateRange2(0.016); if (pool.ammo !== 0) issues.push('with unlimited ammo off the gun is not topped up');
+      pool.ammo = currentWeapon.mag;
+      RANGE2.instant = true; if (equipMsFor({ id: 'srx' }, 'primary') !== 60) issues.push('switching in the range should be instant: ' + equipMsFor({ id: 'srx' }, 'primary'));
+      RANGE2.instant = false; if (equipMsFor({ id: 'srx' }, 'primary') < 800) issues.push('with instant switching off the SR-X keeps its draw time');
+      RANGE2.instant = true; match = { type: 'ffa' }; if (equipMsFor({ id: 'srx' }, 'primary') < 800) issues.push('instant switching leaked out of the range'); match = { type: 'range', cfg: {} };
+      // the tracker: shots count every pellet, hits every real hit, kills are not hits
+      rangeSessionReset();
+      rangeNoteShot('sg8', 8); rangeNoteShot('ak20', 1); rangeNoteShot('ak20', 1);
+      if (RANGE_SESSION.shots !== 10) issues.push('a shotgun blast is eight pellets: ' + RANGE_SESSION.shots + ' shots');
+      rangeTargets.forEach(r => r.dummy = r.id === 'rg_t5');
+      rangeNoteHit('ak20', 26, false, 'rg_t1'); rangeNoteHit('ak20', 52, true, 'rg_t1'); rangeNoteHit('sg8', 0, false, 'rg_t1'); rangeNoteHit('sg8', 9, false, 'rg_t2');
+      if (RANGE_SESSION.hits !== 3 || RANGE_SESSION.heads !== 1 || RANGE_SESSION.damage !== 87) issues.push('the tracker miscounts: ' + JSON.stringify(RANGE_SESSION));
+      if (RANGE_SESSION.byWeapon.ak20.hits !== 2 || RANGE_SESSION.byWeapon.ak20.damage !== 78 || RANGE_SESSION.byWeapon.sg8.shots !== 8 || RANGE_SESSION.byWeapon.sg8.hits !== 1) issues.push('the per-weapon tracker miscounts: ' + JSON.stringify(RANGE_SESSION.byWeapon));
+      if (rangeStats.shots !== 10 || rangeStats.hits !== 3) issues.push('the old counters should follow the tracker: ' + JSON.stringify(rangeStats));
+      if (!/ACC 30%/.test(rangeAccuracyText()) || !/HS 33%/.test(rangeAccuracyText())) issues.push('the HUD line: ' + rangeAccuracyText());
+      // the real hit path: a board hit through emitHit counts once, its echo does not count again
+      const hits0 = RANGE_SESSION.hits, here = new THREE.Vector3(0, 1, 10);
+      emitHit('rg_t3', 'rgb1', 'ak20', here.clone());
+      if (RANGE_SESSION.hits !== hits0 + 1) issues.push('a hit on a board through emitHit should count once: ' + (RANGE_SESSION.hits - hits0));
+      emitHit('rg_t3', 'rgb1', 'ak20', here.clone()); if (RANGE_SESSION.hits !== hits0 + 1) issues.push('the same bullet counted twice');
+      // the DPS test: countdown, run, finish, best
+      if (rangeStartDps(10000) !== true || RANGE_DPS.state !== 'countdown') issues.push('the DPS test should start with a countdown');
+      emitHit('rg_t5', 'rgd0', 'ak20', here.clone()); if (RANGE_DPS.damage !== 0) issues.push('damage during the countdown should not count');
+      T += 3100; updateRange2(0.016); if (RANGE_DPS.state !== 'running') issues.push('the test should be running after the countdown');
+      emitHit('rg_t3', 'rgd1', 'ak20', here.clone()); if (RANGE_DPS.damage !== 0) issues.push('hits on an ordinary board do not count for the DPS test');
+      let dealt = 0; for (let i = 0; i < 40; i++) { T += 400; const before = players.rg_t5.hp; emitHit('rg_t5', 'rgd_' + i, 'ak20', here.clone(), i % 5 === 0); dealt = RANGE_DPS.damage; updateRange2(0.016); if (RANGE_DPS.state !== 'running') break; }
+      if (RANGE_DPS.state !== 'done' || !RANGE_DPS.result) issues.push('the test should finish after its time: ' + RANGE_DPS.state);
+      else {
+        const r = RANGE_DPS.result;
+        if (r.secs !== 10 || r.damage <= 0 || Math.abs(r.dps - r.damage / 10) > 1e-6 || !(r.ttk > 0) || Math.abs(r.ttk - 300 / r.dps) > 1e-6) issues.push('the result is not damage over time: ' + JSON.stringify(r));
+        if (r.heads < 1 || r.hits !== RANGE_DPS.hits) issues.push('the result should count its headshots and hits: ' + JSON.stringify(r));
+        if (!r.best || !rangeBest()['srx|10'] || Math.abs(rangeBest()['srx|10'].dps - r.dps) > 1e-6) issues.push('the first result should be saved as the best');
+        const first = r.dps; RANGE_DPS.damage = 1; RANGE_DPS.hits = 1; RANGE_DPS.weaponId = 'srx'; RANGE_DPS.ms = 10000; rangeFinishDps(T); if (RANGE_DPS.result.best || Math.abs(rangeBest()['srx|10'].dps - first) > 1e-6) issues.push('a worse run must not replace the best');
+      }
+      if (players.rg_t5.dead || gameBots.find(b => b.id === 'rg_t5').dead || gameBots.find(b => b.id === 'rg_t5').hp < 9000000) issues.push('the dummy should not die or even dent');
+      // the panel
+      const panel = document.createElement('div'); const keepGet = document.getElementById; document.getElementById = id => id === 'range-panel' ? panel : keepGet.call(document, id);
+      try { rangeOpenPanel(); if (!/RANGE CONTROLS/.test(panel.innerHTML) || !/DPS TEST/.test(panel.innerHTML) || !/ACCURACY TRACKER/.test(panel.innerHTML) || panel.style.display !== 'block') issues.push('the range panel did not open with its parts'); if (!rangePanelOpen()) issues.push('rangePanelOpen should be true'); rangeClosePanel(); if (rangePanelOpen()) issues.push('the range panel should close'); match = { type: 'ffa' }; panel.style.display = 'none'; rangeOpenPanel(); if (panel.style.display === 'block') issues.push('the panel opened outside the range'); }
+      finally { document.getElementById = keepGet; }
+    } catch (e) {
+      issues.push('threw: ' + (e && e.stack ? e.stack.split('\\n').slice(0, 4).join(' | ') : e));
+    } finally {
+      match = saved.match; performance.now = saved.now; playSoundEvent = saved.sound; rangeTargets = saved.targets; gameBots.length = 0; gameBots.push(...saved.bots);
+      Object.assign(RANGE_SESSION, JSON.parse(saved.session)); RANGE2 = saved.r2; RANGE_DPS.state = 'idle'; currentWeaponIdx = saved.idx; currentWeapon = saved.w; activeSlot = saved.slot; reloading = saved.reloading; myId = saved.myId;
+      showAnnouncement = saved.announce; [spawnHitNumber, trackTotalDamage, skinHitFX] = saved.spies; socket.emit = saved.emit;
+      for (let i = 0; i < 6; i++) { delete remoteMeshes['rg_t' + i]; delete players['rg_t' + i]; }
+    }
+    return issues;
+  })()`);
+  if (issues.length) { ok = false; console.log('range 2.0 failures:\n' + issues.join('\n')); }
+  else console.log('range 2.0: layouts and speed, unlimited ammo, instant switching, tracker (pellets, hits, headshots, per weapon), DPS test on a dummy that cannot die, best per weapon, panel, settings');
+}
+
 if (ok && process.argv.includes('--action-wind')) {
   const issues = vm.runInThisContext(`(() => {
     const issues=[], saved={gameStarted,isDead,activeSlot,velocity:playerVelocity.clone()};

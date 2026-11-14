@@ -450,6 +450,7 @@
     'CENTER GAP': '中心间隙', 'DOT SIZE': '圆点大小', 'OPACITY': '透明度', 'BLACK OUTLINE': '黑色描边',
     '💥 HITMARKER': '💥 命中标记', 'SHOW HITMARKER': '显示命中标记', 'HITMARKER SOUND VOLUME': '命中音效音量', 'DAMAGE NUMBERS': '伤害数字',
     'BODY': '身体', 'HEADSHOT': '爆头', 'ELIMINATION': '击杀',
+    'KILLCAM (AFTER YOU DIE)': '击杀回放（阵亡后）', 'REPLAY': '回放', 'LIVE VIEW': '实时视角',
     'That key is reserved.': '这个键已被保留。',
     'Click a key, then press the new one. Esc cancels. Taking a key that is already in use swaps the two actions. Saved on this device. On-screen hints may still show the default keys.': '点击一个按键，再按下新的键。Esc 取消。占用已被使用的键会和对方互换。保存在本设备上。屏幕上的提示可能仍显示默认按键。',
     '🗑 F · SWAP WEAPONS': '🗑 F · 换武器',

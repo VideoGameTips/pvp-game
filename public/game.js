@@ -5605,6 +5605,18 @@ function playSoundEvent(name, opts = {}) {
     playFilteredNoise(ctx,start,.11,out,.5*mult,'bandpass',1300,.8);
     playFilteredNoise(ctx,start+.04,.38,out,.32*mult,'lowpass',850,.7);
     for(let i=0;i<3;i++) playTone(ctx,start+i*.035,.07,out,210+i*65,65,.12*mult,'triangle');
+  } else if (name === 'replay_whoosh') {
+    // the rewind: a rising sweep of air and a falling tone under it
+    playFilteredNoise(ctx, start, 0.5, out, 0.26 * mult, 'bandpass', 700, 0.8, 0.12, 1.4);
+    playTone(ctx, start, 0.42, out, 160, 720, 0.10 * mult, 'sine');
+  } else if (name === 'replay_thump') {
+    // a heartbeat: two soft low thumps
+    playTone(ctx, start, 0.13, out, 72, 44, 0.34 * mult, 'sine');
+    playTone(ctx, start + 0.17, 0.11, out, 66, 42, 0.26 * mult, 'sine');
+  } else if (name === 'replay_boom') {
+    // the kill: a deep boom and a breath of noise
+    playTone(ctx, start, 0.55, out, 95, 32, 0.45 * mult, 'sine');
+    playFilteredNoise(ctx, start, 0.18, out, 0.22 * mult, 'lowpass', 900, 0.7, 0.002, 1.8);
   } else if (name === 'hm_body') {
     // The click of a hit that took health: soft, short, a little thock under it. `tier` nudges the pitch (a far, weak hit is duller).
     const k = (HIT_TIERS[opts.tier] || HIT_TIERS.yellow).click;
@@ -50464,6 +50476,9 @@ function openHitmarkerPanel() {
     ${slider('opacity', 'OPACITY', 0.2, 1, 0.05)}
     ${slider('volume', 'HITMARKER SOUND VOLUME', 0, 1, 0.05)}
     ${toggle('hm-numbers', 'DAMAGE NUMBERS', HITMARKER.numbers)}
+    <div style="margin:14px 0 6px;font-size:11px;letter-spacing:1px;color:#f0e2b0;">KILLCAM (AFTER YOU DIE)</div>
+    <div style="display:flex;gap:6px;">${btn('data-kc="replay"', 'REPLAY', KILLREPLAY_SETTINGS.mode === 'replay')}${btn('data-kc="live"', 'LIVE VIEW', KILLREPLAY_SETTINGS.mode === 'live')}${btn('data-kc="off"', 'OFF', KILLREPLAY_SETTINGS.mode === 'off')}</div>
+    <div style="margin-top:5px;font-size:10px;color:#a8996a;letter-spacing:.5px;">REPLAY: the last seconds through your killer's eyes, slowed for the kill. LIVE VIEW: watch them after you die.</div>
     <button id="hm-reset" style="display:block;width:100%;margin-top:12px;padding:10px;background:#2a1a1a;color:#ff9988;border:1px solid #ff5544;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">RESET TO DEFAULT</button>
   `;
   if (_hmPreview) { _hmPreview.view.clear(); _hmPreview.nums.clear(); }
@@ -50483,6 +50498,7 @@ function openHitmarkerPanel() {
     const v = document.getElementById(`hm-${k}-val`); if (v) v.textContent = fmt[k](HITMARKER[k]);
     if (k !== 'volume') test('hit');
   }));
+  panel.querySelectorAll('[data-kc]').forEach(b => b.addEventListener('click', () => { KILLREPLAY_SETTINGS.mode = b.dataset.kc; saveKillReplaySettings(); openHitmarkerPanel(); }));
   document.getElementById('hm-enabled').addEventListener('click', () => { HITMARKER.enabled = !HITMARKER.enabled; saveHitmarker(); openHitmarkerPanel(); });
   document.getElementById('hm-numbers').addEventListener('click', () => { HITMARKER.numbers = !HITMARKER.numbers; saveHitmarker(); openHitmarkerPanel(); });
   document.getElementById('hm-reset').addEventListener('click', () => { HITMARKER = { ...HITMARKER_DEFAULT }; saveHitmarker(); openHitmarkerPanel(); });
@@ -50815,6 +50831,7 @@ document.addEventListener('keydown', e => {
   }
   keys[e.code] = true;
   if (!gameStarted) return;
+  if (e.code === 'KeyP' && !e.repeat && match?.type === 'range' && !isDead && document.activeElement?.tagName !== 'INPUT') { e.preventDefault(); if (rangePanelOpen()) rangeClosePanel(); else rangeOpenPanel(); return; }   // the range controls
   // Spectator cycling while dead
   if (spectatorState) {
     if (e.code === 'ArrowLeft')  { spectatorCycle(-1); e.preventDefault(); return; }
@@ -51617,6 +51634,7 @@ const EQUIP_MS = {
 };
 const EQUIP_MS_DEFAULT = { primary: 800, secondary: 400, melee: 220, support: 250 };
 function equipMsFor(item, slot) {
+  if (match?.type === 'range' && RANGE2.instant) return 60;                                  // the range: switching is instant (the controls turn it off)
   const id = item && (item.baseId || item.id);
   const ms = (id && EQUIP_MS[id] != null) ? EQUIP_MS[id] : (EQUIP_MS_DEFAULT[slot] || 300);
   return Math.max(60, Math.min(EQUIP_MS_MAX, ms));
@@ -53516,7 +53534,12 @@ function killcamUI() {
   return (KILLCAM.ui = ui);
 }
 function startKillcam(killerId, weaponId) {
-  if (KILLCAM.archived) { try { startKillerView(killerId, weaponId); } catch (e) { console.warn('[killer view]', e); } return; }   // the replay is archived: you watch your killer live instead
+  if (KILLCAM.archived) {                                                  // (the three-camera replay is archived; these two take its place)
+    if (KILLREPLAY_SETTINGS.mode === 'off') return;
+    try { if (startKillReplay(killerId, weaponId)) return; } catch (e) { console.warn('[replay]', e); try { stopKillcam(); } catch (e2) {} }   // the dramatic replay from their eyes; if there is nothing to replay, ...
+    try { startKillerView(killerId, weaponId); } catch (e) { console.warn('[killer view]', e); }                                        // ... you watch your killer live instead
+    return;
+  }
   if (KILLCAM.active) return;
   if (!killerId || killerId === myId) return; // no self-kill killcam
   if (match && match.over) return;             // the end screen is already up
@@ -53559,6 +53582,7 @@ function startKillcam(killerId, weaponId) {
   for (const id of ['death-screen', 'waiting-screen']) { const el = document.getElementById(id); if (el) el.style.display = 'none'; }
 }
 function stopKillcam() {
+  if (KILLREPLAY.active) endKillReplay();
   if (!KILLCAM.active) return;
   KILLCAM.active = false;
   if (KILLCAM.ui) KILLCAM.ui.style.display = 'none';
@@ -53580,6 +53604,7 @@ function stopKillcam() {
   for (const job of [..._pendingDeathJobs]) job();  // and what was still counting down (afterDeath)
 }
 function updateKillcam(now) {
+  if (KILLREPLAY.active) { updateKillReplay(now); return; }
   if (!KILLCAM.active) return;
   if (!isDead) { stopKillcam(); return; }   // a new round (or a respawn) brought you back: you're playing again
   const t = (now - KILLCAM.startedAt) / KILLCAM.durationMs;
@@ -53647,6 +53672,244 @@ function updateKillcam(now) {
   const label = (shot === KILLCAM_SHOTS[0] && KILLCAM.povBlocked) ? 'BEHIND THE KILLER' : shot.label;
   if (lbl._label !== label) { lbl._label = label; lbl.textContent = label; }
   ui.querySelector('.kc-fill').style.width = (t * 100).toFixed(1) + '%';
+}
+
+// ── 🎞 THE DRAMATIC REPLAY: how you were killed, through your killer's eyes ───────────────────────────────────────────
+// The old three-camera death replay was archived and what stood in for it was a LIVE look through the killer's eyes after
+// you were already dead. This is a replay of the moments BEFORE it: everybody's pose is recorded 20 times a second (yours,
+// every body in the scene) for the last five seconds; when you die the last 3.6 s play back from your killer's exact point
+// of view (their position, their look direction, the gun in their hands, their shots as they fired them, every hit
+// landing on you with their hitmarker), run in real time and then slowed to a crawl for the last second and a half, the
+// kill held in a freeze with a gold marker, a boom and a red flash, then a fade into the death screen. Letterbox bars, a
+// vignette that closes in, a heartbeat and a REC badge make it feel like a replay; SPACE, ENTER or a click skips it.
+// Everybody else is hidden while it plays: they are somewhere else now, and the clip is about the two of you.
+// Settings: Settings -> Hitmarker -> KILLCAM (replay / live view / off). The numbers are in KILLREPLAY_LOOK.
+const KILLREPLAY_DEFAULT = { mode: 'replay' };                       // 'replay' | 'live' (the old look through their eyes after you die) | 'off'
+let KILLREPLAY_SETTINGS = { ...KILLREPLAY_DEFAULT };
+try { const m = (JSON.parse(localStorage.getItem('pvp_killreplay') || '{}') || {}).mode; if (['replay', 'live', 'off'].includes(m)) KILLREPLAY_SETTINGS.mode = m; } catch (e) {}
+function saveKillReplaySettings() { try { localStorage.setItem('pvp_killreplay', JSON.stringify(KILLREPLAY_SETTINGS)); } catch (e) {} }
+const KILLREPLAY_LOOK = {
+  clipMs: 3600,        // how much of the run-up to the kill is shown
+  slowFrom: 1500,      // the slow-down starts this long (clip ms) before the kill ...
+  slowTo: 600,         // ... and is complete this long before it
+  slowSpeed: 0.27,     // the crawl (1 = real time)
+  holdMs: 650,         // the freeze on the kill
+  fadeMs: 550,         // then to black
+  fovStart: 75, fovEnd: 61, fovPunch: 9,
+  barsPct: 11,         // letterbox bars: share of the screen height, top and bottom
+};
+const KILLREPLAY = { active: false, buf: [], capacity: 100, lastSampleAt: 0, lastDate: 0, clip: null, hpSeen: null, hits: [], firedAt: {}, ui: null, ghost: null, gun: null, hiddenKids: [], hiddenBodies: [], tracers: [] };
+// Playback speed with `left` ms of the clip still to play: real time, then eased down to the crawl.
+function replaySpeed(left) {
+  const L = KILLREPLAY_LOOK;
+  if (left >= L.slowFrom) return 1;
+  if (left <= L.slowTo) return L.slowSpeed;
+  const u = (L.slowFrom - left) / (L.slowFrom - L.slowTo);
+  return 1 + (L.slowSpeed - 1) * (u * u * (3 - 2 * u));
+}
+// How long the whole thing takes on the wall clock (the speed profile integrated), for a clip of `clipMs`.
+function replayWallMs(clipMs, dt = 4) {
+  let u = 0, wall = 0;
+  while (u < clipMs) { u += dt * replaySpeed(clipMs - u); wall += dt; }
+  return wall + KILLREPLAY_LOOK.holdMs + KILLREPLAY_LOOK.fadeMs;
+}
+// ── the recorder: 20 samples a second, only while alive, frozen the moment you die
+function replaySample(now) {
+  const R = KILLREPLAY;
+  if (now - R.lastSampleAt < 50) return;
+  if (!myId || isDead || !gameStarted || inLobby || KILLCAM.active) { R.lastSampleAt = now; return; }
+  const gap = R.buf.length && now - R.buf[R.buf.length - 1].t > 700;               // a respawn, a pause, a new round: the old frames are somebody else's story
+  if (gap) { R.buf.length = 0; R.hits.length = 0; }
+  const nowDate = Date.now(), prevDate = R.lastDate || nowDate - 50;
+  const prevT = R.lastSampleAt;
+  R.lastSampleAt = now; R.lastDate = nowDate;
+  const ids = [myId], d = [camera.position.x, camera.position.y - PLAYER_EYE_HEIGHT, camera.position.z, euler.y, euler.x, 0];
+  const myEye = camera.position;
+  for (const id in remoteMeshes) {
+    const mesh = remoteMeshes[id];
+    if (!mesh || !mesh.visible || id === myId) continue;
+    const p = players[id] || {}, bot = p.isBot ? gameBots.find(b => b.id === id) : null;
+    const fired = (R.firedAt[id] > prevT || (bot && bot.lastShot > prevDate)) ? 1 : 0;
+    let pitch = Number.isFinite(p.rotX) ? p.rotX : 0;
+    if (bot) { const dx = myEye.x - mesh.position.x, dz = myEye.z - mesh.position.z; pitch = Math.atan2(myEye.y - 0.2 - (mesh.position.y + PLAYER_EYE_HEIGHT), Math.hypot(dx, dz) || 1); }   // a bot looks where it aims: at you
+    ids.push(id); d.push(mesh.position.x, mesh.position.y, mesh.position.z, mesh.rotation.y - Math.PI, pitch, fired);
+  }
+  R.buf.push({ t: now, ids, d: Float32Array.from(d) });
+  if (R.buf.length > R.capacity) R.buf.shift();
+  // health coming off me is a hit on me: the replay shows it as the killer's hitmarker
+  const hp = players[myId] && Number.isFinite(players[myId].hp) ? players[myId].hp : null;
+  if (hp != null && R.hpSeen != null && hp < R.hpSeen - 0.5) { R.hits.push({ t: now, dmg: R.hpSeen - hp }); if (R.hits.length > 40) R.hits.shift(); }
+  R.hpSeen = hp;
+}
+// Where `id` was at absolute time `tc` (ms), between two samples: x, y (feet), z, yaw, pitch, fired.
+function replayAt(clip, id, tc) {
+  const fr = clip.frames;
+  let i = 0; while (i < fr.length - 2 && fr[i + 1].t <= tc) i++;
+  const a = fr[i], b = fr[Math.min(fr.length - 1, i + 1)];
+  const ia = a.ids.indexOf(id); if (ia < 0) return null;
+  let ib = b.ids.indexOf(id); const A = ia * 6; let B = ib * 6;
+  if (ib < 0) { ib = ia; B = A; }
+  const k = b.t > a.t ? Math.max(0, Math.min(1, (tc - a.t) / (b.t - a.t))) : 0, mix = (x, y) => x + (y - x) * k;
+  const dy = Math.atan2(Math.sin(b.d[B + 3] - a.d[A + 3]), Math.cos(b.d[B + 3] - a.d[A + 3]));
+  return { x: mix(a.d[A], b.d[B]), y: mix(a.d[A + 1], b.d[B + 1]), z: mix(a.d[A + 2], b.d[B + 2]), yaw: a.d[A + 3] + dy * k, pitch: mix(a.d[A + 4], b.d[B + 4]), fired: a.d[A + 5] };
+}
+function _replayUI() {
+  const mk = (css, text) => { const e = document.createElement('div'); e.style.cssText = css; if (text != null) e.textContent = text; document.body.appendChild(e); return e; };
+  const L = KILLREPLAY_LOOK, bar = pos => `position:fixed;left:0;right:0;${pos}:0;height:${L.barsPct}%;background:#000;z-index:9000;pointer-events:none;transform:scaleY(0);transform-origin:${pos === 'top' ? 'top' : 'bottom'};`;
+  const ui = {
+    top: mk(bar('top')), bottom: mk(bar('bottom')),
+    vignette: mk('position:fixed;inset:0;z-index:8999;pointer-events:none;opacity:0;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 38%,rgba(0,0,0,0.85) 100%);'),
+    flash: mk('position:fixed;inset:0;z-index:9001;pointer-events:none;opacity:0;background:#ff2418;mix-blend-mode:screen;'),
+    fade: mk('position:fixed;inset:0;z-index:9002;pointer-events:none;opacity:0;background:#000;'),
+    rec: mk('position:fixed;left:3.5%;top:' + (L.barsPct + 2.5) + '%;z-index:9003;pointer-events:none;color:#ff4a4a;font:700 15px "Courier New",monospace;letter-spacing:3px;text-shadow:0 1px 3px #000;', ''),
+    tag: mk('position:fixed;right:3.5%;top:' + (L.barsPct + 2.5) + '%;z-index:9003;pointer-events:none;color:#e8f0ff;font:700 12px "Courier New",monospace;letter-spacing:3px;text-shadow:0 1px 3px #000;text-align:right;', ''),
+    banner: mk('position:fixed;left:0;right:0;bottom:' + (L.barsPct + 5) + '%;z-index:9003;pointer-events:none;text-align:center;opacity:0;transform:translateY(14px);transition:opacity .25s,transform .25s;color:#fff;font:900 34px "Arial Black",Arial,sans-serif;letter-spacing:5px;text-shadow:0 2px 6px #000,0 0 22px rgba(255,60,40,.75);'),
+  };
+  ui.sub = document.createElement('div'); ui.sub.style.cssText = 'font:700 15px "Courier New",monospace;letter-spacing:4px;margin-top:8px;color:#ffd9c0;'; ui.title = document.createElement('div'); ui.banner.appendChild(ui.title); ui.banner.appendChild(ui.sub);
+  ui.skip = mk('position:fixed;right:3.5%;bottom:' + (L.barsPct + 2.5) + '%;z-index:9003;pointer-events:none;color:#cfd8e8;font:700 11px "Courier New",monospace;letter-spacing:3px;opacity:.75;text-shadow:0 1px 3px #000;', 'SPACE · SKIP');
+  return ui;
+}
+function startKillReplay(killerId, weaponId) {
+  const R = KILLREPLAY, L = KILLREPLAY_LOOK;
+  if (KILLREPLAY_SETTINGS.mode !== 'replay' || R.active || KILLCAM.active || !killerId || killerId === myId || !isDead) return false;
+  if (match && match.over) return false;
+  if (!R.buf.length || R.buf.length < 12) return false;
+  const lastT = R.buf[R.buf.length - 1].t, frames = R.buf.filter(f => f.t >= lastT - L.clipMs);
+  if (frames.length < 12 || !frames[frames.length - 1].ids.includes(killerId) || !frames[frames.length - 1].ids.includes(myId)) return false;
+  const withKiller = frames.filter(f => f.ids.includes(killerId)).length;
+  if (withKiller < frames.length * 0.6) return false;                                // they were not in the picture for most of it: nothing to show from their eyes
+  const clip = { frames, t0: frames[0].t, t1: frames[frames.length - 1].t, killerId };
+  clip.ms = clip.t1 - clip.t0;
+  Object.assign(R, { active: true, clip, u: 0, phase: 'play', lastT: performance.now(), holdLeft: L.holdMs, fadeLeft: L.fadeMs, killed: false, kick: 0, beat: 0, hitIdx: 0, firedIdx: 0, doneFov: 75 });
+  R.tracers.length = 0;
+  KILLCAM.active = true; KILLCAM.killerId = killerId; KILLCAM.savedCamPos = camera.position.clone(); KILLCAM.savedCamQuat = camera.quaternion.clone(); KILLCAM.startedAt = performance.now();
+  window.PVP_KILLER_VIEW = true;                                                    // the ragdoll's falling-head camera gives way to this one
+  document.body.classList.add('killcam-on');
+  for (const id of ['death-screen', 'waiting-screen']) { const el = document.getElementById(id); if (el) el.style.display = 'none'; }
+  R.hiddenKids = camera.children.filter(c => c.visible && !c.isLight); for (const c of R.hiddenKids) c.visible = false;   // my own gun rides on the camera
+  R.hiddenBodies = []; for (const id in remoteMeshes) { const m = remoteMeshes[id]; if (m && m.visible) { R.hiddenBodies.push(m); m.visible = false; } }
+  R.ghost = makeKillcamActor(currentUser?.username || 'You', 'ally', mySkin, false, myHair); scene.add(R.ghost);
+  const kp = players[killerId] || {}, kb = gameBots.find(b => b.id === killerId);
+  const wid = weaponId || kp.weaponId || (kb && kb.weaponId) || null;
+  try { R.gun = wid ? makeKillerViewGun(wid, kp.weaponSkin || null, kp.wrap || null) : null; } catch (e) { R.gun = null; }
+  if (R.gun) camera.add(R.gun);
+  R.ui = _replayUI();
+  R.killerName = String(kp.name || (kb && kb.name) || 'AN ENEMY').toUpperCase(); R.weaponName = wid ? weaponDisplayName(wid) : '';
+  const last = R.clip.frames[R.clip.frames.length - 1], ki = last.ids.indexOf(killerId) * 6, vi = last.ids.indexOf(myId) * 6;
+  R.dist = Math.hypot(last.d[ki] - last.d[vi], last.d[ki + 2] - last.d[vi + 2]);
+  R.head = !!(_killInfo[myId] && _killInfo[myId].head);
+  R.ui.rec.textContent = '● REC'; R.ui.tag.textContent = 'REPLAY · HOW YOU DIED';
+  R.onKey = e => { if (['Space', 'Enter', 'NumpadEnter', 'Escape'].includes(e.code)) { e.preventDefault(); e.stopImmediatePropagation(); stopKillcam(); } };
+  R.onClick = e => { e.stopImmediatePropagation(); stopKillcam(); };
+  window.addEventListener('keydown', R.onKey, true); window.addEventListener('mousedown', R.onClick, true); window.addEventListener('touchstart', R.onClick, true);
+  try { playSoundEvent('replay_whoosh', { volume: 0.9, minGap: 0 }); } catch (e) {}
+  return true;
+}
+function endKillReplay() {
+  const R = KILLREPLAY;
+  if (!R.active) return;
+  R.active = false; window.PVP_KILLER_VIEW = false;
+  window.removeEventListener('keydown', R.onKey, true); window.removeEventListener('mousedown', R.onClick, true); window.removeEventListener('touchstart', R.onClick, true);
+  if (R.ui) { for (const k of Object.keys(R.ui)) { const e = R.ui[k]; if (e && e.parentNode) e.parentNode.removeChild(e); } R.ui = null; }
+  if (R.ghost) { scene.remove(R.ghost); try { disposeBody(R.ghost); } catch (e) {} R.ghost = null; }
+  _disposeViewGun(R.gun); R.gun = null;
+  for (const c of R.hiddenKids) c.visible = true; R.hiddenKids = [];
+  for (const m of R.hiddenBodies) { const id = Object.keys(remoteMeshes).find(k => remoteMeshes[k] === m); if (!id || players[id]?.dead !== true) m.visible = true; } R.hiddenBodies = [];
+  for (const t of R.tracers) { if (t.mesh.parent) t.mesh.parent.remove(t.mesh); t.mesh.material.dispose(); } R.tracers.length = 0;
+  try { renderer.domElement.style.filter = ''; } catch (e) {}
+  camera.fov = targetFOV || 75; camera.updateProjectionMatrix();
+  R.clip = null; R.buf.length = 0; R.hits.length = 0; R.hpSeen = null;               // (the next life records its own)
+}
+function updateKillReplay(now) {
+  const R = KILLREPLAY, L = KILLREPLAY_LOOK, C = R.clip;
+  if (!R.active || !C) return;
+  if (!isDead) { stopKillcam(); return; }                                          // a new round, a respawn: you are playing again
+  const dt = Math.min(0.05, (now - R.lastT) / 1000); R.lastT = now;
+  const bars = Math.min(1, (now - KILLCAM.startedAt) / 350);
+  R.ui.top.style.transform = R.ui.bottom.style.transform = `scaleY(${bars.toFixed(3)})`;
+  let speed = 1;
+  if (R.phase === 'play') {
+    speed = replaySpeed(C.ms - R.u);
+    R.u = Math.min(C.ms, R.u + dt * 1000 * speed);
+    if (R.u >= C.ms) { R.phase = 'hold'; _replayKill(now); }
+  } else if (R.phase === 'hold') {
+    speed = 0; R.holdLeft -= dt * 1000;
+    if (R.holdLeft <= 0) R.phase = 'fade';
+  } else {
+    speed = 0; R.fadeLeft -= dt * 1000;
+    R.ui.fade.style.opacity = String(Math.min(1, 1 - R.fadeLeft / L.fadeMs));
+    if (R.fadeLeft <= 0) { stopKillcam(); return; }
+  }
+  const tc = C.t0 + R.u, K = replayAt(C, C.killerId, tc), V = replayAt(C, myId, tc);
+  if (!K) return;
+  // the killer's eyes, exactly: where they stood, where they looked
+  const slow = Math.max(0, Math.min(1, (1 - speed) / (1 - L.slowSpeed)));
+  const jitter = (1 - Math.abs(Math.sin(now * 0.013))) * 0.0016 * (1 + 2 * slow);
+  camera.position.set(K.x, K.y + PLAYER_EYE_HEIGHT, K.z);
+  camera.rotation.set(K.pitch + (Math.sin(now * 0.021) * jitter), K.yaw + Math.cos(now * 0.017) * jitter, 0, 'YXZ');
+  if (R.punch > 0) R.punch = Math.max(0, R.punch - dt * 2.2);
+  const distNow = V ? Math.hypot(K.x - V.x, K.z - V.z) : 0;
+  const fov = L.fovStart + (L.fovEnd - L.fovStart) * (R.u / C.ms) - slow * Math.min(16, 0.45 * distNow) - (R.punch || 0) * L.fovPunch;   // (it pushes in on the kill, more the further away it was)
+  if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = fov; camera.updateProjectionMatrix(); }
+  if (R.ghost && V) {
+    R.ghost.position.set(V.x, V.y, V.z); R.ghost.rotation.y = V.yaw + Math.PI;
+    animateCharacterMesh(R.ghost, dt * Math.max(0.2, speed), 0);
+  }
+  // their gun: it kicks with every shot they fired, and flashes
+  if (R.gun) {
+    R.kick = Math.max(0, R.kick - dt * 7 * Math.max(0.25, speed));
+    R.gun.visible = true; R.gun.position.z = -0.25 + 0.05 * R.kick; R.gun.rotation.x = 0.07 * R.kick;
+  }
+  const fr = C.frames;
+  while (R.firedIdx < fr.length && fr[R.firedIdx].t <= tc) {                        // every sample passed since the last frame: a shot they fired, a hit that landed on me
+    const f = fr[R.firedIdx++], ik = f.ids.indexOf(C.killerId);
+    if (ik >= 0 && f.d[ik * 6 + 5]) _replayShot(K, tc);
+  }
+  while (R.hitIdx < R.hits.length && R.hits[R.hitIdx].t < C.t0) R.hitIdx++;
+  while (R.hitIdx < R.hits.length && R.hits[R.hitIdx].t <= tc && R.hits[R.hitIdx].t <= C.t1 - 40) {
+    const h = R.hits[R.hitIdx++];
+    showHitmarker('hit'); try { playHitConfirmSound('hit'); } catch (e) {}
+    if (V) { try { spawnHitParticle(new THREE.Vector3(V.x, V.y + 1.25, V.z)); } catch (e) {} }
+  }
+  _replayTracers(dt * Math.max(0.3, speed));
+  // the look: slower is darker, closer and more drained
+  R.ui.vignette.style.opacity = (0.35 + 0.65 * slow).toFixed(3);
+  try { renderer.domElement.style.filter = `saturate(${(1 - 0.45 * slow).toFixed(2)}) contrast(${(1.08 + 0.1 * slow).toFixed(2)})`; } catch (e) {}
+  const left = Math.max(0, (C.ms - R.u) / 1000);
+  R.ui.rec.textContent = ((Math.floor(now / 500) % 2) ? '● ' : '○ ') + 'REC  -' + left.toFixed(1) + 's' + (speed < 0.99 && speed > 0 ? '  ×' + speed.toFixed(2) : '');
+  if (slow > 0.4 && now - R.beat > 640) { R.beat = now; try { playSoundEvent('replay_thump', { volume: 0.7, minGap: 0 }); } catch (e) {} }
+}
+// A thin tracer from the muzzle along their line of sight, and a flash at the muzzle.
+function _replayShot(K, tc) {
+  const R = KILLREPLAY;
+  R.kick = 1;
+  const f = new THREE.Vector3(-Math.sin(K.yaw) * Math.cos(K.pitch), Math.sin(K.pitch), -Math.cos(K.yaw) * Math.cos(K.pitch));
+  const eye = new THREE.Vector3(K.x, K.y + PLAYER_EYE_HEIGHT, K.z);
+  const muzzle = eye.clone().addScaledVector(f, 0.9).add(new THREE.Vector3(-f.z, 0, f.x).multiplyScalar(-0.1)).add(new THREE.Vector3(0, -0.1, 0));
+  try { spawnTellFlash(muzzle, { size: 0.42, ms: 110, color: 0xffd28a, far: false }); } catch (e) {}
+  if (R.tracers.length > 8) { const t = R.tracers.shift(); if (t.mesh.parent) t.mesh.parent.remove(t.mesh); t.mesh.material.dispose(); }
+  const m = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.02, 3.2), new THREE.MeshBasicMaterial({ color: 0xfff0c8, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+  m.position.copy(muzzle).addScaledVector(f, 2.2); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), f);
+  scene.add(m); R.tracers.push({ mesh: m, dir: f, life: 0.22, max: 0.22 });
+}
+function _replayTracers(dt) {
+  const R = KILLREPLAY;
+  for (let i = R.tracers.length - 1; i >= 0; i--) {
+    const t = R.tracers[i]; t.life -= dt;
+    if (t.life <= 0) { if (t.mesh.parent) t.mesh.parent.remove(t.mesh); t.mesh.material.dispose(); R.tracers.splice(i, 1); }
+    else { t.mesh.position.addScaledVector(t.dir, 260 * dt); t.mesh.material.opacity = 0.9 * Math.min(1, t.life / (t.max * 0.5)); }      // a streak flying at their target
+  }
+}
+// The moment of the kill: freeze, gold marker, a boom, a red flash, the name.
+function _replayKill(now) {
+  const R = KILLREPLAY;
+  if (R.killed) return;
+  R.killed = true; R.punch = 1;
+  showHitmarker('kill'); try { playHitConfirmSound('kill'); playSoundEvent('replay_boom', { volume: 1.0, minGap: 0 }); } catch (e) {}
+  const fl = R.ui.flash; fl.style.transition = 'none'; fl.style.opacity = '0.55'; requestAnimationFrame(() => { fl.style.transition = 'opacity .6s'; fl.style.opacity = '0'; });
+  R.ui.title.textContent = 'ELIMINATED BY ' + R.killerName;
+  R.ui.sub.textContent = [R.weaponName, Math.round(R.dist) + ' m', R.head ? 'HEADSHOT' : ''].filter(Boolean).join('  ·  ').toUpperCase();
+  R.ui.banner.style.opacity = '1'; R.ui.banner.style.transform = 'translateY(0)';
 }
 
 // ── 📹 KILL LOG — save your kills and replay them from 6 cameras at once ──
@@ -57451,7 +57714,7 @@ function tryShoot() {
   }
   expireSpawnShield(); // firing breaks the spawn shield
   try { afterPlayerShot(currentWeapon.id, now); } catch (e) { console.warn('[shot fx]', e); }   // flame jet, water spray
-  if (match?.type === 'range') { rangeStats.shots++; updateRangeHUD(); updateMatchHUD(); }
+  if (match?.type === 'range') { rangeNoteShot(currentWeapon.id, wStats.pellets || 1); updateMatchHUD(); }
 
   const shotViolence = weaponKickStrength(wStats, wStats.pellets || 1);
   const model = weaponModels[currentWeaponIdx];
@@ -68374,6 +68637,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
       bot.hp = Math.max(0, bot.hp - effective);
       if (players[pid]) players[pid].hp = bot.hp;
       const dealtToBot = hpBeforeHit - bot.hp, firstCount = _hmFirstTime(pid, bulletId);   // what really came off, and whether this bullet has been counted
+      if (match?.type === 'range' && firstCount) rangeNoteHit(weaponId, dealtToBot, headshot, pid);   // the range's accuracy tracker and DPS test count every real hit
       // Flee-trigger metrics: track recent damage + consecutive hits
       const nowT = Date.now();
       if (!bot._lastBigHit || nowT - bot._lastBigHit > 1500) bot._recentDmg = 0;
@@ -72023,6 +72287,7 @@ socket.on('skinChanged', ({ id, skin, isAdmin, skinData, hair, finisher }) => {
   scene.add(mesh); remoteMeshes[id] = mesh;
 });
 socket.on('bulletFired', b => {
+  if (b.ownerId && b.ownerId !== myId) KILLREPLAY.firedAt[b.ownerId] = performance.now();   // (the replay shows their shots)
   if (b.ownerId===myId) return;
   if (KILLER_VIEW.active && b.ownerId === KILLER_VIEW.id) KILLER_VIEW.kick = 1;
   const w = projectileWeaponSpec(b.weapon) || WEAPONS[0];
@@ -76481,7 +76746,7 @@ function onEntityDied(targetId, killerId) {
     onDDayKill(targetId, killerId);
   } else if (match.type === 'range') {
     if (targetId !== myId) {
-      rangeStats.hits++;
+      RANGE_SESSION.kills++;
       updateRangeHUD();
       updateMatchHUD();
       const rt = rangeTargets.find(r => r.id === targetId);
@@ -79316,36 +79581,40 @@ function spawnRangeTargets() {
     { tx: -15, tz: -10, moving: false },
     { tx:   6, tz: -22, moving: false },
     { tx:  15, tz: -32, moving: false },
+    // the DPS dummy: it cannot die
+    { tx:   0, tz:  20, moving: false, dummy: true },
   ];
 
-  targetDefs.forEach(({ tx, tz, moving }, i) => {
+  targetDefs.forEach(({ tx, tz, moving, dummy }, i) => {
     const id = `range_target_${now}_${i}`;
     const pData = {
-      id, name: `Target ${i+1}`, isBot: true, team: 'enemy',
+      id, name: dummy ? 'DPS DUMMY' : `Target ${i+1}`, isBot: true, team: 'enemy',
       weaponId: 'ak20', ownerId: myId,
       x: tx, y: 0, z: tz, rotY: Math.PI, rotX: 0,
-      hp: 100, dead: false, kills: 0, deaths: 0,
+      hp: dummy ? 9999999 : 100, dead: false, kills: 0, deaths: 0,
     };
     players[id] = pData;
 
     const mesh = buildRangeTargetMesh();
+    if (dummy) mesh.traverse(o => { if (o.isMesh && o.material && o.material.color && o.material.color.getHex() === 0xf5f5f5) { o.material = o.material.clone(); o.material.color.setHex(0x7fb6c4); } });   // (a blue-grey board)
     mesh.position.set(tx, 0, tz);
     scene.add(mesh);
     remoteMeshes[id] = mesh;
 
     gameBots.push({
       id, team: 'enemy', weaponId: 'ak20',
-      x: tx, z: tz, rotY: Math.PI, hp: 100, dead: false,
+      x: tx, z: tz, rotY: Math.PI, hp: dummy ? 9999999 : 100, dead: false,
       state: 'target',
       wanderAngle: 0, wanderTimer: 0, lastShot: 0,
       stuckTimer: 0, strafeDir: 1, strafeFlipTimer: 0,
-      tacTimer: 0, prevHp: 100, coverPt: null,
+      tacTimer: 0, prevHp: dummy ? 9999999 : 100, coverPt: null,
     });
 
-    botList.push({ id, name: `Target ${i+1}`, team: 'enemy', weaponId: 'ak20', spawnX: tx, spawnZ: tz, hp: 100 });
+    botList.push({ id, name: dummy ? 'DPS DUMMY' : `Target ${i+1}`, team: 'enemy', weaponId: 'ak20', spawnX: tx, spawnZ: tz, hp: dummy ? 9999 : 100 });
 
-    rangeTargets.push({ id, baseX: tx, z: tz, moving, dir: 1, speed: 3, respawnAt: 0 });
+    rangeTargets.push({ id, baseX: tx, z: tz, moving, mixedMoving: moving, dummy: !!dummy, dir: (i % 2) ? 1 : -1, speed: 3, respawnAt: 0 });
   });
+  applyRangeLayout();
 
   socket.emit('spawnBots', botList);
 }
@@ -79353,6 +79622,7 @@ function spawnRangeTargets() {
 function initRange() {
   rangeTargets = [];
   rangeStats = { shots: 0, hits: 0 };
+  rangeSessionReset(); RANGE_DPS.state = 'idle';
   activateMap('range');
   scene.background.setHex(rangeMapGroup._skyColor);
   spawnRangeTargets();
@@ -79362,15 +79632,152 @@ function initRange() {
 }
 
 function updateRangeHUD() {
-  const acc = rangeStats.shots > 0 ? Math.round(rangeStats.hits / rangeStats.shots * 100) : 0;
   const el = document.getElementById('range-stats');
-  if (el) el.textContent = `SHOTS ${rangeStats.shots}  ·  HITS ${rangeStats.hits}  ·  ACC ${acc}%`;
+  if (el && RANGE_DPS.state !== 'running' && RANGE_DPS.state !== 'countdown') el.textContent = rangeAccuracyText() + '  ·  P: CONTROLS';
 }
 
 function rangeExitNearby(){return gameStarted && match?.type==='range' && !isDead && Math.hypot(camera.position.x+16,camera.position.z-41)<2.8;}
 function returnFromRange(){teardownMatchWorld();selectMode('lobby13');}
 function enterShootingRange(){teardownMatchWorld();selectMode('range');}
+
+// ── 🎯 PRACTICE RANGE 2.0 ────────────────────────────────────────────────────────────────────────────────────────────
+// The range was thirteen boards, two of them sliding, and a counter that scored KILLS as hits. Now: P opens the range
+// controls. Targets can be still, a mix, or all moving, at a speed you set; ammo is unlimited and weapon switching instant
+// (both switchable off); a DPS TEST aims everything at a dummy that cannot die for 10 or 30 seconds and tells you damage, DPS,
+// accuracy, headshots and how long that weapon takes to kill 300 health, keeping your best per weapon; and an accuracy tracker
+// counts every real hit (every pellet), headshot and point of damage, in total and per weapon. Nothing here is ranked or
+// touches your account. (Mouse sensitivity: the AIM LAB button opens the calibration room.)
+const RANGE2_DEFAULT = { layout: 'mixed', speed: 4, unlimited: true, instant: true };
+function sanitizeRange2(o) {
+  o = o || {};
+  const sp = Number(o.speed);
+  return { layout: ['static', 'mixed', 'moving'].includes(o.layout) ? o.layout : RANGE2_DEFAULT.layout, speed: Number.isFinite(sp) ? Math.min(14, Math.max(1, sp)) : RANGE2_DEFAULT.speed,
+    unlimited: o.unlimited === undefined ? RANGE2_DEFAULT.unlimited : !!o.unlimited, instant: o.instant === undefined ? RANGE2_DEFAULT.instant : !!o.instant };
+}
+let RANGE2 = { ...RANGE2_DEFAULT };
+try { RANGE2 = sanitizeRange2(JSON.parse(localStorage.getItem('pvp_range2') || '{}')); } catch (e) {}
+function saveRange2() { RANGE2 = sanitizeRange2(RANGE2); try { localStorage.setItem('pvp_range2', JSON.stringify(RANGE2)); } catch (e) {} }
+const RANGE_BEST_KEY = 'pvp_range_best';
+function rangeBest() { try { const v = JSON.parse(localStorage.getItem(RANGE_BEST_KEY) || '{}'); return v && typeof v === 'object' ? v : {}; } catch (e) { return {}; } }
+const RANGE_SESSION = { shots: 0, hits: 0, heads: 0, damage: 0, kills: 0, t0: 0, byWeapon: {} };
+const RANGE_DPS = { state: 'idle', t0: 0, ms: 10000, countdownMs: 3000, damage: 0, hits: 0, shots: 0, heads: 0, weaponId: null, result: null };
+function rangeSessionReset() { Object.assign(RANGE_SESSION, { shots: 0, hits: 0, heads: 0, damage: 0, kills: 0, t0: Date.now(), byWeapon: {} }); rangeStats.shots = 0; rangeStats.hits = 0; }
+const _rw = id => RANGE_SESSION.byWeapon[id] || (RANGE_SESSION.byWeapon[id] = { shots: 0, hits: 0, heads: 0, damage: 0 });
+function rangeNoteShot(weaponId, pellets = 1) {
+  if (!weaponId) return;
+  const n = Math.max(1, Math.round(pellets));
+  RANGE_SESSION.shots += n; _rw(weaponId).shots += n; rangeStats.shots = RANGE_SESSION.shots;
+  if (RANGE_DPS.state === 'running') RANGE_DPS.shots += n;
+  updateRangeHUD();
+}
+function rangeNoteHit(weaponId, damage, head, targetId) {
+  if (!weaponId || !(damage > 0)) return;
+  RANGE_SESSION.hits++; RANGE_SESSION.damage += damage; if (head) RANGE_SESSION.heads++;
+  const w = _rw(weaponId); w.hits++; w.damage += damage; if (head) w.heads++;
+  rangeStats.hits = RANGE_SESSION.hits;
+  const rt = rangeTargets.find(r => r.id === targetId);
+  if (RANGE_DPS.state === 'running' && rt && rt.dummy) { RANGE_DPS.damage += damage; RANGE_DPS.hits++; if (head) RANGE_DPS.heads++; }
+  updateRangeHUD();
+}
+function rangeAccuracyText() {
+  const S = RANGE_SESSION, acc = S.shots ? Math.round(Math.min(1, S.hits / S.shots) * 100) : 0, hs = S.hits ? Math.round(S.heads / S.hits * 100) : 0;
+  return `SHOTS ${S.shots}  ·  HITS ${S.hits}  ·  ACC ${acc}%  ·  HS ${hs}%  ·  DMG ${Math.round(S.damage)}`;
+}
+// Which of the boards move and how fast, for the layout and the speed asked for. The dummy never moves.
+function applyRangeLayout() {
+  rangeTargets.forEach((rt, i) => {
+    if (rt.dummy) { rt.moving = false; return; }
+    rt.moving = RANGE2.layout === 'moving' ? true : RANGE2.layout === 'static' ? false : rt.mixedMoving;
+    rt.speed = RANGE2.speed * (RANGE2.layout === 'moving' ? 0.75 + (i % 4) * 0.17 : 1);          // (a few speeds at once, so tracking is not one rhythm)
+    if (!rt.moving) { const bot = gameBots.find(b => b.id === rt.id), mesh = remoteMeshes[rt.id]; if (bot) bot.x = rt.baseX; if (mesh) mesh.position.x = rt.baseX; }
+  });
+}
+function rangeStartDps(ms) {
+  const D = RANGE_DPS;
+  if (match?.type !== 'range' || !rangeTargets.some(r => r.dummy)) return false;
+  Object.assign(D, { state: 'countdown', t0: performance.now(), ms, damage: 0, hits: 0, shots: 0, heads: 0, weaponId: heldItemId(), result: null });
+  showAnnouncement('DPS TEST', 'Get ready: ' + Math.round(ms / 1000) + ' s on the dummy', '#ffcc44', 2200);
+  return true;
+}
+function rangeFinishDps(now) {
+  const D = RANGE_DPS, secs = D.ms / 1000, dps = D.damage / secs;
+  const r = D.result = { weaponId: D.weaponId, secs, damage: Math.round(D.damage), dps, hits: D.hits, shots: D.shots, heads: D.heads, acc: D.shots ? Math.min(1, D.hits / D.shots) : 0, ttk: dps > 0 ? 300 / dps : null, best: false };
+  const best = rangeBest(), key = D.weaponId + '|' + secs;
+  if (!best[key] || dps > best[key].dps) { best[key] = { dps, damage: r.damage, t: Date.now() }; r.best = true; try { localStorage.setItem(RANGE_BEST_KEY, JSON.stringify(best)); } catch (e) {} }
+  D.state = 'done';
+  showAnnouncement('DPS ' + Math.round(dps), (r.best ? 'NEW BEST · ' : '') + weaponDisplayName(D.weaponId) + ' · ' + r.damage + ' damage', '#44ddff', 3200);
+  try { playSoundEvent('hm_kill', { volume: 0.8, minGap: 0 }); } catch (e) {}
+  rangeOpenPanel();
+}
+// Every frame in the range: the DPS test's clock, unlimited ammo (the gun in hand is topped up the moment it drops), the HUD line.
+function updateRange2(dt) {
+  const D = RANGE_DPS, now = performance.now();
+  if (D.state === 'countdown' && now - D.t0 >= D.countdownMs) { D.state = 'running'; D.t0 = now; D.damage = D.hits = D.shots = D.heads = 0; showAnnouncement('GO', '', '#44ff88', 700); }
+  else if (D.state === 'running' && now - D.t0 >= D.ms) rangeFinishDps(now);
+  if ((RANGE2.unlimited || D.state === 'running' || D.state === 'countdown') && (activeSlot === 'primary' || activeSlot === 'secondary')) {
+    const w = WEAPONS[currentWeaponIdx], pool = weaponAmmo[currentWeaponIdx];
+    if (w && pool && !w.noReload && !reloading && pool.ammo < w.mag) { pool.ammo = w.mag; pool.reserve = w.reserve; ammo = pool.ammo; reserve = pool.reserve; updateAmmoHUD(); }
+  }
+  const el = document.getElementById('range-stats');
+  if (el) {
+    let t = rangeAccuracyText();
+    if (D.state === 'countdown') t = 'DPS TEST IN ' + Math.max(0, (D.countdownMs - (now - D.t0)) / 1000).toFixed(1) + ' s';
+    else if (D.state === 'running') { const el_ = (now - D.t0) / 1000; t = 'DPS TEST ' + Math.max(0, D.ms / 1000 - el_).toFixed(1) + ' s  ·  ' + Math.round(D.damage) + ' DMG  ·  ' + Math.round(D.damage / Math.max(1, el_)) + ' DPS'; }
+    else t += '  ·  P: CONTROLS';
+    if (el.textContent !== t) el.textContent = t;
+  }
+}
+function rangePanelOpen() { const p = document.getElementById('range-panel'); return !!p && p.style.display === 'block'; }
+function rangeClosePanel() { const p = document.getElementById('range-panel'); if (p) p.style.display = 'none'; }
+function rangeOpenPanel() {
+  if (match?.type !== 'range') return;
+  closeOtherDialogs('range-panel');
+  try { releasePointer(); } catch (e) {}
+  let panel = document.getElementById('range-panel');
+  if (!panel) {
+    panel = document.createElement('div'); panel.id = 'range-panel';
+    panel.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9900;background:#0b141a;border:2px solid #44ddff;border-radius:8px;padding:20px;color:#fff;font-family:"Courier New",monospace;min-width:340px;max-width:min(560px,94vw);max-height:90vh;overflow:auto;';
+    document.body.appendChild(panel);
+  }
+  panel.style.display = 'block';
+  const btn = (attrs, label, on) => `<button ${attrs} style="padding:6px 10px;cursor:pointer;font-family:inherit;font-size:11px;font-weight:bold;letter-spacing:1px;border-radius:4px;background:${on ? '#12404f' : '#0e1f27'};color:${on ? '#aaf0ff' : '#7fb6c4'};border:1px solid ${on ? '#44ddff' : '#2a5666'};">${label}</button>`;
+  const toggle = (id, label, on) => `<div style="display:flex;align-items:center;justify-content:space-between;margin:9px 0;"><div style="font-size:11px;letter-spacing:1px;color:#bfe9f2;">${label}</div>${btn(`id="${id}"`, on ? 'ON' : 'OFF', on)}</div>`;
+  const S = RANGE_SESSION, acc = S.shots ? Math.round(Math.min(1, S.hits / S.shots) * 100) : 0, hs = S.hits ? Math.round(S.heads / S.hits * 100) : 0;
+  const rows = Object.entries(S.byWeapon).sort((a, b) => b[1].shots - a[1].shots).map(([id, w]) => `<tr><td>${weaponDisplayName(id)}</td><td>${w.shots}</td><td>${w.hits}</td><td>${w.shots ? Math.round(Math.min(1, w.hits / w.shots) * 100) : 0}%</td><td>${w.hits ? Math.round(w.heads / w.hits * 100) : 0}%</td><td>${Math.round(w.damage)}</td></tr>`).join('');
+  const best = rangeBest(), bestRows = Object.entries(best).sort((a, b) => b[1].dps - a[1].dps).slice(0, 6).map(([k, v]) => { const [id, secs] = k.split('|'); return `<tr><td>${weaponDisplayName(id)}</td><td>${secs} s</td><td>${Math.round(v.dps)}</td><td>${v.damage}</td></tr>`; }).join('');
+  const R = RANGE_DPS.state === 'done' && RANGE_DPS.result;
+  const result = R ? `<div style="margin:12px 0;padding:10px;border:1px solid #44ddff;border-radius:6px;background:#0f2630;"><div style="font-size:11px;letter-spacing:2px;color:#7fd8ea;">DPS TEST · ${weaponDisplayName(R.weaponId)} · ${R.secs} s${R.best ? ' · NEW BEST' : ''}</div><div style="font-size:26px;font-weight:bold;color:#aaf0ff;">${Math.round(R.dps)} DPS</div><div style="font-size:12px;color:#bfe9f2;">${R.damage} damage · ${R.hits} hits of ${R.shots} shots (${Math.round(R.acc * 100)}%) · ${R.heads} headshots${R.ttk ? ' · 300 HP in ' + R.ttk.toFixed(2) + ' s' : ''}</div></div>` : '';
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;border-bottom:1px solid #2a5666;padding-bottom:8px;">
+      <div style="font-size:17px;letter-spacing:3px;color:#7fe0f2;">🎯 RANGE CONTROLS</div>
+      <button id="rg-close" style="background:#2a1f1f;color:#ffaaaa;border:1px solid #ff6666;padding:4px 10px;cursor:pointer;font-family:inherit;border-radius:3px;">✕</button>
+    </div>
+    ${result}
+    <div style="font-size:11px;letter-spacing:1px;color:#bfe9f2;margin:6px 0;">TARGETS</div>
+    <div style="display:flex;gap:6px;">${btn('data-lay="static"', 'STILL', RANGE2.layout === 'static')}${btn('data-lay="mixed"', 'MIXED', RANGE2.layout === 'mixed')}${btn('data-lay="moving"', 'ALL MOVING', RANGE2.layout === 'moving')}</div>
+    <div style="margin:10px 0 4px;"><div style="display:flex;justify-content:space-between;font-size:11px;letter-spacing:1px;color:#bfe9f2;"><span>TARGET SPEED</span><span id="rg-speed-val" style="color:#aaf0ff;">${RANGE2.speed.toFixed(1)} m/s</span></div><input id="rg-speed" type="range" min="1" max="14" step="0.5" value="${RANGE2.speed}" style="width:100%;"></div>
+    ${toggle('rg-unl', 'UNLIMITED AMMO', RANGE2.unlimited)}
+    ${toggle('rg-ins', 'INSTANT WEAPON SWITCHING', RANGE2.instant)}
+    <div style="font-size:11px;letter-spacing:1px;color:#bfe9f2;margin:12px 0 6px;">DPS TEST (THE BLUE-GREY DUMMY CANNOT DIE)</div>
+    <div style="display:flex;gap:6px;">${btn('id="rg-dps10"', '10 SECONDS', false)}${btn('id="rg-dps30"', '30 SECONDS', false)}${btn('id="rg-aim"', '🎯 AIM LAB (SENSITIVITY)', false)}</div>
+    <div style="font-size:11px;letter-spacing:1px;color:#bfe9f2;margin:14px 0 4px;">ACCURACY TRACKER · ${S.shots} shots · ${S.hits} hits · ${acc}% · ${hs}% headshots · ${Math.round(S.damage)} damage</div>
+    ${rows ? `<table style="width:100%;font-size:11px;border-collapse:collapse;color:#cfeff6;"><tr style="color:#7fb6c4;text-align:left;"><th>WEAPON</th><th>SHOTS</th><th>HITS</th><th>ACC</th><th>HS</th><th>DMG</th></tr>${rows}</table>` : '<div style="font-size:11px;color:#7fb6c4;">Shoot something: every shot, hit, headshot and point of damage is counted here.</div>'}
+    ${bestRows ? `<div style="font-size:11px;letter-spacing:1px;color:#bfe9f2;margin:14px 0 4px;">BEST DPS</div><table style="width:100%;font-size:11px;border-collapse:collapse;color:#cfeff6;"><tr style="color:#7fb6c4;text-align:left;"><th>WEAPON</th><th>TEST</th><th>DPS</th><th>DAMAGE</th></tr>${bestRows}</table>` : ''}
+    <button id="rg-reset" style="display:block;width:100%;margin-top:14px;padding:9px;background:#2a1a1a;color:#ff9988;border:1px solid #ff5544;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">RESET TRACKER</button>
+    <div style="margin-top:8px;font-size:10px;color:#6d97a4;">Press P again to close.</div>`;
+  const redo = () => rangeOpenPanel();
+  panel.querySelector('#rg-close').addEventListener('click', rangeClosePanel);
+  panel.querySelectorAll('[data-lay]').forEach(b => b.addEventListener('click', () => { RANGE2.layout = b.dataset.lay; saveRange2(); applyRangeLayout(); redo(); }));
+  panel.querySelector('#rg-speed').addEventListener('input', e => { RANGE2.speed = parseFloat(e.target.value); saveRange2(); applyRangeLayout(); const v = panel.querySelector('#rg-speed-val'); if (v) v.textContent = RANGE2.speed.toFixed(1) + ' m/s'; });
+  panel.querySelector('#rg-unl').addEventListener('click', () => { RANGE2.unlimited = !RANGE2.unlimited; saveRange2(); redo(); });
+  panel.querySelector('#rg-ins').addEventListener('click', () => { RANGE2.instant = !RANGE2.instant; saveRange2(); redo(); });
+  panel.querySelector('#rg-dps10').addEventListener('click', () => { if (rangeStartDps(10000)) rangeClosePanel(); });
+  panel.querySelector('#rg-dps30').addEventListener('click', () => { if (rangeStartDps(30000)) rangeClosePanel(); });
+  panel.querySelector('#rg-aim').addEventListener('click', () => { rangeClosePanel(); openAimLab(); });
+  panel.querySelector('#rg-reset').addEventListener('click', () => { rangeSessionReset(); updateRangeHUD(); redo(); });
+}
 function updateRange(dt) {
+  updateRange2(dt);
   showLobbyPrompt(rangeExitNearby()?'Return to lobby / '+fKeyHint(false):null);
   const now = Date.now();
   for (const rt of rangeTargets) {
@@ -81582,6 +81989,7 @@ function loop() {
   safeLoopStep('atmosphere', () => updateAtmosphere(dt));  // wind, weather in the air, the sky, the sound of the place
   safeLoopStep('batch5', () => updateBatch5(dt));     // train scroll, vacuum, weather, lights-out, chandelier, debris
   safeLoopStep('killcam-sample', () => killcamSample(performance.now()));
+  safeLoopStep('replay-sample', () => replaySample(performance.now()));
   safeLoopStep('killcam', () => updateKillcam(performance.now()));
   safeLoopStep('vehicle-prompt', () => updateVehiclePrompt());// vehicle pickup prompt (BR arena)
   safeLoopStep('vehicle-piloting', () => updateVehiclePiloting(dt)); // move + sync vehicle while piloted
@@ -84237,7 +84645,7 @@ document.addEventListener('langchange', () => {
 // One dialog at a time (#21): each of these used to open on top of whatever was already open, all in
 // different sizes. Closing is only hiding — every dialog rebuilds from current state when it opens.
 // index.html gives them one shared frame.
-const DIALOG_IDS = ['player-record-panel', 'stealth-panel', 'settings-hub-panel', 'controls-panel', 'touch-controls-panel', 'crosshair-panel', 'display-settings-panel', 'aimlab-overlay', 'hitmarker-panel', 'shoot-fx-panel', 'aim-assist-panel', 'weapon-skins-panel', 'item-skins-panel',
+const DIALOG_IDS = ['player-record-panel', 'stealth-panel', 'settings-hub-panel', 'controls-panel', 'touch-controls-panel', 'crosshair-panel', 'display-settings-panel', 'aimlab-overlay', 'hitmarker-panel', 'range-panel', 'shoot-fx-panel', 'aim-assist-panel', 'weapon-skins-panel', 'item-skins-panel',
                     'skins-panel', 'kill-log-panel', 'char-chat-panel', 'map-dialog', 'diff-dialog', 'duel-panel', 'lobby-service-panel','weapon-inspect-panel'];
 function anyDialogOpen() {
   return DIALOG_IDS.some(id => { const el = document.getElementById(id); return el && getComputedStyle(el).display !== 'none'; });
