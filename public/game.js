@@ -4785,7 +4785,7 @@ const SKIN_SAMPLES = {
   sg8_cyberpunk:      { file: 'laser2', gain: 0.887, from: 0.00, len: 0.85, fade: 0.40, rate: [1.14, 1.14] },
 };
 const _sampleState = {};                                            // by file (so the Vector's is _sampleState.vector), not by weapon
-let _sampleVoices = 0;
+let _sampleVoices = 0, _voiceFullAt = 0;
 // The bytes of a recording. They ride inside sound-data.js (window.SOUND_DATA, written by tools/embed-sounds.js, loaded by index.html) because a page opened as
 // a file (double-clicking index.html) is not allowed to fetch() anything: there every load failed and the made-up shots played. A script loads from a file, a
 // server and itch alike. null if the data is not there (then the file is fetched, which works from any server).
@@ -4875,19 +4875,26 @@ function eventSample(ctx, name, volume) {                           // a clip to
   st.last = ready[k].def; st.at = now;
   return ready[k];
 }
-function sampleBus(ctx) {                                          // a recording is already as loud as it is: it gets a limiter of its own, not the made-up guns' bus (which squashes everything into one level)
-  if (ctx._sampleBus) return ctx._sampleBus;
+function sampleBus(ctx, ding = false) {                                 // a recording is already as loud as it is: it gets a limiter of its own, not the made-up guns' bus (which squashes everything into one level). The headshot ding has one of its own too: a burst of gunfire must not squash it
+  const key = ding ? '_dingBus' : '_sampleBus';
+  if (ctx[key]) return ctx[key];
   const input = ctx.createGain(), lim = ctx.createDynamicsCompressor();
-  lim.threshold.value = -12; lim.knee.value = 6; lim.ratio.value = 10; lim.attack.value = 0.002; lim.release.value = 0.08;
+  lim.threshold.value = ding ? -6 : -12; lim.knee.value = 6; lim.ratio.value = 10; lim.attack.value = 0.002; lim.release.value = 0.08;
   input.connect(lim).connect(ctx.destination);
-  return (ctx._sampleBus = input);
+  return (ctx[key] = input);
 }
 function playWeaponSample(ctx, start, S, level, distGain, remote) {
-  if (_sampleVoices > 48) return;                                   // (a long clip at the Vector's rate is a couple of dozen at once; anything past that helps nobody)
-  const d = S.def, src = ctx.createBufferSource(), g = ctx.createGain(), r = (d.rate[0] + Math.random() * (d.rate[1] - d.rate[0])) * _wpnPitch, t1 = start + d.len;
+  const ding = S.def.file === 'headshot';
+  if (_sampleVoices > 48 && !ding) {                                // (a long clip at the Vector's rate is a couple of dozen at once; anything past that helps nobody. A headshot ding is never dropped)
+    const t = performance.now();
+    if (!_voiceFullAt) _voiceFullAt = t; else if (t - _voiceFullAt > 4000) { _sampleVoices = 0; _voiceFullAt = 0; }     // a count stuck high (a voice whose end never came, e.g. while the tab slept) must not silence every gun for good
+    return;
+  }
+  if (_sampleVoices <= 48) _voiceFullAt = 0;
+  const d = S.def, src = ctx.createBufferSource(), g = ctx.createGain(), r = (d.rate[0] + Math.random() * (d.rate[1] - d.rate[0])) * (ding ? 1 : _wpnPitch), t1 = start + d.len;
   src.buffer = S.buf; src.playbackRate.value = r;
   g.gain.setValueAtTime(level * d.gain, start); g.gain.setValueAtTime(level * d.gain, Math.max(start, t1 - d.fade)); g.gain.linearRampToValueAtTime(0.0001, t1);
-  src.connect(g); g.connect(sampleBus(ctx));
+  src.connect(g); g.connect(sampleBus(ctx, ding));
   if (!_wpnDry) try {                                               // and a whisper of the room, as the made-up shots get (someone else's, across the map, gets more of it)
     const indoor = INDOOR_MAPS.has(typeof activeMapName !== 'undefined' ? activeMapName : ''), send = ctx.createGain();
     send.gain.value = (remote ? 0.070 : 0.037) * distGain * (indoor ? 1 : 1.15); g.connect(send).connect(getReverbBus(ctx, indoor));
@@ -67629,6 +67636,7 @@ function addHitNumber(damage, headshot) { if (HITMARKER.numbers) HITMARKER_NUMBE
 // The click. A P90 or a Minigun lands fifteen to twenty hits a second: each kind keeps a minimum gap, and the more sounds
 // there have been in the last half second the quieter and rarer the next body click gets. A kill is always heard.
 const _hmSoundLog = [];
+let _lastHeadDingAt = -1e9;     // when the last headshot ding rang: a kill's own tone waits for it (see confirmKill)
 function playHitConfirmSound(kind, tier) {
   const vol = HITMARKER.volume;
   if (!(vol > 0)) return false;
@@ -67637,6 +67645,7 @@ function playHitConfirmSound(kind, tier) {
   const crowd = _hmSoundLog.length;
   if (kind !== 'kill' && kind !== 'head' && crowd >= 8) return false;          // (a headshot is always heard: holding the trigger on a head must not mute the ding)
   _hmSoundLog.push(now);
+  if (kind === 'head') _lastHeadDingAt = now;
   const base = kind === 'kill' ? 0.9 : kind === 'head' ? 0.85 : 0.7, duck = kind === 'kill' || kind === 'head' ? 1 : 1 / (1 + 0.16 * crowd);          // (a headshot ding is never ducked)
   playSoundEvent(kind === 'kill' ? 'hm_kill' : kind === 'head' ? 'hm_head' : 'hm_body',
     { volume: base * vol * duck, minGap: kind === 'kill' ? 120 : kind === 'head' ? 0 : 70, tier });          // (head: no gap at all, one ding per hit, and they stack)
@@ -67685,7 +67694,8 @@ function confirmKill(id, name) {
   if (_lastKillConfirm.id === id && now - _lastKillConfirm.t < 1500) return false;
   _lastKillConfirm = { id, t: now };
   showHitmarker('kill');
-  playHitConfirmSound('kill');              // the elimination tone: once per kill (the local hit and the server's echo both land here)
+  { const since = performance.now() - _lastHeadDingAt;     // a killing headshot rang the ding and the kill tone on the same instant, and the kill tone buried the ding: it now waits for the ding to land
+    if (since < 250) setTimeout(() => playHitConfirmSound('kill'), 170 - Math.min(since, 150)); else playHitConfirmSound('kill'); }   // the elimination tone: once per kill (the local hit and the server's echo both land here)
   const el = document.getElementById('kill-confirm');
   if (el) {
     el.textContent = '☠ ' + (name || 'Enemy');
