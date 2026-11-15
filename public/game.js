@@ -2769,6 +2769,7 @@ const BOT_DIFFICULTY_TUNING = {
 // Priorities, in order: damage, high ground, staying alive.
 function aiDifficulty(d) { return d === 'nightmare' ? 'expert' : d; }
 function nightmareThink(bot, target, dt, now) {
+  if (target._phantom) { bot._hgGoal = null; return; }                    // blind (no line of sight): no plan that needs to know where they are
   const A = bot._nm || (bot._nm = { bias: 0, still: 0, nextHg: 0 });
   const tz = target.isPlayer ? camera.position.z : target.z, dx = target.x - bot.x, dz = tz - bot.z, dist = Math.hypot(dx, dz) || 1;
   if (target.isPlayer) {                                                                   // how the player moves, seen from the bot
@@ -3296,6 +3297,7 @@ function botShouldFlee(bot, dist) {
   const targetingPlayer = !isDead;
   // EXPERT bots are confident — much stricter flee thresholds. They want to fight, not run.
   const expert = bot.difficulty === 'expert', nm = !!bot.nightmare;      // 😈 a Nightmare bot values staying alive: it retreats earlier
+  if (nm && window.NM) { const f = NM.fleeDecision(bot, dist); if (f !== undefined) return f; }   // 😈 finish a weak enemy; do not turn back on a runner
   const lowHpThresh    = nm ? 100 : expert ? 45  : 75;   // sub-15% expert / sub-25% hard
   const panicDmg       = nm ? 70 : expert ? 100 : 40;   // huge burst required for expert panic
   const outnumThresh   = expert ? 3   : 2;    // need 3 enemies close before expert flees
@@ -3306,7 +3308,7 @@ function botShouldFlee(bot, dist) {
   // 1. Critical HP
   if (bot.hp < lowHpThresh) return 'low_hp';
   // 2. Reloading → seek cover
-  if (bot.reloadUntil && Date.now() < bot.reloadUntil) return 'reloading';
+  if (bot.reloadUntil && Date.now() < bot.reloadUntil && !nm) return 'reloading';   // (a Nightmare bot swaps guns instead of hiding to reload)
   // 3. Frost-slowed badly
   if ((bot.frostSlow || 100) < 60) return 'frosted';
   // 4. Heavy damage spike
@@ -79024,10 +79026,11 @@ function spawnGameBots() {
     const _nmLoad = selectedDifficulty === 'nightmare' && !fixedM4Tower && !_playstyle;       // 😈 a Nightmare bot's own kit: Crossbow, Revolver, Scythe
     let weaponId = chooseBotPrimaryId(_playstyle?.primary);
     if (fixedM4Tower) weaponId = 'm4a1_arena';
-    if (_nmLoad) weaponId = 'crossbow';
-    const botSecondaryId = fixedM4Tower ? null : _nmLoad ? 'revolver' : chooseBotSecondaryId(_playstyle?.secondary);
-    const botMeleeId     = fixedM4Tower ? null : _nmLoad ? 'scythe' : chooseBotMeleeId(_playstyle?.melee);
-    const botUtilityId   = fixedM4Tower ? 'frag' : chooseBotSupportId(_playstyle?.utility);
+    const _nmKit = _nmLoad && window.NM ? NM.kit() : null;                                   // 😈 nightmare-ai.js: the strongest legal guns, a Katana (or other melee) and a utility (it used to be the Crossbow every time)
+    if (_nmLoad) weaponId = _nmKit ? _nmKit.primary : 'crossbow';
+    const botSecondaryId = fixedM4Tower ? null : _nmLoad ? (_nmKit ? _nmKit.secondary : 'revolver') : chooseBotSecondaryId(_playstyle?.secondary);
+    const botMeleeId     = fixedM4Tower ? null : _nmLoad ? (_nmKit ? _nmKit.melee : 'scythe') : chooseBotMeleeId(_playstyle?.melee);
+    const botUtilityId   = fixedM4Tower ? 'frag' : _nmKit ? _nmKit.utility : chooseBotSupportId(_playstyle?.utility);
 
     // ── Create locally RIGHT NOW (no network round-trip needed) ──────────
     // Lobby 13 keeps the named cast's looks. Actual match bots all wear the
@@ -81289,7 +81292,8 @@ function updateBotAI(dt,simulation=null) {
     if (bot.primaryId) {
       const myMe = players[myId];
       const tgtDist = myMe ? Math.hypot(bot.x - myMe.x, bot.z - myMe.z) : 999;
-      const desired = (tgtDist < 4 && bot.secondaryId) ? 'secondary' : 'primary';
+      const desired = (bot.nightmare && window.NM && bot.secondaryId) ? NM.chooseSlot(bot, tgtDist, Date.now())   // 😈 whichever gun is worth more damage here, right now
+                    : (tgtDist < 4 && bot.secondaryId) ? 'secondary' : 'primary';
       if (desired !== bot.activeSlot) {
         bot.activeSlot = desired;
         const newWeaponId = desired === 'secondary' ? bot.secondaryId : bot.primaryId;
@@ -81303,7 +81307,7 @@ function updateBotAI(dt,simulation=null) {
     }
 
     // 💣 Utility usage — throw a grenade-style utility occasionally if hostile + in range
-    if (bot.utilityId && bot.utilityUsesLeft > 0 && now >= (bot.nextUtilityAt || 0)) {
+    if (bot.utilityId && bot.utilityUsesLeft > 0 && now >= (bot.nextUtilityAt || 0) && !(bot.nightmare && window.NM)) {   // (a Nightmare bot's utility is NM.utility's: tactical, not random)
       const myMe2 = players[myId];
       if (myMe2 && !isDead && bot.team === 'enemy') {
         const d2 = Math.hypot(bot.x - myMe2.x, bot.z - myMe2.z);
@@ -81440,7 +81444,8 @@ function updateBotAI(dt,simulation=null) {
       continue; // skip movement block
     }
 
-    const target = getBotTarget(bot);
+    const _realTarget = getBotTarget(bot);
+    const target = (bot.nightmare && window.NM) ? NM.perceive(bot, _realTarget, now) : _realTarget;   // 😈 what it knows: the real target in line of sight, otherwise a remembered / searched point
     let moveX = 0, moveZ = 0;
     tickBotMeleeAbility(bot,target,dt,now,roundLive);
 
@@ -82310,7 +82315,7 @@ function updateBotAI(dt,simulation=null) {
         const r = (MAP_RAMPS[activeMapName] || []).find(rr => rampSurfaceAt(rr, bot.x, bot.z) != null);
         if (r && mLen > 0.001) rampUp = (moveX / mLen) * r.ux + (moveZ / mLen) * r.uz;
         const wantsHeight = rampUp > 0.15 || engDist < 24 || wasHit;
-        if (wantsHeight && Math.random() < 0.42) {
+        if (wantsHeight && Math.random() < (bot.nightmare ? 0.92 : 0.42)) {      // 😈 no grenade to jump on: a Nightmare bot slides into the ramp and jumps off it, nearly every time
           const hx = mLen > 0.001 ? moveX / mLen : Math.sin(bot.rotY || 0);
           const hz = mLen > 0.001 ? moveZ / mLen : Math.cos(bot.rotY || 0);
           bot.yVel = 10.8 + Math.max(0, rampUp) * 3.2;
@@ -82344,6 +82349,12 @@ function updateBotAI(dt,simulation=null) {
         if (engaging && onGround) bot._nextJumpAt = Math.min(bot._nextJumpAt || 0, now + 600 + Math.random() * 900);                    // it keeps moving
         if (engaging && onGround && !(now < (bot._slideUntil || 0))) bot._nextSlideAt = Math.min(bot._nextSlideAt || 0, now + 300 + Math.random() * 500);
         nightmareDash(bot, target, wasHit, now);
+        if (window.NM) {                                                // 😈 nightmare-ai.js: pursuit / search, an unpredictable strafe, a Katana guard in time, the grenade jump and the other utilities
+          const mv = NM.think(bot, target, { x: moveX, z: moveZ }, { dt, now, onGround, wasHit });
+          moveX = mv.x; moveZ = mv.z;
+          NM.deflect(bot, now);
+          NM.utility(bot, target, now, { onGround, wasHit, dt });
+        }
         const g = bot._hgGoal;
         if (g) {                                                        // head for the high ground, sliding into the ramp
           const gx = g.x - bot.x, gz = g.z - bot.z, gd = Math.hypot(gx, gz) || 1, sp = Math.max(Math.hypot(moveX, moveZ), 8 * dt);

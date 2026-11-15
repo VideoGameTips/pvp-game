@@ -49,6 +49,7 @@ FILES=(index.html game.js chat.js i18n.js three.min.js socket.io.min.js wiki.htm
 
 FILES+=(lobby-case.js boss-arsenal.js battle-simulator.js battle-simulator.css tether-weapons.js swap-portals.js)
 FILES+=(rank-core.js ranked.js)   # Ranked 1v1 / 2v2 (index.html loads both)
+FILES+=(nightmare-ai.js)   # the Nightmare bot's brain (index.html loads it)
 FILES+=(chronos-engine.js combat-visuals.js)   # the Chronos Engine builder and the combat-visuals settings / HUD polish
 FILES+=(rank-core.js ranked.js)
 
