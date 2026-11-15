@@ -34844,6 +34844,111 @@ function buildPuppetmaster() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+
+// ═══ 🌿 THE HUNGRY GARDEN: a living, starving Minigun (Mythic). Six thorned stems with little mouths, a flower bud for a body, a belt of seed pods ═══
+// It is the Minigun's own model underneath (the spinning cluster, the belt's rounds, the reload and fire timing all belong to the base gun); only what you see is new.
+// Idle, each stem turns on its own toward the nearest enemy like a hungry snake; firing, the mouths snap and the bud opens; reload grows roots across it.
+function _hgNearestEnemy() {                                   // a world position, or null: the closest living enemy within 45 m
+  const me = camera.position; let best = null, bd = 45 * 45;
+  const consider = (x, y, z) => { const d = (x - me.x) ** 2 + (z - me.z) ** 2; if (d < bd) { bd = d; best = { x, y, z }; } };
+  try {
+    const mine = localEntityTeam(myId);
+    for (const b of gameBots) if (!b.dead && b.team && b.team !== mine) consider(b.x, (b.y || 0) + 1.2, b.z);
+    for (const [id, m] of Object.entries(remoteMeshes)) { const p = players[id]; if (id === myId || !m.visible || !p || p.dead || p.isBot) continue; if (localEntityTeam(id) !== mine) consider(m.position.x, m.position.y + 1.2, m.position.z); }
+  } catch (e) {}
+  return best;
+}
+function buildHungryGarden() {
+  const g = buildMinigun(), cl = g._barrelCluster;
+  const M = (c, sh = 30, sp = 0x223322, em = 0) => new THREE.MeshPhongMaterial({ color: c, shininess: sh, specular: sp, emissive: em, side: THREE.DoubleSide });
+  const bark = M(0x3b2a1a, 12), stemM = M(0x2f6a26, 22, 0x4a8a3a), leaf = M(0x23602a, 20, 0x5aa04a), lining = M(0xb02a5e, 40, 0xff80b0, 0x2a0414), mouthM = M(0x7a0a2a, 30, 0xff6080, 0x240006),
+        thornM = M(0xe8dfb0, 60, 0xffffff), pod = M(0x6aa83a, 40, 0xc8ff90, 0x0a1a04), seed = M(0xe8d7a0, 50, 0xffffff), vine = M(0x4a3a20, 10), rootM = M(0x6b4a28, 8);
+  // the body and everything bolted to it is bark; the belt (the Minigun's 'ammo' rounds) becomes seed pods; the barrels are rebuilt below
+  const ammo = g._parts && g._parts.ammo, inCl = o => { for (let p = o; p; p = p.parent) if (p === cl) return true; return false; }, inAmmo = o => { for (let p = o; p; p = p.parent) if (p === ammo) return true; return false; };
+  g.traverse(o => { if (!o.isMesh || o === g._flash || inCl(o)) return; if (!inAmmo(o)) o.material = bark; });
+  if (ammo) { let i = 0; ammo.traverse(o => { if (o.isMesh) { o.material = [pod, seed, vine][i++ % 3]; } }); }
+  while (cl.children.length) cl.remove(cl.children[0]);
+  // ── six stems, each with a mouth ──
+  const stems = [], BASE_Z = 0.14, LEN = 0.30;
+  const Q = new THREE.Quaternion(), FWD = new THREE.Vector3(0, 0, -1);
+  for (let i = 0; i < 6; i++) {
+    const a = i / 6 * Math.PI * 2, bx = Math.cos(a) * 0.026, by = Math.sin(a) * 0.026;
+    const piv = new THREE.Group(); piv.position.set(bx, by, BASE_Z - 0.0);                // the stem turns about its rear end
+    const geo = new THREE.CylinderGeometry(0.0072, 0.0104, LEN, 8); const stem = new THREE.Mesh(geo, stemM); stem.rotation.x = Math.PI / 2; stem.position.z = -LEN / 2; stem.castShadow = true; piv.add(stem);
+    for (let k = 0; k < 9; k++) {                                                          // thorns, pointing out along the stem
+      const th = new THREE.Mesh(new THREE.ConeGeometry(0.0026, 0.0095, 5), thornM), ang = k * 2.4 + i, z = -0.03 - k * 0.028;
+      th.position.set(Math.cos(ang) * 0.009, Math.sin(ang) * 0.009, z); th.lookAt(th.position.x * 3, th.position.y * 3, z - 0.004); th.rotateX(Math.PI / 2); piv.add(th);
+    }
+    const jaws = [];                                                                       // the mouth: an upper and a lower jaw hinged at the stem's tip, with little teeth
+    for (const s of [1, -1]) {
+      const hinge = new THREE.Group(); hinge.position.set(0, 0, -LEN); piv.add(hinge);
+      const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.0150, 0.0036, 0.026), mouthM); jaw.position.set(0, s * 0.0034, -0.013); hinge.add(jaw);
+      for (let t = -1; t <= 1; t++) { const tooth = new THREE.Mesh(new THREE.ConeGeometry(0.0021, 0.0070, 4), thornM); tooth.position.set(t * 0.0048, s * 0.0034 - s * 0.0034, -0.025); tooth.rotation.x = Math.PI / 2; tooth.position.y = s * -0.0006; hinge.add(tooth); }
+      jaws.push([hinge, s]);
+    }
+    cl.add(piv); stems.push({ piv, jaws, q: new THREE.Quaternion(), k: 2.4 + i * 0.55, ph: i * 1.31 });
+  }
+  cl.children.forEach(c => { c.position.z += 0; });
+  // the hub the stems grow out of: a knot of root and bark at the rear
+  const knot = new THREE.Mesh(new THREE.CylinderGeometry(0.040, 0.034, 0.030, 12), bark); knot.rotation.x = Math.PI / 2; knot.position.z = BASE_Z + 0.010; cl.add(knot);
+  // ── the flower bud: eight petals folded round the body, opening when it fires ──
+  const petals = [], L = 0.17;
+  const sh = new THREE.Shape(); [[-0.019, 0], [-0.025, 0.06], [-0.012, 0.135], [0, L], [0.012, 0.135], [0.025, 0.06], [0.019, 0]].forEach((p, i) => (i ? sh.lineTo(p[0], p[1]) : sh.moveTo(p[0], p[1]))); sh.closePath();
+  const pgeo = new THREE.ExtrudeGeometry(sh, { depth: 0.0022, bevelEnabled: false }); pgeo.rotateX(-Math.PI / 2);
+  const lgeo = pgeo.clone(); lgeo.scale(0.72, 1, 0.82);
+  for (let i = 0; i < 8; i++) {
+    const a = i / 8 * Math.PI * 2 + 0.2, pg = new THREE.Group(); pg.rotation.z = a - Math.PI / 2; pg.position.set(Math.cos(a) * 0.050, Math.sin(a) * 0.050 + 0.004, 0.125);
+    const hinge = new THREE.Group(); pg.add(hinge);
+    const out = new THREE.Mesh(pgeo, leaf); hinge.add(out); const inn = new THREE.Mesh(lgeo, lining); inn.position.y = -0.0024; hinge.add(inn);
+    g.add(pg); petals.push({ hinge, ph: i * 0.9 });
+  }
+  // ── roots: they crawl over the body on a reload, and are gone again by the end ──
+  const roots = [];
+  for (let i = 0; i < 7; i++) {
+    const a = i / 7 * Math.PI * 2, pts = [];
+    for (let k = 0; k <= 8; k++) { const s = k / 8, th = a + s * 1.6 * (i % 2 ? 1 : -1); pts.push(new THREE.Vector3(Math.cos(th) * (0.058 - s * 0.006) * 1.0, Math.sin(th) * 0.058 + 0.004, 0.14 - s * 0.19 + Math.sin(s * 9 + i) * 0.006)); }
+    const tg = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 36, 0.0034 - (i % 3) * 0.0004, 5, false), r = new THREE.Mesh(tg, rootM); r.userData.total = tg.index.count; tg.setDrawRange(0, 0); g.add(r); roots.push(r);
+  }
+  const st = { was: false, fireK: 0, open: 0, jawK: 0, enemy: null, nextLook: 0 };
+  const smooth = (cur, to, k, dt) => cur + (to - cur) * (1 - Math.exp(-k * dt));
+  const tgt = new THREE.Vector3(), dir = new THREE.Vector3(), tq = new THREE.Quaternion(), idq = new THREE.Quaternion();
+  g._tick = (dt, now, assembling) => {
+    if (assembling) return;
+    const f = !!(g._flash && g._flash.visible); if (f) st.fireK = 1; st.fireK = Math.max(0, st.fireK - dt / 0.16);
+    const firing = st.fireK > 0, R = _fsReload(g);
+    // the bud: shut when it is quiet, open while it fires, wide open for an inspect
+    st.open = smooth(st.open, firing || R.insp ? (R.insp ? 1 : 0.5) : 0, firing ? 14 : 3, dt);
+    for (const p of petals) p.hinge.rotation.x = -0.20 + st.open * 1.10 + Math.sin(now * 2 + p.ph) * 0.03;
+    // the mouths: snapping while it fires, a slow hungry working of the jaws otherwise, one after another in an inspect
+    for (let i = 0; i < 6; i++) {
+      const S = stems[i], snap = firing ? 0.5 * Math.abs(Math.sin(now * 40 + i * 1.7)) : R.insp ? Math.max(0, Math.sin(now * 5 - i * 1.1)) * 0.55 : 0.07 + 0.07 * Math.sin(now * 1.7 + S.ph);
+      for (const [h, s] of S.jaws) h.rotation.x = -s * snap * 1.5;                           // (upper jaw lifts, lower drops)
+    }
+    // the stems turn toward the nearest enemy, each at its own pace; straight ahead while it fires; toward you in an inspect
+    if (now > st.nextLook) { st.enemy = _hgNearestEnemy(); st.nextLook = now + 0.15; }
+    const aim = firing ? null : R.insp ? 'you' : st.enemy;
+    if (aim) { if (aim === 'you') tgt.set(0, 0.10, 0.5); else { tgt.set(aim.x, aim.y, aim.z); cl.worldToLocal(tgt); } }
+    for (let i = 0; i < 6; i++) {
+      const S = stems[i];
+      if (aim) {
+        dir.copy(tgt).sub(S.piv.position).normalize(); const ang = Math.acos(Math.max(-1, Math.min(1, dir.dot(FWD))));
+        tq.setFromUnitVectors(FWD, dir); if (ang > 0.42) tq.slerp(idq, 1 - 0.42 / ang);                  // (never further than ~24 degrees from straight: it must stay in view)
+        const wob = Math.sin(now * 2.1 + S.ph) * 0.05; tq.multiply(Q.setFromEuler(new THREE.Euler(wob, wob * 0.7, 0)));
+        S.q.slerp(tq, 1 - Math.exp(-S.k * dt));
+      } else {
+        const sway = new THREE.Euler(Math.sin(now * 0.9 + S.ph) * 0.05, Math.cos(now * 0.7 + S.ph * 1.3) * 0.05, 0);
+        tq.setFromEuler(firing ? new THREE.Euler(0, 0, 0) : sway); S.q.slerp(tq, 1 - Math.exp(-(firing ? 16 : 2) * dt));
+      }
+      S.piv.quaternion.copy(S.q);
+    }
+    // the roots: grow in over the first of a reload, wither away at the end
+    const grow = R.rel ? (R.t < 0.7 ? R.t / 0.7 : Math.max(0, 1 - (R.t - 0.7) / 0.3)) : 0;
+    for (let i = 0; i < roots.length; i++) { const r = roots[i], k = Math.max(0, Math.min(1, grow * 1.25 - i * 0.04)); r.geometry.setDrawRange(0, Math.floor(r.userData.total * k / 3) * 3); r.visible = k > 0.01; }
+  };
+  g._calm = () => { st.fireK = 0; for (const p of petals) p.hinge.rotation.x = -0.20; for (const S of stems) { S.q.identity(); S.piv.quaternion.identity(); } for (const r of roots) r.visible = false; };
+  g._calm();
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
 function buildFractureCrossbow() {
   const g = new THREE.Group();
   const obsidian = new THREE.MeshPhongMaterial({ color: 0x151222, shininess: 150, specular: 0xb4a2f0 });
@@ -49316,6 +49421,7 @@ const SKIN_SHOT = {};
   G({ shape: 'cube', c: [0xe8c07a, 0x8a5a2a] }, 'crumbs', ['twin_ar_toaster']);
   G({ shape: 'cork', c: [0xc8a030, 0xe8e0c0], min: 0.08 }, 'soda', ['javelin_launcher_champagne', 'firework_showman']);
   G({ shape: 'leaf', c: [0x4caf3a, 0x2e7d32] }, 'crumbs', ['minigun_salad_spinner'], 0x4caf3a);
+  G({ shape: 'needle', c: [0xe8dfb0, 0x4caf3a], min: 0.06 }, 'crumbs', ['minigun_hungry_garden'], 0x7ad04a);   // THE HUNGRY GARDEN: hardened thorns
   G({ shape: 'ball', c: [0xff4fa8, 0xffe14a] }, 'paint', ['paintball_gumball']);
   // water and foam
   G({ shape: 'drop', c: [0x3aa8e8, 0xffffff] }, 'water', ['glock18_water_pistol', 'akimbo_water_pistols', 'm134_lawn_sprinkler', 'barrett_pressure_washer']);
@@ -61165,6 +61271,9 @@ const MODEL_SKINS = [
   { id: 'minigun_puppetmaster', weapon: 'minigun', name: 'THE PUPPETMASTER', rarity: 'legendary',
     sw: ['#2a2a34', '#ff2a3a'], build: buildPuppetmaster,
     blurb: 'Six barrels hang in the air round an empty centre, each on a thin red string from a ring that hovers above. They spin up without touching anything. Inspect drops the strings slack, then snaps them tight. Same damage and fire rate as the Minigun.' },
+  { id: 'minigun_hungry_garden', weapon: 'minigun', name: 'THE HUNGRY GARDEN', rarity: 'mythic', look: { hit: 'thorn' },
+    sw: ['#2f6a26', '#b02a5e', '#e8dfb0'], build: buildHungryGarden,
+    blurb: 'A living Minigun, and it is starving. Six thorn-covered stems end in little hungry mouths; the body is a flower bud that opens when it fires; the belt is a chain of seed pods. Fire and the mouths snap, spitting thorns. Reload and roots crawl over it and grow a fresh belt. Stop firing and each stem slowly turns toward the nearest enemy like a hungry snake. Whoever it kills is wrapped in thorned vines that wither away with them. Same damage and fire rate as the Minigun.' },
   { id: 'crossbow_widowmaker', weapon: 'crossbow', name: 'WIDOWMAKER', rarity: 'legendary', look: { hit: 'web' },
     sw: ['#0e0e12', '#ff2a2a'], build: buildWidowmaker,
     blurb: 'A mechanical spider that is also a crossbow. Eight legs fold along its sides; aim and they unfold into the bow arms. A shot snaps the front legs in, a reload sends a little spider crawling along the rail with the next bolt, and inspect stands it up and walks it across your view. Whoever it kills hangs in a giant red web that then shatters.' },
@@ -61430,7 +61539,7 @@ const TOWER_MODEL_SKIN_IDS = new Set(['ak20_field_radio']);
 // 🏆 Earned at the end of a ranked season by finishing it at Legend rank: never bought, pulled or won any other way (server.js SEASON_SKIN_IDS grants it when the season is closed).
 const SEASON_MODEL_SKIN_IDS = new Set(['ak20_phoenix_reign']);
 // 🐉 Gen 3: the newest skins have their own case. Mirrors GEN3_SKIN_IDS in server.js (no skin is free).
-const GEN3_MODEL_SKIN_IDS = new Set(['srx_point_of_no_return', 'crossbow_seraphim', 'revolver_clockbreaker', 'minigun_puppetmaster', 'crossbow_chronos_engine', 'crossbow_fracture', 'railgun_penteract', 'chain_gun_clockwork_dragon', 'ak20_breach_protocol', 'lever_remembrance', 'mauser_phantom_circuit']);
+const GEN3_MODEL_SKIN_IDS = new Set(['minigun_hungry_garden', 'srx_point_of_no_return', 'crossbow_seraphim', 'revolver_clockbreaker', 'minigun_puppetmaster', 'crossbow_chronos_engine', 'crossbow_fracture', 'railgun_penteract', 'chain_gun_clockwork_dragon', 'ak20_breach_protocol', 'lever_remembrance', 'mauser_phantom_circuit']);
 const GEN3_MELEE_MODEL_SKIN_IDS = new Set(['katana_fractured_reality', 'scythe_deaths_head']);   // Gen 3 holds melee skins too
 const GATED_MODEL_SKIN_IDS = new Set([...GEN1_GATED_MODEL_SKIN_IDS, ...GEN2_MODEL_SKIN_IDS, ...GEN3_MODEL_SKIN_IDS, ...TOWER_MODEL_SKIN_IDS, ...SEASON_MODEL_SKIN_IDS, ...PVP_SHOP_CATALOG.exclusiveSkins]);
 const GATED_MELEE_MODEL_SKIN_IDS = new Set([...GEN2_MELEE_MODEL_SKIN_IDS, ...GEN2_SUPPORT_MODEL_SKIN_IDS, ...GEN3_MELEE_MODEL_SKIN_IDS]);   // (the lock check is by id, so utilities share it)
@@ -66837,6 +66946,8 @@ const SKIN_FX = {
   minigun_puppetmaster: { equip: 'unfold', equipMs: 1000, equipSfx: ['whoosh', 'clack'],
     inspect: [K(.12, { py: .02 }), K(.25, { py: .05, pz: -.03 }), K(.62, { py: .05, pz: -.03 }), K(.70, { py: .035, pz: -.03 }), K(.86, { py: .02 }), K(1, {})] },
   katana_fractured_reality: { equip: 'assemble', equipMs: 950, equipSfx: ['crystal', 'chime'] },
+  minigun_hungry_garden: { equip: 'unfold', equipMs: 1100, equipSfx: ['whoosh', 'snapin'],
+    inspect: [K(.10, { py: .02 }), K(.24, { py: .05, pz: -.03 }), K(.50, { py: .05, pz: -.03, rz: .12 }), K(.74, { py: .05, pz: -.03, rz: -.08 }), K(.90, { py: .02 }), K(1, {})] },
   crossbow_fracture: { equip: 'build', equipMs: 900, equipSfx: ['whoosh', 'snapin'],
     inspect: [K(.14, { py: .03 }), K(.30, { py: .045, rz: .40 }), K(.50, { py: .045, rz: -.40 }), K(.70, { py: .045, rz: .35 }), K(.88, { py: .02, rz: -.15 }), K(1, {})] },
   crossbow_widowmaker: { equip: 'unfold', equipMs: 1000, equipSfx: ['fold', 'click'],
@@ -68532,6 +68643,51 @@ function playGlassFinisher(targetId) {
   return true;
 }
 // The end a skin's hit style gives a kill; false = it has none (the finisher the player picked, or the ragdoll, runs as always). Looked up at the call, so a test can stand in for any of them.
+
+// The kill: thorned vines burst out of the ground round the body, wind up it, and wither away with it
+HIT_STYLES.thorn = { chars: '✦✧+', glow: '#5aff3a', fill: '#c8ff9a', hit: 0xd8ffb0, miss: 0x7ad04a, screen: 'rgba(90,255,60,0.14)', num: '#9aff6a', numShadow: '0 0 8px #3aff1a, 0 0 2px #0a3a00, -1px -1px 0 #021a00, 1px 1px 0 #021a00', scramble: '✦✧+0123' };
+FINISHER_MOVES.thorn = function (mesh, id, c, killerId) {
+  const body = _finisherMat('thorn', 0x1c3a14); body.color.setHex(0x1c3a14);
+  _finisherSwap(mesh, body);
+  playSoundEvent('wood_break', { position: mesh.position, volume: 0.6, minGap: 80 });
+  const root = new THREE.Group(); root.position.copy(mesh.position); scene.add(root);
+  const green = new THREE.MeshLambertMaterial({ color: 0x3a8a2a, transparent: true }), thornM = new THREE.MeshLambertMaterial({ color: 0xe8dfb0, transparent: true });
+  const vines = [];
+  for (let i = 0; i < 9; i++) {
+    const a0 = i / 9 * Math.PI * 2, turns = 0.9 + (i % 3) * 0.25, h = 1.5 + (i % 4) * 0.18, pts = [];
+    for (let k = 0; k <= 14; k++) { const s = k / 14, a = a0 + s * turns * Math.PI * 2, r = 0.42 + 0.14 * Math.sin(s * 6 + i); pts.push(new THREE.Vector3(Math.cos(a) * r * (1 - s * 0.35), s * h, Math.sin(a) * r * (1 - s * 0.35))); }
+    const curve = new THREE.CatmullRomCurve3(pts), geo = new THREE.TubeGeometry(curve, 30, 0.04, 6, false), m = new THREE.Mesh(geo, green); root.add(m);
+    const thorns = [];
+    for (let k = 1; k < 12; k++) { const s = k / 12, p = curve.getPoint(s), tg = curve.getTangent(s), th = new THREE.Mesh(new THREE.ConeGeometry(0.022, 0.13, 5), thornM);
+      th.position.copy(p); th.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(Math.cos(k * 2.4 + i), 0.15, Math.sin(k * 2.4 + i)).normalize()); root.add(th); thorns.push([th, s]); }
+    vines.push({ m, geo, total: geo.index.count, thorns, delay: i * 0.025 });
+  }
+  const cleanup = () => { scene.remove(root); green.dispose(); thornM.dispose(); for (const v of vines) { v.geo.dispose(); v.thorns.forEach(([t]) => t.geometry.dispose()); } };
+  setTimeout(cleanup, 2500);
+  let burst = false;
+  _finisherDrive(mesh, id, 1850, (t, dt, st) => {
+    mesh.position.copy(st.p); mesh.rotation.y = st.r.y; mesh.scale.copy(st.s);
+    const grow = Math.min(1, t / 0.28), wither = t < 0.62 ? 0 : (t - 0.62) / 0.38;                      // up in a quarter of a second, still, then dry out and drop
+    for (const v of vines) {
+      const k = Math.max(0, Math.min(1, (grow - v.delay) * 1.1));
+      v.geo.setDrawRange(0, Math.floor(v.total * k / 3) * 3);
+      v.thorns.forEach(([th, s]) => { th.visible = s <= k; th.scale.setScalar(1 - wither * 0.6); });
+    }
+    green.color.setRGB(0.23 + wither * 0.30, 0.54 - wither * 0.22, 0.17 - wither * 0.05); green.opacity = 1 - Math.max(0, wither - 0.4) / 0.6; thornM.opacity = green.opacity;
+    root.scale.y = 1 - wither * 0.25; root.position.y = st.p.y - wither * 0.15;
+    if (!burst && t > 0.12) { burst = true; _finisherBurst(st.p.clone().setY(st.p.y + 0.3), 0x6ad03a, 22, [0x3a8a2a, 0x6ad03a, 0xe8dfb0]); _spawnFinisherRing(st.p.clone(), 0x4aff2a, 1.8); }
+    mesh.visible = wither < 0.5 || ((now => Math.floor(now / 60) % 2)(performance.now()) === 0);   // the withering body flickers out with it
+  }, st => { cleanup(); });
+};
+function playThornFinisher(targetId, killerId) {
+  const mesh = remoteMeshes[targetId];
+  if (!mesh || !mesh.visible) return false;
+  if (mesh._finisher && performance.now() < mesh._finisher.until) return true;
+  mesh._finisher = { id: 'thorn', until: performance.now() + 4200 };
+  FINISHER_MOVES.thorn(mesh, targetId, 0x6ad03a, killerId);
+  pushFeedLine('FED TO THE GARDEN', players[targetId]?.name || 'Enemy', '#8aff5a');
+  return true;
+}
 function _playSkinFinisher(kind, targetId, killerId = null) {
   if (kind === 'hack') return playGlitchFinisher(targetId);
   if (kind === 'error') return playGlitchFinisher(targetId, 'error');
@@ -68541,6 +68697,7 @@ function _playSkinFinisher(kind, targetId, killerId = null) {
   if (kind === 'shatter') return playShatterFinisher(targetId);
   if (kind === 'pixel') return playHologramFinisher(targetId);
   if (kind === 'web') return playWebFinisher(targetId, killerId);
+  if (kind === 'thorn') return playThornFinisher(targetId, killerId);
   if (kind === 'card') return playAceFinisher(targetId, killerId);
   return false;
 }
