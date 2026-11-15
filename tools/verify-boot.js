@@ -5631,6 +5631,7 @@ if (ok && (process.argv.includes('--stats') || process.argv.includes('--dump-sta
       if (w.ammoRegen) t.push('Ammo slowly regenerates');
       if (w.silentShots) t.push('Silenced');
       if (w.ignoreDefenses) t.push('Ignores shields and deflects');
+      if (w.pierce) t.push('Pierces: the round goes through up to ' + w.pierce.extra + ' more enem' + (w.pierce.extra > 1 ? 'ies' : 'y') + '; each one after takes ' + Math.round(w.pierce.keep * 100) + '% of what the one before did');
       if (w.activeReload) t.push('Active reload: a well-timed second tap speeds it up');
       if (w.killReload) t.push('A kill refills the magazine');
       if (w.lastBulletBonus) t.push('The last round in the magazine hits harder');

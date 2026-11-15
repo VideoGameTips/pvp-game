@@ -53,12 +53,14 @@ const WEAPONS = [
   },
   {
     id: 'sg8',   name: 'SG-8',  type: 'Shotgun', slot: 'primary',
+    pierce: { extra: 1, keep: 0.5 },   // 🎯 goes through 1 more enemy, each taking 50% of the last one's damage (client: the bullet loop; published as a trait)
     mag: 8,   reserve: 32,  damage: 18, fireRate: 450,  reloadTime: 3125, reloadStyle: 'shell',
     auto: false, pellets: 6, spread: 0.08, adsZoom: 55, bulletSpeed: 110, noReload: false,
     ability: { name: 'Bullet Wave', cd: 12000, desc: '6×6 grid · 36 bullets · 20 dmg each', type: 'bulletwave', noADS: true },
   },
   {
     id: 'srx', activeReload: true,   name: 'SR-X',  type: 'Sniper', slot: 'primary',
+    pierce: { extra: 1, keep: 0.7 },   // 🎯 goes through 1 more enemy, each taking 70% of the last one's damage (client: the bullet loop; published as a trait)
     mag: 5,   reserve: 20,  damage: 95, fireRate: 1200, reloadTime: 3000,
     auto: false, pellets: 1, spread: 0,    adsZoom: 15, bulletSpeed: 200, bulletSpeedMult: 10, noReload: false,
     // spread:0 and no recoil object already meant no random scatter and no
@@ -400,6 +402,7 @@ const WEAPONS = [
   },
   {
     id: 'amr', archived: true, activeReload: true, name: 'Anti-Material Rifle', type: 'Heavy Sniper', slot: 'primary',
+    pierce: { extra: 2, keep: 0.8 },   // 🎯 goes through 2 more enemies, each taking 80% of the last one's damage (client: the bullet loop; published as a trait)
     mag: 3, reserve: 12, damage: 180, fireRate: 1600, reloadTime: 3400,
     auto: false, pellets: 1, spread: 0, adsZoom: 14, bulletSpeed: 260, bulletSpeedMult: 10, noReload: false,
     bulletColor: 0xddaa44, bulletSize: 0.075,
@@ -726,6 +729,7 @@ const WEAPONS = [
   },
   {
     id: 'barrett', activeReload: true, name: 'Barrett M82', type: 'Admin · Anti-Material', slot: 'primary',
+    pierce: { extra: 2, keep: 0.8 },   // 🎯 goes through 2 more enemies, each taking 80% of the last one's damage (client: the bullet loop; published as a trait)
     mag: 5, reserve: 15, damage: 250, fireRate: 1100, reloadTime: 3200,
     auto: false, pellets: 1, spread: 0, adsZoom: 12, bulletSpeed: 320, bulletSpeedMult: 10, noReload: false,
     bulletColor: 0xffcc66, bulletSize: 0.08, adminItem: true,
@@ -69301,7 +69305,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
   // 🔥 Plasma Carbine: the bolt grows as it travels, up to +80% at 45 m (it gives up what the other guns lose over distance)
   const plasmaGrow = WEAPONS.find(w => w.id === weaponId)?.plasmaGrows && hitDist != null ? 1 + 0.8 * Math.min(1, hitDist / 45) : 1;
   const dmg = Number.isFinite(opts.damageOverride) ? Math.max(0, Math.min(999, Math.round(opts.damageOverride))) : (headshot && instakill) ? 999 : Math.round(
-    (headshot ? baseDmg * headshotMultFor(weaponId) : baseDmg) * synergy * falloff * plasmaGrow * (opts.wallPenetrated && gatecrasherPiercesWalls(weaponId) ? .5 : 1));
+    (headshot ? baseDmg * headshotMultFor(weaponId) : baseDmg) * synergy * falloff * plasmaGrow * (opts.wallPenetrated && gatecrasherPiercesWalls(weaponId) ? .5 : 1) * (Number.isFinite(opts.damageScale) ? opts.damageScale : 1));
   if (!opts.reflectedDamage) {
     if (match?.boss && pid === match.boss.bot.id && bossOnHit(hitWorldPos, weaponId, {...opts,damageOverride:dmg})) return;
     const guardingBot = resolveBot(pid);
@@ -70005,6 +70009,7 @@ function updateBullets(dt) {
       const headR = 0.28 + bulletR, bodyR = 0.65 + bulletR;
 
       for (const [pid, mesh] of Object.entries(remoteMeshes)) {
+        if (b._pierced && b._pierced.has(pid)) continue;                     // a round that has already gone through this one does not hit it twice
         if (mesh._ragdoll && !players[pid]?.dead) {
           const hit = window.PVP_RAGDOLL?.hit(mesh, new THREE.Vector3(px0,py0,pz0), _bpos, bulletR);
           if (hit && (!bestHit || hit.t < bestHit.t)) bestHit = { pid, mesh, ...hit };
@@ -70179,13 +70184,13 @@ function updateBullets(dt) {
             const baseDmg = getClientWeaponDamage(b.weaponId);
             // The range's dummies take what a player would: the same falloff, and they are graded the same.
             const dFall = falloffMultiplier(b.weaponId, camera.position.distanceTo(_bpos));
-            const dmg = Math.round((bestHit.headshot ? baseDmg * headshotMultFor(b.weaponId) : baseDmg) * dFall * projectileWallDamageScale(b, bestHit.t));
+            const dmg = Math.round((bestHit.headshot ? baseDmg * headshotMultFor(b.weaponId) : baseDmg) * dFall * projectileWallDamageScale(b, bestHit.t) * (b._pierceScale || 1));
             handleDummyHit(dummy, bestHit.mesh, { damage: dmg, headshot: bestHit.headshot, falloff: dFall, headMiss: bestHit.miss, weaponId: b.weaponId }, _bpos.clone());
           }
         } else if (b.isPaintBomb) {
           triggerPaintExplosion(_bpos.clone(), b);
         } else {
-          emitHit(bestHit.pid, b.id, b.weaponId || currentWeapon.id, _bpos.clone(), bestHit.headshot, { headMiss: bestHit.miss, wallPenetrated: projectileWallDamageScale(b, bestHit.t) < 1 });
+          emitHit(bestHit.pid, b.id, b.weaponId || currentWeapon.id, _bpos.clone(), bestHit.headshot, { headMiss: bestHit.miss, wallPenetrated: projectileWallDamageScale(b, bestHit.t) < 1, damageScale: b._pierceScale });
           applyDotOnHit(b.weaponId || currentWeapon.id, bestHit.pid);
         }
         if (b.skinLook && b.skinLook.hit) skinHitFX(b.skinLook.hit, _bpos.clone(), true);                  // the skin's own hit: the Hacker Pistol's flash and code
@@ -70200,6 +70205,14 @@ function updateBullets(dt) {
           rocketExplode(_bpos.clone(), adminBoomId(b), _adminOnly ? null : bestHit.pid, { damagePlayer: false, skinLook: b.skinLook });
         }
         if (b.plantsSpear) landThrownSpear(b, bestHit.mesh.position, null);                   // it drops and stands at their feet
+        // 🎯 Piercing rounds (sniper rifles, the SG-8's pellets): the round goes on through, and whoever it meets next takes a share of the damage
+        { const PR = b._pr !== undefined ? b._pr : (b._pr = WEAPONS.find(w => w.id === b.weaponId)?.pierce || null);
+          if (PR && !b.isPaintBomb && !b.plantsSpear && (b._pierceN || 0) < PR.extra) {
+            (b._pierced || (b._pierced = new Set())).add(bestHit.pid); b._pierceN = (b._pierceN || 0) + 1; b._pierceScale = (b._pierceScale || 1) * PR.keep;
+            spawnHitParticle(_bpos);
+            b.mesh.position.copy(bestHit.pos).addScaledVector(b.dir, 0.02);           // carry on from the body it went through: the rest of this frame's flight (a sniper round covers dozens of metres a frame) is flown again, so whoever stands behind is found
+            continue;
+          } }
         removeBullet();
         spawnHitParticle(_bpos);
         continue;

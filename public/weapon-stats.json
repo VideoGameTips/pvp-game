@@ -142,7 +142,9 @@
     "name": "Bullet Wave",
     "desc": "6×6 grid · 36 bullets · 20 dmg each"
    },
-   "traits": []
+   "traits": [
+    "Pierces: the round goes through up to 1 more enemy; each one after takes 50% of what the one before did"
+   ]
   },
   {
    "id": "srx",
@@ -200,7 +202,8 @@
    },
    "traits": [
     "Active reload: a well-timed second tap speeds it up",
-    "Perfectly accurate, no recoil"
+    "Perfectly accurate, no recoil",
+    "Pierces: the round goes through up to 1 more enemy; each one after takes 70% of what the one before did"
    ]
   },
   {
@@ -2785,7 +2788,8 @@
    },
    "traits": [
     "Ignores shields and deflects",
-    "Active reload: a well-timed second tap speeds it up"
+    "Active reload: a well-timed second tap speeds it up",
+    "Pierces: the round goes through up to 2 more enemies; each one after takes 80% of what the one before did"
    ]
   },
   {
