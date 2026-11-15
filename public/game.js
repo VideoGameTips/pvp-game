@@ -82353,6 +82353,7 @@ function updateBotAI(dt,simulation=null) {
           const mv = NM.think(bot, target, { x: moveX, z: moveZ }, { dt, now, onGround, wasHit });
           moveX = mv.x; moveZ = mv.z;
           NM.deflect(bot, now);
+          NM.reachStrike(bot, target, now);                               // (Spear / Chain Maul: a strike from their reach)
           NM.utility(bot, target, now, { onGround, wasHit, dt });
         }
         const g = bot._hgGoal;

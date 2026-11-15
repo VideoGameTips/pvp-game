@@ -224,7 +224,10 @@
     if (st.camp && dist > 14 && S.spotsHit) { f = Math.max(f, spd * 0.7); }          // a camper: come at them, from a different side
     // the weapon's own playstyle: spacing, an ambush's retreat, a sniper's new position, a peek, cover between bursts
     const P = profileFor(bot);
-    if (!pursue || dist < P.band[1]) {
+    const reachItem = (bot.meleeId === 'spear' || bot.meleeId === 'chain_hammer') ? MELEE_ITEMS.find(m => m.id === bot.meleeId) : null;
+    const reloadingNow = bot.reloadUntil && now < bot.reloadUntil;
+    if (reachItem && reloadingNow && hasLOS && dist > reachItem.range - 0.6) f = Math.max(f, spd * 1.0);       // reloading: close to the melee's reach (the spear's, or the Chain Maul's 10 m) instead of hiding
+    else if (!pursue || dist < P.band[1]) {
       if (dist < P.band[0]) f = Math.min(f, -spd * (P.close ? 0.25 : 0.7));
       else if (dist > P.band[1]) f = Math.max(f, spd * (P.close ? 1.0 : 0.85));
       else f *= 0.35;
@@ -265,6 +268,29 @@
       if (hasLineOfSight(bot.x, bot.z, c.x, c.z) && hasLineOfSight(c.x, c.z, rp.x, rp.z)) { S.reloc = { x: c.x, z: c.z, until: now + 2600 }; return; }
     }
   }
+
+  // ── Spear and Chain Maul: strike from reach, with the item's own damage and cooldown ──
+  // A Spear pokes from 3 m while it strafes; a Chain Maul swings at up to 10 m, which a gun duel does not expect. It strikes when its gun is reloading, when the enemy is weak, or when the
+  // item out-damages the gun at that distance; never into a guard, never through a wall.
+  NM.reachStrike = function (bot, target, now) {
+    if ((bot.meleeId !== 'spear' && bot.meleeId !== 'chain_hammer') || !target || target._phantom || !target.isPlayer || isDead || bot._regularMelee) return false;
+    const S = A(bot); if (now < (S.reachAt || 0)) return false;
+    const item = MELEE_ITEMS.find(m => m.id === bot.meleeId && !m.archived); if (!item) return false;
+    if ((typeof isShielded === 'function' && isShielded()) || (typeof meleeAbilityBuff !== 'undefined' && meleeAbilityBuff && ['parry', 'deflect'].includes(meleeAbilityBuff.type))) return false;
+    const px = camera.position.x, pz = camera.position.z, dist = Math.hypot(px - bot.x, pz - bot.z);
+    if (dist > item.range - 0.35 || Math.abs((camera.position.y - 1.65) - (bot.y || 0)) > 2.5 || !hasLineOfSight(bot.x, bot.z, px, pz)) return false;
+    const gun = WEAPONS.find(w => w.id === bot.weaponId), gunDps = gun ? NM.weaponValue(gun, dist) : 0, meleeDps = (item.damage || 0) / ((item.cooldown || 800) / 1000);
+    const tHp = (players[myId] && players[myId].hp != null) ? players[myId].hp : 300;
+    if (!(bot.reloadUntil && now < bot.reloadUntil) && tHp > 300 * 0.35 && meleeDps * 0.9 < gunDps) return false;
+    S.reachAt = now + (item.cooldown || 800) * 1.1;
+    try { botHitsMe(bot.id, item.id); } catch (e) { return false; }
+    try {
+      armRemoteMesh(remoteMeshes[bot.id], item.id); setTimeout(() => { try { if (!bot.dead) armRemoteMesh(remoteMeshes[bot.id], bot.weaponId); } catch (e) {} }, 420);
+      playSoundEvent('melee_heavy', { position: new THREE.Vector3(bot.x, (bot.y || 0) + 1, bot.z), remote: true, volume: 0.7, minGap: 80 });
+      spawnHitParticle(new THREE.Vector3(px, 1.3, pz));
+    } catch (e) {}
+    return true;
+  };
 
   // ── 4. the Katana: predict the round and raise the guard in time ──
   NM.deflect = function (bot, now) {
