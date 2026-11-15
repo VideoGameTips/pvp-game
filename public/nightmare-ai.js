@@ -15,7 +15,7 @@
   const NM = window.NM = { version: 1 };
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const T = () => (typeof BOT_DIFFICULTY_TUNING !== 'undefined' && BOT_DIFFICULTY_TUNING.nightmare) || { fireMin: 330, fireRand: 170, reloadMin: 650, reloadRand: 200 };
-  const A = bot => bot._nm2 || (bot._nm2 = { mem: null, search: null, plan: null, hist: [], spots: [], flips: 0, flipAt: 0, last: { x: bot.x, z: bot.z, t: 0 }, style: {}, slotAt: 0, utilAt: 0, seen: {} });
+  const A = bot => bot._nm2 || (bot._nm2 = { mem: null, search: null, plan: null, hist: [], spots: [], flips: 0, flipAt: 0, last: { x: bot.x, z: bot.z, t: Date.now() }, style: {}, slotAt: 0, utilAt: 0, seen: {} });
   const realOf = t => (t && t._phantom) ? t._real : t;
   const posOf = t => t.isPlayer ? { x: camera.position.x, z: camera.position.z } : { x: t.x, z: t.z };
 
@@ -61,7 +61,9 @@
     const pw = WEAPONS.find(w => w.id === bot.primaryId), sw = WEAPONS.find(w => w.id === bot.secondaryId);
     if (!pw || !sw) return cur;
     const st = S.style, d = dist * (st.rush ? 0.6 : (st.camp || st.retreat) ? 1.2 : 1);
-    const vp = NM.weaponValue(pw, d), vs = NM.weaponValue(sw, d);
+    const tHp = (typeof players !== 'undefined' && players[myId] && players[myId].hp != null) ? players[myId].hp : 300, weak = tHp < 300 * 0.4;
+    const mod = (w, v) => ((w.id === 'duelist_pistol') ? (weak ? 2.6 : 0.3) : (w.id === 'revolver' || w.id === 'auto_revolver' || w.id === 'snub_revolver') && weak ? 1.4 : 1) * v;   // a duelist saves its shot for a finish; a revolver finishes eagerly
+    const vp = mod(pw, NM.weaponValue(pw, d)), vs = mod(sw, NM.weaponValue(sw, d));
     const reloading = bot.reloadUntil && now < bot.reloadUntil;
     const best = vs > vp * 1.18 ? 'secondary' : vp > vs * 1.18 ? 'primary' : cur;    // a clear winner, or stay
     if (best === cur) return cur;
@@ -134,20 +136,38 @@
 
   // ── Nightmare playstyles per weapon: the spacing it wants, and how it fights with it ──
   //   band: the range it fights at · close: it closes in on its own · shot: relocate after each shot · peek: expose / hide cycle (ms) · burst: cover between bursts · hold: suppress, less strafing
+  // Classes: a playstyle is a spacing band plus a few verbs. band: the range it fights at · close: it closes in on its own · shot: a new position after every shot · peek: [expose, hide] ms
+  //   burst: cover between bursts · hold: suppress, little strafing · press: strafes hard · retreatAfterShot: strikes, then backs off · jumpy: jumps after a shot (double-jump skirmisher) · finisher: saved for a weak enemy
+  const C = {
+    ar:       { band: [8, 22], burst: true },
+    ambush:   { band: [2.5, 8], close: true, retreatAfterShot: true },
+    sniper:   { band: [26, 48], shot: true },
+    smg:      { band: [3.5, 12], close: true, press: true },
+    peek:     { band: [14, 30], peek: [650, 900] },
+    patient:  { band: [14, 30] },
+    lmg:      { band: [12, 26], hold: true },
+    marksman: { band: [12, 24] },
+    explosive:{ band: [16, 34], shot: true },                                       // targets corners, cover edges and escape routes from range, never in the same spot twice
+    control:  { band: [9, 18], jumpy: true },                                       // slows / freezes, then stays out of reach
+    skirmish: { band: [8, 18], jumpy: true, retreatAfterShot: true },               // poison / chip: a shot, a jump, away
+    duel:     { band: [8, 20], peek: [500, 700] },
+    cannon:   { band: [8, 22], peek: [700, 1000], shot: true },
+    backup:   { band: [2, 8], close: true, press: true },
+    thrown:   { band: [8, 18], jumpy: true },
+    flame:    { band: [2, 7], close: true, press: true },
+  };
   const PROFILES = {
-    ak20:        { band: [8, 22],  burst: true },                                  // tactical aggressor: angles, tracking, cover between bursts
-    sg8:         { band: [2.5, 8], close: true, retreatAfterShot: true },          // ambush predator: close through cover, strike, back off before the answer
-    srx:         { band: [26, 48], shot: true },                                   // precision hunter: long lines, relocate after every shot
-    p90:         { band: [3.5, 12], close: true, press: true },                    // relentless pursuer: constant pressure
-    lever:       { band: [14, 30], peek: [650, 900] },                             // peek specialist: out just long enough to fire
-    crossbow:    { band: [14, 30], patient: true },                                // patient assassin: spacing, no wasted shots
-    minigun:     { band: [12, 26], hold: true },                                   // area controller: holds a corridor
-    m1_garand:   { band: [12, 24] },                                               // midrange marksman: optimal spacing
-    revolver:    { band: [8, 20],  peek: [500, 700] },                             // precision finisher: quick peeks
-    auto_revolver: { band: [8, 20], peek: [500, 700] },
-    hand_cannon: { band: [8, 22],  peek: [700, 1000], shot: true },                // high-risk duelist: one big shot, then a new spot
-    machine_pistol: { band: [2, 8], close: true, press: true },                    // close-range backup
-    duelist:     { band: [10, 24], patient: true },                                // saves its shot for a finish
+    // primaries
+    ak20: C.ar, burst: C.ar, sg8: C.ambush, storm_bloom: C.ambush, srx: C.sniper, railgun: C.sniper, air_rifle: C.sniper, p90: C.smg, mp40: C.smg, vector: C.smg,
+    lever: C.peek, crossbow: Object.assign({}, C.patient, { patient: true }), minigun: C.lmg, rpd: C.lmg, chain_gun: C.lmg, m1_garand: C.marksman,
+    rpg: C.explosive, grenade_launcher: C.explosive, mortar_rifle: Object.assign({}, C.explosive, { band: [24, 46] }), boombow: C.explosive, javelin_launcher: C.explosive,
+    freeze_gun: C.control, cyroclasm: C.control, flamethrower: C.flame, paintball: C.skirmish,
+    // secondaries
+    revolver: C.duel, auto_revolver: C.duel, snub_revolver: Object.assign({}, C.duel, { band: [5, 14] }), mauser: C.duel, hand_cannon: C.cannon, duelist_pistol: Object.assign({}, C.duel, { band: [10, 24], finisher: true }),
+    machine_pistol: C.backup, akimbo: C.backup, cycler: C.backup, nail_gun: Object.assign({}, C.backup, { band: [4, 12] }), continuum: C.skirmish,
+    sawed_off: C.ambush, gunslinger: Object.assign({}, C.ambush, { band: [3, 10] }), gatecrasher: C.duel, pistol: C.duel,
+    dart_gun: C.skirmish, slingshot: Object.assign({}, C.skirmish, { band: [10, 22], peek: [600, 800] }),                         // slingshot: attacks from behind cover, ricochet angles by peeking at walls
+    taser: C.control, flare: C.thrown, laser_pointer: C.patient, throwing_knives: C.thrown, traffic_cone: C.thrown, cream_pie: C.thrown,
   };
   const BY_TYPE = [[/sniper/i, 'srx'], [/shotgun/i, 'sg8'], [/smg/i, 'p90'], [/lmg|heavy|chain|gatling/i, 'minigun'], [/marksman|battle/i, 'lever'], [/secondary|pistol|revolver/i, 'revolver']];
   const DEFAULT = { band: [8, 22] };
@@ -215,6 +235,7 @@
       if (P.retreatAfterShot && dist < 11) S.retreatUntil = now + 1100;
     }
     if (S.retreatUntil && now < S.retreatUntil) f = -spd * 1.1;
+    if (P.jumpy && S.jumpAt2 !== bot.lastShot && now - (bot.lastShot || 0) < 250 && ctx.onGround && dist > 4) { S.jumpAt2 = bot.lastShot; bot.yVel = 12.5; bot.y = bot.y || 0; bot._airJumpUsed = false; }   // a shot, then up (the second jump is the bot's usual double jump)
     if (P.peek && hasLOS) {
       if (!S.peek || now > S.peek.until) S.peek = { hide: !(S.peek && S.peek.hide), until: now + (S.peek && !S.peek.hide ? P.peek[1] : P.peek[0]) * (0.8 + Math.random() * 0.4) };
       if (S.peek.hide) { const cp = coverPoint(bot, S, real, now); if (cp) { const cx = cp.x - bot.x, cz = cp.z - bot.z, cl = Math.hypot(cx, cz); if (cl > 1.2) return { x: cx / cl * 9 * dt, z: cz / cl * 9 * dt }; } f = Math.min(f, -spd * 0.5); }
