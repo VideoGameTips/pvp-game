@@ -501,7 +501,7 @@ for (const id of GEN2_NEW_MYTHIC_SKIN_IDS) GEN2_SKIN_WEIGHTS[id] = 0.5;    // ha
 // each one is dealt by this case and nowhere else.
 const GEN3_LEGENDARY_SKIN_IDS = ['minigun_hungry_garden', 'srx_point_of_no_return', 'crossbow_seraphim', 'revolver_clockbreaker', 'minigun_puppetmaster', 'katana_fractured_reality', 'crossbow_chronos_engine', 'crossbow_fracture', 'railgun_penteract', 'chain_gun_clockwork_dragon', 'ak20_breach_protocol', 'scythe_deaths_head', 'mauser_phantom_circuit'];
 const GEN3_RARE_SKIN_IDS = ['lever_remembrance'];
-const GEN3_MYTHIC_SKIN_IDS = ['m1_garand_clockwork_requiem'];   // The Clockwork Requiem, the case's rarest
+const GEN3_MYTHIC_SKIN_IDS = ['sg8_abyssal_sovereign', 'm1_garand_clockwork_requiem'];   // The Clockwork Requiem, the case's rarest
 const GEN3_SKIN_IDS = [...GEN3_MYTHIC_SKIN_IDS, ...GEN3_LEGENDARY_SKIN_IDS, ...GEN3_RARE_SKIN_IDS];
 const GEN3_SKIN_WEIGHTS = {};
 for (const id of GEN3_LEGENDARY_SKIN_IDS) GEN3_SKIN_WEIGHTS[id] = 2;

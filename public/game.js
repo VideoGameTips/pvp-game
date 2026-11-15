@@ -36030,6 +36030,289 @@ function buildIronclad() {
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 
+// 🦑 SG-8 -> THE ABYSSAL SOVEREIGN. A shotgun made of the skull and bones of an ancient anglerfish. The barrel is a spine ending in a ring of SIX gaping, tooth-lined mouths; the body is a huge lopsided skull (a hollow
+// eye socket on the side you see, cracks and dark coral on the other) over an underslung jaw; the stock is a cage of fossil ribs that wraps your shoulder; glowing lure tendrils sway on top and translucent fins wave
+// on the flanks. Fire: all six mouths snap open together and throw spectral teeth. Reload: a gullet on the loading port opens, takes each shell in its jaws and swallows it. Inspect: a long lure grows out of the
+// skull, then one mouth opens its eyelids on an eye that turns and stares. Signature: the teeth chatter when an enemy you could actually SEE is near -- with no line of sight there is nothing, so it never shows
+// anyone through a wall (and it tells you how close, never which way).
+let _abyssThreatAt = 0, _abyssThreat = 0;
+function _abyssNearby(now) {                                                    // 0..1: how close the nearest enemy in plain sight is; recomputed five times a second
+  if (now - _abyssThreatAt < 0.2) return _abyssThreat;
+  _abyssThreatAt = now;
+  let best = 0;
+  try {
+    const cx = camera.position.x, cy = camera.position.y, cz = camera.position.z, RANGE = 26, botIds = new Set(gameBots.map(b => b.id));
+    const look = (x, z) => {
+      const d = Math.hypot(x - cx, z - cz);
+      if (d > RANGE || d <= 0.01) return;
+      if (hasLineOfSight(cx, cz, x, z, cy, 1.2)) best = Math.max(best, 1 - d / RANGE);
+    };
+    for (const b of gameBots) { if (b.dead || b.team === 'ally') continue; const m = remoteMeshes[b.id]; look(m ? m.position.x : b.x, m ? m.position.z : b.z); }
+    for (const [pid, m] of Object.entries(remoteMeshes)) {
+      if (pid === myId || botIds.has(pid) || !m.visible || players[pid]?.dead) continue;
+      let ff = false; try { ff = friendlyFireBlocked(pid, myId); } catch (e) {}
+      if (!ff) look(m.position.x, m.position.z);
+    }
+  } catch (e) { best = 0; }
+  return _abyssThreat = best;
+}
+
+function buildAbyssalSovereign() {
+  const g = new THREE.Group();
+  const bone = new THREE.MeshPhongMaterial({ color: 0xd9d2bc, shininess: 45, specular: 0xa8a898, flatShading: true });
+  const boneD = new THREE.MeshPhongMaterial({ color: 0x8e8670, shininess: 25, specular: 0x5a5a50, flatShading: true });
+  const abyss = new THREE.MeshPhongMaterial({ color: 0x081216, shininess: 50, specular: 0x2a5a60, flatShading: true });
+  const coralA = new THREE.MeshPhongMaterial({ color: 0x2a1c3c, emissive: 0x0c0818, shininess: 30, flatShading: true });
+  const coralB = new THREE.MeshPhongMaterial({ color: 0x1c4048, emissive: 0x06181c, shininess: 30, flatShading: true });
+  const glowC = new THREE.MeshBasicMaterial({ color: 0x4af0d8 });
+  const bulbM = new THREE.MeshBasicMaterial({ color: 0xbffff0 });
+  const addGlow = (c, o) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+  const eyeM = new THREE.MeshBasicMaterial({ color: 0xcffff4 });
+  const pupilM = new THREE.MeshBasicMaterial({ color: 0x020608 });
+  const box = (m, w, h, d, x, y, z, parent = g, rx = 0, ry = 0, rz = 0) => gpBox(parent, m, w, h, d, x, y, z, rx, ry, rz);
+  // ── The skull: a big lopsided dome in the SG-8's own footprint, so the hands and the sight line are where they were ──
+  gpPlate(g, bone, [[-0.060, 0.004], [-0.045, 0.034], [-0.005, 0.052], [0.045, 0.056], [0.100, 0.044], [0.122, 0.014], [0.116, -0.020], [0.075, -0.034], [0.040, -0.022], [-0.005, -0.028], [-0.040, -0.018]], 0.058, 0);
+  gpPlate(g, boneD, [[-0.052, 0.020], [-0.020, 0.044], [0.030, 0.050], [0.020, 0.036], [-0.030, 0.026]], 0.062, 0);                           // a heavy brow ridge
+  gpPlate(g, bone, [[-0.050, -0.020], [0.020, -0.034], [0.070, -0.044], [0.062, -0.058], [-0.020, -0.052], [-0.064, -0.034]], 0.044, 0);        // the underslung jaw
+  for (let i = 0; i < 7; i++) gpCyl(g, bone, 0.0026, 0.0003, 0.015, 4, 0, -0.058, -0.040 + i * 0.012, Math.PI, 0);                              // its teeth, pointing up
+  // the hollow eye socket on the side you see; on the far side, cracks and a half-closed socket
+  gpCyl(g, abyss, 0.0175, 0.0175, 0.004, 10, -0.0295, 0.028, 0.040, 0, Math.PI / 2);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.0195, 0.0042, 5, 10), bone); rim.rotation.y = Math.PI / 2; rim.position.set(-0.0305, 0.028, 0.040); g.add(rim);
+  box(glowC, 0.002, 0.003, 0.003, -0.0262, 0.030, 0.044);                                                                                      // a pinprick of light, far back in the dark
+  gpCyl(g, abyss, 0.0095, 0.0095, 0.004, 8, 0.0295, 0.026, 0.050, 0, Math.PI / 2);
+  box(boneD, 0.003, 0.010, 0.020, 0.0305, 0.034, 0.050, g, 0, 0, 0.5);
+  [[0.040, 0.030, 0.04, 0.6], [0.040, -0.004, 0.05, -0.4], [0.075, 0.014, 0.04, 0.2]].forEach(([z, y, l, r]) => box(abyss, 0.002, 0.003, l, 0.0298, y, z, g, 0, 0, r));
+  const coral = (x, y, z, n, m) => { for (let i = 0; i < n; i++) { const c = new THREE.Mesh(new THREE.ConeGeometry(0.004 + (i % 3) * 0.0012, 0.014 + (i % 4) * 0.005, 4), m); c.position.set(x + (i % 3 - 1) * 0.005, y + (i % 2) * 0.003, z + (i % 4 - 1.5) * 0.005); c.rotation.set((i % 3 - 1) * 0.5, 0, (i % 2 ? 1 : -1) * 0.6); g.add(c); } };
+  coral(0.026, 0.040, 0.082, 6, coralA); coral(0.024, 0.008, 0.100, 4, coralB); coral(-0.018, 0.050, 0.098, 4, coralA); coral(0.020, 0.054, 0.020, 3, coralB);
+  // ── The spine that is the magazine tube, and the barrel it carries ──
+  for (let i = 0; i < 10; i++) { gpCyl(g, i % 2 ? boneD : bone, 0.0105, 0.0105, 0.016, 8, 0, -0.008, -0.060 - i * 0.024); gpBox(g, boneD, 0.004, 0.012, 0.008, 0, 0.006, -0.060 - i * 0.024); }
+  gpCyl(g, abyss, 0.0045, 0.0045, 0.250, 5, 0, -0.008, -0.178);
+  gpCyl(g, boneD, 0.0125, 0.0125, 0.300, 10, 0, 0.020, -0.200);
+  for (let i = 0; i < 5; i++) gpCyl(g, bone, 0.0158, 0.0158, 0.010, 8, 0, 0.020, -0.090 - i * 0.050);
+  // ── Six gaping mouths round the muzzle, each ringed with teeth that flare open together ──
+  const FWD = new THREE.Vector3(0, 0, -1), mouths = [], teeth = [];
+  for (let i = 0; i < 6; i++) {
+    const a = Math.PI / 2 + i * Math.PI / 3, big = i === 0 ? 1.45 : 1, mg = new THREE.Group();
+    mg.position.set(Math.cos(a) * 0.037 * (i === 0 ? 1.12 : 1), 0.020 + Math.sin(a) * 0.037 * (i === 0 ? 1.12 : 1), -0.340); mg.scale.setScalar(big); g.add(mg);
+    gpCyl(mg, boneD, 0.0085, 0.0125, 0.030, 8, 0, 0, 0);                                                                                       // a flared throat
+    gpCyl(mg, abyss, 0.0098, 0.0098, 0.0025, 8, 0, 0, -0.0150);                                                                                // the dark inside
+    const m = { g: mg, a, teeth: [] };
+    for (let k = 0; k < 6; k++) {
+      const b = k * Math.PI / 3, pv = new THREE.Group(); pv.position.set(Math.cos(b) * 0.0118, Math.sin(b) * 0.0118, -0.0155); mg.add(pv);
+      const tooth = new THREE.Mesh(new THREE.ConeGeometry(0.0030, 0.0125, 4), bone); tooth.rotation.x = -Math.PI / 2; tooth.position.z = -0.0062; pv.add(tooth);
+      m.teeth.push({ pv, r: new THREE.Vector3(Math.cos(b), Math.sin(b), 0), ph: i * 6 + k }); teeth.push(m.teeth[k]);
+    }
+    mouths.push(m);
+  }
+  // the eye that waits in the top mouth, behind two lids
+  const eyeG = new THREE.Group(); eyeG.position.set(0, 0, -0.003); eyeG.scale.setScalar(0.01); eyeG.visible = false; mouths[0].g.add(eyeG);
+  eyeG.add(new THREE.Mesh(new THREE.SphereGeometry(0.0082, 8, 6), eyeM));
+  const iris = new THREE.Mesh(new THREE.TorusGeometry(0.0046, 0.0012, 4, 10), glowC); iris.position.z = -0.0074; eyeG.add(iris);
+  const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.0030, 6, 5), pupilM); pupil.position.z = -0.0078; pupil.scale.set(1, 1, 0.5); eyeG.add(pupil);
+  const lidU = new THREE.Mesh(new THREE.BoxGeometry(0.020, 0.0075, 0.004), bone), lidL = new THREE.Mesh(new THREE.BoxGeometry(0.020, 0.0075, 0.004), bone);
+  lidU.position.set(0, 0.0042, -0.0165); lidL.position.set(0, -0.0042, -0.0165); mouths[0].g.add(lidU, lidL);
+  // ── Lure tendrils: a chain of jointed segments with a bright bulb at the tip ──
+  const tendril = (x, y, z, segs, len, th, bulb, curl) => {
+    const root = new THREE.Group(); root.position.set(x, y, z); g.add(root);
+    const joints = []; let parent = root;
+    for (let i = 0; i < segs; i++) {
+      const j = new THREE.Group(); j.position.y = i ? len : 0; parent.add(j);
+      const seg = new THREE.Mesh(new THREE.CylinderGeometry(th * (1 - i / (segs + 2)), th * (1 - (i + 1) / (segs + 2)), len, 5), i % 2 ? boneD : abyss); seg.position.y = len / 2; j.add(seg);
+      joints.push(j); parent = j;
+    }
+    const tip = new THREE.Group(); tip.position.y = len; parent.add(tip);
+    const b = new THREE.Mesh(new THREE.IcosahedronGeometry(bulb, 0), bulbM); tip.add(b);
+    const halo = new THREE.Mesh(new THREE.IcosahedronGeometry(bulb * 2.2, 0), addGlow(0x4af0d8, 0.28)); tip.add(halo);
+    return { root, joints, bulb: b, halo, curl };
+  };
+  const tends = [tendril(-0.010, 0.050, 0.010, 5, 0.020, 0.0030, 0.0055, -0.20), tendril(0.014, 0.052, 0.038, 4, 0.018, 0.0027, 0.0048, -0.26), tendril(-0.016, 0.048, 0.064, 4, 0.016, 0.0024, 0.0042, -0.30)];
+  const lure = tendril(0, 0.056, 0.018, 9, 0.032, 0.0042, 0.0105, -0.19); lure.root.scale.setScalar(0.001); lure.root.visible = false;
+  // ── Grip, trigger guard, rib-cage stock, and a forend of vertebrae ──
+  gpPlate(g, bone, [[0.060, -0.020], [0.084, -0.040], [0.086, -0.092], [0.062, -0.102], [0.044, -0.052], [0.042, -0.024]], 0.030, 0);
+  for (let i = 0; i < 4; i++) box(boneD, 0.032, 0.004, 0.026, 0, -0.046 - i * 0.012, 0.062 + i * 0.006, g, 0.2);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.0036, 5, 10, Math.PI * 1.05), boneD);
+  guard.rotation.set(0, Math.PI / 2, -0.4); guard.position.set(0, -0.030, 0.008); g.add(guard);
+  box(glowC, 0.005, 0.015, 0.005, 0, -0.022, 0.008, g, 0.2);
+  box(boneD, 0.012, 0.010, 0.060, 0, 0.022, 0.208);                                                                                            // the spine the ribs hang from
+  for (let i = 0; i < 6; i++) box(bone, 0.016, 0.012, 0.012, 0, 0.026, 0.150 + i * 0.026, g, 0, 0, 0.1 * (i % 2 ? 1 : -1));
+  for (let i = 0; i < 5; i++) {
+    const R = 0.052 - i * 0.0042, r = new THREE.Mesh(new THREE.TorusGeometry(R, 0.0068 - i * 0.0004, 5, 14, Math.PI * 1.12), i % 2 ? boneD : bone);
+    r.rotation.z = Math.PI - 0.06 * Math.PI; r.position.set(0, 0.020, 0.138 + i * 0.034); g.add(r);
+  }
+  gpCyl(g, boneD, 0.030, 0.030, 0.012, 8, 0, -0.012, 0.296); coral(0.020, -0.030, 0.270, 4, coralB);
+  const forend = gpPart(g, 'main', () => {
+    for (let i = 0; i < 4; i++) { gpCyl(g, i % 2 ? bone : boneD, 0.020, 0.020, 0.018, 8, 0, 0.000, -0.112 - i * 0.026); gpBox(g, boneD, 0.010, 0.012, 0.012, 0, 0.018, -0.112 - i * 0.026); }
+    [-0.016, 0.016].forEach(x => gpBox(g, boneD, 0.004, 0.006, 0.120, x, -0.014, -0.060));
+  });
+  // ── The gullet on the loading port: two jaws that open for a shell and swallow it ──
+  const gul = new THREE.Group(); gul.position.set(-0.036, -0.006, 0.030); g.add(gul);
+  const jawU = new THREE.Group(), jawL = new THREE.Group(); gul.add(jawU, jawL);
+  box(bone, 0.034, 0.005, 0.030, -0.017, 0.002, 0, jawU); box(bone, 0.034, 0.005, 0.030, -0.017, -0.002, 0, jawL);
+  for (let i = 0; i < 4; i++) { gpCyl(jawU, bone, 0.0026, 0.0003, 0.011, 4, -0.006 - i * 0.008, -0.005, -0.009 + (i % 2) * 0.018, 0, 0); gpCyl(jawL, bone, 0.0026, 0.0003, 0.011, 4, -0.006 - i * 0.008, 0.005, 0.009 - (i % 2) * 0.018, Math.PI, 0); }
+  const throat = new THREE.Mesh(new THREE.SphereGeometry(0.008, 6, 5), glowC); throat.position.set(0.001, 0, 0); throat.scale.setScalar(0.01); gul.add(throat);
+  const shell = new THREE.Group(); shell.visible = false; g.add(shell);
+  gpCyl(shell, new THREE.MeshPhongMaterial({ color: 0xb02a2a, shininess: 50, flatShading: true }), 0.0082, 0.0082, 0.030, 8, 0, 0, 0, 0, Math.PI / 2);
+  gpCyl(shell, new THREE.MeshPhongMaterial({ color: 0xc89a3c, shininess: 120, flatShading: true }), 0.0086, 0.0086, 0.010, 8, 0.016, 0, 0, 0, Math.PI / 2);
+  // ── Fins: thin, translucent, waving ──
+  const finShape = new THREE.Shape(); finShape.moveTo(0, 0); finShape.lineTo(0.052, 0.030); finShape.lineTo(0.066, 0.000); finShape.lineTo(0.050, -0.034); finShape.closePath();
+  const fins = [-1, 1].map(sd => { const f = new THREE.Mesh(new THREE.ShapeGeometry(finShape), addGlow(0x6af0ff, 0.26)); f.position.set(sd * 0.030, 0.006, 0.090); f.rotation.set(0, sd * Math.PI / 2 + sd * 0.3, 0); f._sd = sd; g.add(f); return f; });
+  const dorsal = new THREE.Mesh(new THREE.ShapeGeometry(new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(0.040, 0.034), new THREE.Vector2(0.050, 0), new THREE.Vector2(0.026, -0.006)])), addGlow(0x6af0ff, 0.22));
+  dorsal.position.set(0, 0.056, 0.100); dorsal.rotation.set(0, Math.PI / 2, 0); g.add(dorsal);
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.030, 6, 5), new THREE.MeshBasicMaterial({ color: 0x7ffff0 }));
+  flash.visible = false; flash.position.set(0, 0.020, -0.376); g.add(flash);
+  g._flash = flash; g._kickZ = 0.025; g._greebled = true; g._handDetailed = true;
+  g.traverse(o => { if (o.isMesh) o.userData.noSmooth = true; });
+  // ── Motion ──
+  const S = { shot: 0, open: 0, threat: 0, lure: 0, eye: 0, look: 0, gape: 0, gulp: 0 };
+  const smooth = (a, b, t) => { const x = Math.max(0, Math.min(1, (t - a) / (b - a))); return x * x * (3 - 2 * x); };
+  const tmp = new THREE.Vector3();
+  const layTeeth = (open, chatter, now) => {
+    for (const t of teeth) {
+      const ang = 0.95 * open + chatter * (0.16 + 0.12 * Math.sin(t.ph)) * Math.sin(now * 62 + t.ph * 1.9);
+      tmp.set(0, 0, -Math.cos(ang)).addScaledVector(t.r, Math.sin(ang)).normalize();
+      t.pv.quaternion.setFromUnitVectors(FWD, tmp);
+    }
+  };
+  const layTend = (T, now, k, ph) => { T.joints.forEach((j, i) => { j.rotation.x = T.curl * k + Math.sin(now * 1.3 + i * 0.55 + ph) * 0.10 * k; j.rotation.z = Math.sin(now * 0.9 + i * 0.4 + ph * 2) * 0.08 * k; }); };
+  const reset = () => {
+    Object.assign(S, { shot: 0, open: 0, threat: 0, lure: 0, eye: 0, look: 0, gape: 0, gulp: 0 });
+    layTeeth(0, 0, 0); jawU.rotation.z = 0; jawL.rotation.z = 0; shell.visible = false; throat.scale.setScalar(0.01);
+    lure.root.visible = false; eyeG.visible = false; eyeG.scale.setScalar(0.01); lidU.position.y = 0.0042; lidL.position.y = -0.0042; mouths[0].g.scale.setScalar(1.45);
+    lidU.visible = lidL.visible = true;
+  };
+  g._calm = reset;
+  g._steamShot = () => { S.shot = 1; flash.material.color.setHex(Math.random() < 0.5 ? 0x7ffff0 : 0xe8fff8); };
+  g._S = S; g._teeth = teeth; g._mouths = mouths; g._jawU = jawU; g._jawL = jawL; g._shell = shell; g._lure = lure; g._eye = eyeG; g._lids = [lidU, lidL]; g._tends = tends; g._fins = fins; g._throat = throat;
+  g._tick = (dt, now, assembling) => {
+    if (assembling) { reset(); return; }
+    const inspecting = !!(g._inspectMode && g._reloadStart), reloading = !!(g._reloadStart && !g._inspectMode);
+    const T = g._reloadStart ? Math.max(0, Math.min(1, (Date.now() - g._reloadStart) / (g._reloadDur || (inspecting ? 2600 : 3000)))) : 0;
+    S.shot = Math.max(0, S.shot - dt / 0.14);
+    const threat = _abyssNearby(now);
+    S.threat += (threat - S.threat) * Math.min(1, dt * 6);
+    let open = S.shot > 0 ? Math.sin(Math.min(1, (1 - S.shot) * 1.6 + 0.12) * Math.PI) : 0;               // all six snap open together and shut again
+    // reload: the gullet takes four shells, one after another
+    let ju = 0, shellK = -1;
+    if (reloading) {
+      const C = 4, span = 0.80 / C, c = Math.min(C - 1, Math.floor((T - 0.10) / span)), u = (T - 0.10 - c * span) / span;
+      if (T >= 0.10 && T < 0.90 && u >= 0) {
+        ju = u < 0.30 ? smooth(0, 0.30, u) : u < 0.58 ? 1 - smooth(0.30, 0.58, u) * 1.0 : 0;                 // opens, then bites shut
+        shellK = u < 0.58 ? u / 0.58 : -1;                                                                    // the shell slides in until the jaws close on it
+        S.gulp = u > 0.55 && u < 0.85 ? Math.sin((u - 0.55) / 0.30 * Math.PI) : 0;
+      } else S.gulp = 0;
+    } else S.gulp = 0;
+    jawU.rotation.z = -0.62 * ju; jawL.rotation.z = 0.62 * ju;
+    shell.visible = shellK >= 0 && shellK < 1;
+    if (shell.visible) { const e = smooth(0, 1, shellK); shell.position.set(-0.118 + 0.092 * e, -0.030 + 0.027 * e, 0.030); shell.rotation.z = 0.5 * (1 - e); shell.scale.setScalar(1 - 0.0 * e); }
+    throat.scale.setScalar(0.01 + 0.9 * S.gulp);
+    // inspect: a long lure grows from the skull; then the top mouth opens its eyelids on an eye that looks about
+    let lureK = 0, eyeOpen = 0, gape = 0, lookA = 0;
+    if (inspecting) {
+      lureK = smooth(0.10, 0.40, T) * (1 - smooth(0.88, 0.99, T));
+      gape = smooth(0.50, 0.66, T) * (1 - smooth(0.86, 0.96, T));
+      eyeOpen = smooth(0.58, 0.72, T) * (1 - smooth(0.84, 0.94, T));
+      lookA = Math.sin(T * 18) * 0.35 * eyeOpen;
+    }
+    // idle: tendrils sway, fins wave
+    tends.forEach((t, i) => { layTend(t, now, 1, i * 1.7); const p = 0.75 + 0.25 * Math.sin(now * 2.2 + i); t.halo.scale.setScalar(p * (1 + 0.5 * S.shot)); });
+    fins.forEach((f, i) => { f.rotation.x = Math.sin(now * 2.1 + i * 2) * 0.22; });
+    dorsal.rotation.x = Math.sin(now * 1.7) * 0.08;
+    // the long lure
+    lure.root.visible = lureK > 0.01;
+    if (lure.root.visible) { lure.root.scale.setScalar(Math.max(0.001, lureK)); layTend(lure, now, 1, 0.5); lure.halo.scale.setScalar((0.8 + 0.5 * Math.sin(now * 5)) * (1 + 0.6 * lureK)); }
+    // the eye
+    mouths[0].g.scale.setScalar(1.45 + 0.45 * gape);
+    const lid = 0.0042 + 0.0120 * eyeOpen;
+    lidU.position.y = lid; lidL.position.y = -lid; lidU.visible = lidL.visible = eyeOpen < 0.97;
+    eyeG.visible = eyeOpen > 0.02; eyeG.scale.setScalar(0.01 + 0.99 * eyeOpen);
+    eyeG.rotation.y = lookA; eyeG.rotation.x = Math.sin(T * 11) * 0.18 * eyeOpen;
+    pupil.scale.set(1 + 0.5 * Math.sin(T * 25) * eyeOpen, 1 + 0.5 * Math.sin(T * 25) * eyeOpen, 0.5);
+    S.lure = lureK; S.eye = eyeOpen; S.gape = gape; S.look = lookA;
+    layTeeth(Math.max(open, 0.55 * gape), S.threat, now);
+    S.open = open;
+  };
+  reset();
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
+// 🦑 The kill: a gigantic spectral anglerfish rises out of the dark behind the body, opens its jaws, and swallows the silhouette whole.
+function _anglerFish() {
+  const root = new THREE.Group(), parts = [];
+  const fill = new THREE.MeshBasicMaterial({ color: 0x2ad8c8, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, toneMapped: false });
+  const wire = new THREE.LineBasicMaterial({ color: 0x9ffff0, transparent: true, opacity: 0, depthWrite: false, toneMapped: false });
+  const add = (geo, parent, x, y, z, sx = 1, sy = 1, sz = 1, rx = 0, ry = 0, rz = 0) => {
+    const m = new THREE.Mesh(geo, fill); m.position.set(x, y, z); m.scale.set(sx, sy, sz); m.rotation.set(rx, ry, rz); parent.add(m);
+    m.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo, 20), wire)); parts.push(m); return m;
+  };
+  const body = add(new THREE.SphereGeometry(1, 9, 7), root, 0, 0, -0.4, 1.25, 1.1, 1.9);
+  add(new THREE.ConeGeometry(0.9, 2.2, 5), root, 0, 0.1, -2.8, 0.8, 0.8, 1, -Math.PI / 2);                          // the tail narrows behind
+  add(new THREE.ConeGeometry(0.7, 1.5, 4), root, 0, 0.1, -4.2, 0.2, 1.6, 1, -Math.PI / 2);                          // and the tail fin stands up
+  for (const sd of [-1, 1]) {
+    add(new THREE.ConeGeometry(0.45, 1.5, 4), root, sd * 1.2, -0.4, -0.2, 0.25, 1, 1, 0, 0, sd * -1.2);             // pectoral fins
+    add(new THREE.SphereGeometry(0.30, 7, 5), root, sd * 0.95, 0.5, 1.1);                                              // the eyes
+  }
+  for (let i = 0; i < 4; i++) add(new THREE.ConeGeometry(0.12, 0.8, 4), root, 0, 1.15, -0.6 - i * 0.55);             // spines along the back
+  const jawU = new THREE.Group(), jawL = new THREE.Group(); jawU.position.set(0, 0.25, 0.7); jawL.position.set(0, -0.3, 0.7); root.add(jawU, jawL);
+  add(new THREE.BoxGeometry(2.0, 0.34, 1.9), jawU, 0, 0.1, 0.95); add(new THREE.BoxGeometry(2.2, 0.40, 1.9), jawL, 0, -0.1, 0.95);
+  for (let i = 0; i < 7; i++) {
+    const x = (i - 3) * 0.30;
+    add(new THREE.ConeGeometry(0.11, 0.62, 4), jawU, x, -0.30, 1.75 - Math.abs(i - 3) * 0.12, 1, 1, 1, Math.PI);
+    add(new THREE.ConeGeometry(0.11, 0.70, 4), jawL, x, 0.34, 1.80 - Math.abs(i - 3) * 0.12);
+  }
+  const stalk = new THREE.Group(); stalk.position.set(0, 1.0, 1.3); root.add(stalk);
+  add(new THREE.CylinderGeometry(0.05, 0.08, 1.7, 5), stalk, 0, 0.8, 0.4, 1, 1, 1, 0.7);
+  const bulbFill = new THREE.MeshBasicMaterial({ color: 0xfff2a0, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
+  const bulb = new THREE.Mesh(new THREE.IcosahedronGeometry(0.34, 1), bulbFill); bulb.position.set(0, 1.55, 1.2); stalk.add(bulb);
+  const halo = new THREE.Mesh(new THREE.IcosahedronGeometry(0.8, 1), new THREE.MeshBasicMaterial({ color: 0x4af0d8, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false })); halo.position.copy(bulb.position); stalk.add(halo);
+  return { root, jawU, jawL, fill, wire, bulbFill, halo, stalk, dispose() { root.traverse(o => { if (o.geometry) o.geometry.dispose(); }); fill.dispose(); wire.dispose(); bulbFill.dispose(); halo.material.dispose(); } };
+}
+function playAnglerFinisher(targetId, killerId) {
+  const mesh = remoteMeshes[targetId];
+  if (!mesh || !mesh.visible) return false;
+  if (mesh._finisher && performance.now() < mesh._finisher.until) return true;
+  mesh._finisher = { id: 'angler', until: performance.now() + 4200 };
+  const sil = _finisherMat('angler', 0x010305); sil.color.setHex(0x010305);
+  _finisherSwap(mesh, sil);
+  const killer = killerId === myId ? camera.position : (remoteMeshes[killerId] && remoteMeshes[killerId].position);
+  const away = new THREE.Vector3(mesh.position.x - (killer ? killer.x : mesh.position.x), 0, mesh.position.z - (killer ? killer.z : mesh.position.z - 1));
+  if (away.lengthSq() < 0.01) away.set(0, 0, -1);
+  away.normalize();
+  const fish = _anglerFish(), SIZE = 1.45, epoch = matchEpoch;
+  fish.root.scale.setScalar(SIZE);
+  const center = mesh.position.clone().setY(mesh.position.y + 1.0), start = center.clone().addScaledVector(away, 7.5).setY(center.y + 0.8);
+  fish.root.position.copy(start);
+  fish.root.lookAt(center.x, center.y + 0.2, center.z);                               // its mouth (+z) faces the body
+  scene.add(fish.root);
+  playSoundEvent('emp_zap', { position: center, volume: 0.6, minGap: 100 });
+  let snapped = false, gone = false;
+  const cleanup = () => { if (gone) return; gone = true; scene.remove(fish.root); fish.dispose(); };
+  setTimeout(cleanup, 3200);
+  const toward = away.clone().multiplyScalar(-1);
+  _finisherDrive(mesh, targetId, 2000, (t, dt, st) => {
+    if (epoch !== matchEpoch) { cleanup(); return; }
+    const now = performance.now(), fadeIn = Math.min(1, t / 0.14), fadeOut = t > 0.82 ? 1 - (t - 0.82) / 0.18 : 1, a = fadeIn * fadeOut;
+    fish.fill.opacity = 0.30 * a; fish.wire.opacity = 0.9 * a; fish.bulbFill.opacity = a; fish.halo.material.opacity = 0.35 * a * (0.7 + 0.3 * Math.sin(now * 0.02));
+    // it glides in, mouth wide, and the jaws shut on the body
+    const glide = t < 0.30 ? 0 : _ease(Math.min(1, (t - 0.30) / 0.32));
+    fish.root.position.copy(start).addScaledVector(toward, 7.5 * glide * 0.98 + (t > 0.62 ? (t - 0.62) * 5 : 0)).y += Math.sin(now * 0.004) * 0.12;
+    const open = t < 0.30 ? smoothstep01(t / 0.30) * 0.7 : t < 0.60 ? 0.7 : Math.max(0, 0.7 * (1 - (t - 0.60) / 0.07));
+    fish.jawU.rotation.x = -open; fish.jawL.rotation.x = open * 0.9;
+    fish.stalk.rotation.x = Math.sin(now * 0.006) * 0.12;
+    // the body is dark and still, drawn toward the mouth, and goes in as the jaws close
+    mesh.position.copy(st.p); mesh.rotation.y = st.r.y; mesh.scale.copy(st.s);
+    if (t > 0.30 && t < 0.62) { const k = (t - 0.30) / 0.32; mesh.position.addScaledVector(away, 0.9 * k); mesh.position.y = st.p.y + 0.15 * k; }
+    if (t >= 0.60) { const k = Math.min(1, (t - 0.60) / 0.12); mesh.scale.copy(st.s).multiplyScalar(Math.max(0.001, 1 - k)); mesh.position.lerp(fish.root.position.clone().addScaledVector(toward, 1.0).setY(fish.root.position.y - 0.2), k); }
+    if (t >= 0.62 && !snapped) {
+      snapped = true;
+      playSoundEvent('melee_heavy', { position: center, volume: 0.9, pitch: 0.5, minGap: 60 });
+      _finisherBurst(center, 0x4af0d8, 30, [0x4af0d8, 0xe8fff8, 0x2ad8c8]); _spawnFinisherRing(st.p.clone(), 0x4af0d8, 2.4);
+    }
+  }, st => { cleanup(); _spawnFinisherRing(st.p.clone(), 0x2ad8c8, 1.6); });
+  pushFeedLine('SWALLOWED', players[targetId]?.name || 'Enemy', '#4af0d8');
+  return true;
+}
+const smoothstep01 = x => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
+
 function buildWidowmaker() {
   // 🕷️ Crossbow -> WIDOWMAKER. A mechanical spider that is also a crossbow: eight jointed legs folded along its sides. Aim and the front four unfold into the bow
   // arms while the rear four spread; a shot snaps the front legs in and they reset; a reload sends a little spider crawling along the rail with the next bolt; inspect
@@ -49329,6 +49612,7 @@ const SKIN_SHAPES = (() => {
       [-0.9, 0.2, 1.3].forEach((y, i) => parts.push(part(new THREE.TorusGeometry(R * (0.9 + i * 0.35), R * 0.07, 4, 14), new THREE.MeshBasicMaterial({ color: i === 1 ? 0xd05aff : b, transparent: true, opacity: 0.85 }), [0, R * y, 0], [Math.PI / 2 + (i - 1) * 0.35, 0, i * 0.5])));
       return { parts, wake: b, wakeLen: 10, spin: { x: 0, y: 6, z: 0 } };
     },
+    tooth: (a, b, R) => ({ parts: [part(new THREE.ConeGeometry(R * 0.55, R * 2.8, 5), L(a), [0, R * 0.9, 0]), part(Sp(R * 0.55), K(b), [0, -R * 0.7, 0], null, [1, 1.4, 1])], wake: b, wakeLen: 8, spin: { x: 0, y: 12, z: 0 } }),   // a spectral fang, point first, with a glow at its root
     card: (a, b, R) => {                                                        // a razor-edged playing card: dark steel, a silver border, a glowing red diamond; it spins about its line of flight
       const w = R * 2.6, h = R * 3.6, t = R * 0.10;
       const parts = [part(B(w, h, t), L(0x15151c))];
@@ -49469,6 +49753,7 @@ const SKIN_SHOT = {};
   G({ shape: 'goldbullet', c: [0xffc83d, 0xfff2b8], k: 1.6 }, null, ['revolver_midas']);                       // the Midas Revolver: a gold round on a gold trail
   G({ shape: 'bolt', c: [0x35e8ff, 0xffffff], k: 1.2 }, null, ['machine_pistol_overclocked']);
   G({ shape: 'bolt', c: [0xd2842a, 0xffe3b0], k: 1.1 }, null, ['p90_ironclad']);
+  G({ shape: 'tooth', c: [0xe8f4ee, 0x4af0d8], min: 0.07, k: 1.3 }, null, ['sg8_abyssal_sovereign']);   // spectral teeth
   G({ shape: 'ball', c: [0xff7a1a, 0xfff0d0], k: 1.5 }, 'orbital', ['grenade_launcher_orbital']);                        // Orbital Strike: a glowing orange grenade
   G({ shape: 'ball', c: [0x2a2a30, 0xffb04a], k: 1.8 }, null, ['hand_cannon_broadside']);                                // Broadside: a cannonball on a fiery trail
   G({ shape: 'goldbullet', c: [0xff7a1a, 0xffd08a], k: 1.5 }, null, ['hand_cannon_iron_judge']);                  // The Iron Judge: a molten round                    // Overclocked: a cyan bolt
@@ -61304,6 +61589,9 @@ const MODEL_SKINS = [
   { id: 'p90_ironclad', weapon: 'p90', name: 'IRONCLAD', rarity: 'epic',
     sw: ['#5a626c', '#d2842a'], build: buildIronclad,
     blurb: 'A tiny armoured vehicle in the shape of a P90. Three layers of riveted plate on each side, a hexagonal opening sunk into an armoured housing, a long open cassette between two rails, and a bolt that shuttles in its window. Reload: the clamps swing open, the cover plates slide apart, the cassette lifts out and a fresh one locks in. Inspect: it rolls side to side while the armour opens up.' },
+  { id: 'sg8_abyssal_sovereign', weapon: 'sg8', name: 'THE ABYSSAL SOVEREIGN', rarity: 'mythic', look: { hit: 'angler' },
+    sw: ['#d9d2bc', '#4af0d8'], build: buildAbyssalSovereign,
+    blurb: 'A shotgun made of the skull and bones of an ancient anglerfish. Six gaping, tooth-lined mouths snap open together and throw spectral teeth; the stock is a cage of fossil ribs; lure tendrils glow and sway. Reload: a gullet swallows each shell. Inspect: a long lure grows out of the skull and an eye opens in one of the mouths. Its teeth chatter when an enemy you can see is near. Its kills end with a giant spectral anglerfish swallowing the body.' },
   { id: 'plasma_carbine_fishbowl', weapon: 'plasma_carbine', name: 'Fishbowl Carbine', rarity: 'rare',
     sw: ['#2a8ae8', '#ff7a1a'], build: buildFishbowlCarbine,
     blurb: 'Fills with water when drawn. Three fish live in it.' },
@@ -61542,7 +61830,7 @@ const TOWER_MODEL_SKIN_IDS = new Set(['ak20_field_radio']);
 // 🏆 Earned at the end of a ranked season by finishing it at Legend rank: never bought, pulled or won any other way (server.js SEASON_SKIN_IDS grants it when the season is closed).
 const SEASON_MODEL_SKIN_IDS = new Set(['ak20_phoenix_reign']);
 // 🐉 Gen 3: the newest skins have their own case. Mirrors GEN3_SKIN_IDS in server.js (no skin is free).
-const GEN3_MODEL_SKIN_IDS = new Set(['m1_garand_clockwork_requiem', 'minigun_hungry_garden', 'srx_point_of_no_return', 'crossbow_seraphim', 'revolver_clockbreaker', 'minigun_puppetmaster', 'crossbow_chronos_engine', 'crossbow_fracture', 'railgun_penteract', 'chain_gun_clockwork_dragon', 'ak20_breach_protocol', 'lever_remembrance', 'mauser_phantom_circuit']);
+const GEN3_MODEL_SKIN_IDS = new Set(['sg8_abyssal_sovereign', 'm1_garand_clockwork_requiem', 'minigun_hungry_garden', 'srx_point_of_no_return', 'crossbow_seraphim', 'revolver_clockbreaker', 'minigun_puppetmaster', 'crossbow_chronos_engine', 'crossbow_fracture', 'railgun_penteract', 'chain_gun_clockwork_dragon', 'ak20_breach_protocol', 'lever_remembrance', 'mauser_phantom_circuit']);
 const GEN3_MELEE_MODEL_SKIN_IDS = new Set(['katana_fractured_reality', 'scythe_deaths_head']);   // Gen 3 holds melee skins too
 const GATED_MODEL_SKIN_IDS = new Set([...GEN1_GATED_MODEL_SKIN_IDS, ...GEN2_MODEL_SKIN_IDS, ...GEN3_MODEL_SKIN_IDS, ...TOWER_MODEL_SKIN_IDS, ...SEASON_MODEL_SKIN_IDS, ...PVP_SHOP_CATALOG.exclusiveSkins]);
 const GATED_MELEE_MODEL_SKIN_IDS = new Set([...GEN2_MELEE_MODEL_SKIN_IDS, ...GEN2_SUPPORT_MODEL_SKIN_IDS, ...GEN3_MELEE_MODEL_SKIN_IDS]);   // (the lock check is by id, so utilities share it)
@@ -66918,6 +67206,8 @@ const SKIN_FX = {
   hand_cannon_broadside: { equip: 'unfold', equipMs: 1000, equipSfx: ['whoosh', 'snapin'] },
   p90_ironclad: { equip: 'slam', equipMs: 900, equipSfx: ['whoosh', 'snapin'], equipBeats: [[.55, 'slam']],
     inspect: [K(.10, { py: .02, rz: -.35, ry: .25 }), K(.34, { py: .03, rz: -.62, ry: .5 }), K(.60, { py: .03, rz: .62, ry: -.5 }), K(.84, { py: .02, rz: .2, ry: -.15 }), K(1, {})] },
+  sg8_abyssal_sovereign: { equip: 'build', equipMs: 1000, equipSfx: ['whoosh', 'snapin'],
+    inspect: [K(.12, { py: .02, ry: .30, rz: -.12 }), K(.34, { py: .04, ry: .38, rz: -.16 }), K(.60, { py: .04, ry: .12, rx: .10 }), K(.82, { py: .035, ry: -.05, rx: .12 }), K(.94, { py: .02 }), K(1, {})] },
   machine_pistol_overclocked: { equip: 'windup', equipMs: 1000, equipSfx: ['windup', 'ding'] },
   revolver_shatterpoint: { equip: 'assemble', equipMs: 1000, equipSfx: ['snapin', 'chime'] },
   rpg_black_hole: { equip: 'blackhole', equipMs: 1100, equipSfx: ['singularity', 'chime'] },
@@ -68649,6 +68939,7 @@ function playGlassFinisher(targetId) {
 // The end a skin's hit style gives a kill; false = it has none (the finisher the player picked, or the ragdoll, runs as always). Looked up at the call, so a test can stand in for any of them.
 
 // The kill: thorned vines burst out of the ground round the body, wind up it, and wither away with it
+HIT_STYLES.angler = { chars: '◦°○', glow: '#4af0d8', fill: '#c8fff6', hit: 0xc8fff6, miss: 0x4af0d8, screen: 'rgba(74,240,216,0.14)', num: '#8afff0', numShadow: '0 0 8px #1ac8b0, 0 0 2px #00302c, -1px -1px 0 #001a18, 1px 1px 0 #001a18', scramble: '◦°○01' };
 HIT_STYLES.thorn = { chars: '✦✧+', glow: '#5aff3a', fill: '#c8ff9a', hit: 0xd8ffb0, miss: 0x7ad04a, screen: 'rgba(90,255,60,0.14)', num: '#9aff6a', numShadow: '0 0 8px #3aff1a, 0 0 2px #0a3a00, -1px -1px 0 #021a00, 1px 1px 0 #021a00', scramble: '✦✧+0123' };
 FINISHER_MOVES.thorn = function (mesh, id, c, killerId) {
   const body = _finisherMat('thorn', 0x1c3a14); body.color.setHex(0x1c3a14);
@@ -68702,6 +68993,7 @@ function _playSkinFinisher(kind, targetId, killerId = null) {
   if (kind === 'pixel') return playHologramFinisher(targetId);
   if (kind === 'web') return playWebFinisher(targetId, killerId);
   if (kind === 'thorn') return playThornFinisher(targetId, killerId);
+  if (kind === 'angler') return playAnglerFinisher(targetId, killerId);
   if (kind === 'card') return playAceFinisher(targetId, killerId);
   if (kind === 'clock' && typeof playClockFinisher === 'function') return playClockFinisher(targetId, killerId);   // The Clockwork Requiem (clockwork-requiem.js)
   return false;

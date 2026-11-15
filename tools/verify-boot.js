@@ -3623,6 +3623,78 @@ if (ok && process.argv.includes('--ironclad')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+// THE ABYSSAL SOVEREIGN (the SG-8 skin): a mythic from the Gen 3 case. Six mouths that snap open together on a shot, teeth that chatter when an enemy in plain sight is near (and never through a wall), a gullet that swallows each shell on reload,
+// a lure and an eye on inspect, spectral teeth for rounds, and a giant anglerfish that swallows the body on a kill.
+if (ok && process.argv.includes('--abyssal')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const sk = MODEL_SKINS.find(s => s.id === 'sg8_abyssal_sovereign');
+    if (!sk || sk.weapon !== 'sg8' || sk.rarity !== 'mythic') return ['the ABYSSAL SOVEREIGN mythic skin of the SG-8 is missing'];
+    if (!GEN3_MODEL_SKIN_IDS.has(sk.id)) issues.push('it is not dealt by the Gen 3 case (no skin is free)');
+    const fx = SKIN_FX[sk.id];
+    if (!fx || !fx.equip || !fx.inspect) issues.push('no entrance or inspect track');
+    if (!SKIN_SHOT[sk.id] || SKIN_SHOT[sk.id].shot.shape !== 'tooth') issues.push('the rounds should be spectral teeth');
+    else { const a = _skinShotMesh(SKIN_SHOT[sk.id].shot, 0.1); if (!a || a.children.length < 2) issues.push('the tooth has too few parts'); }
+    if (!HIT_STYLES.angler || sk.look.hit !== 'angler') issues.push('the kill look is missing');
+    const m = sk.build();
+    if (!m._S || !m._tick || !m._calm || !m._steamShot || !m._flash || !m._teeth || !m._jawU || !m._lure || !m._eye) return issues.concat(['the model is missing its state, tick, calm, shot hook, flash, teeth, gullet, lure or eye']);
+    if (m._mouths.length !== 6) issues.push('there should be six mouths: ' + m._mouths.length);
+    const S = m._S; let clk = performance.now() / 1000; const run = (n, dt = 0.016) => { for (let i = 0; i < n; i++) { clk += dt; m._tick(dt, clk, false); } };
+    const rl = f => { m._inspectMode = false; m._reloadStart = Date.now() - f * 3000; m._reloadDur = 3000; run(20); };
+    const insp = f => { m._inspectMode = true; m._reloadStart = Date.now() - f * 2600; m._reloadDur = 2600; run(20); };
+    const keepLOS = hasLineOfSight, keepBots = gameBots.slice(), keepRemote = Object.assign({}, remoteMeshes);
+    try {
+      run(3);
+      // all six mouths open on a shot
+      const angle0 = m._teeth.map(t => t.pv.quaternion.clone());
+      m._steamShot(); run(1, 0.03);
+      if (!(S.open > 0.3)) issues.push('fire: the mouths should snap open: ' + S.open.toFixed(2));
+      if (!m._teeth.every((t, i) => t.pv.quaternion.angleTo(angle0[i]) > 0.2)) issues.push('fire: every tooth of every mouth should move');
+      run(30); if (!(S.open < 0.05)) issues.push('fire: and shut again');
+      // the chatter: an enemy in plain sight, near -> teeth chatter; behind a wall -> nothing at all
+      camera.position.set(0, 1.65, 0);
+      gameBots.length = 0; gameBots.push({ id: 'zz_ab', team: 'enemy', dead: false, x: 0, z: -8 }); remoteMeshes['zz_ab'] = { position: new THREE.Vector3(0, 0, -8), visible: true };
+      hasLineOfSight = () => true; _abyssThreatAt = -9; run(40);
+      if (!(S.threat > 0.4)) issues.push('chatter: an enemy in plain sight 8 m away should be felt: ' + S.threat.toFixed(2));
+      const q0 = m._teeth[0].pv.quaternion.clone(); let moved = 0; for (let i = 0; i < 12; i++) { run(1, 0.016); moved = Math.max(moved, m._teeth[0].pv.quaternion.angleTo(q0)); }
+      if (!(moved > 0.05)) issues.push('chatter: the teeth should be moving');
+      hasLineOfSight = () => false; _abyssThreatAt = -9; run(120);
+      if (!(S.threat < 0.02)) issues.push('chatter: behind a wall it must say NOTHING: ' + S.threat.toFixed(3));
+      hasLineOfSight = () => true; gameBots[0].x = 0; remoteMeshes['zz_ab'].position.set(60, 0, 0); _abyssThreatAt = -9; run(120);
+      if (!(S.threat < 0.02)) issues.push('chatter: an enemy far away is not felt: ' + S.threat.toFixed(3));
+      gameBots[0].team = 'ally'; remoteMeshes['zz_ab'].position.set(0, 0, -5); _abyssThreatAt = -9; run(120);
+      if (!(S.threat < 0.02)) issues.push('chatter: allies never count: ' + S.threat.toFixed(3));
+      // reload: the gullet opens for a shell, bites shut, swallows
+      let sawOpen = false, sawShell = false, sawGulp = false;
+      for (let f = 0.10; f < 0.90; f += 0.01) { rl(f); if (Math.abs(m._jawU.rotation.z) > 0.3) sawOpen = true; if (m._shell.visible) sawShell = true; if (S.gulp > 0.3) sawGulp = true; }
+      if (!sawOpen) issues.push('reload: the gullet should open'); if (!sawShell) issues.push('reload: a shell should slide towards it'); if (!sawGulp) issues.push('reload: it should swallow');
+      m._reloadStart = 0; run(30); if (Math.abs(m._jawU.rotation.z) > 0.01 || m._shell.visible) issues.push('after reload: the gullet closed and empty');
+      // inspect: the lure grows, an eye opens in the top mouth
+      insp(0.45); if (!(m._lure.root.visible && m._lure.root.scale.x > 0.8)) issues.push('inspect: a long lure should have grown: ' + m._lure.root.scale.x.toFixed(2));
+      insp(0.78); if (!(m._eye.visible && m._eye.scale.x > 0.8 && m._lids[0].position.y > 0.01)) issues.push('inspect: the eye should be open: ' + m._eye.scale.x.toFixed(2));
+      insp(0.99); m._inspectMode = false; m._reloadStart = 0; run(60);
+      if (m._lure.root.visible || m._eye.visible) issues.push('after inspect: the lure is back in and the eye shut');
+      m._calm();
+    } catch (e) { issues.push('threw: ' + (e && e.stack || e)); }
+    finally { hasLineOfSight = keepLOS; gameBots.length = 0; gameBots.push(...keepBots); delete remoteMeshes['zz_ab']; }
+    // the kill: a giant anglerfish swallows the body
+    const keepPSE = playSoundEvent; playSoundEvent = () => {};                    // (no audio in here)
+    try {
+      const body = new THREE.Group(); body.add(new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.7, 0.3), new THREE.MeshBasicMaterial())); body.position.set(0, 0, -6); body.visible = true;
+      remoteMeshes['zz_kill'] = body; players['zz_kill'] = { name: 'x', dead: true };
+      const n0 = scene.children.length;
+      if (!_playSkinFinisher('angler', 'zz_kill', myId)) issues.push('kill: the finisher should play');
+      if (scene.children.length <= n0) issues.push('kill: the fish should be in the scene');
+      if (!(body._finisher && body._finisher.id === 'angler')) issues.push('kill: the body should be owned by the finisher');
+      delete remoteMeshes['zz_kill']; delete players['zz_kill'];
+    } catch (e) { issues.push('kill threw: ' + (e && e.stack || e)); }
+    finally { playSoundEvent = keepPSE; }
+    return issues;
+  })()`);
+  console.log('ABYSSAL SOVEREIGN checks: Gen 3 mythic, six mouths snap on fire, teeth chatter only for enemies in plain sight, gullet swallows shells, lure + eye on inspect, anglerfish kill');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 // HOUSE OF CARDS (the Throwing Knives skin): a legendary from the Gen 2 case: a fan of three cards and a floating ace that shuffle on every throw, the Impossible Shuffle on inspect (the deck is
 // thrown up, spirals, interleaves, four aces stop in the air, become one knife that lands in the hand), a card for a round, and the ace of spades behind what it kills.
 if (ok && process.argv.includes('--houseofcards')) {
