@@ -57985,6 +57985,7 @@ function tryShoot() {
   }
   expireSpawnShield(); // firing breaks the spawn shield
   try { afterPlayerShot(currentWeapon.id, now); } catch (e) { console.warn('[shot fx]', e); }   // flame jet, water spray
+  matchNoteShot(currentWeapon.id, wStats.pellets || 1);            // (the match analysis)
   if (match?.type === 'range') { rangeNoteShot(currentWeapon.id, wStats.pellets || 1); updateMatchHUD(); }
 
   const shotViolence = weaponKickStrength(wStats, wStats.pellets || 1);
@@ -67683,6 +67684,7 @@ function hitConfirmFromServer(data, knownHpBefore) {
   const dealt = Number.isFinite(data.dealt) ? data.dealt : (Number.isFinite(knownHpBefore) && Number.isFinite(data.hp) ? knownHpBefore - data.hp : 0);
   if (!(dealt > 0)) return false;
   const head = !!data.headshot;
+  matchNoteHit(data.weapon, dealt, head);                                          // (the match analysis)
   if (data.hp <= 0) { if (head) playHitConfirmSound('head', _hmTiers.get(data.bulletId)); addHitNumber(dealt, head); return true; }
   hitConfirmed(head ? 'head' : 'hit', { tier: _hmTiers.get(data.bulletId), damage: dealt });
   return true;
@@ -67693,6 +67695,7 @@ function confirmKill(id, name) {
   const now = performance.now();
   if (_lastKillConfirm.id === id && now - _lastKillConfirm.t < 1500) return false;
   _lastKillConfirm = { id, t: now };
+  matchNoteKill((_killInfo[id] && _killInfo[id].weapon) || heldItemId());          // (the match analysis)
   showHitmarker('kill');
   feelKillPulse();
   { const since = performance.now() - _lastHeadDingAt;     // a killing headshot rang the ding and the kill tone on the same instant, and the kill tone buried the ding: it now waits for the ding to land
@@ -68936,6 +68939,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
       bot.hp = Math.max(0, bot.hp - effective);
       if (players[pid]) players[pid].hp = bot.hp;
       const dealtToBot = hpBeforeHit - bot.hp, firstCount = _hmFirstTime(pid, bulletId);   // what really came off, and whether this bullet has been counted
+      if (firstCount) matchNoteHit(weaponId, dealtToBot, headshot);
       if (match?.type === 'range' && firstCount) rangeNoteHit(weaponId, dealtToBot, headshot, pid);   // the range's accuracy tracker and DPS test count every real hit
       // Flee-trigger metrics: track recent damage + consecutive hits
       const nowT = Date.now();
@@ -76090,6 +76094,8 @@ function initMatch() {
     // This match's own tally for the end screen (myKills runs for the whole session)
     killsAtStart: myKills,
     deaths: 0,
+    startedAt: Date.now(),                 // (the match analysis: how long it ran)
+    stats: newMatchStats(),                // shots, hits, headshots, damage, kills, per weapon
   };
   // Init lives for BR mode
   if (cfg.type === 'br') {
@@ -78526,6 +78532,7 @@ function endMatch(winner, reason) {
   if (match.jugg) juggCleanup();
   rngRestore(match.roulette);
   const isWin  = winner === 'ally';
+  try { matchAnalysisOnEnd(winner); } catch (e) { console.warn('[analysis]', e); }
   releasePointer(); // PLAY AGAIN / CHANGE MODE / BACK TO LOBBY need the cursor
   const el     = document.getElementById('match-over-screen');
   clearFeed();                                      // the fight's messages stop here (#29)
@@ -80203,6 +80210,143 @@ function updateRangeHUD() {
 function rangeExitNearby(){return gameStarted && match?.type==='range' && !isDead && Math.hypot(camera.position.x+16,camera.position.z-41)<2.8;}
 function returnFromRange(){teardownMatchWorld();selectMode('lobby13');}
 function enterShootingRange(){teardownMatchWorld();selectMode('range');}
+
+// ── 📊 MATCH ANALYSIS ────────────────────────────────────────────────────────────────────────────────────────────────
+// Every match keeps its own tally (on match.stats): shots (a shotgun blast is its pellets), real hits, headshots, damage
+// dealt and taken, kills, and all of it per weapon. When the match ends it is boiled down to one line, saved with your
+// sensitivity and field of view (the last 60 matches, on this device), and an ANALYSIS button on the results screen opens
+// the report: this match against your average of the last ten, what changed and in which direction, your weapons, and the
+// answer to "did the new sensitivity actually help": your results grouped by sensitivity. Settings -> Match analysis opens
+// the latest report any time. Nothing here touches your account or ranked points, and nothing is sent anywhere.
+const MATCH_HISTORY_KEY = 'pvp_match_history', MATCH_HISTORY_CAP = 60, MATCH_BASELINE = 10;
+const MATCH_NO_ANALYSIS = new Set(['range', 'lobby', 'obby', 'wave_dash', 'builder']);
+function newMatchStats() { return { shots: 0, hits: 0, heads: 0, damage: 0, taken: 0, kills: 0, byWeapon: {}, lastHp: null }; }
+const _mw = (S, id) => S.byWeapon[id] || (S.byWeapon[id] = { shots: 0, hits: 0, heads: 0, damage: 0, kills: 0 });
+function _matchStats() { return match && !match.over && match.stats && !MATCH_NO_ANALYSIS.has(match.type) ? match.stats : null; }
+function matchNoteShot(weaponId, pellets = 1) {
+  const S = _matchStats(); if (!S || !weaponId) return;
+  const n = Math.max(1, Math.round(pellets)); S.shots += n; _mw(S, weaponId).shots += n;
+}
+function matchNoteHit(weaponId, damage, head) {
+  const S = _matchStats(); if (!S || !weaponId || !(damage > 0)) return;
+  S.hits++; S.damage += damage; const w = _mw(S, weaponId); w.hits++; w.damage += damage; if (head) { S.heads++; w.heads++; }
+}
+function matchNoteKill(weaponId) { const S = _matchStats(); if (!S) return; S.kills++; if (weaponId) _mw(S, weaponId).kills++; }
+// Health coming off me is damage taken (a respawn or a heal never counts); sampled each frame.
+function matchSampleHealth() {
+  const S = _matchStats(); if (!S) return;
+  const hp = players[myId] && Number.isFinite(players[myId].hp) ? players[myId].hp : null;
+  if (hp != null && S.lastHp != null && hp < S.lastHp) S.taken += S.lastHp - hp;
+  S.lastHp = hp;
+}
+function matchSummary(winner) {
+  const S = match.stats, secs = Math.max(1, Math.round((Date.now() - (match.startedAt || Date.now())) / 1000));
+  const top = Object.entries(S.byWeapon).sort((a, b) => b[1].damage - a[1].damage || b[1].shots - a[1].shots).slice(0, 6).map(([id, w]) => [id, w.shots, w.hits, w.heads, Math.round(w.damage), w.kills]);
+  return { t: Date.now(), mode: (typeof currentModeId === 'function' && currentModeId()) || match.type, map: activeMapName, secs, win: winner === 'ally' ? 1 : winner == null ? null : 0,
+    shots: S.shots, hits: S.hits, heads: S.heads, damage: Math.round(S.damage), taken: Math.round(S.taken), kills: Math.max(S.kills, Math.max(0, myKills - (match.killsAtStart || 0))), deaths: match.deaths || 0,
+    sens: Number(GAMEPLAY_SETTINGS.lookSens) || 1, fov: Math.round(typeof baseFOV === 'function' ? baseFOV() : 75), top };
+}
+function matchHistory() { try { const v = JSON.parse(localStorage.getItem(MATCH_HISTORY_KEY) || '[]'); return Array.isArray(v) ? v.filter(m => m && typeof m === 'object') : []; } catch (e) { return []; } }
+function saveMatchHistory(list) { while (list.length > MATCH_HISTORY_CAP) list.shift(); try { localStorage.setItem(MATCH_HISTORY_KEY, JSON.stringify(list)); } catch (e) {} }
+// Is this match worth keeping? A few seconds of nothing, or a mode with nothing to aim at, is not.
+function matchWorthKeeping(m) { return !!m && m.secs >= 15 && (m.shots >= 5 || m.hits >= 2); }
+function matchMetrics(m) {
+  return { acc: m.shots > 0 ? Math.min(1, m.hits / m.shots) : null, hs: m.hits > 0 ? m.heads / m.hits : null, dpm: m.secs > 0 ? m.damage / (m.secs / 60) : null,
+    kd: m.kills / Math.max(1, m.deaths), taken: m.taken, kills: m.kills, deaths: m.deaths, damage: m.damage };
+}
+// metric -> [label, format, higher is better?]
+const MATCH_METRICS = { acc: ['ACCURACY', v => Math.round(v * 100) + '%', true, 0.02], hs: ['HEADSHOTS', v => Math.round(v * 100) + '%', true, 0.02], dpm: ['DAMAGE / MIN', v => Math.round(v), true, 5],
+  kd: ['K/D', v => v.toFixed(2), true, 0.1], damage: ['DAMAGE DEALT', v => Math.round(v), true, 20], taken: ['DAMAGE TAKEN', v => Math.round(v), false, 20], kills: ['KILLS', v => Math.round(v), true, 0.5], deaths: ['DEATHS', v => Math.round(v), false, 0.5] };
+const _avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
+// This match against the average of the (up to) ten before it; the result of each metric says how much it moved, and whether that is good.
+function analyzeMatch(cur, past, window = MATCH_BASELINE) {
+  const base = past.slice(-window), cm = matchMetrics(cur), bm = base.map(matchMetrics), rows = [];
+  for (const [key, [label, fmt, higherBetter, eps]] of Object.entries(MATCH_METRICS)) {
+    const v = cm[key], vals = bm.map(m => m[key]).filter(x => x != null), b = _avg(vals);
+    const diff = v != null && b != null ? v - b : null;
+    rows.push({ key, label, value: v, base: b, diff, fmt, better: diff == null || Math.abs(diff) < eps ? null : (diff > 0) === higherBetter });
+  }
+  const notes = [], R = k => rows.find(r => r.key === k);
+  if (!base.length) notes.push('This is the first match on record here. From the next one on, each report compares it with your average.');
+  else {
+    const a = R('acc'); if (a.diff != null && a.better !== null) notes.push(`Accuracy ${Math.round(a.value * 100)}%: ${Math.round(Math.abs(a.diff) * 100)} points ${a.diff > 0 ? 'above' : 'below'} your average of ${Math.round(a.base * 100)}% over ${base.length} match${base.length > 1 ? 'es' : ''}.`);
+    const h = R('hs'); if (h.diff != null && h.better !== null) notes.push(`Headshot rate ${Math.round(h.value * 100)}%, ${h.diff > 0 ? 'up' : 'down'} ${Math.round(Math.abs(h.diff) * 100)} points on your average.`);
+    const d = R('dpm'); if (d.diff != null && d.better !== null) notes.push(`You dealt ${Math.round(d.value)} damage a minute, ${d.diff > 0 ? 'more' : 'less'} than your usual ${Math.round(d.base)}.`);
+    const t = R('taken'); if (t.diff != null && t.better !== null && t.base > 0) notes.push(`You took ${t.diff > 0 ? 'more' : 'less'} damage than usual (${Math.round(t.value)} against ${Math.round(t.base)}).`);
+  }
+  const used = cur.top.filter(w => w[1] >= 15 && w[2] > 0).sort((x, y) => y[2] / y[1] - x[2] / x[1])[0];
+  if (used) notes.push(`Most accurate weapon: ${weaponDisplayName(used[0])} (${Math.round(used[2] / used[1] * 100)}% over ${used[1]} shots).`);
+  const dmg = cur.top[0]; if (dmg && dmg[4] > 0) notes.push(`Most damage: ${weaponDisplayName(dmg[0])} with ${dmg[4]}${dmg[5] ? ' and ' + dmg[5] + ' kill' + (dmg[5] > 1 ? 's' : '') : ''}.`);
+  const sens = sensitivityGroups([...past, cur]), me = sens.find(g => g.sens === Math.round(cur.sens * 20) / 20), others = sens.filter(g => g !== me && g.n >= 2).sort((x, y) => y.n - x.n)[0];
+  let sensNote = null;
+  if (me && me.n >= 2 && others && me.acc != null && others.acc != null) {
+    const d = me.acc - others.acc, few = Math.min(me.n, others.n) < 4;
+    sensNote = Math.abs(d) < 0.02 ? `At ${me.sens.toFixed(2)}× (${me.n} matches) your accuracy is about the same as at ${others.sens.toFixed(2)}× (${others.n} matches): ${Math.round(me.acc * 100)}% against ${Math.round(others.acc * 100)}%.`
+      : `At ${me.sens.toFixed(2)}× (${me.n} matches) your accuracy averages ${Math.round(me.acc * 100)}%, ${d > 0 ? 'better' : 'worse'} than ${Math.round(others.acc * 100)}% at ${others.sens.toFixed(2)}× (${others.n} matches).` + (few ? ' Only a few matches so far: take it as a hint, not an answer.' : '');
+  } else if (me && me.n < 2) sensNote = `This is your first match at ${me.sens.toFixed(2)}×. Play a few more and the report can say whether it helped.`;
+  if (sensNote) notes.push(sensNote);
+  return { rows, notes, base: base.length, sens };
+}
+// Matches grouped by sensitivity (to the nearest 0.05): how many, and the averages.
+function sensitivityGroups(list) {
+  const g = {};
+  for (const m of list) { const k = Math.round((m.sens || 1) * 20) / 20, o = g[k] || (g[k] = { sens: k, n: 0, acc: [], hs: [], dpm: [] }), mm = matchMetrics(m); o.n++; if (mm.acc != null) o.acc.push(mm.acc); if (mm.hs != null) o.hs.push(mm.hs); if (mm.dpm != null) o.dpm.push(mm.dpm); }
+  return Object.values(g).map(o => ({ sens: o.sens, n: o.n, acc: _avg(o.acc), hs: _avg(o.hs), dpm: _avg(o.dpm) })).sort((a, b) => a.sens - b.sens);
+}
+let _lastMatchSummary = null;
+function matchAnalysisOnEnd(winner) {
+  if (!match || !match.stats || MATCH_NO_ANALYSIS.has(match.type)) { _lastMatchSummary = null; return null; }
+  const m = matchSummary(winner);
+  if (!matchWorthKeeping(m)) { _lastMatchSummary = null; return null; }
+  const list = matchHistory(); list.push(m); saveMatchHistory(list); _lastMatchSummary = m;
+  const host = document.getElementById('match-over-stats');
+  if (host && host.parentNode && !document.getElementById('match-analysis-btn')) {
+    const b = document.createElement('button'); b.id = 'match-analysis-btn'; b.textContent = '📊 MATCH ANALYSIS';
+    b.style.cssText = 'margin:8px 0;padding:8px 18px;cursor:pointer;font-family:inherit;font-weight:bold;letter-spacing:2px;border-radius:5px;background:#10303a;color:#aaf0ff;border:1px solid #44ddff;';
+    b.addEventListener('click', () => openMatchAnalysis());
+    host.parentNode.insertBefore(b, host.nextSibling);
+  }
+  return m;
+}
+function openMatchAnalysis() {
+  closeOtherDialogs('match-analysis-panel');
+  try { releasePointer(); } catch (e) {}
+  const hist = matchHistory(), cur = hist[hist.length - 1];
+  let panel = document.getElementById('match-analysis-panel');
+  if (!panel) {
+    panel = document.createElement('div'); panel.id = 'match-analysis-panel';
+    panel.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9960;background:#0b141a;border:2px solid #44ddff;border-radius:8px;padding:20px;color:#fff;font-family:"Courier New",monospace;width:min(640px,94vw);max-height:92vh;overflow:auto;';
+    document.body.appendChild(panel);
+  }
+  panel.style.display = 'block';
+  const head = t => `<div style="font-size:11px;letter-spacing:2px;color:#7fd8ea;margin:16px 0 6px;">${t}</div>`;
+  if (!cur) {
+    panel.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;"><div style="font-size:17px;letter-spacing:3px;color:#7fe0f2;">📊 MATCH ANALYSIS</div><button id="ma-close" style="background:#2a1f1f;color:#ffaaaa;border:1px solid #ff6666;padding:4px 10px;cursor:pointer;font-family:inherit;border-radius:3px;">✕</button></div><div style="margin:18px 0;color:#9ec9d3;">No matches on record yet. Finish a match (a few shots at least) and its report appears here and on the results screen.</div>`;
+    panel.querySelector('#ma-close').addEventListener('click', () => { panel.style.display = 'none'; });
+    return;
+  }
+  const idx = hist.indexOf(cur), past = hist.slice(0, idx), A = analyzeMatch(cur, past);
+  const when = new Date(cur.t), dstr = when.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' + when.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  const arrow = r => r.better === null ? '<span style="color:#7fa0aa;">–</span>' : r.better ? '<span style="color:#6dffa0;">▲</span>' : '<span style="color:#ff7a6a;">▼</span>';
+  const rows = A.rows.map(r => `<tr><td>${r.label}</td><td style="color:#aaf0ff;font-weight:bold;">${r.value == null ? '–' : r.fmt(r.value)}</td><td style="color:#9ec9d3;">${r.base == null ? '–' : r.fmt(r.base)}</td><td>${arrow(r)}</td></tr>`).join('');
+  const wrows = cur.top.map(w => `<tr><td>${weaponDisplayName(w[0])}</td><td>${w[1]}</td><td>${w[2]}</td><td>${w[1] ? Math.round(Math.min(1, w[2] / w[1]) * 100) : 0}%</td><td>${w[2] ? Math.round(w[3] / w[2] * 100) : 0}%</td><td>${w[4]}</td><td>${w[5]}</td></tr>`).join('');
+  const srows = A.sens.map(g => `<tr${g.sens === Math.round(cur.sens * 20) / 20 ? ' style="color:#aaf0ff;font-weight:bold;"' : ''}><td>${g.sens.toFixed(2)}×</td><td>${g.n}</td><td>${g.acc == null ? '–' : Math.round(g.acc * 100) + '%'}</td><td>${g.hs == null ? '–' : Math.round(g.hs * 100) + '%'}</td><td>${g.dpm == null ? '–' : Math.round(g.dpm)}</td></tr>`).join('');
+  const recent = hist.slice(-10).map(m => { const mm = matchMetrics(m); return `<tr${m === cur ? ' style="color:#aaf0ff;font-weight:bold;"' : ''}><td>${new Date(m.t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</td><td>${String(m.mode).toUpperCase()}</td><td>${m.win === 1 ? 'W' : m.win === 0 ? 'L' : '–'}</td><td><span style="display:inline-block;height:7px;width:${Math.round((mm.acc || 0) * 80)}px;background:#44ddff;border-radius:3px;"></span> ${mm.acc == null ? '–' : Math.round(mm.acc * 100) + '%'}</td><td>${mm.hs == null ? '–' : Math.round(mm.hs * 100) + '%'}</td><td>${mm.dpm == null ? '–' : Math.round(mm.dpm)}</td><td>${m.kills}/${m.deaths}</td><td>${(m.sens || 1).toFixed(2)}×</td></tr>`; }).join('');
+  const T = 'width:100%;font-size:11px;border-collapse:collapse;color:#cfeff6;', TH = 'color:#7fb6c4;text-align:left;';
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;"><div style="font-size:17px;letter-spacing:3px;color:#7fe0f2;">📊 MATCH ANALYSIS</div><button id="ma-close" style="background:#2a1f1f;color:#ffaaaa;border:1px solid #ff6666;padding:4px 10px;cursor:pointer;font-family:inherit;border-radius:3px;">✕</button></div>
+    <div style="margin-top:6px;font-size:12px;color:#9ec9d3;">${String(cur.mode).toUpperCase()} · ${cur.map || ''} · ${Math.floor(cur.secs / 60)}:${String(cur.secs % 60).padStart(2, '0')} · ${dstr} · ${cur.win === 1 ? 'WIN' : cur.win === 0 ? 'LOSS' : 'DRAW'} · ${(cur.sens || 1).toFixed(2)}× sensitivity · FOV ${cur.fov}</div>
+    ${head('THIS MATCH AGAINST YOUR LAST ' + (A.base || 0) + ' ' + (A.base === 1 ? 'MATCH' : 'MATCHES'))}
+    <table style="${T}"><tr style="${TH}"><th></th><th>THIS MATCH</th><th>YOUR AVERAGE</th><th></th></tr>${rows}</table>
+    ${head('WHAT STANDS OUT')}<ul style="margin:0;padding-left:18px;font-size:12px;line-height:1.6;color:#d8f4fa;">${A.notes.map(n => `<li>${n}</li>`).join('')}</ul>
+    ${cur.top.length ? head('WEAPONS') + `<table style="${T}"><tr style="${TH}"><th>WEAPON</th><th>SHOTS</th><th>HITS</th><th>ACC</th><th>HS</th><th>DMG</th><th>KILLS</th></tr>${wrows}</table>` : ''}
+    ${head('YOUR RESULTS BY SENSITIVITY')}<table style="${T}"><tr style="${TH}"><th>SENS</th><th>MATCHES</th><th>ACC</th><th>HS</th><th>DMG/MIN</th></tr>${srows}</table>
+    ${head('RECENT MATCHES')}<table style="${T}"><tr style="${TH}"><th>DAY</th><th>MODE</th><th></th><th>ACCURACY</th><th>HS</th><th>DMG/MIN</th><th>K/D</th><th>SENS</th></tr>${recent}</table>
+    <div style="display:flex;gap:8px;margin-top:16px;"><button id="ma-aim" style="flex:1;padding:9px;background:#10303a;color:#aaf0ff;border:1px solid #44ddff;cursor:pointer;font-family:inherit;letter-spacing:1px;border-radius:4px;">🎯 AIM LAB</button><button id="ma-clear" style="flex:1;padding:9px;background:#2a1a1a;color:#ff9988;border:1px solid #ff5544;cursor:pointer;font-family:inherit;letter-spacing:1px;border-radius:4px;">CLEAR HISTORY</button></div>`;
+  panel.querySelector('#ma-close').addEventListener('click', () => { panel.style.display = 'none'; });
+  panel.querySelector('#ma-aim').addEventListener('click', () => { panel.style.display = 'none'; try { openAimLab(); } catch (e) {} });
+  panel.querySelector('#ma-clear').addEventListener('click', () => { try { localStorage.removeItem(MATCH_HISTORY_KEY); } catch (e) {} _lastMatchSummary = null; openMatchAnalysis(); });
+}
 
 // ── 🎯 PRACTICE RANGE 2.0 ────────────────────────────────────────────────────────────────────────────────────────────
 // The range was thirteen boards, two of them sliding, and a counter that scored KILLS as hits. Now: P opens the range
@@ -82572,6 +82716,7 @@ function loop() {
   safeLoopStep('batch5', () => updateBatch5(dt));     // train scroll, vacuum, weather, lights-out, chandelier, debris
   safeLoopStep('killcam-sample', () => killcamSample(performance.now()));
   safeLoopStep('replay-sample', () => replaySample(performance.now()));
+  safeLoopStep('match-stats', matchSampleHealth);
   safeLoopStep('killcam', () => updateKillcam(performance.now()));
   safeLoopStep('vehicle-prompt', () => updateVehiclePrompt());// vehicle pickup prompt (BR arena)
   safeLoopStep('vehicle-piloting', () => updateVehiclePiloting(dt)); // move + sync vehicle while piloted
@@ -85228,7 +85373,7 @@ document.addEventListener('langchange', () => {
 // One dialog at a time (#21): each of these used to open on top of whatever was already open, all in
 // different sizes. Closing is only hiding — every dialog rebuilds from current state when it opens.
 // index.html gives them one shared frame.
-const DIALOG_IDS = ['player-record-panel', 'stealth-panel', 'settings-hub-panel', 'controls-panel', 'touch-controls-panel', 'crosshair-panel', 'display-settings-panel', 'aimlab-overlay', 'hitmarker-panel', 'range-panel', 'shoot-fx-panel', 'aim-assist-panel', 'weapon-skins-panel', 'item-skins-panel',
+const DIALOG_IDS = ['player-record-panel', 'stealth-panel', 'settings-hub-panel', 'controls-panel', 'touch-controls-panel', 'crosshair-panel', 'display-settings-panel', 'aimlab-overlay', 'hitmarker-panel', 'range-panel', 'match-analysis-panel', 'shoot-fx-panel', 'aim-assist-panel', 'weapon-skins-panel', 'item-skins-panel',
                     'skins-panel', 'kill-log-panel', 'char-chat-panel', 'map-dialog', 'diff-dialog', 'duel-panel', 'lobby-service-panel','weapon-inspect-panel'];
 function anyDialogOpen() {
   return DIALOG_IDS.some(id => { const el = document.getElementById(id); return el && getComputedStyle(el).display !== 'none'; });
@@ -85712,6 +85857,7 @@ function openSettingsHub() {
       <button id="settings-crosshair" style="padding:12px;background:#2a2410;color:#ffd866;border:1px solid #ffcc44;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">🎯 CROSSHAIR</button>
     </div>
     <button id="settings-display" style="display:block;width:100%;margin:8px 0;padding:12px;background:#0f2a24;color:#88ffcc;border:1px solid #44cc99;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">🎛 PRESETS & DISPLAY</button>
+    <button id="settings-analysis" style="display:block;width:100%;margin:8px 0;padding:12px;background:#10303a;color:#aaf0ff;border:1px solid #44ddff;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">📊 MATCH ANALYSIS</button>
     <button id="settings-hitmarker" style="display:block;width:100%;margin:8px 0;padding:12px;background:#2a2410;color:#ffd866;border:1px solid #ffcc44;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">💥 HITMARKER</button>
     <button id="settings-shoot-fx" style="display:block;width:100%;margin:8px 0;padding:12px;background:#2a1a3a;color:#cc99ff;border:1px solid #aa77ff;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">🔊 SHOOT FX</button>
     <button id="settings-aim-assist" style="display:block;width:100%;margin:8px 0;padding:12px;background:#3a1a1a;color:#ff9988;border:1px solid #ff5544;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">🎯 AIM ASSIST</button>
@@ -85753,6 +85899,7 @@ function openSettingsHub() {
   document.getElementById('settings-controls').addEventListener('click', () => { panel.style.display = 'none'; if (isTouchUI()) openTouchControlsPanel(); else openControlsPanel(); });  // a phone has no keys to rebind
   document.getElementById('settings-crosshair').addEventListener('click', () => { panel.style.display = 'none'; openCrosshairPanel(); });
   document.getElementById('settings-display').addEventListener('click', () => { panel.style.display = 'none'; openDisplayPanel(); });
+  document.getElementById('settings-analysis').addEventListener('click', () => { panel.style.display = 'none'; openMatchAnalysis(); });
   document.getElementById('settings-hitmarker').addEventListener('click', () => { panel.style.display = 'none'; openHitmarkerPanel(); });
   document.getElementById('settings-shoot-fx').addEventListener('click', () => { panel.style.display = 'none'; openShootFxPanel(); });
   document.getElementById('settings-aim-assist').addEventListener('click', () => { panel.style.display = 'none'; openAimAssistPanel(); });

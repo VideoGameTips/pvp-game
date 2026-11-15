@@ -683,6 +683,99 @@ if (ok && process.argv.includes('--range2')) {
   else console.log('range 2.0: layouts and speed, unlimited ammo, instant switching, tracker (pellets, hits, headshots, per weapon), DPS test on a dummy that cannot die, best per weapon, panel, settings');
 }
 
+if (ok && process.argv.includes('--analysis')) {
+  // Match analysis: the tally of a match (pellets, hits, headshots, damage dealt and taken, kills, per weapon), what is worth keeping, the comparison with
+  // the last ten, what counts as better, the sensitivity answer, the saved history, and the report itself.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const saved = { match, myId, hp: players[myId], hist: localStorage.getItem(MATCH_HISTORY_KEY), kills: myKills, sound: playSoundEvent, spies: [spawnHitNumber, trackTotalDamage, skinHitFX], emit: socket.emit, last: _lastMatchSummary, bots: gameBots.slice(), lobby: inLobby, sens: GAMEPLAY_SETTINGS.lookSens };
+    playSoundEvent = () => {}; spawnHitNumber = () => {}; trackTotalDamage = () => {}; skinHitFX = () => {}; socket.emit = () => {};
+    const mk = (o) => Object.assign({ t: Date.now(), mode: 'ffa5', map: 'urban', secs: 180, win: 1, shots: 100, hits: 25, heads: 5, damage: 900, taken: 600, kills: 6, deaths: 4, sens: 1, fov: 90, top: [['ak20', 100, 25, 5, 900, 6]] }, o);
+    try {
+      myId = 'an_me'; inLobby = false; GAMEPLAY_SETTINGS.lookSens = 0.8; localStorage.removeItem(MATCH_HISTORY_KEY);
+      // ── the tally
+      match = { type: 'ffa', stats: newMatchStats(), startedAt: Date.now() - 120000, killsAtStart: myKills, deaths: 3, over: false, cfg: {} };
+      matchNoteShot('sg8', 8); matchNoteShot('ak20', 1); matchNoteShot('ak20', 1); matchNoteShot('ak20', 1);
+      matchNoteHit('ak20', 26, false); matchNoteHit('ak20', 52, true); matchNoteHit('sg8', 9, false); matchNoteHit('sg8', 0, false); matchNoteHit('', 40, false);
+      matchNoteKill('ak20'); matchNoteKill('sg8');
+      const S = match.stats;
+      if (S.shots !== 11 || S.hits !== 3 || S.heads !== 1 || S.damage !== 87 || S.kills !== 2) issues.push('the tally is wrong: ' + JSON.stringify({ s: S.shots, h: S.hits, hd: S.heads, d: S.damage, k: S.kills }));
+      if (S.byWeapon.sg8.shots !== 8 || S.byWeapon.sg8.hits !== 1 || S.byWeapon.ak20.heads !== 1 || S.byWeapon.ak20.kills !== 1) issues.push('the per-weapon tally is wrong: ' + JSON.stringify(S.byWeapon));
+      players.an_me = { id: 'an_me', hp: 300 }; S.lastHp = null;
+      for (const hp of [300, 250, 280, 200, 300]) { players.an_me.hp = hp; matchSampleHealth(); }
+      if (S.taken !== 130) issues.push('damage taken should count only health coming off (not heals or a respawn): ' + S.taken);
+      for (const t of ['range', 'lobby']) { const m2 = { ...match, type: t, stats: newMatchStats() }; const keep = match; match = m2; matchNoteShot('ak20', 5); if (m2.stats.shots) issues.push(t + ' has no analysis'); match = keep; }
+      match.over = true; matchNoteShot('ak20', 5); if (S.shots !== 11) issues.push('nothing counts after the match is over'); match.over = false;
+      const pre = S.hits; matchNoteHit('ak20', 30, false); matchNoteHit('ak20', -5, false); if (S.hits !== pre + 1) issues.push('a hit that took nothing counted');
+      // ── the real paths: a server-confirmed hit, a hit on a bot, a kill
+      const hits0 = S.hits; hitConfirmFromServer({ shooterId: 'an_me', targetId: 'v', hp: 40, dealt: 35, weapon: 'p90', headshot: true, bulletId: 'an1' }, 75);
+      if (S.hits !== hits0 + 1 || S.byWeapon.p90.heads !== 1 || S.byWeapon.p90.damage !== 35) issues.push('a server-confirmed hit should be counted with its damage: ' + JSON.stringify(S.byWeapon.p90));
+      hitConfirmFromServer({ shooterId: 'an_me', targetId: 'v', hp: 40, dealt: 35, weapon: 'p90', headshot: true, bulletId: 'an1' }, 75); if (S.hits !== hits0 + 1) issues.push('an echoed hit counted twice');
+      players.an_bot = { id: 'an_bot', isBot: true, hp: 300, team: 'enemy', name: 'B' }; remoteMeshes.an_bot = { position: new THREE.Vector3(0, 0, -5), visible: true, rotation: { x: 0, y: 0, z: 0 } };
+      const bot = { id: 'an_bot', hp: 300, maxHp: 300, x: 0, z: -5, y: 0, team: 'enemy', isBot: true, dead: false }; gameBots.push(bot);
+      const h1 = S.hits; emitHit('an_bot', 'anb1', 'ak20', new THREE.Vector3(0, 1, -5)); if (S.hits !== h1 + 1 || S.damage <= 0) issues.push('a hit on a bot should count once: ' + (S.hits - h1));
+      emitHit('an_bot', 'anb1', 'ak20', new THREE.Vector3(0, 1, -5)); if (S.hits !== h1 + 1) issues.push('the same bullet counted twice');
+      gameBots.splice(gameBots.indexOf(bot), 1); delete players.an_bot; delete remoteMeshes.an_bot;
+      const k0 = S.kills; _lastKillConfirm = { id: null, t: 0 }; _killInfo.an_v = { killer: 'an_me', weapon: 'sg8', head: false }; confirmKill('an_v', 'V'); if (S.kills !== k0 + 1 || S.byWeapon.sg8.kills < 2) issues.push('a confirmed kill should be counted for its weapon');
+      confirmKill('an_v', 'V'); if (S.kills !== k0 + 1) issues.push('one kill counted twice');
+      // ── the summary and what is worth keeping
+      const sum = matchSummary('ally');
+      if (sum.secs < 118 || sum.secs > 125 || sum.win !== 1 || sum.deaths !== 3 || sum.sens !== 0.8 || !sum.top.length) issues.push('the summary: ' + JSON.stringify({ secs: sum.secs, win: sum.win, d: sum.deaths, sens: sum.sens }));
+      for (let i = 1; i < sum.top.length; i++) if (sum.top[i][4] > sum.top[i - 1][4]) issues.push('weapons should be sorted by damage');
+      if (matchSummary(null).win !== null || matchSummary('enemy').win !== 0) issues.push('a draw and a loss are told apart from a win');
+      if (matchWorthKeeping(mk({ secs: 10 })) || matchWorthKeeping(mk({ shots: 0, hits: 0 })) || !matchWorthKeeping(mk({}))) issues.push('what is worth keeping: not a few seconds, not a match with no shooting');
+      // ── metrics and the comparison
+      const mm = matchMetrics(mk({}));
+      if (Math.abs(mm.acc - 0.25) > 1e-9 || Math.abs(mm.hs - 0.2) > 1e-9 || Math.abs(mm.dpm - 300) > 1e-9 || Math.abs(mm.kd - 1.5) > 1e-9) issues.push('metrics: ' + JSON.stringify(mm));
+      if (matchMetrics(mk({ shots: 0, hits: 0 })).acc !== null) issues.push('no shots, no accuracy figure');
+      if (matchMetrics(mk({ hits: 40, shots: 20 })).acc !== 1) issues.push('accuracy cannot pass 100%');
+      const past = [mk({ hits: 20, deaths: 3, taken: 500 }), mk({ hits: 20, deaths: 3, taken: 500 }), mk({ hits: 20, deaths: 3, taken: 500 })];
+      const cur = mk({ hits: 40, heads: 12, damage: 1500, deaths: 8, taken: 1300, kills: 9, sens: 0.8 });
+      const A = analyzeMatch(cur, past), row = k => A.rows.find(r => r.key === k);
+      if (row('acc').better !== true || row('hs').better !== true || row('dpm').better !== true) issues.push('more accuracy, headshots and damage a minute are better');
+      if (row('deaths').better !== false || row('taken').better !== false) issues.push('more deaths and more damage taken are worse');
+      if (analyzeMatch(mk({ hits: 20, deaths: 3, taken: 500 }), past).rows.some(r => r.better !== null)) issues.push('a match like the average changes nothing');
+      if (!A.notes.some(n => /Accuracy 40%.*above.*20%/.test(n))) issues.push('the accuracy note: ' + JSON.stringify(A.notes));
+      if (A.base !== 3 || analyzeMatch(cur, []).base !== 0 || !/first match/.test(analyzeMatch(cur, []).notes[0])) issues.push('the first match on record says so');
+      const long = []; for (let i = 0; i < 15; i++) long.push(mk({ hits: i < 5 ? 10 : 20 })); if (analyzeMatch(cur, long).base !== 10) issues.push('the average is of the last ten, not all');
+      // ── sensitivity: grouped, compared, honest about few matches
+      const hist = [mk({ sens: 1, hits: 20 }), mk({ sens: 1, hits: 20 }), mk({ sens: 1, hits: 22 }), mk({ sens: 0.8, hits: 32 }), mk({ sens: 0.8, hits: 30 })];
+      const A2 = analyzeMatch(mk({ sens: 0.8, hits: 31 }), hist), g = A2.sens;
+      if (g.length !== 2 || g[0].sens !== 0.8 || g[0].n !== 3 || g[1].n !== 3) issues.push('matches are grouped by sensitivity: ' + JSON.stringify(g.map(x => [x.sens, x.n])));
+      const sn = A2.notes.find(n => /accuracy averages/.test(n)); if (!sn || !/better/.test(sn) || !/hint/.test(sn)) issues.push('the sensitivity answer: ' + JSON.stringify(A2.notes));
+      if (sensitivityGroups([mk({ sens: 0.82 }), mk({ sens: 0.8 })]).length !== 1) issues.push('close sensitivities are one group');
+      if (!analyzeMatch(mk({ sens: 0.6 }), hist).notes.some(n => /first match at 0.60/.test(n))) issues.push('a new sensitivity says it is new');
+      // ── the history and the end of a match
+      localStorage.removeItem(MATCH_HISTORY_KEY); for (let i = 0; i < 70; i++) { const l = matchHistory(); l.push(mk({ t: i })); saveMatchHistory(l); }
+      if (matchHistory().length !== MATCH_HISTORY_CAP || matchHistory()[0].t !== 10) issues.push('the history keeps the last ' + MATCH_HISTORY_CAP + ': ' + matchHistory().length);
+      localStorage.setItem(MATCH_HISTORY_KEY, '{not json'); if (matchHistory().length) issues.push('a corrupt history is empty, not a crash'); localStorage.setItem(MATCH_HISTORY_KEY, JSON.stringify([1, null, mk({})])); if (matchHistory().length !== 1) issues.push('junk entries in the history are dropped');
+      localStorage.removeItem(MATCH_HISTORY_KEY);
+      const before = matchHistory().length; const out = matchAnalysisOnEnd('ally'); if (!out || matchHistory().length !== before + 1) issues.push('a finished match should be saved');
+      match.type = 'range'; if (matchAnalysisOnEnd('ally') !== null) issues.push('a range session is not a match to analyse'); match.type = 'ffa';
+      const tiny = match.stats.shots; match.stats = newMatchStats(); if (matchAnalysisOnEnd('ally') !== null || matchHistory().length !== before + 1) issues.push('a match with no shooting is not saved');
+      // ── the report
+      const panel = document.createElement('div'); const keepGet = document.getElementById; document.getElementById = id => id === 'match-analysis-panel' ? panel : keepGet.call(document, id);
+      try {
+        openMatchAnalysis(); if (!/No matches on record|MATCH ANALYSIS/.test(panel.innerHTML) || panel.style.display !== 'block') issues.push('the report did not open');
+        const l = matchHistory(); l.push(mk({ t: Date.now() - 1000 })); l.push(mk({ t: Date.now(), hits: 40, sens: 0.8 })); saveMatchHistory(l);
+        openMatchAnalysis();
+        for (const part of ['THIS MATCH AGAINST YOUR LAST', 'WHAT STANDS OUT', 'WEAPONS', 'YOUR RESULTS BY SENSITIVITY', 'RECENT MATCHES', 'ACCURACY', 'DAMAGE / MIN']) if (!panel.innerHTML.includes(part)) issues.push('the report is missing: ' + part);
+        if (!panel.innerHTML.includes('▲')) issues.push('the report should mark what got better');
+        localStorage.removeItem(MATCH_HISTORY_KEY); openMatchAnalysis(); if (!/No matches on record/.test(panel.innerHTML)) issues.push('with no history the report says so');
+      } finally { document.getElementById = keepGet; }
+    } catch (e) {
+      issues.push('threw: ' + (e && e.stack ? e.stack.split('\\n').slice(0, 4).join(' | ') : e));
+    } finally {
+      match = saved.match; myId = saved.myId; if (saved.hp) players[saved.myId] = saved.hp; else delete players.an_me; if (saved.hist == null) localStorage.removeItem(MATCH_HISTORY_KEY); else localStorage.setItem(MATCH_HISTORY_KEY, saved.hist);
+      playSoundEvent = saved.sound; [spawnHitNumber, trackTotalDamage, skinHitFX] = saved.spies; socket.emit = saved.emit; _lastMatchSummary = saved.last; inLobby = saved.lobby; GAMEPLAY_SETTINGS.lookSens = saved.sens;
+      gameBots.length = 0; gameBots.push(...saved.bots); delete _killInfo.an_v;
+    }
+    return issues;
+  })()`);
+  if (issues.length) { ok = false; console.log('match analysis failures:\n' + issues.join('\n')); }
+  else console.log('match analysis: the tally (pellets, hits, headshots, damage, kills, per weapon), what is kept, the comparison with the last ten and which way is better, the sensitivity answer, the saved history, the report');
+}
+
 if (ok && process.argv.includes('--action-wind')) {
   const issues = vm.runInThisContext(`(() => {
     const issues=[], saved={gameStarted,isDead,activeSlot,velocity:playerVelocity.clone()};
