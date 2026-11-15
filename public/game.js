@@ -67694,6 +67694,7 @@ function confirmKill(id, name) {
   if (_lastKillConfirm.id === id && now - _lastKillConfirm.t < 1500) return false;
   _lastKillConfirm = { id, t: now };
   showHitmarker('kill');
+  feelKillPulse();
   { const since = performance.now() - _lastHeadDingAt;     // a killing headshot rang the ding and the kill tone on the same instant, and the kill tone buried the ding: it now waits for the ding to land
     if (since < 250) setTimeout(() => playHitConfirmSound('kill'), 170 - Math.min(since, 150)); else playHitConfirmSound('kill'); }   // the elimination tone: once per kill (the local hit and the server's echo both land here)
   const el = document.getElementById('kill-confirm');
@@ -71640,6 +71641,263 @@ function clearCombatFeedback() {
     if (el) { clearTimeout(el._t); el.style.opacity = '0'; }
   }
 }
+
+// ═══ ✨ FEEL PASS 2: kill pulse, low-health cracks, grenade preview, pickup glow, match intro card, victory confetti, final-kill freeze ═══
+// (Everything here makes its own elements and its own CSS: nothing to add to index.html. Damage direction already existed: showDamageDirection.)
+let _feel2Css = false;
+function feel2Css() {
+  if (_feel2Css) return; _feel2Css = true;
+  const s = document.createElement('style');
+  s.textContent = `
+  .k-ring { position: fixed; left: 50%; top: 50%; width: 30px; height: 30px; margin: -15px 0 0 -15px; border-radius: 50%; border: 2px solid rgba(255,90,70,.95);
+    box-shadow: 0 0 10px rgba(255,60,40,.7), inset 0 0 8px rgba(255,60,40,.5); pointer-events: none; z-index: 80; }
+  .hp-cracks { position: fixed; inset: 0; pointer-events: none; z-index: 79; opacity: 0; transition: opacity .6s; background-size: 100% 100%; background-repeat: no-repeat; mix-blend-mode: screen; }
+  .hp-cracks.on { opacity: .72; }
+  .intro-card { position: fixed; left: 50%; top: 11%; width: min(620px, 92vw); transform: translateX(-50%); z-index: 81; pointer-events: none; text-align: center; color: #fff;
+    font-family: 'Courier New', monospace; padding: 14px 18px 16px; background: linear-gradient(90deg, transparent, rgba(8,10,16,.82) 14%, rgba(8,10,16,.82) 86%, transparent);
+    border-top: 1px solid rgba(255,255,255,.25); border-bottom: 1px solid rgba(255,255,255,.25); }
+  .intro-mode { font-size: 12px; letter-spacing: 6px; color: #ffcf66; }
+  .intro-map { font-size: clamp(26px, 6vw, 44px); font-weight: 900; letter-spacing: 6px; margin: 2px 0 8px; text-shadow: 0 0 24px rgba(255,255,255,.35); }
+  .intro-teams { display: flex; align-items: flex-start; justify-content: center; gap: 14px; font-size: 12px; letter-spacing: 1px; }
+  .intro-side { flex: 1; min-width: 0; line-height: 1.5; }
+  .intro-side b { display: block; font-size: 10px; letter-spacing: 4px; margin-bottom: 2px; }
+  .intro-side.me b, .intro-side.me { color: #6fc3ff; } .intro-side.them b, .intro-side.them { color: #ff7b7b; }
+  .intro-vs { font-size: 18px; font-weight: 900; color: #fff; align-self: center; letter-spacing: 2px; }
+  .ff-bar { position: fixed; left: 0; width: 100%; background: #000; z-index: 120; pointer-events: none; height: 0; }
+  .ff-cap { position: fixed; left: 0; width: 100%; bottom: 17%; z-index: 121; pointer-events: none; text-align: center; color: #fff; font-family: 'Courier New', monospace; }
+  .ff-cap .a { font-size: 12px; letter-spacing: 8px; color: #ff6a6a; } .ff-cap .b { font-size: clamp(20px, 4vw, 34px); font-weight: 900; letter-spacing: 3px; text-shadow: 0 0 22px rgba(255,60,60,.8); }
+  .ff-vig { position: fixed; inset: 0; z-index: 119; pointer-events: none; background: radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,.75) 100%); opacity: 0; }
+  `;
+  document.head.appendChild(s);
+}
+
+// 2. Kill confirmation pulse: the crosshair swells, and a red ring leaves it
+function feelKillPulse() {
+  try {
+    feel2Css();
+    const ch = document.getElementById('crosshair');
+    if (ch && ch.animate) ch.animate([{ scale: 1 }, { scale: 1.7, offset: 0.25 }, { scale: 1 }], { duration: 280, easing: 'ease-out' });
+    const ring = document.createElement('div'); ring.className = 'k-ring'; document.body.appendChild(ring);
+    const a = ring.animate([{ transform: 'scale(.7)', opacity: 1 }, { transform: 'scale(2.8)', opacity: 0 }], { duration: 420, easing: 'cubic-bezier(.1,.7,.3,1)' });
+    a.onfinish = () => ring.remove(); setTimeout(() => ring.remove(), 700);
+  } catch (e) {}
+}
+
+// 7. Low-health screen cracks: glass that breaks outward from the edges. Under 30% a few; under 15% many more. Drawn once, procedurally.
+const _hpCracks = { a: null, b: null };
+function feelCrackSVG(seed, count, long) {
+  let s = seed; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  const lines = [];
+  for (let i = 0; i < count; i++) {
+    const side = Math.floor(rnd() * 4), t = rnd() * 100;
+    let x = side === 0 ? t : side === 1 ? 100 : side === 2 ? t : 0, y = side === 0 ? 0 : side === 1 ? t : side === 2 ? 100 : t;
+    const ix = side === 1 ? -1 : side === 3 ? 1 : 0, iy = side === 0 ? 1 : side === 2 ? -1 : 0;
+    const branches = 3 + Math.floor(rnd() * 3);
+    for (let b = 0; b < branches; b++) {
+      let px = x, py = y, ang = Math.atan2(iy || (rnd() - .5), ix || (rnd() - .5)) + (rnd() - .5) * 1.6;
+      let d = `M${px.toFixed(1)} ${py.toFixed(1)}`; const segs = 4 + Math.floor(rnd() * 4), L = (long ? 7 : 5) + rnd() * (long ? 9 : 6);
+      for (let k = 0; k < segs; k++) { ang += (rnd() - .5) * .9; px += Math.cos(ang) * L * (1 - k / (segs + 2)); py += Math.sin(ang) * L * (1 - k / (segs + 2)); d += ` L${px.toFixed(1)} ${py.toFixed(1)}`; }
+      lines.push(d);
+    }
+    lines.push(`M${(x + ix * 5).toFixed(1)} ${(y + iy * 5).toFixed(1)} q${(rnd() * 8 - 4).toFixed(1)} ${(rnd() * 8 - 4).toFixed(1)} ${(rnd() * 12 - 6).toFixed(1)} ${(rnd() * 12 - 6).toFixed(1)}`);
+  }
+  const p = lines.map(d => `<path d='${d}'/>`).join('');
+  return `url("data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'><g fill='none' stroke='white' stroke-width='.22' stroke-linecap='round' opacity='.85'>${p}</g><g fill='none' stroke='#ff5050' stroke-width='.5' opacity='.25'>${p}</g></svg>`)}")`;
+}
+function feelHpCracks(hp, maxHp) {
+  try {
+    feel2Css();
+    if (!_hpCracks.a) {
+      for (const k of ['a', 'b']) {
+        const el = document.createElement('div'); el.className = 'hp-cracks'; el.style.backgroundImage = feelCrackSVG(k === 'a' ? 7321 : 90211, k === 'a' ? 4 : 7, k === 'b');
+        document.body.appendChild(el); _hpCracks[k] = el;
+      }
+    }
+    const frac = maxHp > 0 ? hp / maxHp : 1, live = hp > 0 && !inLobby;
+    _hpCracks.a.classList.toggle('on', live && frac <= 0.3);
+    _hpCracks.b.classList.toggle('on', live && frac <= 0.15);
+  } catch (e) {}
+}
+
+// 4. Grenade trajectory preview: a dotted arc, drawn with the grenade's own physics, while you hold a frag (the cook)
+let _gpv = null;
+function _gpvBuild() {
+  const N = 90, geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
+  const c = document.createElement('canvas'); c.width = c.height = 32; const g = c.getContext('2d');
+  g.fillStyle = '#fff'; g.beginPath(); g.arc(16, 16, 11, 0, 7); g.fill();
+  const tex = new THREE.CanvasTexture(c);
+  const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xffd070, size: 0.11, map: tex, transparent: true, opacity: 0.9, depthWrite: false, alphaTest: 0.2 }));
+  pts.frustumCulled = false; pts.renderOrder = 998;
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.22, 0.30, 24), new THREE.MeshBasicMaterial({ color: 0xff6a3a, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false }));
+  ring.renderOrder = 998;
+  const group = new THREE.Group(); group.add(pts); group.add(ring); scene.add(group);
+  return { group, pts, ring, N, tmp: new THREE.Vector3() };
+}
+function updateGrenadePreview() {
+  const on = fragCook && gameStarted && !isDead && !countdownActive && !match?.over && !inLobby;
+  if (!on) { if (_gpv) _gpv.group.visible = false; return; }
+  if (!_gpv) _gpv = _gpvBuild();
+  if (!_gpv.group.parent) scene.add(_gpv.group);
+  const origin = new THREE.Vector3(); camera.getWorldPosition(origin);
+  origin.add(new THREE.Vector3(0.12, -0.18, -0.30).applyQuaternion(camera.quaternion));
+  const dir = new THREE.Vector3(0, 0.18, -1).applyQuaternion(camera.quaternion).normalize();
+  const g = { mesh: { position: origin.clone() }, velX: dir.x * 20, velY: dir.y * 20, velZ: dir.z * 20, bounceCount: 0 };
+  const left = Math.max(0.2, Math.min(3, (fragCook.explodeAt - Date.now()) / 1000)), step = 1 / 30, arr = _gpv.pts.geometry.attributes.position.array;
+  let n = 0, t = 0, last = origin.clone();
+  while (t < left && n < _gpv.N) {
+    g.velY -= GRENADE_GRAVITY * step; const hit = moveGrenadeWithCollision(g, step); t += step;
+    if (t > 0.1) { arr[n * 3] = g.mesh.position.x; arr[n * 3 + 1] = g.mesh.position.y; arr[n * 3 + 2] = g.mesh.position.z; n++; }
+    last.copy(g.mesh.position); if (hit) break;
+  }
+  for (let i = n; i < _gpv.N; i++) { arr[i * 3] = last.x; arr[i * 3 + 1] = last.y - 1000; arr[i * 3 + 2] = last.z; }     // (the unused dots, parked far below)
+  _gpv.pts.geometry.attributes.position.needsUpdate = true; _gpv.pts.geometry.setDrawRange(0, _gpv.N);
+  _gpv.ring.position.copy(last).add(new THREE.Vector3(0, 0.03, 0)); _gpv.ring.rotation.x = -Math.PI / 2;
+  const pulse = 1 + 0.12 * Math.sin(performance.now() / 110); _gpv.ring.scale.setScalar(pulse);
+  _gpv.group.visible = true;
+}
+
+// 5. Dropped weapons glow in their rarity colour: an outline shell that breathes and a ring on the floor
+function feelPickupGlow(group, box, color) {
+  try {
+    const c = new THREE.Color(color);
+    const shell = new THREE.Mesh(box.geometry, new THREE.MeshBasicMaterial({ color: c, side: THREE.BackSide, transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending }));
+    shell.scale.setScalar(1.38); box.add(shell);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.52, 28), new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = 0.04; group.add(ring);
+    return { shell, ring };
+  } catch (e) { return null; }
+}
+function feelPickupGlowTick(gl, t, i) {
+  if (!gl) return;
+  const k = 0.5 + 0.5 * Math.sin(t * 3.2 + i);
+  gl.shell.material.opacity = 0.28 + 0.3 * k;
+  gl.ring.material.opacity = 0.25 + 0.35 * (1 - k); gl.ring.scale.setScalar(1 + 0.25 * k);
+}
+
+// 8. Match intro card: the map, the mode, who is on whose side, before the countdown ends
+function showMatchIntroCard() {
+  try {
+    if (!match || !['elim', 'race', 'ffa', 'br', 'frontlines'].includes(match.type) || (match.round || 1) > 1) return;
+    feel2Css();
+    setTimeout(() => {
+      if (!match || match.over) return;
+      const mine = [], theirs = [], all = [];
+      for (const [id, p] of Object.entries(players)) {
+        if (!p || p.isDummy || !p.name) continue;
+        all.push(p.name);
+        if (id === myId) continue;
+        (localEntityTeam(id) === localEntityTeam(myId) ? mine : theirs).push(p.name);
+      }
+      const list = a => a.length ? a.slice(0, 5).join(' · ') + (a.length > 5 ? ` · +${a.length - 5}` : '') : '—';
+      const modeId = currentModeId(), mode = modeId ? modeCardLabel(modeId) : String(match.type).toUpperCase();
+      const el = document.createElement('div'); el.className = 'intro-card';
+      const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      const teams = match.type === 'ffa' || match.type === 'br'
+        ? `<div class="intro-side me"><b>FREE FOR ALL</b>${esc(all.length)} fighters · every one for themselves</div>`
+        : `<div class="intro-side me"><b>YOUR TEAM</b>${esc('YOU' + (mine.length ? ' · ' + list(mine) : ''))}</div><div class="intro-vs">VS</div><div class="intro-side them"><b>ENEMY</b>${esc(list(theirs))}</div>`;
+      el.innerHTML = `<div class="intro-mode">${esc(mode)}</div><div class="intro-map">${esc(mapCardLabel(activeMapName))}</div><div class="intro-teams">${teams}</div>`;
+      document.body.appendChild(el);
+      const a = el.animate([{ opacity: 0, transform: 'translate(-50%,-24px)' }, { opacity: 1, transform: 'translate(-50%,0)', offset: 0.12 }, { opacity: 1, transform: 'translate(-50%,0)', offset: 0.82 }, { opacity: 0, transform: 'translate(-50%,-10px)' }], { duration: 3400, easing: 'ease-out' });
+      a.onfinish = () => el.remove(); setTimeout(() => el.remove(), 4200);
+    }, 200);
+  } catch (e) {}
+}
+
+// 6. Victory confetti: small paper bursts round the winning side's names (the title, and the MVP panel when there is one)
+function feelVictoryConfetti(won) {
+  try {
+    if (!won) return;
+    const screen = document.getElementById('match-over-screen'); if (!screen || screen.style.display === 'none') return;
+    const cv = document.createElement('canvas'); cv.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;z-index:111;pointer-events:none;';
+    cv.width = innerWidth; cv.height = innerHeight; document.body.appendChild(cv);
+    const g = cv.getContext('2d'), cols = ['#ffd866', '#ff6a8a', '#6fc3ff', '#7affb0', '#ffffff', '#c58aff'], parts = [];
+    const spots = [];
+    for (const sel of ['#match-over-title', '[id*="mvp"]', '#match-over-sub']) { const e = screen.querySelector(sel); if (e) { const r = e.getBoundingClientRect(); if (r.width > 0) spots.push([r.left + r.width / 2, r.top + r.height / 2, r.width]); } }
+    if (!spots.length) spots.push([innerWidth / 2, innerHeight * 0.25, 300]);
+    const burst = (x, y, w, n) => { for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, v = 120 + Math.random() * 360;
+      parts.push({ x: x + (Math.random() - .5) * w * 0.5, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 220, r: Math.random() * 6.28, vr: (Math.random() - .5) * 14, w: 4 + Math.random() * 5, h: 2 + Math.random() * 4, c: cols[i % cols.length], life: 1.6 + Math.random() * 1.3 }); } };
+    spots.forEach((s, i) => setTimeout(() => burst(s[0], s[1], s[2], 46), i * 160));
+    setTimeout(() => spots.forEach(s => burst(s[0], s[1], s[2], 26)), 900);
+    let last = performance.now(), stop = last + 4500;
+    const tick = now => {
+      const dt = Math.min(0.05, (now - last) / 1000); last = now; g.clearRect(0, 0, cv.width, cv.height);
+      for (const p of parts) { p.vy += 620 * dt; p.vx *= 1 - 0.9 * dt; p.vy *= 1 - 0.5 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.r += p.vr * dt; p.life -= dt;
+        if (p.life <= 0) continue; g.save(); g.globalAlpha = Math.min(1, p.life * 1.5); g.translate(p.x, p.y); g.rotate(p.r); g.scale(1, Math.abs(Math.sin(p.r * 1.7)) * 0.8 + 0.2); g.fillStyle = p.c; g.fillRect(-p.w / 2, -p.h / 2, p.w, p.h); g.restore(); }
+      if (now < stop || parts.some(p => p.life > 0)) requestAnimationFrame(tick); else cv.remove();
+    };
+    requestAnimationFrame(tick); setTimeout(() => cv.remove(), 9000);
+  } catch (e) {}
+}
+
+// 10. Final-kill freeze-frame: the picture stops for a beat on the elimination that ended the match, with bars and the names. (Not a replay: just a held frame.)
+let _feelLastKill = null, _feelFreezeUntil = 0;
+function feelNoteKill(targetId, killerId) {
+  const nm = id => id ? (players[id]?.name || resolveBot(id)?.name || null) : null;
+  _feelLastKill = { t: performance.now(), targetId, killerId, tn: nm(targetId), kn: nm(killerId) };
+}
+function feelFinalFreeze() {                         // returns how long the picture is held (ms), 0 for no freeze
+  try {
+    const k = _feelLastKill;
+    if (!k || !match || match.forfeit || !['elim', 'race', 'ffa', 'br', 'frontlines'].includes(match.type)) return 0;
+    if (performance.now() - k.t > 900 || !k.killerId || k.killerId === k.targetId || !k.tn) return 0;
+    _feelLastKill = null; feel2Css();
+    const MS = 1250; _feelFreezeUntil = performance.now() + MS;
+    const mk = (cls, extra) => { const e = document.createElement('div'); e.className = cls; if (extra) e.style.cssText = extra; document.body.appendChild(e); return e; };
+    const top = mk('ff-bar', 'top:0'), bot = mk('ff-bar', 'bottom:0'), vig = mk('ff-vig');
+    const cap = mk('ff-cap'); cap.innerHTML = `<div class="a">FINAL ELIMINATION</div><div class="b"></div>`; cap.lastChild.textContent = `${k.kn || 'Someone'}  ▸  ${k.tn}`;
+    const opts = { duration: MS, fill: 'forwards' };
+    top.animate([{ height: '0' }, { height: '11vh' }], { duration: 260, fill: 'forwards', easing: 'ease-out' }); bot.animate([{ height: '0' }, { height: '11vh' }], { duration: 260, fill: 'forwards', easing: 'ease-out' });
+    vig.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 300, fill: 'forwards' });
+    cap.animate([{ opacity: 0, transform: 'translateY(14px)' }, { opacity: 1, transform: 'none', offset: 0.22 }, { opacity: 1 }], opts);
+    let zoom = null; try { zoom = renderer.domElement.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.06)' }], { duration: MS, easing: 'ease-out', fill: 'forwards' }); } catch (e) {}
+    try { playSoundEvent('replay_thump', { volume: 0.9, minGap: 0 }); } catch (e) {}
+    setTimeout(() => { for (const e of [top, bot, vig, cap]) e.remove(); try { zoom && zoom.cancel(); } catch (e) {} _feelFreezeUntil = 0; }, MS);
+    return MS;
+  } catch (e) { _feelFreezeUntil = 0; return 0; }
+}
+
+// 3. Rank promotion: a new rank's emblem assembles out of eight shards that fly in from every side, flashes, and names itself.
+// (Listens to the same rankUpdate the ranked panel does: ranked.js is not touched.)
+function feelRankPromotion(u) {
+  try {
+    const R = window.PVP_RANK, badge = window.PVP_RANKED && window.PVP_RANKED.badge;
+    if (!u || !u.after || u.before == null || !(u.delta > 0) || !R || !badge) return;
+    const after = R.tierOf(u.after.points), beforeRank = Number.isFinite(u.before.rank) ? u.before.rank : R.tierOf(u.before.points || 0).rank;
+    if (!(after.rank > beforeRank)) return;
+    feel2Css();
+    const old = document.getElementById('rank-promo'); if (old) old.remove();
+    const root = document.createElement('div'); root.id = 'rank-promo';
+    root.style.cssText = 'position:fixed;inset:0;z-index:9000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:radial-gradient(ellipse at center,rgba(12,14,24,.985),rgba(0,0,0,.995));color:#fff;font-family:"Courier New",monospace;cursor:pointer;';
+    const stage = document.createElement('div'); stage.style.cssText = 'position:relative;width:min(240px,60vw);height:min(240px,60vw);';
+    root.appendChild(stage);
+    const SIZE = 240, N = 8, shards = [];
+    for (let i = 0; i < N; i++) {
+      const a0 = i / N * Math.PI * 2 - Math.PI / 2, a1 = (i + 1) / N * Math.PI * 2 - Math.PI / 2, P = a => `${(50 + 80 * Math.cos(a)).toFixed(1)}% ${(50 + 80 * Math.sin(a)).toFixed(1)}%`;
+      const w = document.createElement('div'); w.style.cssText = `position:absolute;inset:0;clip-path:polygon(50% 50%, ${P(a0)}, ${P((a0 + a1) / 2)}, ${P(a1)});will-change:transform,opacity;opacity:0;`;
+      const c = badge(after.rank, SIZE); c.style.cssText = 'width:100%;height:100%;display:block;filter:drop-shadow(0 0 14px rgba(255,255,255,.25));'; w.appendChild(c); stage.appendChild(w); shards.push([w, (a0 + a1) / 2]);
+    }
+    const ring = document.createElement('div'); ring.style.cssText = 'position:absolute;inset:-6%;border-radius:50%;border:3px solid #fff;opacity:0;';
+    stage.appendChild(ring);
+    const head = document.createElement('div'); head.style.cssText = 'font-size:14px;letter-spacing:10px;color:#ffd866;opacity:0;'; head.textContent = 'RANK UP';
+    const name = document.createElement('div'); name.style.cssText = 'font-size:clamp(26px,7vw,46px);font-weight:900;letter-spacing:6px;opacity:0;text-shadow:0 0 28px currentColor;'; name.textContent = String(after.name || '').toUpperCase();
+    const sub = document.createElement('div'); sub.style.cssText = 'font-size:12px;letter-spacing:3px;color:#aaa;opacity:0;'; sub.textContent = 'click to continue';
+    root.append(head, name, sub); document.body.appendChild(root);
+    shards.forEach(([w, ang], i) => {                                    // each shard comes in from far away along its own angle, turning, and clicks into place
+      const d = 520 + (i % 3) * 120, dx = Math.cos(ang) * d, dy = Math.sin(ang) * d, rot = (i % 2 ? 1 : -1) * (60 + i * 17);
+      w.animate([{ transform: `translate(${dx}px,${dy}px) rotate(${rot}deg) scale(.4)`, opacity: 0 }, { opacity: 1, offset: 0.25 }, { transform: 'none', opacity: 1 }],
+        { duration: 760, delay: 250 + i * 110, easing: 'cubic-bezier(.2,.9,.25,1.15)', fill: 'forwards' });
+      setTimeout(() => { try { playSoundEvent('hitmarker', { volume: 0.5, minGap: 0, tier: i % 2 ? 'orange' : 'blue' }); } catch (e) {} }, 250 + i * 110 + 650);
+    });
+    const done = 250 + N * 110 + 800;
+    ring.animate([{ transform: 'scale(.6)', opacity: 0.95 }, { transform: 'scale(1.9)', opacity: 0 }], { duration: 800, delay: done, easing: 'ease-out', fill: 'forwards' });
+    stage.animate([{ filter: 'brightness(1)' }, { filter: 'brightness(2.4)', offset: 0.3 }, { filter: 'brightness(1)' }], { duration: 700, delay: done });
+    for (const [el, delay] of [[head, done + 150], [name, done + 330], [sub, done + 1200]]) el.animate([{ opacity: 0, transform: 'translateY(10px) scale(.9)' }, { opacity: 1, transform: 'none' }], { duration: 420, delay, fill: 'forwards', easing: 'ease-out' });
+    setTimeout(() => { try { playSoundEvent('hm_kill', { volume: 1, minGap: 0, pitch: 1.2 }); } catch (e) {} }, done);
+    const close = () => { root.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 300, fill: 'forwards' }).onfinish = () => root.remove(); setTimeout(() => root.remove(), 600); };
+    root.addEventListener('click', close); setTimeout(close, done + 4200);
+  } catch (e) {}
+}
+try { if (typeof socket !== 'undefined' && socket && socket.on) socket.on('rankUpdate', u => feelRankPromotion(u)); } catch (e) {}
 function showDamageDirection(fromId) {
   const layer = document.getElementById('dmg-dir');
   const src = players[fromId] || gameBots.find(b => b.id === fromId);
@@ -71677,6 +71935,7 @@ function updateHealthHUD(hp) {
   // Under 30%: the edges stay red until you heal, respawn or die (#36).
   const low = document.getElementById('low-hp');
   if (low) low.classList.toggle('on', hp > 0 && hp <= maxHp * 0.3 && !inLobby);
+  feelHpCracks(hp, maxHp);                                   // glass cracks at the edges: a few under 30%, many under 15%
 }
 
 // ── Spectator mode (watch teammates after dying) ────────────────────────────
@@ -76007,6 +76266,7 @@ function startMatchRound() {
     // where nobody has time to read it. It now shows on the screens where you are
     // waiting anyway — loadout, waiting, end (#29, showFunFact).
   };
+  showMatchIntroCard();
   runCountdown(liveLoadoutAllowed()?3:5, doStart);
 }
 
@@ -76942,6 +77202,7 @@ function onEntityDied(targetId, killerId) {
     seen[targetId] = now;
   }
   pushKillfeed(targetId, killerId);
+  feelNoteKill(targetId, killerId);
   if (match.type === 'campaign') { window.PVP_UNDERWORLD?.death(targetId); return; }
   if (killerId === myId && targetId !== myId) { contractsOnKill(targetId); try { polishMyKill(targetId); } catch (e) {} }
   if (targetId === myId) { contractsOnDeath(); try { polishMyDeath(killerId); } catch (e) {} }
@@ -78314,7 +78575,9 @@ function endMatch(winner, reason) {
     : '';
   document.getElementById('death-screen').style.display   = 'none';
   document.getElementById('waiting-screen').style.display = 'none';
-  el.style.display = 'flex';
+  { const freezeMs = feelFinalFreeze(), owner = match;                         // the match's last elimination holds the picture for a beat before the results
+    if (freezeMs) { el.style.display = 'none'; setTimeout(() => { if (match === owner && match.over) { el.style.display = 'flex'; feelVictoryConfetti(isWin); } }, freezeMs); }
+    else { el.style.display = 'flex'; setTimeout(() => feelVictoryConfetti(isWin), 250); } }
 
   // ── 🍩 Award shop donuts ─────────────────────────────────────────────
   const playerKills = (match.ffaKills?.[myId])
@@ -79779,7 +80042,7 @@ function zombieDropPickup(kind, x, z, id, tier, fromY = 0) {
   const gy = botGroundYAt(x, z, fromY + 0.1, 1.05, 2.2);
   g.position.set(x, gy, z);
   scene.add(g);
-  zombiePickups.push({ kind, id, tier, mesh: g, box, born: Date.now(), x, z, y: gy });
+  zombiePickups.push({ kind, id, tier, mesh: g, box, born: Date.now(), x, z, y: gy, glow: feelPickupGlow(g, box, color) });
   playSoundEvent('hitmarker', { volume: 0.6, minGap: 0, tier: kind === 'ammo' ? 'orange' : 'blue' });
 }
 function zombieRemovePickup(i) {
@@ -79826,6 +80089,7 @@ function updateZombiePickups(dt) {
     const pk = zombiePickups[i], age = now - pk.born, forever = pk.kind === 'radio';
     if (!forever && age > ZOMBIE_PICKUP_LIFE_MS) { zombieRemovePickup(i); continue; }
     pk.box.rotation.y += dt * 2.2; pk.box.position.y = 0.55 + Math.sin(t * 3 + i) * 0.12;
+    feelPickupGlowTick(pk.glow, t, i);
     pk.mesh.visible = forever || age < ZOMBIE_PICKUP_LIFE_MS - 6000 || Math.floor(age / 220) % 2 === 0;   // blinks out in its last seconds
     if (isDead) continue;
     const d = Math.hypot(camera.position.x - pk.x, camera.position.z - pk.z);
@@ -82228,6 +82492,7 @@ function loop() {
   safeLoopStep('smoke-blind', () => updateSmokeBlind(Math.min((now - lastTime) / 1000, 0.05)));   // ahead of the early returns below, so entering a finale or dying clears it
   const dt = Math.min((now-lastTime)/1000, 0.05);
   lastTime = now;
+  if (_feelFreezeUntil && now < _feelFreezeUntil) return;                    // the final-kill freeze-frame: the last picture simply stays
   if (window.PVP_BATTLE_SIM?.active) { safeLoopStep('battle-simulator', () => window.PVP_BATTLE_SIM.frame(dt)); return; }
   safeLoopStep('ragdoll', () => window.PVP_RAGDOLL?.tick(dt));
   if (window.PVP_BACKROOMS?.active) { safeLoopStep('backrooms', () => window.PVP_BACKROOMS.tick(dt)); return; }
@@ -82384,6 +82649,7 @@ function loop() {
 
   updateMatchTimer(dt);
   updateGrenades(dt);
+  safeLoopStep('grenade-preview', updateGrenadePreview);
   updateBlinkPearls(dt);
   updateSatchels(dt);
   updateDDay(dt);
