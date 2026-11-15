@@ -61286,6 +61286,9 @@ const MODEL_SKINS = [
   { id: 'vector_deadlock', weapon: 'vector', name: 'DEADLOCK', rarity: 'legendary',
     sw: ['#3a3e46', '#ff3a1a'], build: buildDeadlock,
     blurb: 'A classified corporate Vector with its own cooling department: two armoured heat-exchanger housings above and below the barrel that slide outward the longer you hold the trigger, showing six glowing heat sinks and venting steam when it runs hot. The receiver covers slide back on equip and the screen flashes DEADLOCK // READY. Reload is a PURGE CYCLE: the housings fling open and steam blasts sideways before they slam shut on the new magazine. Inspect is an EMERGENCY SHUTDOWN: an alarm, an orange barrel, four clamps clanking round it, a steam cloud, and a little shake.' },
+  { id: 'm1_garand_clockwork_requiem', weapon: 'm1_garand', name: 'The Clockwork Requiem', rarity: 'mythic', look: { hit: 'clock' }, noMagic: true,
+    sw: ['#e9e0cf', '#d7ab45', '#14110f'], build: buildClockworkRequiem,
+    blurb: 'An astronomical timepiece that fires lost time. Ivory and gold plates float round a black core, an orrery turns above the receiver, and gold rings down the barrel lock for an instant and surge forward with every shot. Reloading throws the clip up and rewinds time to rebuild it. A kill raises a clock face whose hands spin backward as the target breaks into fragments of time.' },
   { id: 'crossbow_chronos_engine', weapon: 'crossbow', name: 'Chronos Engine', rarity: 'legendary',
     sw: ['#c79a45', '#ffa42e'], build: buildChronosEngine,
     blurb: 'A pocket watch turned into a crossbow. The bolt rail runs through a big brass clock casing with a ticking escape wheel and a rocking balance wheel; the limbs are two hinged clock-hand arms that snap in when you fire; a winding key turns as you reload; and the stock is a hollow brass frame with a pendulum swinging in it. Still just a Crossbow.' },
@@ -61539,7 +61542,7 @@ const TOWER_MODEL_SKIN_IDS = new Set(['ak20_field_radio']);
 // 🏆 Earned at the end of a ranked season by finishing it at Legend rank: never bought, pulled or won any other way (server.js SEASON_SKIN_IDS grants it when the season is closed).
 const SEASON_MODEL_SKIN_IDS = new Set(['ak20_phoenix_reign']);
 // 🐉 Gen 3: the newest skins have their own case. Mirrors GEN3_SKIN_IDS in server.js (no skin is free).
-const GEN3_MODEL_SKIN_IDS = new Set(['minigun_hungry_garden', 'srx_point_of_no_return', 'crossbow_seraphim', 'revolver_clockbreaker', 'minigun_puppetmaster', 'crossbow_chronos_engine', 'crossbow_fracture', 'railgun_penteract', 'chain_gun_clockwork_dragon', 'ak20_breach_protocol', 'lever_remembrance', 'mauser_phantom_circuit']);
+const GEN3_MODEL_SKIN_IDS = new Set(['m1_garand_clockwork_requiem', 'minigun_hungry_garden', 'srx_point_of_no_return', 'crossbow_seraphim', 'revolver_clockbreaker', 'minigun_puppetmaster', 'crossbow_chronos_engine', 'crossbow_fracture', 'railgun_penteract', 'chain_gun_clockwork_dragon', 'ak20_breach_protocol', 'lever_remembrance', 'mauser_phantom_circuit']);
 const GEN3_MELEE_MODEL_SKIN_IDS = new Set(['katana_fractured_reality', 'scythe_deaths_head']);   // Gen 3 holds melee skins too
 const GATED_MODEL_SKIN_IDS = new Set([...GEN1_GATED_MODEL_SKIN_IDS, ...GEN2_MODEL_SKIN_IDS, ...GEN3_MODEL_SKIN_IDS, ...TOWER_MODEL_SKIN_IDS, ...SEASON_MODEL_SKIN_IDS, ...PVP_SHOP_CATALOG.exclusiveSkins]);
 const GATED_MELEE_MODEL_SKIN_IDS = new Set([...GEN2_MELEE_MODEL_SKIN_IDS, ...GEN2_SUPPORT_MODEL_SKIN_IDS, ...GEN3_MELEE_MODEL_SKIN_IDS]);   // (the lock check is by id, so utilities share it)
@@ -66927,6 +66930,7 @@ const SKIN_FX = {
   harpoon_octopus: { equip: 'unfold', equipMs: 950, equipSfx: ['whoosh', 'squeak'] },
   flamethrower_disco_inferno: { equip: 'flip', equipMs: 950, equipSfx: ['whoosh', 'chime'],
     inspect: [K(.12, { py: .02, rx: -.15 }), K(.26, { py: .05, pz: -.02, rx: -.50 }), K(.80, { py: .05, pz: -.02, rx: -.50 }), K(.88, { py: .03, rx: -.30 }), K(.94, { py: .015, rx: -.08 }), K(1, {})] },
+  m1_garand_clockwork_requiem: { equip: 'unfold', equipMs: 1200, equipSfx: ['whoosh', 'chime'], inspectMs: 4200 },
   crossbow_chronos_engine: { equip: 'unfold', equipMs: 1100, equipSfx: ['whoosh', 'chime'] },
   mauser_phantom_circuit: { equip: 'unfold', equipMs: 1000, equipSfx: ['whoosh', 'snapin'] },
   ak20_phoenix_reign: { equip: 'build', equipMs: 900, equipSfx: ['whoosh', 'chime'] },
@@ -68699,6 +68703,7 @@ function _playSkinFinisher(kind, targetId, killerId = null) {
   if (kind === 'web') return playWebFinisher(targetId, killerId);
   if (kind === 'thorn') return playThornFinisher(targetId, killerId);
   if (kind === 'card') return playAceFinisher(targetId, killerId);
+  if (kind === 'clock' && typeof playClockFinisher === 'function') return playClockFinisher(targetId, killerId);   // The Clockwork Requiem (clockwork-requiem.js)
   return false;
 }
 // Plays the chosen finisher on a body. The seven classic ones run the classic effect (see _playClassicFinisher); the others have a move
