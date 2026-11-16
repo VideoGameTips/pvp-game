@@ -934,6 +934,11 @@ const WEAPONS = [
     auto: false, pellets: 1, spread: 0.07, adsSpreadMult: 0, adsZoom: 50, bulletSpeed: 150, noReload: false,
     heatShots: 2, heatCooldown: 920, quietBurst: true, bulletColor: 0xffa03a, falloffLift: 0.05,
     recoil: { up: 0.010, side: 0.006, climb: 0.18, max: 1.8, recover: 8, adsMult: 0.55 } },
+  { id: 'm4_commando', name: 'M4 Commando', type: 'AR', slot: 'primary',
+    // 🎖️ Mobile precision: the AK20's lighter, quicker-handling cousin. 28 a shot at 10 a second is 280 DPS (the AK20's 300), a 24-round magazine,
+    // and you carry it 5% faster (moveMult: only while it is in your hands). Bullets fly dead straight, like the AK20's.
+    mag: 24, reserve: 72, damage: 28, fireRate: 100, reloadTime: 1900, headshotMult: 2,
+    auto: true, pellets: 1, spread: 0, adsZoom: 48, bulletSpeed: 130, noReload: false, moveMult: 1.05 },
 ];
 
 // ── Damage drop-off by range ────────────────────────────────────────────────
@@ -992,7 +997,7 @@ Object.assign(WEAPON_FALLOFF, {
   minigun: FALLOFF_MINIGUN, m134: FALLOFF_MINIGUN,
   ak20: FALLOFF_AR, burst: { near: 31, far: 76, min: 0.68 }, cyroclasm: FALLOFF_AR,
   freeze_gun: FALLOFF_AR, plasma_carbine: FALLOFF_AR, arc_rifle: FALLOFF_AR, flechette: FALLOFF_AR,
-  burst_cannon: FALLOFF_AR, twin_ar: FALLOFF_AR, glassmaker: FALLOFF_AR, auto_revolver: FALLOFF_AR,
+  burst_cannon: FALLOFF_AR, twin_ar: FALLOFF_AR, m4_commando: FALLOFF_AR, glassmaker: FALLOFF_AR, auto_revolver: FALLOFF_AR,
   xm7: { near: 38, far: 96, min: 0.72 }, hkmp7: FALLOFF_SMG, m4a1_arena: FALLOFF_ARENA_AR,
   paintball: FALLOFF_PAINT, nail_gun: FALLOFF_PAINT, sticker_blaster: FALLOFF_PAINT,
   srx: FALLOFF_SNIPER, railgun: FALLOFF_SNIPER, coilgun: FALLOFF_SNIPER, amr: FALLOFF_SNIPER, barrett: FALLOFF_SNIPER,
@@ -1594,7 +1599,7 @@ const BOT_MOVE_INTERVAL = 0.033; // send position updates every 33ms (30 Hz, lik
 // Admin items are NOT priced — they're claimed via promo codes only.
 const WEAPON_COSTS = {
   // Primaries — ARs / SMGs
-  ak20: 250,  mp40: 200, p90: 350, vector: 300, burst: 280,
+  ak20: 250, m4_commando: 400,  mp40: 200, p90: 350, vector: 300, burst: 280,
   // Primaries — Shotguns
   sg8: 220,
   // Primaries — Snipers / Marksman
@@ -41448,7 +41453,18 @@ const weaponModels = [
   buildPhaseRifle(),  // phase_rifle
   buildChronoPistol(),  // chrono_pistol
   buildTwinBurst(),  // twin_burst
+  buildM4Commando(),  // m4_commando
 ];
+function buildM4Commando() {
+  // 🎖️ M4 Commando: the M4A1's shape in desert-olive furniture with a tan band round the handguard and a stripe down the top rail: the compact, quick carbine.
+  const g = buildM4A1();
+  const olive = new THREE.MeshPhongMaterial({ color: 0x5b6b3a, shininess: 40, specular: 0x3a4430 }), tan = new THREE.MeshPhongMaterial({ color: 0xc2a878, shininess: 60, specular: 0x6a5a3a });
+  gpBox(g, tan, 0.054, 0.054, 0.014, 0, 0.010, -0.200);
+  gpBox(g, tan, 0.054, 0.054, 0.014, 0, 0.010, -0.300);
+  gpBox(g, olive, 0.020, 0.004, 0.200, 0, 0.0525, -0.020);
+  g._flash = g._flash || makeMuzzleFlash();
+  return g;
+}
 function buildTwinBurst() {
   // 🔫 TWIN BURST: a stubby over-under pistol -- a semi shotgun. Two stacked barrels, each with a flared choke, in a squared-off block; the two shots of a burst leave
   // from the top and bottom barrel in turn. Hands, grip and magazine sit where the pistol's do.
@@ -55250,7 +55266,7 @@ function updateMovement(dt, socialBlocked = false) {
   const weightMult = Math.max(0.15, 1 - weight); // floor at 15% so you're never frozen
   const baseSpeedMult = (activeSlot === 'melee'
     ? (meleeAbilityBuff?.type === 'revup' && !meleeAbilityBuff.hold ? 3.0 : (equippedMeleeItem()?.speedMult || 1.5))
-    : 1) * weightMult;
+    : 1) * weightMult * (((activeSlot === 'primary' || activeSlot === 'secondary') && currentWeapon?.moveMult) || 1);      // a gun can be carried quicker (the M4 Commando: +5%)
   const adrenalineActive = Date.now() < adrenalineUntil;
   // Frost slow: 100 = normal, 0 = frozen. Linear scale.
   const frostMult = Math.max(0, playerFrostSlow) / 100 * (Date.now() < playerChillUntil ? CHILL_MULT : 1);

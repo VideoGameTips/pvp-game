@@ -6347,6 +6347,68 @@
    "traits": [
     "Short range: stops at 42 m"
    ]
+  },
+  {
+   "id": "m4_commando",
+   "name": "M4 Commando",
+   "type": "AR",
+   "slot": "primary",
+   "archived": false,
+   "damage": 28,
+   "pellets": 1,
+   "headshotMult": 2,
+   "headDamage": 56,
+   "damagePerShot": 28,
+   "fireRateMs": 100,
+   "shotsPerSec": 10,
+   "auto": true,
+   "dps": 280,
+   "magazine": 24,
+   "reserve": 72,
+   "reloadSec": 1.9,
+   "reloadStyle": "magazine",
+   "noReload": false,
+   "timeToEmptySec": 2.3,
+   "bulletSpeed": 130,
+   "adsZoom": 48,
+   "falloff": {
+    "nearM": 28,
+    "farM": 70,
+    "minPct": 55
+   },
+   "damageByRange": [
+    28,
+    28,
+    28,
+    27,
+    24,
+    21,
+    18,
+    15,
+    15,
+    15,
+    15
+   ],
+   "shotsToKill": {
+    "body": 11,
+    "head": 6
+   },
+   "ttkBodySec": 1,
+   "scatterDeg": 0,
+   "bloom": null,
+   "recoil": {
+    "kickPerShotDeg": 0.274,
+    "sideKickDeg": 0.165,
+    "climbPerShotPct": 3,
+    "climbMaxX": 1.664,
+    "steadyKickDeg": 0.456,
+    "shotsToMaxClimb": 21,
+    "recoverPerSec": 8.5,
+    "adsKickPct": 12
+   },
+   "screenKick": 0.632,
+   "ability": null,
+   "traits": []
   }
  ],
  "melees": [
