@@ -129,9 +129,11 @@ const WEAPONS = [
   },
   {
     id: 'lever', name: 'Lever Rifle', type: 'Marksman', slot: 'primary',
-    mag: 8, reserve: 40, damage: 93, fireRate: 520, reloadTime: 2300,
-    auto: false, pellets: 1, spread: 0.002, adsZoom: 32, bulletSpeed: 184, noReload: false,
-    recoil: { up: 0.016, side: 0.007, climb: 0.16, max: 1.9, recover: 7.5, adsMult: 0.55 },
+    // The Lever Rifle and the M1 Garand are one weapon now: these are the two averaged (117 / 93 damage, 400 / 520 ms, 32 / 40 reserve...). The Garand's 'ping' on the last round is kept at half strength.
+    mag: 8, reserve: 36, damage: 105, fireRate: 460, reloadTime: 2250,
+    auto: false, pellets: 1, spread: 0.0025, adsZoom: 34, bulletSpeed: 186, noReload: false,
+    recoil: { up: 0.015, side: 0.0065, climb: 0.155, max: 1.85, recover: 7.75, adsMult: 0.55 },
+    lastBulletBonus: 30,
     ability: { name: 'Deadeye', cd: 16000, desc: 'Next shot deals 150 dmg', type: 'powershot', pellets: 1, spreadMult: 0, weaponAbId: 'lever_ab' },
   },
   {
@@ -282,7 +284,7 @@ const WEAPONS = [
     ability: { name: 'Discharge', cd: 11000, desc: 'AOE electric burst 2.5 m · 70 dmg', type: 'aoe', radius: 2.5, damage: 70, color: 0xffff44 },
   },
   {
-    id: 'm1_garand', name: 'M1 Garand', type: 'Battle Rifle', slot: 'primary',
+    id: 'm1_garand', name: 'M1 Garand', type: 'Battle Rifle', slot: 'primary', archived: true,   // merged into the Lever Rifle; this is its 'Classic Garand' skin. Kept here so the weapon indices do not shift.
     mag: 8, reserve: 32, damage: 117, fireRate: 400, reloadTime: 2200,
     auto: false, pellets: 1, spread: 0.003, adsZoom: 35, bulletSpeed: 188, noReload: false,
     recoil: { up: 0.014, side: 0.006, climb: 0.15, max: 1.8, recover: 8, adsMult: 0.55 },
@@ -1603,7 +1605,7 @@ const WEAPON_COSTS = {
   // Primaries — Shotguns
   sg8: 220,
   // Primaries — Snipers / Marksman
-  srx: 500, lever: 360,
+  srx: 500, lever: 370,
   lancer: 460, rpg: 520, bazooka: 620,
   // Primaries — Special
   rpd: 450, paintball: 120, crossbow: 280,
@@ -61224,7 +61226,7 @@ const MODEL_SKINS = [
   { id: 'five_seven_soap', weapon: 'five_seven', name: 'Soap Dispenser', rarity: 'good',
     sw: ['#e860a8', '#f6f6f2'], build: buildSoapDispenser,
     blurb: 'Pump bottle, pink soap, a bubble stuck to the spout.' },
-  { id: 'garand_hockey_stick', weapon: 'm1_garand', name: 'Hockey Stick', rarity: 'good',
+  { id: 'garand_hockey_stick', weapon: 'lever', name: 'Hockey Stick', rarity: 'good',
     sw: ['#d8b070', '#1c1e24'], build: buildHockeyStick,
     blurb: 'Taped blade, puck balanced on it. The ping is a slapshot.' },
   { id: 'potato_cannon_crisp_tube', weapon: 'potato_cannon', name: 'Crisp Tube', rarity: 'good',
@@ -61345,7 +61347,7 @@ const MODEL_SKINS = [
   { id: 'm4a1_arena_hk416', weapon: 'm4a1_arena', name: 'HK416', rarity: 'rare',
     sw: ['#b39a6b', '#2c3034'], build: buildHK416,
     blurb: 'Round free-float handguard with a rail at every quarter, a steel magazine, a laser box and a holographic sight.' },
-  { id: 'm1_garand_fal', weapon: 'm1_garand', name: 'FN FAL', rarity: 'rare',
+  { id: 'm1_garand_fal', weapon: 'lever', name: 'FN FAL', rarity: 'rare',
     sw: ['#6b4a2c', '#2c3034'], build: buildFAL,
     blurb: 'The right arm of the free world: slab receiver, aperture sight, vented walnut and a three-slot hider.' },
   { id: 'srx_m24', weapon: 'srx', name: 'M24 SWS', rarity: 'rare',
@@ -61664,7 +61666,7 @@ const MODEL_SKINS = [
   { id: 'vector_deadlock', weapon: 'vector', name: 'DEADLOCK', rarity: 'legendary',
     sw: ['#3a3e46', '#ff3a1a'], build: buildDeadlock,
     blurb: 'A classified corporate Vector with its own cooling department: two armoured heat-exchanger housings above and below the barrel that slide outward the longer you hold the trigger, showing six glowing heat sinks and venting steam when it runs hot. The receiver covers slide back on equip and the screen flashes DEADLOCK // READY. Reload is a PURGE CYCLE: the housings fling open and steam blasts sideways before they slam shut on the new magazine. Inspect is an EMERGENCY SHUTDOWN: an alarm, an orange barrel, four clamps clanking round it, a steam cloud, and a little shake.' },
-  { id: 'm1_garand_clockwork_requiem', weapon: 'm1_garand', name: 'The Clockwork Requiem', rarity: 'mythic', look: { hit: 'clock' }, noMagic: true,
+  { id: 'm1_garand_clockwork_requiem', weapon: 'lever', name: 'The Clockwork Requiem', rarity: 'mythic', look: { hit: 'clock' }, noMagic: true,
     sw: ['#e9e0cf', '#d7ab45', '#14110f'], build: buildClockworkRequiem,
     blurb: 'An astronomical timepiece that fires lost time. Ivory and gold plates float round a black core, an orrery turns above the receiver, and gold rings down the barrel lock for an instant and surge forward with every shot. Reloading throws the clip up and rewinds time to rebuild it. A kill raises a clock face whose hands spin backward as the target breaks into fragments of time.' },
   { id: 'crossbow_chronos_engine', weapon: 'crossbow', name: 'Chronos Engine', rarity: 'legendary',
@@ -61685,6 +61687,9 @@ const MODEL_SKINS = [
   { id: 'sg8_abyssal_sovereign', weapon: 'sg8', name: 'THE ABYSSAL SOVEREIGN', rarity: 'mythic', look: { hit: 'angler' },
     sw: ['#d9d2bc', '#4af0d8'], build: buildAbyssalSovereign,
     blurb: 'A shotgun made of the skull and bones of an ancient anglerfish. Six gaping, tooth-lined mouths snap open together and throw spectral teeth; the stock is a cage of fossil ribs; lure tendrils glow and sway. Reload: a gullet swallows each shell. Inspect: a long lure grows out of the skull and an eye opens in one of the mouths. Its teeth chatter when an enemy you can see is near. Its kills end with a giant spectral anglerfish swallowing the body.' },
+  { id: 'lever_classic_garand', weapon: 'lever', name: 'Classic Garand', rarity: 'good',
+    sw: ['#6b431f', '#3f4143'], build: buildM1Garand,
+    blurb: 'The original M1 Garand: a walnut battle rifle with its clip well and protected front sight. It was its own weapon until it was merged into the Lever Rifle, which took the average of the two.' },
   { id: 'plasma_carbine_fishbowl', weapon: 'plasma_carbine', name: 'Fishbowl Carbine', rarity: 'rare',
     sw: ['#2a8ae8', '#ff7a1a'], build: buildFishbowlCarbine,
     blurb: 'Fills with water when drawn. Three fish live in it.' },
@@ -61895,7 +61900,7 @@ const GEN2_MODEL_SKIN_IDS = new Set([
   'revolver_donut', 'ak20_donut', 'rpg_donut', 'machine_pistol_donut', 'pistol_donut',
   'sg8_donut', 'srx_donut', 'vector_donut', 'grenade_launcher_donut', 'minigun_donut',
   'mp40_donut', 'deagle_donut', 'shorty_donut',
-  'revolver_midas', 'pistol_frost', 'ak20_xerror', 'revolver_shatterpoint', 'machine_pistol_overclocked', 'p90_ironclad', 'hand_cannon_iron_judge', 'hand_cannon_broadside', 'sawed_off_double_trouble', 'sawed_off_classic_shorty', 'grenade_launcher_orbital', 'minigun_redline',            // the Gen 2 case's two new top rarities: EPIC and MYTHIC (server.js GEN2_EPIC_SKIN_IDS / GEN2_NEW_MYTHIC_SKIN_IDS)
+  'revolver_midas', 'pistol_frost', 'ak20_xerror', 'revolver_shatterpoint', 'machine_pistol_overclocked', 'p90_ironclad', 'hand_cannon_iron_judge', 'hand_cannon_broadside', 'sawed_off_double_trouble', 'sawed_off_classic_shorty', 'lever_classic_garand', 'grenade_launcher_orbital', 'minigun_redline',            // the Gen 2 case's two new top rarities: EPIC and MYTHIC (server.js GEN2_EPIC_SKIN_IDS / GEN2_NEW_MYTHIC_SKIN_IDS)
   'ak20_rainbow', 'ak20_hyperspace', 'ak20_blueprint', 'sg8_portal', 'vector_portal',
   'railgun_portal_detector', 'p90_quantum_scanner', 'freeze_hyperslush', 'firework_showman',
   'shorty_outlaw', 'snub_gunslinger', 'deagle_glitch', 'deagle_phantom', 'vector_glitch_exe', 'vector_neon_anarchy', 'vector_deadlock', 'flamethrower_disco_inferno', 'crossbow_widowmaker', 'throwing_knives_house_of_cards', 'boombow_gravity_end', 'harpoon_octopus',
@@ -67299,6 +67304,7 @@ const SKIN_FX = {
     reload: _fxR(RELOAD_KEYS.ak20, (RELOAD_PROPS.ak20 || []).map(e => e.k === 'mag' ? Object.assign({}, e, { k: 'holomag' }) : e), null, 'beep') },
   minigun_redline: { equip: 'windup', equipMs: 1000, equipSfx: ['windup', 'ding'] },
   grenade_launcher_orbital: { equip: 'unfold', equipMs: 1000, equipSfx: ['whoosh', 'snapin'] },
+  lever_classic_garand: { equip: 'slam', equipMs: 850, equipSfx: ['whoosh', null] },
   sawed_off_classic_shorty: { equip: 'slam', equipMs: 850, equipSfx: ['whoosh', null] },
   sawed_off_double_trouble: { equip: 'slam', equipMs: 900, equipSfx: ['whoosh', 'snapin'] },
   hand_cannon_iron_judge: { equip: 'unfold', equipMs: 1000, equipSfx: ['whoosh', 'snapin'] },
@@ -76252,7 +76258,7 @@ function forcePlayerWeapon(weaponId, slot = 'primary') {
 // nowhere else. Tiers are how good the thing is in a duel against a gun, so melees and most utilities sit low: rolling
 // a Frying Pan is a bad day, which is the point.
 const DICE_POOL = {
-  SS: ['gunslinger', 'm1_garand', 'ak20', 'event_horizon', 'omega_pistol', 'm:lightsabre', 'u:orbital_strike'],
+  SS: ['gunslinger', 'ak20', 'event_horizon', 'omega_pistol', 'm:lightsabre', 'u:orbital_strike'],
   S:  ['air_rifle', 'vector', 'minigun', 'revolver', 'lever', 'p90', 'storm_core', 'quantum_repeater', 'abs_zero', 'prism_engine',
        'solar_lance', 'm:titan_hammer', 'u:specter_drone', 'u:hunter_drone'],
   A:  ['burst', 'rpd', 'slingshot', 'mauser', 'chain_gun', 'hand_cannon', 'nail_gun', 'grenade_launcher', 'mp40', 'akimbo',
@@ -80035,7 +80041,7 @@ function zombieDarken(on) {
 const ZOMBIE_DROP_POOL = {
   C: ['pistol', 'machine_pistol', 'snub_revolver', 'twin_burst', 'sawed_off', 'mp40', 'm:bat', 'm:knife', 'm:sabre', 'u:frag', 'u:medkit', 'u:molotov'],
   B: ['revolver', 'mauser', 'duelist_pistol', 'auto_revolver', 'sg8', 'vector', 'burst', 'ak20', 'lever', 'm:katana', 'm:combat_axe', 'u:stim', 'u:land_mine'],
-  A: ['hand_cannon', 'akimbo', 'p90', 'm1_garand', 'srx', 'rpd', 'grenade_launcher', 'm:chainsaw', 'm:sledge', 'u:mini_turret', 'u:smoke'],
+  A: ['hand_cannon', 'akimbo', 'p90', 'srx', 'rpd', 'grenade_launcher', 'm:chainsaw', 'm:sledge', 'u:mini_turret', 'u:smoke'],
   S: ['minigun', 'chain_gun', 'rpg', 'railgun', 'm:chain_hammer', 'u:satchel'],
 };
 const ZOMBIE_DROP_TIER_WEIGHT = { C: 52, B: 31, A: 13, S: 4 };

@@ -3838,6 +3838,33 @@ if (ok && process.argv.includes('--twinburst')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+// LEVER RIFLE + M1 GARAND: one weapon now. The Lever Rifle has the average of the two, the Garand is archived (it keeps its slot) and returns as the Classic Garand skin, its skins and bundles moved over.
+if (ok && process.argv.includes('--leverrifle')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const lever = WEAPONS.find(w => w.id === 'lever'), garand = WEAPONS.find(w => w.id === 'm1_garand');
+    if (!lever || !garand) return ['the Lever Rifle or the Garand slot is missing'];
+    if (lever.name !== 'Lever Rifle') issues.push('it is called the Lever Rifle: ' + lever.name);
+    const avg = { mag: 8, reserve: 36, damage: 105, fireRate: 460, reloadTime: 2250 };
+    for (const k in avg) if (lever[k] !== avg[k]) issues.push('averaged ' + k + ' should be ' + avg[k] + ': ' + lever[k]);
+    if (!garand.archived) issues.push('the Garand should be archived (it keeps its slot)');
+    if (weaponModels.length !== WEAPONS.length) issues.push('WEAPONS and weaponModels must stay the same length');
+    const stray = MODEL_SKINS.filter(s => s.weapon === 'm1_garand').map(s => s.id);
+    if (stray.length) issues.push('skins still on the archived Garand: ' + stray.join(', '));
+    const classic = MODEL_SKINS.find(s => s.id === 'lever_classic_garand');
+    if (!classic || classic.weapon !== 'lever') issues.push('the Classic Garand skin of the Lever Rifle is missing');
+    else {
+      if (!GEN2_MODEL_SKIN_IDS.has(classic.id)) issues.push('the Classic Garand is not dealt by a case (no skin is free)');
+      const m = classic.build(); if (!m || !m._flash) issues.push('the Classic Garand model needs a flash');
+    }
+    const archivedIds = new Set(WEAPONS.filter(w => w.archived).map(w => w.id));
+    for (const b of (PVP_SHOP_CATALOG.bundles || [])) for (const id of b.items) if (archivedIds.has(id)) issues.push('bundle ' + b.id + ' holds the archived ' + id);
+    return issues;
+  })()`);
+  console.log('LEVER RIFLE checks: averaged stats, Garand archived and its skins moved, Classic Garand skin, no archived item in a bundle');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 // HOUSE OF CARDS (the Throwing Knives skin): a legendary from the Gen 2 case: a fan of three cards and a floating ace that shuffle on every throw, the Impossible Shuffle on inspect (the deck is
 // thrown up, spirals, interleaves, four aces stop in the air, become one knife that lands in the hand), a card for a round, and the ace of spades behind what it kills.
 if (ok && process.argv.includes('--houseofcards')) {

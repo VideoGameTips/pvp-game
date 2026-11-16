@@ -3,7 +3,7 @@
     {id:'pitiful',name:'Field Kit',items:['ak20','revolver','bat'],skins:['ak20_ak47_wood']},
     {id:'starter_pro',name:'Burst Operator',items:['burst','revolver','knife'],skins:['burst_m4a1']},
     {id:'heavy_duty',name:'Heavy Duty',items:['rpd','minigun','sledge'],skins:['rpd_m249']},
-    {id:'wwii',name:'WWII Arsenal',items:['mp40','m1_garand','mauser'],skins:['mp40_cyberpunk']},
+    {id:'wwii',name:'WWII Arsenal',items:['mp40','lever','mauser'],skins:['mp40_cyberpunk']},
     {id:'sniper_pack',name:'Long Watch',items:['srx','pistol','knife'],skins:['srx_dragunov']},
     {id:'run_n_gun',name:'Run & Gun',items:['vector','machine_pistol','knife'],skins:['vector_mp5']},
     {id:'shotgun_pack',name:'Breach Team',items:['sg8','sawed_off','bat'],skins:['sg8_remington870']},
@@ -52,7 +52,7 @@
     p2w:{name:'Straight Pay to Win',color:'#f46f82',min:75000,max:300000},
   };
   const tierGroups={
-    prime:['p90','vector','burst','srx','lever','rpd','rpg','bazooka','crossbow','flamethrower','grenade_launcher','freeze_gun','boombow','m1_garand','mortar_rifle','air_rifle','hand_cannon','gatecrasher','akimbo','frost_blaster','freeze_ray','auto_revolver','sawed_off','machine_revolver','katana','sledge','spear','chainsaw','combat_axe','fire_axe','nunchucks','riot_shield','satchel','sticky_charge','adrenaline','land_mine','emp_grenade','tesla_coil','mini_turret','guardian_drone','hologram','magnet_mine','healing_pulse','teleport_beacon','cloak','berserker_serum','drone_strike','hunter_drone','heal_gun','vampire_syringe'],
+    prime:['p90','vector','burst','srx','lever','rpd','rpg','bazooka','crossbow','flamethrower','grenade_launcher','freeze_gun','boombow','mortar_rifle','air_rifle','hand_cannon','gatecrasher','akimbo','frost_blaster','freeze_ray','auto_revolver','sawed_off','machine_revolver','katana','sledge','spear','chainsaw','combat_axe','fire_axe','nunchucks','riot_shield','satchel','sticky_charge','adrenaline','land_mine','emp_grenade','tesla_coil','mini_turret','guardian_drone','hologram','magnet_mine','healing_pulse','teleport_beacon','cloak','berserker_serum','drone_strike','hunter_drone','heal_gun','vampire_syringe'],
     exclusive:['minigun','chain_gun','railgun','cyroclasm','storm_bloom','continuum','gunslinger','lightsabre','scythe','chain_hammer','grapple_hook','blink_pearl','glitch_cube','lancer','nano_shield'],
     p2w:['javelin_launcher','event_horizon','storm_core','abs_zero','solar_lance','quantum_repeater','magnetar','nebula_mortar','prism_engine','void_harvester','pulse_needle','phase_blade','gravity_hammer','volt_whip','nano_swarm','warp_beacon','stasis_mine','specter_drone','quantum_barrier','black_hole_seed','orbital_strike','titan_hammer','vampire_blade'],
   };
@@ -71,9 +71,9 @@
     umbrella:450,yoyo:900,shock_baton:1400,tennis_racket:350,golf_club:600,
     stim:250,smoke:200,molotov:500,air_grenade:400,air_blaster:1200,ammo_fountain:800,
     confetti_cannon:150,rubber_duck:100,bounce_pad:700,tripwire:700,hamburger:350,acid_grenade:900,bee_jar:1000,
-    p90:4200,vector:5000,burst:3500,srx:6500,lever:4000,rpd:6000,rpg:8500,bazooka:10000,
+    p90:4200,vector:5000,burst:3500,srx:6500,lever:3900,rpd:6000,rpg:8500,bazooka:10000,
     crossbow:3000,flamethrower:5500,grenade_launcher:7500,freeze_gun:6000,boombow:4500,
-    m1_garand:3800,mortar_rifle:7000,air_rifle:3200,hand_cannon:4000,gatecrasher:9000,
+    mortar_rifle:7000,air_rifle:3200,hand_cannon:4000,gatecrasher:9000,
     akimbo:5000,frost_blaster:6500,freeze_ray:6500,auto_revolver:5000,sawed_off:3800,machine_revolver:4500,
     katana:8000,sledge:5000,spear:3000,chainsaw:11000,combat_axe:6500,fire_axe:5000,
     nunchucks:3500,riot_shield:7500,satchel:5500,sticky_charge:4000,

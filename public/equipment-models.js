@@ -182,6 +182,22 @@
     box(g, p.rubber, [0.063, 0.076, 0.015], [0, -0.014, 0.405], [-0.12, 0, 0]);
   });
 
+  // Lever Rifle (the M1 Garand was merged into it): one continuous walnut stock, exposed receiver, handguard, clip
+  // well, and protected front sight.
+  defineGun('lever', [0x6b431f, 0x3f4143], [0, 0.018, -0.61], 0.022, (g, p) => {
+    box(g, p.wood, [0.055, 0.075, 0.56], [0, -0.012, -0.06]);
+    box(g, p.wood, [0.060, 0.060, 0.20], [0, -0.010, 0.30], [-0.10, 0, 0]);
+    box(g, p.dark, [0.062, 0.066, 0.16], [0, 0.014, 0.035]);
+    box(g, p.steel, [0.052, 0.030, 0.15], [0, 0.054, -0.015]);
+    cyl(g, p.steel, 0.008, 0.39, [0, 0.018, -0.425]);
+    box(g, p.wood, [0.050, 0.042, 0.22], [0, 0.025, -0.245]);
+    box(g, p.brass, [0.030, 0.010, 0.035], [0, 0.071, -0.005]);
+    box(g, p.dark, [0.024, 0.032, 0.012], [0, 0.062, -0.47]);
+    torus(g, p.dark, 0.018, 0.004, [0, 0.062, -0.485], [0, PI / 2, 0], PI);
+    torus(g, p.steel, 0.034, 0.005, [0, -0.062, 0.060], [0, PI / 2, 0], PI * 1.5);   // the lever loop
+    box(g, p.rubber, [0.063, 0.076, 0.015], [0, -0.014, 0.405], [-0.12, 0, 0]);
+  });
+
   // Plasma Carbine: split shell around a visible plasma bottle and three
   // focusing vanes instead of a conventional barrel.
   defineGun('plasma_carbine', [0x173d28, 0x66ff99], [0, 0.012, -0.43], 0.012, (g, p) => {

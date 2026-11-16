@@ -310,7 +310,7 @@ const WEAPON_COSTS = {
   // Primaries — Shotguns
   sg8: 220,
   // Primaries — Snipers / Marksman
-  srx: 500, lever: 360,
+  srx: 500, lever: 370,
   lancer: 460, rpg: 520, bazooka: 620,
   // Primaries — Special
   rpd: 450, paintball: 120, crossbow: 280,
@@ -483,6 +483,7 @@ GEN2_RARE_SKIN_IDS.push('harpoon_octopus');   // Octopus: the speargun that shoo
 GEN2_RARE_SKIN_IDS.push('flamethrower_disco_inferno');   // DISCO INFERNO: the nightclub flamethrower
 GEN2_LEGENDARY_SKIN_IDS.push('rpg_black_hole', 'hand_cannon_iron_judge', 'hand_cannon_broadside', 'sawed_off_double_trouble', 'grenade_launcher_orbital', 'minigun_redline');
 GEN2_LEGENDARY_SKIN_IDS.push('moon_mine_eclipse');   // Eclipse Engine, the Moon Mine's skin
+GEN2_GOOD_SKIN_IDS.push('lever_classic_garand');   // the old M1 Garand, as a skin of the merged Lever Rifle
 GEN2_GOOD_SKIN_IDS.push('sawed_off_classic_shorty');   // the old Shorty pump, as a skin of the merged Shorty   // Black Hole Cannon
 GEN2_RARE_SKIN_IDS.push('srx_absolute_zero', 'sg8_tectonic');   // Absolute Zero, Tectonic
 // 🟠🔴 The case's two newest top rarities, EPIC and MYTHIC (MODEL_SKINS rarity 'epic' / 'mythic' in public/game.js): the Midas Revolver (EPIC), the Frost Pistol (EPIC) and X!@&!@ (MYTHIC). Each has an entrance like every Gen 2 skin; what is new is how
@@ -536,6 +537,7 @@ for (const id of Object.keys(WEAPON_COSTS)) {
 // (gotcha #4) -- pulled from the shop, and from chest/wheel reward pools
 // below, but still a valid purchase for anyone who already owns one.
 const ARCHIVED_ITEM_IDS = new Set([
+  'm1_garand',   // merged into the Lever Rifle
   'bazooka',
   'amr',
   'shockwave_launcher',
@@ -700,6 +702,13 @@ function ensureShopFields(u) {
     if (!u.purchased.includes('sawed_off')) u.purchased.push('sawed_off');
     if (!Array.isArray(u.skinInventory)) u.skinInventory = [];
     if (!u.skinInventory.includes('sawed_off_classic_shorty')) u.skinInventory.push('sawed_off_classic_shorty');
+  }
+  // The M1 Garand was merged into the Lever Rifle. Whoever bought the Garand owns the Lever Rifle, and keeps the old model as a skin.
+  if (u.purchased.includes('m1_garand')) {
+    u.purchased = u.purchased.filter(id => id !== 'm1_garand');
+    if (!u.purchased.includes('lever')) u.purchased.push('lever');
+    if (!Array.isArray(u.skinInventory)) u.skinInventory = [];
+    if (!u.skinInventory.includes('lever_classic_garand')) u.skinInventory.push('lever_classic_garand');
   }
   // The Freeze Ray moved from the secondaries to the utilities (id freeze_ray). Whoever bought it keeps it.
   if (u.purchased.includes('frost_blaster') && !u.purchased.includes('freeze_ray')) u.purchased.push('freeze_ray');
@@ -2347,7 +2356,7 @@ event_horizon: 75,
   // Primaries
   ak20: 25, m4_commando: 28,  sg8: 18,
   srx: 95, rpd: 10, mp40: 20, p90: 10,
-  paintball: 60, burst: 47, lever: 93,
+  paintball: 60, burst: 47, lever: 105,
   vector: 18, crossbow: 100, flamethrower: 3,
   grenade_launcher: 90, railgun: 200, minigun: 27, chain_gun: 22, javelin_launcher: 30,
   freeze_gun: 13, boombow: 50,
