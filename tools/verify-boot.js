@@ -3780,6 +3780,64 @@ if (ok && process.argv.includes('--abyssal')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+// TWIN BURST (a secondary): one pull fires two 48s 0.08 s apart and you are committed to both; a second between bursts; from the hip every bullet scatters, aimed down the sights it does not.
+if (ok && process.argv.includes('--twinburst')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const idx = WEAPONS.findIndex(w => w.id === 'twin_burst'), w = WEAPONS[idx];
+    if (!w) return ['the Twin Burst is missing'];
+    const want = { slot: 'secondary', damage: 48, mag: 12, fireRate: 80, reloadTime: 1800, heatShots: 2, auto: false, adsSpreadMult: 0 };
+    for (const k in want) if (w[k] !== want[k]) issues.push('stat ' + k + ' should be ' + want[k] + ': ' + w[k]);
+    if (!(w.spread > 0.03)) issues.push('it needs a real hip spread: ' + w.spread);
+    if (w.fireRate + w.heatCooldown !== 1000) issues.push('a burst every second: ' + (w.fireRate + w.heatCooldown));
+    if (weaponModels.length !== WEAPONS.length) issues.push('WEAPONS and weaponModels must stay the same length: ' + WEAPONS.length + ' / ' + weaponModels.length);
+    const m = weaponModels[idx];
+    if (!m || !m._flash || !m._shotPose) return issues.concat(['its model (at the same index) needs a flash and a shot pose']);
+    const a = m._shotPose(), b = m._shotPose(), c = m._shotPose();
+    if (a === b || a !== c) issues.push('the bullets of a burst should leave from alternate barrels');
+    if (typeof WEAPON_COSTS !== 'undefined' && !(WEAPON_COSTS.twin_burst > 0)) issues.push('it needs a price');
+    const saved = { slot: activeSlot, wi: currentWeaponIdx, cw: currentWeapon, dead: isDead, started: gameStarted, last: lastShot, slb: spawnLocalBullet, sound: playWeaponSound, ar: addRecoil, fa: flashAbilityName,
+      st: setTimeout, ads: isADS, pos: camera.position.clone(), quat: camera.quaternion.clone(), ammo: weaponAmmo[idx], heat: weaponHeatState.twin_burst, shooting };
+    const bullets = [], timers = []; let flashed = 0;
+    try {
+      activeSlot = 'secondary'; currentWeaponIdx = idx; currentWeapon = w; isDead = false; gameStarted = true; reloading = false; isADS = false;
+      camera.position.set(0, 1.65, 0); camera.quaternion.set(0, 0, 0, 1); camera.updateMatrixWorld(true);
+      weaponAmmo[idx] = { ammo: w.mag, reserve: w.reserve };
+      for (const wm of weaponModels) wm.visible = false; m.visible = true;
+      spawnLocalBullet = (o, d) => { bullets.push(d.clone()); };
+      playWeaponSound = () => {}; addRecoil = () => {}; flashAbilityName = () => { flashed++; };
+      setTimeout = (f, ms) => { timers.push({ f, ms }); return 0; };
+      const pull = () => { lastShot = 0; tryShoot(); };
+      weaponHeatState.twin_burst = { shotCount: 0, cooldownUntil: 0 };
+      pull();
+      if (bullets.length !== 1) issues.push('a pull fires its first bullet at once: ' + bullets.length);
+      const next = timers.find(t => t.ms === w.fireRate);
+      if (!next) issues.push('the second bullet should be queued 0.08 s later (a commitment: no trigger needed)');
+      else { shooting = false; lastShot = Date.now(); next.f(); }
+      if (bullets.length !== 2) issues.push('a burst is two bullets: ' + bullets.length);
+      if (weaponAmmo[idx].ammo !== w.mag - 2) issues.push('two rounds per burst: ' + weaponAmmo[idx].ammo);
+      pull();
+      if (bullets.length !== 2) issues.push('no new burst for a full second: ' + bullets.length);
+      weaponHeatState.twin_burst.cooldownUntil = 0; pull();
+      if (bullets.length !== 3) issues.push('after the second the next burst fires: ' + bullets.length);
+      if (flashed) issues.push('a burst is not an overheat: no OVERHEATED banner');
+      const dev = list => { const same = list.filter((_, i) => i % 2 === 0); return Math.max(0, ...same.map(d => d.angleTo(same[0]))); };   // (every other bullet leaves the same barrel)
+      const run = ads => { isADS = ads; bullets.length = 0; for (let i = 0; i < 20; i++) { weaponHeatState.twin_burst = { shotCount: 0, cooldownUntil: 0 }; weaponAmmo[idx] = { ammo: w.mag, reserve: w.reserve }; pull(); } return bullets.slice(); };
+      const hip = run(false), ads = run(true);
+      if (!(dev(hip) > 0.03)) issues.push('from the hip it should scatter: max ' + dev(hip).toFixed(4) + ' rad');
+      if (!(dev(ads) < 0.005 && dev(hip) > 6 * dev(ads))) issues.push('aimed down the sights the spread is gone (hip ' + dev(hip).toFixed(4) + '): max ' + dev(ads).toFixed(6) + ' rad');
+    } catch (e) { issues.push('threw: ' + (e && e.stack || e)); }
+    finally {
+      activeSlot = saved.slot; currentWeaponIdx = saved.wi; currentWeapon = saved.cw; isDead = saved.dead; gameStarted = saved.started; lastShot = saved.last; spawnLocalBullet = saved.slb;
+      playWeaponSound = saved.sound; addRecoil = saved.ar; flashAbilityName = saved.fa; setTimeout = saved.st; isADS = saved.ads; camera.position.copy(saved.pos); camera.quaternion.copy(saved.quat);
+      weaponAmmo[idx] = saved.ammo; if (saved.heat) weaponHeatState.twin_burst = saved.heat; else delete weaponHeatState.twin_burst; shooting = saved.shooting;
+    }
+    return issues;
+  })()`);
+  console.log('TWIN BURST checks: stats, two bullets a burst and committed to both, a second between bursts, hip spread and aimed-down-sights accuracy');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 // HOUSE OF CARDS (the Throwing Knives skin): a legendary from the Gen 2 case: a fan of three cards and a floating ace that shuffle on every throw, the Impossible Shuffle on inspect (the deck is
 // thrown up, spirals, interleaves, four aces stop in the air, become one knife that lands in the hand), a card for a round, and the ace of spades behind what it kills.
 if (ok && process.argv.includes('--houseofcards')) {

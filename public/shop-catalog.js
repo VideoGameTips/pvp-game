@@ -66,7 +66,7 @@
   const weaponPrices={
     mp40:700,paintball:450,revolver:350,shorty:500,cycler:650,throwing_knives:700,taser:1000,
     machine_pistol:1100,traffic_cone:300,cream_pie:250,dart_gun:600,laser_pointer:200,
-    snub_revolver:400,duelist_pistol:1200,mauser:750,nail_gun:600,slingshot:300,
+    snub_revolver:400,twin_burst:950,duelist_pistol:1200,mauser:750,nail_gun:600,slingshot:300,
     bat:200,sabre:600,baguette:150,knife:1400,crowbar:300,screwdriver:100,
     umbrella:450,yoyo:900,shock_baton:1400,tennis_racket:350,golf_club:600,
     stim:250,smoke:200,molotov:500,air_grenade:400,air_blaster:1200,ammo_fountain:800,

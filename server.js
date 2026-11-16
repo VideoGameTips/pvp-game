@@ -323,7 +323,7 @@ const WEAPON_COSTS = {
   coilgun: 460,  painter_beam: 300, gravity_paint: 400,
   portal_launcher: 460,  traffic_controller: 320,
   // Primaries — Explosive / projectile
-  boombow: 500, gravity_launcher: 480, harpoon_gun: 440, mortar_rifle: 480, swap_gun: 600,
+  boombow: 500, gravity_launcher: 480, harpoon_gun: 440, mortar_rifle: 480, swap_gun: 600, twin_burst: 240,
   firework_launcher: 360, shockwave_launcher: 460, airburst_projector: 360,
   pinball_launcher: 440, seismic_hammer: 480, glassmaker: 380,
   // Primaries — Tactical / precision / battle rifle
@@ -2396,7 +2396,7 @@ event_horizon: 75,
   // ── NEW PRIMARIES ──────────────────────────────────────────────────────
     m1_garand: 117, plasma_carbine: 18, arc_rifle: 22,
   gravity_launcher: 75, potato_cannon: 60, sticker_blaster: 8,
-  harpoon_gun: 95, mortar_rifle: 85, phase_rifle: 22, phase_rifle_ph: 22, chrono_pistol: 34, swap_gun: 0,
+  harpoon_gun: 95, mortar_rifle: 85, phase_rifle: 22, phase_rifle_ph: 22, chrono_pistol: 34, swap_gun: 0, twin_burst: 48,
   arc_torrent: 5, firework_launcher: 50, switchblade_gun: 50, switchblade_charged: 100,
   jeep_gun: 22, chernobyl_gas: 1,
   // 3rd-batch primaries
@@ -2550,7 +2550,7 @@ const WEAPON_FALLOFF = {
   srx: FALLOFF_SNIPER, railgun: FALLOFF_SNIPER, coilgun: FALLOFF_SNIPER, amr: FALLOFF_SNIPER, barrett: FALLOFF_SNIPER,
   lever: FALLOFF_MARKSMAN, m1_garand: FALLOFF_MARKSMAN, air_rifle: FALLOFF_MARKSMAN, harpoon_gun: FALLOFF_SNIPER,
   revolver: FALLOFF_HEAVY_PISTOL, hand_cannon: FALLOFF_HEAVY_PISTOL, duelist_pistol: FALLOFF_HEAVY_PISTOL, desert_eagle: FALLOFF_HEAVY_PISTOL, m1911: FALLOFF_HEAVY_PISTOL, gunslinger: FALLOFF_HEAVY_PISTOL, akimbo: FALLOFF_AKIMBO,
-  pistol: FALLOFF_SIDEARM, five_seven: FALLOFF_SIDEARM, mauser: FALLOFF_SIDEARM, snub_revolver: FALLOFF_SIDEARM, throwing_knives: FALLOFF_SIDEARM, taser: FALLOFF_SIDEARM, gatecrasher: FALLOFF_SIDEARM,
+  pistol: FALLOFF_SIDEARM, five_seven: FALLOFF_SIDEARM, twin_burst: FALLOFF_SIDEARM, mauser: FALLOFF_SIDEARM, snub_revolver: FALLOFF_SIDEARM, throwing_knives: FALLOFF_SIDEARM, taser: FALLOFF_SIDEARM, gatecrasher: FALLOFF_SIDEARM,
   gatecrasher_slug: FALLOFF_MARKSMAN, gatecrasher_beam: FALLOFF_NONE, continuum: FALLOFF_HEAVY_PISTOL, phase_rifle: FALLOFF_AR, phase_rifle_ph: FALLOFF_AR, chrono_pistol: FALLOFF_SIDEARM, lancer: FALLOFF_MARKSMAN, laser_pointer: { near: 20, far: 90, min: 0.85 },
   event_horizon: FALLOFF_ENERGY, storm_core: FALLOFF_ENERGY, abs_zero: FALLOFF_ENERGY, quantum_repeater: FALLOFF_ENERGY, pulse_needle: FALLOFF_ENERGY, magnetar: FALLOFF_MARKSMAN, void_harvester: FALLOFF_MARKSMAN, solar_lance: FALLOFF_LMG, arc_torrent: FALLOFF_LMG, slingshot: FALLOFF_LMG,
   crossbow: FALLOFF_NONE, grenade_launcher: FALLOFF_NONE, boombow: FALLOFF_NONE, flare: FALLOFF_NONE, gravity_launcher: FALLOFF_NONE, potato_cannon: FALLOFF_NONE, mortar_rifle: FALLOFF_NONE, firework_launcher: FALLOFF_NONE, seismic_hammer: FALLOFF_NONE, signal_pistol: FALLOFF_NONE, throwing_axes: FALLOFF_NONE, nebula_mortar: FALLOFF_NONE, rpg: FALLOFF_NONE, bazooka: FALLOFF_NONE, cyroclasm_laser: FALLOFF_NONE, storm_bloom_ball: FALLOFF_NONE, storm_bloom_aura: FALLOFF_NONE, javelin_launcher: FALLOFF_NONE,

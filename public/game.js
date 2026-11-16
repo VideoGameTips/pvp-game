@@ -927,6 +927,13 @@ const WEAPONS = [
     bulletColor: 0x7af4ff, bulletSize: 0.04, adminItem: true,
     ability: { name: 'Rewind', cd: 22000, desc: 'Snap back to where you were 3 s ago, with the health you had then', type: 'rewind', rewindMs: 3000 },
   },
+  // 🔫 Twin Burst: a semi shotgun. One pull fires two 48s 0.08 s apart and you are committed to both (the second goes whether or not you let go); then a full second before the next burst.
+  // From the hip every bullet scatters; aiming down the sights removes the spread altogether. Strictly a secondary: 96 a burst, about 96 a second.
+  { id: 'twin_burst', name: 'Twin Burst', type: 'Burst Pistol', slot: 'secondary',
+    mag: 12, reserve: 36, damage: 48, fireRate: 80, reloadTime: 1800,
+    auto: false, pellets: 1, spread: 0.07, adsSpreadMult: 0, adsZoom: 50, bulletSpeed: 150, noReload: false,
+    heatShots: 2, heatCooldown: 920, quietBurst: true, bulletColor: 0xffa03a, falloffLift: 0.05,
+    recoil: { up: 0.010, side: 0.006, climb: 0.18, max: 1.8, recover: 8, adsMult: 0.55 } },
 ];
 
 // ── Damage drop-off by range ────────────────────────────────────────────────
@@ -992,7 +999,7 @@ Object.assign(WEAPON_FALLOFF, {
   lever: FALLOFF_MARKSMAN, m1_garand: FALLOFF_MARKSMAN, air_rifle: FALLOFF_MARKSMAN, harpoon_gun: FALLOFF_SNIPER,
   revolver: FALLOFF_HEAVY_PISTOL, hand_cannon: FALLOFF_HEAVY_PISTOL, duelist_pistol: FALLOFF_HEAVY_PISTOL,
   desert_eagle: FALLOFF_HEAVY_PISTOL, m1911: FALLOFF_HEAVY_PISTOL, gunslinger: FALLOFF_HEAVY_PISTOL, akimbo: FALLOFF_AKIMBO,
-  pistol: FALLOFF_SIDEARM, five_seven: FALLOFF_SIDEARM, mauser: FALLOFF_SIDEARM, snub_revolver: FALLOFF_SIDEARM,
+  pistol: FALLOFF_SIDEARM, five_seven: FALLOFF_SIDEARM, twin_burst: FALLOFF_SIDEARM, mauser: FALLOFF_SIDEARM, snub_revolver: FALLOFF_SIDEARM,
   throwing_knives: FALLOFF_SIDEARM, taser: FALLOFF_SIDEARM, gatecrasher: FALLOFF_SIDEARM,
   gatecrasher_slug: FALLOFF_MARKSMAN, gatecrasher_beam: FALLOFF_NONE, continuum: FALLOFF_HEAVY_PISTOL,
   phase_rifle: FALLOFF_AR, phase_rifle_ph: FALLOFF_AR, chrono_pistol: FALLOFF_SIDEARM,
@@ -1604,7 +1611,7 @@ const WEAPON_COSTS = {
   coilgun: 460,  painter_beam: 300, gravity_paint: 400,
   portal_launcher: 460,  traffic_controller: 320,
   // Primaries — Explosive / projectile
-  boombow: 500, gravity_launcher: 480, harpoon_gun: 440, mortar_rifle: 480, swap_gun: 600,
+  boombow: 500, gravity_launcher: 480, harpoon_gun: 440, mortar_rifle: 480, swap_gun: 600, twin_burst: 240,
   firework_launcher: 360, shockwave_launcher: 460, airburst_projector: 360,
   pinball_launcher: 440, seismic_hammer: 480, glassmaker: 380,
   // Primaries — Tactical / precision / battle rifle
@@ -4130,6 +4137,7 @@ function weaponAudioProfile(id, baseWeapon) {
   if (lowerId === 'freeze_gun' || lowerId === 'frost_blaster') return { kind:'freeze', vol:0.24, dur:0.16, f1:680, f2:420 };
   if (lowerId === 'gunslinger') return { kind:'pistol', vol:0.34, dur:0.12, f1:540, f2:120, action:'revolver' };
   if (lowerId === 'akimbo') return { kind:'pistol', vol:0.30, dur:0.10, f1:620, f2:170 };
+  if (lowerId === 'twin_burst') return { kind:'pistol', vol:0.40, dur:0.12, f1:430, f2:110 };
   if (lowerId === 'javelin_launcher') return { kind:'thump', vol:0.46, dur:0.30, f1:100, f2:40, action:'single' };
   if (lowerId === 'hellfire') return { kind:'flamethrower', vol:0.42, dur:0.17, f1:72, f2:40 };
   if (lowerId === 'omega_pistol') return { kind:'crack', vol:.50, dur:.22, f1:110, f2:35, action:'single' };
@@ -41439,7 +41447,50 @@ const weaponModels = [
   buildSwapGun(),
   buildPhaseRifle(),  // phase_rifle
   buildChronoPistol(),  // chrono_pistol
+  buildTwinBurst(),  // twin_burst
 ];
+function buildTwinBurst() {
+  // 🔫 TWIN BURST: a stubby over-under pistol -- a semi shotgun. Two stacked barrels, each with a flared choke, in a squared-off block; the two shots of a burst leave
+  // from the top and bottom barrel in turn. Hands, grip and magazine sit where the pistol's do.
+  const g = new THREE.Group();
+  const steel = gpFinish(0x3a424b, .43, .78, 'steel'), blued = gpFinish(0x2c333b, .31, .86, 'steel');
+  const bright = gpFinish(0x9aa2aa, .17, .93, 'steel'), grip = gpFinish(0x20262b, .76, 0, 'polymer');
+  const inner = GUN_MATS.inner();
+  const brass = new THREE.MeshPhongMaterial({ color: 0xc89a3c, shininess: 120, specular: 0xffe9a8 });
+  const orange = new THREE.MeshPhongMaterial({ color: 0xe0782a, shininess: 70, specular: 0xffc080 });
+  gpBox(g, blued, 0.032, 0.040, 0.150, 0, 0.018, -0.040);                  // the barrel block
+  gpBox(g, inner, 0.033, 0.006, 0.130, 0, 0.040, -0.046);                  // vent rib
+  gpBox(g, orange, 0.034, 0.044, 0.010, 0, 0.018, -0.100);                 // a band round the block
+  gpBox(g, inner, 0.0332, 0.004, 0.090, 0, 0.018, -0.030);                 // the seam between the two barrels' housings
+  for (const y of [0.028, 0.008]) {
+    gpCyl(g, bright, 0.0092, 0.0092, 0.040, 12, 0, y, -0.130);
+    gpCyl(g, steel, 0.0092, 0.0138, 0.020, 12, 0, y, -0.158);              // the flared choke
+    gpCyl(g, inner, 0.0108, 0.0108, 0.002, 12, 0, y, -0.1685);             // the bore
+  }
+  gpBox(g, steel, 0.024, 0.026, 0.100, 0, -0.004, -0.020);                 // frame
+  gpBox(g, brass, 0.004, 0.008, 0.006, 0, 0.046, -0.108);                  // front bead
+  gpBox(g, inner, 0.012, 0.005, 0.008, 0, 0.044, 0.030);                   // rear notch
+  gpContouredPart(g, steel, [[.030, -.014], [.047, -.025], [.051, -.048], [.057, -.076], [.056, -.103], [.047, -.112], [.030, -.112], [.020, -.086], [.014, -.052], [.012, -.018]], .026, 0, .008);
+  [-0.014, 0.014].forEach(x => {
+    gpContouredPart(g, grip, [[.030, -.033], [.044, -.038], [.048, -.064], [.047, -.094], [.034, -.098], [.025, -.072], [.022, -.048]], .004, x, .005);
+    gpBox(g, orange, 0.0012, 0.006, 0.014, Math.sign(x) * 0.0172, -0.040, 0.036);
+  });
+  gpPart(g, 'magazine', () => {
+    gpBox(g, blued, .018, .065, .020, 0, -.078, .035, -.20);
+    gpBox(g, orange, .024, .007, .026, 0, -.112, .042, -.20);
+  }, { x: 0, y: -.045, z: .028 });
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.003, 6, 12, Math.PI * 1.05), steel);
+  guard.rotation.set(0, Math.PI / 2, -0.35); guard.position.set(0, -0.026, 0.000); g.add(guard);
+  gpBox(g, bright, 0.004, 0.013, 0.004, 0, -0.020, 0.000, 0.2);            // trigger
+  gpBox(g, steel, 0.022, 0.014, 0.018, 0, 0.030, 0.038, -0.25);            // beavertail
+  gpBox(g, bright, 0.005, 0.006, 0.020, 0.013, 0.012, 0.026);              // thumb safety
+  const fl = [0.028, 0.008].map(y => { const f = makeMuzzleFlash(); f.position.set(0, y, -0.172); g.add(f); return f; });
+  let alt = false;
+  g._flash = fl[0]; g._shotPose = () => (alt = !alt) ? fl[0] : fl[1];       // each bullet of a burst comes out of the other barrel
+  g._kickZ = 0.014; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+
 function buildPhaseRifle() {
   // 🌀 Phase Rifle. A pearl-and-graphite carbine with three glowing phase coils round the barrel. The coils hum cyan; when you
   // press E they shift to violet and pulse, and every round goes through the walls.
@@ -58381,12 +58432,12 @@ function tryShoot() {
       // rather than waiting for a wasted next trigger pull to discover it.
       heat.cooldownUntil = now + wStats.heatCooldown;
       heat.shotCount = 0;
-      flashAbilityName('OVERHEATED');
+      if (!wStats.quietBurst) flashAbilityName('OVERHEATED');
     } else {
       // Auto-continue the burst: one tap or one auto-fire tick fires all N
       // shots on its own, whether or not the trigger is still held.
       const burstIdx = currentWeaponIdx;
-      setTimeout(() => { if (currentWeaponIdx === burstIdx) tryShoot(); }, wStats.fireRate);
+      setTimeout(() => { if (currentWeaponIdx === burstIdx) { if (wStats.quietBurst) lastShot = 0; tryShoot(); } }, wStats.fireRate);   // (a committed burst: the rate gate must not eat its second bullet)
     }
   } else if (heat && wStats.heatWindow) {
     heat.lastFireAt = now;
@@ -58426,7 +58477,7 @@ function tryShoot() {
   // Apply ability buff for this shot
   const ab = (abilityBuff && abilityBuff.weaponId === currentWeapon.id) ? abilityBuff : null;
   const shotPellets  = ab?.pellets      ?? wStats.pellets;
-  const shotSpread   = (wStats.spread + bloomAdd) * (ab?.spreadMult ?? 1) * (forcedShot?.spreadMult ?? 1);
+  const shotSpread   = (wStats.spread + bloomAdd) * (ab?.spreadMult ?? 1) * (forcedShot?.spreadMult ?? 1) * (isADS && wStats.adsSpreadMult != null ? wStats.adsSpreadMult : 1);   // (the Twin Burst: aim and the scatter is gone)
   let shotWeaponId   = forcedShot?.weaponId ?? ab?.weaponAbId ?? (wStats.damageId || currentWeapon.id);
   const shotSpeed    = wStats.bulletSpeed * (ab?.speedMult ?? 1) * (wStats.randomSpeed ? wStats.randomSpeed.min + Math.random() * (wStats.randomSpeed.max - wStats.randomSpeed.min) : 1);   // the Potato Cannon: a different speed every shot
   if (wStats.trickShot) {
@@ -64708,6 +64759,10 @@ pistol:[K(.12,{py:.03,rx:.28,rz:.28,hy:-.04}), K(.27,{py:.05,rx:.34,rz:.30,hy:-.
         K(.37,{py:.05,rx:.36,rz:.30,hx:-.06,hy:-.18,hr:.7}), K(.51,{py:.06,rx:.36,rz:.30,hx:.03,hy:-.22,hz:.01}),
         K(.64,{py:.06,rx:.36,rz:.30,hy:-.10,hz:.03}), K(.75,{py:.05,rx:.38,rz:.30,hy:-.02,hz:.04}),
         K(.83,{py:.08,rx:.34,rz:.28,hy:0,hz:.02}), K(.93,{py:.04,rx:.26,rz:.34,hx:-.05,hy:.03,hz:.05,hr:-.5})],
+twin_burst:[K(.12,{py:.03,rx:.28,rz:.28,hy:-.04}), K(.27,{py:.05,rx:.34,rz:.30,hy:-.13,hz:.01}),
+        K(.37,{py:.05,rx:.36,rz:.30,hx:-.06,hy:-.18,hr:.7}), K(.51,{py:.06,rx:.36,rz:.30,hx:.03,hy:-.22,hz:.01}),
+        K(.64,{py:.06,rx:.36,rz:.30,hy:-.10,hz:.03}), K(.75,{py:.05,rx:.38,rz:.30,hy:-.02,hz:.04}),
+        K(.83,{py:.08,rx:.34,rz:.28,hy:0,hz:.02}), K(.93,{py:.04,rx:.26,rz:.34,hx:-.05,hy:.03,hz:.05,hr:-.5})],
 switchblade_gun:[K(.10,{py:.03,rx:.24,rz:.24,hy:-.04}), K(.24,{py:.05,rx:.32,rz:.26,hy:-.13,hz:.01}),
                  K(.34,{py:.05,rx:.34,rz:.26,hx:-.06,hy:-.18,hr:.7}), K(.47,{py:.06,rx:.34,rz:.26,hx:.03,hy:-.22,hz:.01}),
                  K(.59,{py:.06,rx:.34,rz:.26,hy:-.10,hz:.03}), K(.70,{py:.05,rx:.36,rz:.26,hy:-.02,hz:.04}),
@@ -66178,6 +66233,7 @@ const RELOAD_PROPS = {
   desert_eagle:[RP(.34,'mag'),RP(.61,'mag','arrive')],
   hand_cannon:[RP(.33,'mag'),RP(.60,'mag','arrive')],
   pistol:[RP(.37,'mag'),RP(.64,'mag','arrive')],
+  twin_burst:[RP(.37,'mag'),RP(.64,'mag','arrive')],
   akimbo:[RP(.34,'mag',null,1,'magR'),RP(.37,'mag',null,1,'magL'),RP(.62,'mag','arrive',1,'magR'),RP(.66,'mag','arrive',1,'magL')],
   switchblade_gun:[RP(.34,'mag'),RP(.59,'mag','arrive')],
   burst_cannon:[RP(.29,'mag'),RP(.55,'mag','arrive'),RP(.29,'link',null,3,'breech')],
@@ -66413,6 +66469,7 @@ const _MAG_STYLES = {
   hand_cannon:    { out: .30, in: .60, rx: .62, rz: .36, cant: .0, lift: .05, fetch: -.20, side: -.10, fin: 'dip', seat: 'rock', hr: .9, tip: .16 },
   // service pistol: textbook press-check
   pistol:         { out: .32, in: .58, rx: .24, rz: .24, cant: .06, fetch: -.18, side: -.06, fin: 'slide', seat: 'press' },
+  twin_burst:     { out: .32, in: .58, rx: .24, rz: .24, cant: .06, fetch: -.18, side: -.06, fin: 'slide', seat: 'press' },
   // anti-materiel: shoulder it, huge mag, bolt hauled with the whole arm
   barrett:        { out: .32, in: .60, rx: .18, rz: .22, cant: .04, lift: .06, fetch: -.30, side: -.10, fin: 'bolt', seat: 'slap' },
   // arena rifle: clean competition change, bolt catch and a short check
@@ -66522,7 +66579,7 @@ function _bakeReloadPostures(T) {
   };
   const OF = {};
   const GROUPS = {
-    pistol: 'pistol five_seven glock18 m1911 desert_eagle hand_cannon switchblade_gun duelist_pistol signal_pistol taser flare nail_gun gatecrasher',
+    pistol: 'pistol twin_burst five_seven glock18 m1911 desert_eagle hand_cannon switchblade_gun duelist_pistol signal_pistol taser flare nail_gun gatecrasher',
     smg: 'vector mp40 hkmp7 machine_pistol smart_smg p90 p90_spec cycler',
     rifle: 'ak20 xm7 burst swarm_rifle twin_ar lancer flechette burst_cannon m4a1_arena coilgun plasma_carbine pulse_needle',
     lmg: 'rpd mg42 minigun chain_gun gau19 m134 mk44',
@@ -79960,7 +80017,7 @@ function zombieDarken(on) {
 // What the dead may drop, by type. Not the whole armoury: no gimmick guns, no energy toys, nothing from the archive. Sidearms,
 // shotguns, SMGs, rifles, a few heavies and explosives, some melee and a handful of throwables, in four steps of rarity.
 const ZOMBIE_DROP_POOL = {
-  C: ['pistol', 'machine_pistol', 'snub_revolver', 'sawed_off', 'mp40', 'm:bat', 'm:knife', 'm:sabre', 'u:frag', 'u:medkit', 'u:molotov'],
+  C: ['pistol', 'machine_pistol', 'snub_revolver', 'twin_burst', 'sawed_off', 'mp40', 'm:bat', 'm:knife', 'm:sabre', 'u:frag', 'u:medkit', 'u:molotov'],
   B: ['revolver', 'mauser', 'duelist_pistol', 'auto_revolver', 'sg8', 'vector', 'burst', 'ak20', 'lever', 'm:katana', 'm:combat_axe', 'u:stim', 'u:land_mine'],
   A: ['hand_cannon', 'akimbo', 'p90', 'm1_garand', 'srx', 'rpd', 'grenade_launcher', 'm:chainsaw', 'm:sledge', 'u:mini_turret', 'u:smoke'],
   S: ['minigun', 'chain_gun', 'rpg', 'railgun', 'm:chain_hammer', 'u:satchel'],
