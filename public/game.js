@@ -21818,12 +21818,32 @@ function registerMapStructure(name, mesh, colliderRefs, kind, targetCollider = c
   mesh.add(cracks);
   const dest={mesh,hp,maxHp:hp,type:'structure',structureKind:kind,mapName:name,
     structureId:`${kind}:${index}`,colliderRef:targetCollider,colliderRefs,cracks};
+  // DYNAMIC COVER: it does not stand and then vanish. As it takes fire the top of it breaks off in steps (the wall is
+  // 100%, then 74%, then 46% as tall, then gone) and the colliders come down with it, so what you could not shoot or
+  // see over, you can. The stage comes from the health alone, so every player's wall is at the same stage.
+  dest.stage=0; dest.box0=colliderRefs.map(c=>c.clone()); dest.sy0=mesh.scale.y||1; dest.bottom0=bounds.min.y; dest.ly0=(bounds.min.y-mesh.position.y)/dest.sy0;   // (works for a mesh or a group: it squashes about its bottom)
   mapDestructibles.push(dest);
   return dest;
 }
+const STRUCTURE_STAGE_HEIGHT = [1, 0.74, 0.46];        // how tall it still is at each stage
+const STRUCTURE_STAGE_AT = [0.67, 0.34];               // below this share of its health: stage 1, stage 2
+function structureStageFor(ratio) { return ratio <= 0 ? 3 : ratio <= STRUCTURE_STAGE_AT[1] ? 2 : ratio <= STRUCTURE_STAGE_AT[0] ? 1 : 0; }
+function applyStructureStage(dest, effects=false) {
+  if (!dest.box0) return;
+  const stage=Math.min(2,structureStageFor(dest.hp/dest.maxHp)), f=STRUCTURE_STAGE_HEIGHT[stage];
+  if (stage===dest.stage) return;
+  const grew=stage>dest.stage; dest.stage=stage;
+  const m=dest.mesh; m.scale.y=dest.sy0*f; m.position.y=dest.bottom0-m.scale.y*dest.ly0;
+  dest.colliderRefs.forEach((c,i)=>{const b=dest.box0[i]; c.min.copy(b.min); c.max.copy(b.max); c.max.y=b.min.y+(b.max.y-b.min.y)*f;});
+  if (effects && grew) {
+    const box=new THREE.Box3().setFromObject(m), center=box.getCenter(new THREE.Vector3()); center.y=box.max.y;
+    spawnStructureDebris(center,dest.structureKind);
+    playSoundEvent(dest.structureKind==='wood'?'wood_break':'explosion',{position:center,volume:.3,minGap:80});
+  }
+}
 function resetMapStructures(name) {
   for (const d of mapDestructibles) if (d.mapName===name && d.structureKind) {
-    d.hp=d.maxHp; d.mesh.visible=true; d.cracks.material.opacity=d.structureKind==='wall'?.18:0;
+    d.hp=d.maxHp; d.mesh.visible=true; d.cracks.material.opacity=d.structureKind==='wall'?.18:0; applyStructureStage(d);
     for (const c of d.colliderRefs) if (!wallColliders.includes(c)) wallColliders.push(c);
   }
 }
@@ -21832,6 +21852,7 @@ function setMapStructureHP(dest, hp, effects=true) {
   dest.hp=Math.max(0,Math.min(dest.maxHp,hp));
   dest.cracks.material.opacity=(dest.structureKind==='wall'?.18:0)+(1-dest.hp/dest.maxHp)*.77;
   dest.mesh.visible=dest.hp>0;
+  if (dest.hp>0) applyStructureStage(dest,effects);
   for (const c of dest.colliderRefs) {
     const i=wallColliders.indexOf(c);
     if (dest.hp<=0 && i>=0) wallColliders.splice(i,1);
@@ -21860,10 +21881,10 @@ function spawnStructureDebris(origin, kind) {
   };requestAnimationFrame(tick);
 }
 function addBreakableMapWalls(name) {
-  if (!['urban','warehouse','airport','refinery','big_arena','super_arena','big_harbor','lockdown'].includes(name)) return;
+  if (!['urban','warehouse','airport','refinery','big_arena','super_arena','big_harbor','lockdown','desert','foundry','chernobyl','temple'].includes(name)) return;
   const group=MAP_GROUPS[name];let count=0;
   for (const mesh of group.children.slice()) {
-    if (count>=4 || !mesh.isMesh || !['wall','cover'].includes(mesh.userData.thCls)) continue;
+    if (count>=6 || !mesh.isMesh || !['wall','cover'].includes(mesh.userData.thCls)) continue;
     const b=new THREE.Box3().setFromObject(mesh), s=b.getSize(new THREE.Vector3());
     if (b.min.y<-.1 || b.min.y>.3 || s.y<2.2 || s.y>7 || Math.min(s.x,s.z)>1.3 || Math.max(s.x,s.z)<4 || Math.max(s.x,s.z)>14) continue;
     if (_mdSpawnRects(name,18).some(r => b.max.x>r.x0 && b.min.x<r.x1 && b.max.z>r.z0 && b.min.z<r.z1)) continue;
@@ -50883,7 +50904,7 @@ const KEY_ACTIONS = [
   ['perspective', 'Camera perspective', 'Digit9'],
   ['slot3', 'Melee', 'Digit3'], ['slot4', 'Support item', 'Digit4'],
   ['inspect', 'Inspect weapon or item', 'KeyT'], ['comboMode', 'Melee: combo / default mode', 'KeyH'], ['melee', 'Quick melee', 'KeyB'], ['chat', 'Quick chat', 'KeyV'],
-  ['comms1', 'Comms wheel 1', 'KeyZ'], ['comms2', 'Comms wheel 2', 'KeyX'], ['scoreboard', 'Scoreboard', 'Tab'],
+  ['comms1', 'Comms wheel 1', 'KeyZ'], ['comms2', 'Comms wheel 2', 'KeyX'], ['scoreboard', 'Scoreboard', 'Tab'], ['bait', 'Sound bait (fake steps or gunfire)', 'KeyN'],
 ];
 const KEY_RESERVED = new Set(['Escape', 'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12', 'Enter', 'MetaLeft', 'MetaRight']);
 let KEYBINDS = {};                       // action -> code, only where it differs from the default
@@ -51499,6 +51520,7 @@ document.addEventListener('keydown', e => {
   }
   keys[e.code] = true;
   if (!gameStarted) return;
+  if (e.code === 'KeyN' && !e.repeat && !commsMenuOpen && document.activeElement?.tagName !== 'INPUT') { e.preventDefault(); useBait(); return; }   // a sound thrown to where you look
   if (e.code === 'KeyP' && !e.repeat && match?.type === 'range' && !isDead && document.activeElement?.tagName !== 'INPUT') { e.preventDefault(); if (rangePanelOpen()) rangeClosePanel(); else rangeOpenPanel(); return; }   // the range controls
   // Spectator cycling while dead
   if (spectatorState) {
@@ -71507,6 +71529,94 @@ function updateEnemyFootsteps(dt) {
   for (const id of _stepState.keys()) if (!live.has(id)) _stepState.delete(id);
 }
 
+
+// ── 🎭 SOUND DECEPTION ───────────────────────────────────────────────────────────────────────────────────────────────
+// Press N (Settings -> Controls: "Sound bait") to throw a sound to a spot you are looking at (up to 40 m): holding a GUN it
+// is a burst of your weapon's own gunfire from there, holding anything else it is a run of footsteps there. Whoever is
+// against you hears it exactly as they would hear the real thing (the server hands it to your opponents, not your team);
+// enemy bots that cannot see anybody go and look. It costs three baits a life and a five second wait, so it is a
+// decision, not noise. Footsteps follow the "enemy footsteps" setting. Your own screen only says BAIT SET.
+const BAIT = { maxCharges: 3, charges: 3, cooldownMs: 5000, readyAt: 0, range: 40, botRange: 55, botMs: 6000, active: [] };
+function _baitPoint() {
+  const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+  let p = null;
+  try {
+    const g = MAP_GROUPS[activeMapName];
+    const hit = g ? new THREE.Raycaster(camera.position.clone(), dir, 0.5, BAIT.range).intersectObject(g, true)[0] : null;
+    if (hit) p = hit.point.clone().addScaledVector(dir, -0.4);
+  } catch (e) {}
+  if (!p) p = camera.position.clone().addScaledVector(dir, Math.min(BAIT.range, 22));
+  p.y = Math.max(0, Math.min(p.y, camera.position.y));
+  return p;
+}
+function _baitKind() { return (activeSlot === 'primary' || activeSlot === 'secondary') ? 'shot' : 'steps'; }
+// Your own bait: charges, cooldown, the throw, and the bots.
+function useBait(now = performance.now()) {
+  if (isDead || !gameStarted || inLobby || !match || match.over || countdownActive) return false;
+  if (BAIT.charges <= 0) { showAnnouncement('NO BAIT LEFT', 'You get them back when you respawn', '#aaaaaa', 900); return false; }
+  if (now < BAIT.readyAt) return false;
+  const at = _baitPoint(), kind = _baitKind(), weapon = heldItemId() || 'ak20', ang = Math.random() * Math.PI * 2;
+  BAIT.charges--; BAIT.readyAt = now + BAIT.cooldownMs;
+  const data = { from: myId, kind, weapon, x: at.x, y: at.y, z: at.z, ang };
+  try { socket.emit('soundBait', { kind, weapon, x: at.x, y: at.y, z: at.z, ang }); } catch (e) {}
+  baitBots(localEntityTeam(myId), at.x, at.z);
+  showAnnouncement('BAIT SET', (kind === 'shot' ? 'fake gunfire' : 'fake footsteps') + ' · ' + BAIT.charges + ' left', '#ffcc66', 900);
+  return data;
+}
+// Something that sounds like a person is over there: opposing bots with nobody in sight go and look.
+function baitBots(ownerTeam, x, z, now = Date.now()) {
+  let n = 0;
+  for (const bot of gameBots) {
+    if (!bot || bot.dead || bot.zombie || bot.campaignActor) continue;
+    if (match?.type !== 'ffa' && ownerTeam && bot.team === ownerTeam) continue;           // your own side is not fooled
+    if (Math.hypot(bot.x - x, bot.z - z) > BAIT.botRange) continue;
+    bot._bait = { x, z, until: now + BAIT.botMs }; n++;
+  }
+  return n;
+}
+// The sound itself, as the other side hears it: a timeline of events from `at` (ms): nine steps along a short walk, or a burst of the weapon's own shots.
+function playBait(d, now = performance.now()) {
+  if (!d || ![d.x, d.y, d.z].every(Number.isFinite)) return false;
+  const ev = [];
+  if (d.kind === 'shot') {
+    const w = WEAPONS.find(x => x.id === d.weapon) || WEAPONS.find(x => x.id === 'ak20') || WEAPONS[0];
+    const gap = Math.max(70, Math.min(420, Number(w.fireRate) || 110)), n = w.auto ? 7 : 4;
+    for (let i = 0; i < n; i++) ev.push([i * gap * (w.auto ? 1 : 2.3) + (i % 2) * 18, () => { try { playWeaponSound(w.id, { baseWeapon: w, remote: true, position: new THREE.Vector3(d.x, d.y + 1.4, d.z), source: d.from || 'bait' }); } catch (e) {} }]);
+  } else {
+    if (GAMEPLAY_SETTINGS.enemyFootsteps === false) return false;
+    const ang = Number.isFinite(d.ang) ? d.ang : 0, sx = Math.sin(ang), sz = Math.cos(ang);
+    for (let i = 0; i < 9; i++) ev.push([i * 330, () => {
+      const px = d.x + sx * 0.95 * i, pz = d.z + sz * 0.95 * i, snd = enemyStepSound(px, pz);
+      if (snd) playEnemyFootstep(px, d.y, pz, snd, 1, i % 2 ? 1.15 : 1.0);
+    }]);
+  }
+  BAIT.active.push({ t0: now, ev });
+  return true;
+}
+function updateBait(now = performance.now()) {
+  if (isDead) { BAIT.charges = BAIT.maxCharges; }
+  for (let i = BAIT.active.length - 1; i >= 0; i--) {
+    const b = BAIT.active[i];
+    while (b.ev.length && now - b.t0 >= b.ev[0][0]) { const e = b.ev.shift(); try { e[1](); } catch (err) {} }
+    if (!b.ev.length) BAIT.active.splice(i, 1);
+  }
+}
+function onSoundBaitMsg(d) {
+  if (!d || d.from === myId || isDead || !gameStarted || inLobby) return;
+  playBait(d);
+  baitBots(localEntityTeam(d.from), d.x, d.z);
+}
+// A bot with nobody in sight goes and looks at a sound it heard (and shoots at what is there): it never overrides a target it can see.
+function getBotTarget(bot) {
+  const t = _getBotTargetBase(bot), b = bot._bait;
+  if (!b || bot.dead) return t;
+  if (Date.now() >= b.until) { bot._bait = null; return t; }
+  if (t && hasLineOfSight(bot.x, bot.z, t.x, t.z)) return t;
+  const dt = t ? Math.hypot(t.x - bot.x, t.z - bot.z) : Infinity, db = Math.hypot(b.x - bot.x, b.z - bot.z);
+  if (db < 3) { bot._bait = null; return t; }                                    // got there: nothing, and back to what it was doing
+  return db < dt * 0.9 ? { x: b.x, z: b.z, isPlayer: false, bait: true } : t;
+}
+
 // ── 🔥💧 Fire against water, and the flame jet ─────────────────────────────────────────────────────────────────
 // Water puts fire out. Two things count as water: a water gun (the Foam Cannon, and any gun wearing a skin that
 // squirts or sprinkles: water pistol, fire extinguisher, lawn sprinkler, soap, slush) and a smoke cloud. Each does
@@ -73297,6 +73407,7 @@ socket.on('weaponChanged', ({ id, weaponId, skin }) => {
 function onScopeStateMsg({ id, on } = {}) { if (id !== myId && on) scopeGlint(remoteMeshes[id]); }
 function onDeflectStateMsg({ id, weapon, ms } = {}) { if (id !== myId && DEFLECT_GLOW_WEAPONS.has(weapon)) startDeflectGlow(remoteMeshes[id], ms); }
 socket.on('scopeState', onScopeStateMsg);
+socket.on('soundBait', onSoundBaitMsg);
 socket.on('deflectState', onDeflectStateMsg);
 socket.on('skinChanged', ({ id, skin, isAdmin, skinData, hair, finisher }) => {
   if (players[id]) players[id].finisher = FINISHER_IDS.includes(finisher) ? finisher : 'auto';   // how this player finishes people
@@ -80995,7 +81106,7 @@ function remoteHumanTargets() {
   }
   return out;
 }
-function getBotTarget(bot) {
+function _getBotTargetBase(bot) {
   if (window.PVP_BATTLE_SIM?.active) return window.PVP_BATTLE_SIM.target(bot);
   // 🛋️ Lobby 13: nobody fights. The team-agnostic fallback below would otherwise
   // make the all-ally cast target (and shoot) each other — so bail out entirely.
@@ -83196,6 +83307,7 @@ function loop() {
   safeLoopStep('killcam-sample', () => killcamSample(performance.now()));
   safeLoopStep('replay-sample', () => replaySample(performance.now()));
   safeLoopStep('match-stats', matchSampleHealth);
+  safeLoopStep('bait', () => updateBait(performance.now()));
   safeLoopStep('killcam', () => updateKillcam(performance.now()));
   safeLoopStep('vehicle-prompt', () => updateVehiclePrompt());// vehicle pickup prompt (BR arena)
   safeLoopStep('vehicle-piloting', () => updateVehiclePiloting(dt)); // move + sync vehicle while piloted

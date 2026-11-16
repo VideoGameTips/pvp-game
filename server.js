@@ -2945,6 +2945,18 @@ io.on('connection', (socket) => {
     emitToMatchExcept(p.matchId, socket.id, 'deflectState', { id: socket.id, weapon: data.weapon, ms: config.duration });   // the others see the blade glow while it holds
   });
 
+  // 🎭 Sound bait: a burst of fake gunfire or a run of fake footsteps thrown to a spot near the player. Only the OPPONENTS hear it (a teammate is not fooled), at most one every 4 s.
+  socket.on('soundBait', data => {
+    const p = players[socket.id], now = Date.now();
+    if (!p || p.dead || !data || p.matchId === HUB_MATCH || now - (p._baitAt || 0) < 4000) return;
+    const kind = data.kind === 'shot' ? 'shot' : data.kind === 'steps' ? 'steps' : null, x = Number(data.x), y = Number(data.y), z = Number(data.z);
+    if (!kind || ![x, y, z].every(Number.isFinite) || Math.hypot(x - p.x, z - p.z) > 55) return;
+    p._baitAt = now;
+    const weapon = typeof data.weapon === 'string' && /^[a-z0-9_]{1,32}$/.test(data.weapon) ? data.weapon : 'ak20';
+    const out = { from: socket.id, kind, weapon, x, y, z, ang: Number.isFinite(Number(data.ang)) ? Number(data.ang) : 0 };
+    for (const sid of socketIdsInMatch(p.matchId)) { const q = players[sid]; if (sid === socket.id || !q || q.isBot || blocksFriendlyFire(p, q)) continue; io.to(sid).emit('soundBait', out); }
+  });
+
   // 🔭 A scoped weapon raised (the SR-X, the crossbow): everyone else in the match gets a glint off the glass. Rate limited, and only for a scoped weapon in hand.
   socket.on('scopeState', data => {
     const p = players[socket.id], now = Date.now();

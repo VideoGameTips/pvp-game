@@ -776,6 +776,91 @@ if (ok && process.argv.includes('--analysis')) {
   else console.log('match analysis: the tally (pellets, hits, headshots, damage, kills, per weapon), what is kept, the comparison with the last ten and which way is better, the sensitivity answer, the saved history, the report');
 }
 
+if (ok && process.argv.includes('--cover-bait')) {
+  // Dynamic cover: a breakable wall comes down in stages (colliders with it, so sightlines open up) and is restored on a reset. Sound bait: a thrown
+  // sound by what you hold, charges and cooldown, bots with nothing in sight go and look, nobody on your side is fooled, and it plays as real footsteps / gunfire.
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const saved = { dead: isDead, started: gameStarted, lobby: inLobby, match, myId, slot: activeSlot, cam: camera.position.clone(), q: camera.quaternion.clone(), emit: socket.emit, sound: playSoundEvent, step: playEnemyFootstep, stepSnd: enemyStepSound, wsound: playWeaponSound, bots: gameBots.slice(), announce: showAnnouncement, fs: GAMEPLAY_SETTINGS.enemyFootsteps, dest: mapDestructibles.length, wall: wallColliders.length, debris: scene.children.length };
+    playSoundEvent = () => {}; showAnnouncement = () => {};
+    try {
+      // ── cover
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(8, 4, 0.5), new THREE.MeshBasicMaterial()); mesh.position.set(0, 2, 0); scene.add(mesh); mesh.updateMatrixWorld(true);
+      const col = new THREE.Box3().setFromObject(mesh); wallColliders.push(col);
+      const d = registerMapStructure('urban', mesh, [col], 'wall'); d.mapName = 'urban';
+      const topAt = () => col.max.y, meshTop = () => new THREE.Box3().setFromObject(mesh).max.y, meshBot = () => new THREE.Box3().setFromObject(mesh).min.y;
+      if (Math.abs(topAt() - 4) > 1e-6 || d.stage !== 0) issues.push('a new wall stands at its full height');
+      const hitAt = h => { const ray = new THREE.Ray(new THREE.Vector3(0, h, 5), new THREE.Vector3(0, 0, -1)); return !!ray.intersectBox(col, new THREE.Vector3()); };
+      if (!hitAt(3.5) || !hitAt(1)) issues.push('a high and a low shot are both stopped by the whole wall');
+      setMapStructureHP(d, d.maxHp * 0.8, false); if (d.stage !== 0 || Math.abs(topAt() - 4) > 1e-6) issues.push('a scratch changes nothing');
+      setMapStructureHP(d, d.maxHp * 0.6, false); if (d.stage !== 1 || Math.abs(topAt() - 4 * STRUCTURE_STAGE_HEIGHT[1]) > 1e-4) issues.push('below two thirds the top breaks off: ' + topAt());
+      if (Math.abs(meshTop() - 4 * STRUCTURE_STAGE_HEIGHT[1]) > 1e-3 || Math.abs(meshBot()) > 1e-3) issues.push('the picture is as tall as the collider and stays on the ground: ' + meshTop().toFixed(2) + ' ' + meshBot().toFixed(2));
+      if (hitAt(3.5) || !hitAt(1)) issues.push('after the first stage a high shot passes over and a low one is still stopped');
+      setMapStructureHP(d, d.maxHp * 0.2, false); if (d.stage !== 2 || Math.abs(topAt() - 4 * STRUCTURE_STAGE_HEIGHT[2]) > 1e-4 || hitAt(2.2) || !hitAt(1.2)) issues.push('below a third it is waist-high cover: ' + topAt());
+      const nSceneBefore = scene.children.length; setMapStructureHP(d, d.maxHp * 0.1, true); if (d.stage !== 2) issues.push('the last stage holds until it is gone');
+      setMapStructureHP(d, 0, false); if (wallColliders.includes(col) || mesh.visible) issues.push('at zero it is gone');
+      resetMapStructures('urban'); if (d.stage !== 0 || Math.abs(topAt() - 4) > 1e-6 || Math.abs(meshTop() - 4) > 1e-3 || !wallColliders.includes(col) || !mesh.visible) issues.push('a reset puts the wall back whole');
+      setMapStructureHP(d, d.maxHp * 0.6, true); if (scene.children.length <= nSceneBefore) issues.push('a stage breaking throws debris');
+      for (const o of scene.children.slice(nSceneBefore - 1)) if (o !== mesh && o.geometry && o.geometry.type === 'BoxGeometry' && o.material && o.material.transparent) scene.remove(o);
+      if (structureStageFor(1) !== 0 || structureStageFor(0.5) !== 1 || structureStageFor(0.1) !== 2 || structureStageFor(0) !== 3) issues.push('stage thresholds');
+      scene.remove(mesh); wallColliders.splice(wallColliders.indexOf(col), 1); mapDestructibles.splice(mapDestructibles.indexOf(d), 1);
+      // ── bait: what you throw
+      const sent = []; socket.emit = (e, p) => { sent.push([e, p]); };
+      myId = 'bt_me'; gameStarted = true; isDead = false; inLobby = false; match = { type: 'elim', over: false, cfg: {} }; BAIT.charges = 3; BAIT.readyAt = 0;
+      camera.position.set(0, 1.65, 0); camera.quaternion.set(0, 0, 0, 1);
+      activeSlot = 'primary'; let r = useBait(1000);
+      if (!r || r.kind !== 'shot' || sent[0][0] !== 'soundBait' || sent[0][1].kind !== 'shot') issues.push('holding a gun, the bait is gunfire: ' + JSON.stringify(sent[0]));
+      if (!(Math.abs(r.z) > 0.5 && Math.abs(r.z) <= 40 + 0.5)) issues.push('the bait lands where you look, within range: ' + r.z);
+      if (BAIT.charges !== 2) issues.push('a bait costs a charge');
+      if (useBait(1000 + 2000)) issues.push('the wait is five seconds'); if (BAIT.charges !== 2) issues.push('a refused bait costs nothing');
+      activeSlot = 'melee'; r = useBait(1000 + 6000); if (!r || r.kind !== 'steps') issues.push('holding anything else, the bait is footsteps');
+      activeSlot = 'primary'; useBait(1000 + 12000); if (BAIT.charges !== 0) issues.push('three baits a life');
+      sent.length = 0; if (useBait(1000 + 20000) || sent.length) issues.push('with no charges nothing is thrown');
+      isDead = true; updateBait(0); if (BAIT.charges !== BAIT.maxCharges) issues.push('they come back when you respawn'); isDead = false; BAIT.readyAt = 0;
+      match = null; if (useBait(5)) issues.push('no bait outside a match'); match = { type: 'elim', over: false, cfg: {} };
+      // ── bait: the bots
+      gameBots.length = 0; const mkBot = (id, team, x, z) => { const b = { id, team, x, z, dead: false, hp: 100 }; gameBots.push(b); return b; };
+      const foe = mkBot('bt_foe', 'enemy', 20, 20), mate = mkBot('bt_mate', 'ally', 22, 20), far = mkBot('bt_far', 'enemy', 300, 300);
+      players.bt_me = { id: 'bt_me', team: 'ally' }; const keepTeam = localEntityTeam; 
+      const n = baitBots('ally', 25, 25); if (n !== 1 || !foe._bait || mate._bait || far._bait) issues.push('only opposing bots within hearing go to look: ' + n);
+      match.type = 'ffa'; mate._bait = null; if (baitBots('ally', 25, 25) < 2) issues.push('in a free for all every bot is fooled'); match.type = 'elim';
+      // the target they choose: nothing in sight -> the sound; something in sight -> that
+      const baseKeep = _getBotTargetBase, losKeep = hasLineOfSight; foe._bait = { x: 30, z: 30, until: Date.now() + 5000 };
+      _getBotTargetBase = () => ({ x: 90, z: 90, isPlayer: true }); hasLineOfSight = () => false;
+      let t = getBotTarget(foe); if (!t || !t.bait || t.x !== 30) issues.push('a bot that sees nobody goes to the sound: ' + JSON.stringify(t));
+      hasLineOfSight = () => true; t = getBotTarget(foe); if (t.bait || t.x !== 90) issues.push('a bot that can see somebody ignores the sound');
+      hasLineOfSight = () => false; _getBotTargetBase = () => ({ x: 22, z: 22, isPlayer: true }); t = getBotTarget(foe); if (t.bait) issues.push('a sound further away than the target it was already heading for does not turn it');
+      foe._bait = { x: 30, z: 30, until: Date.now() - 1 }; _getBotTargetBase = () => ({ x: 90, z: 90, isPlayer: true }); t = getBotTarget(foe); if (t.bait || foe._bait) issues.push('the sound is forgotten after a few seconds');
+      foe._bait = { x: foe.x + 1, z: foe.z, until: Date.now() + 5000 }; t = getBotTarget(foe); if (t.bait || foe._bait) issues.push('arrived: nothing there, back to normal');
+      _getBotTargetBase = baseKeep; hasLineOfSight = losKeep; gameBots.length = 0;
+      // ── bait: what the other side hears
+      const steps = [], shots = []; playEnemyFootstep = (...a) => steps.push(a); enemyStepSound = () => ({ gain: 1, lowpass: 3000, pan: 0 }); playWeaponSound = (id, o) => shots.push([id, o]);
+      GAMEPLAY_SETTINGS.enemyFootsteps = true;
+      if (!playBait({ from: 'x', kind: 'steps', weapon: 'ak20', x: 10, y: 0, z: -10, ang: 0 }, 0)) issues.push('footsteps play');
+      updateBait(10); updateBait(400); updateBait(5000);
+      if (steps.length !== 9 || steps[0][0] !== 10 || Math.abs(steps[8][2] - (-10 + 0.95 * 8)) > 1e-6) issues.push('nine steps along a short walk: ' + steps.length);
+      if (steps[1][5] === steps[0][5]) issues.push('alternate feet'); if (BAIT.active.length) issues.push('a finished bait is forgotten');
+      if (GAMEPLAY_SETTINGS.enemyFootsteps = false, playBait({ kind: 'steps', x: 1, y: 0, z: 1, ang: 0 }, 0)) issues.push('with enemy footsteps off, fake ones are silent too'); GAMEPLAY_SETTINGS.enemyFootsteps = true;
+      playBait({ from: 'x', kind: 'shot', weapon: 'ak20', x: 10, y: 0, z: -10 }, 0); updateBait(5000);
+      if (shots.length < 4 || shots[0][0] !== 'ak20' || !shots[0][1].remote || Math.abs(shots[0][1].position.z + 10) > 1e-6) issues.push('a burst of the weapons own shots, heard as a remote shot there: ' + shots.length);
+      shots.length = 0; playBait({ from: 'x', kind: 'shot', weapon: 'no_such_gun', x: 1, y: 0, z: 1 }, 0); updateBait(5000); if (!shots.length) issues.push('an unknown weapon falls back to a gun');
+      if (playBait({ kind: 'shot', x: NaN, y: 0, z: 0 }) !== false) issues.push('a message with no position is ignored');
+      shots.length = 0; steps.length = 0; onSoundBaitMsg({ from: 'bt_me', kind: 'shot', x: 5, y: 0, z: 5 }); updateBait(performance.now() + 5000); if (shots.length) issues.push('my own bait is not played back to me');
+      onSoundBaitMsg({ from: 'other', kind: 'shot', weapon: 'ak20', x: 5, y: 0, z: 5 }); updateBait(performance.now() + 5000); if (!shots.length) issues.push('somebody elses bait is heard');
+      isDead = true; shots.length = 0; onSoundBaitMsg({ from: 'other', kind: 'shot', weapon: 'ak20', x: 5, y: 0, z: 5 }); updateBait(performance.now() + 5000); if (shots.length) issues.push('the dead hear nothing'); isDead = false;
+    } catch (e) {
+      issues.push('threw: ' + (e && e.stack ? e.stack.split('\\n').slice(0, 4).join(' | ') : e));
+    } finally {
+      isDead = saved.dead; gameStarted = saved.started; inLobby = saved.lobby; match = saved.match; myId = saved.myId; activeSlot = saved.slot; camera.position.copy(saved.cam); camera.quaternion.copy(saved.q);
+      socket.emit = saved.emit; playSoundEvent = saved.sound; playEnemyFootstep = saved.step; enemyStepSound = saved.stepSnd; playWeaponSound = saved.wsound; gameBots.length = 0; gameBots.push(...saved.bots); showAnnouncement = saved.announce; GAMEPLAY_SETTINGS.enemyFootsteps = saved.fs;
+      BAIT.active.length = 0; BAIT.charges = BAIT.maxCharges; BAIT.readyAt = 0; delete players.bt_me;
+    }
+    return issues;
+  })()`);
+  if (issues.length) { ok = false; console.log('cover + bait failures:\n' + issues.join('\n')); }
+  else console.log('cover + bait: a wall breaks down in stages and opens sightlines, a reset restores it; sound bait by what you hold, charges, cooldown, bots go to look, opponents hear it as real');
+}
+
 if (ok && process.argv.includes('--action-wind')) {
   const issues = vm.runInThisContext(`(() => {
     const issues=[], saved={gameStarted,isDead,activeSlot,velocity:playerVelocity.clone()};
