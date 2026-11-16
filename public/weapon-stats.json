@@ -201,9 +201,9 @@
     "desc": "Next bullet at 10× speed"
    },
    "traits": [
+    "Pierces: the round goes through up to 1 more enemy; each one after takes 70% of what the one before did",
     "Active reload: a well-timed second tap speeds it up",
-    "Perfectly accurate, no recoil",
-    "Pierces: the round goes through up to 1 more enemy; each one after takes 70% of what the one before did"
+    "Perfectly accurate, no recoil"
    ]
   },
   {
@@ -610,56 +610,56 @@
    "type": "Marksman",
    "slot": "primary",
    "archived": false,
-   "damage": 93,
+   "damage": 105,
    "pellets": 1,
    "headshotMult": 2,
-   "headDamage": 186,
-   "damagePerShot": 93,
-   "fireRateMs": 520,
-   "shotsPerSec": 1.923,
+   "headDamage": 210,
+   "damagePerShot": 105,
+   "fireRateMs": 460,
+   "shotsPerSec": 2.174,
    "auto": false,
-   "dps": 178.846,
+   "dps": 228.261,
    "magazine": 8,
-   "reserve": 40,
-   "reloadSec": 2.3,
+   "reserve": 36,
+   "reloadSec": 2.25,
    "reloadStyle": "magazine",
    "noReload": false,
-   "timeToEmptySec": 3.64,
-   "bulletSpeed": 184,
-   "adsZoom": 32,
+   "timeToEmptySec": 3.22,
+   "bulletSpeed": 186,
+   "adsZoom": 34,
    "falloff": {
     "nearM": 42,
     "farM": 100,
     "minPct": 78
    },
    "damageByRange": [
-    93,
-    93,
-    93,
-    93,
-    93,
+    105,
+    105,
+    105,
+    105,
+    105,
+    102,
+    98,
     90,
-    87,
-    80,
-    73,
-    73,
-    73
+    82,
+    82,
+    82
    ],
    "shotsToKill": {
-    "body": 4,
+    "body": 3,
     "head": 2
    },
-   "ttkBodySec": 1.56,
-   "scatterDeg": 0.115,
+   "ttkBodySec": 0.92,
+   "scatterDeg": 0.143,
    "bloom": null,
    "recoil": {
-    "kickPerShotDeg": 0.802,
-    "sideKickDeg": 0.421,
+    "kickPerShotDeg": 0.791,
+    "sideKickDeg": 0.391,
     "climbPerShotPct": 13,
-    "climbMaxX": 1.9,
-    "steadyKickDeg": 1.524,
+    "climbMaxX": 1.85,
+    "steadyKickDeg": 1.463,
     "shotsToMaxClimb": 7,
-    "recoverPerSec": 7.5,
+    "recoverPerSec": 7.75,
     "adsKickPct": 13
    },
    "screenKick": 2.4,
@@ -667,7 +667,9 @@
     "name": "Deadeye",
     "desc": "Next shot deals 150 dmg"
    },
-   "traits": []
+   "traits": [
+    "The last round in the magazine hits harder"
+   ]
   },
   {
    "id": "vector",
@@ -1064,7 +1066,9 @@
     "name": "Spin-Up",
     "desc": "4s · fire rate ×2 · barrels spin faster"
    },
-   "traits": []
+   "traits": [
+    "Base movement while equipped: 70%"
+   ]
   },
   {
    "id": "freeze_gun",
@@ -1406,7 +1410,7 @@
    "name": "Shorty",
    "type": "Secondary",
    "slot": "secondary",
-   "archived": false,
+   "archived": true,
    "damage": 30,
    "pellets": 4,
    "headshotMult": 2,
@@ -1737,7 +1741,7 @@
    "name": "M1 Garand",
    "type": "Battle Rifle",
    "slot": "primary",
-   "archived": false,
+   "archived": true,
    "damage": 117,
    "pellets": 1,
    "headshotMult": 2,
@@ -2788,8 +2792,8 @@
    },
    "traits": [
     "Ignores shields and deflects",
-    "Active reload: a well-timed second tap speeds it up",
-    "Pierces: the round goes through up to 2 more enemies; each one after takes 80% of what the one before did"
+    "Pierces: the round goes through up to 2 more enemies; each one after takes 80% of what the one before did",
+    "Active reload: a well-timed second tap speeds it up"
    ]
   },
   {
@@ -3786,7 +3790,7 @@
   },
   {
    "id": "sawed_off",
-   "name": "Sawed-Off",
+   "name": "Shorty",
    "type": "Secondary",
    "slot": "secondary",
    "archived": false,
@@ -6346,6 +6350,70 @@
    "ability": null,
    "traits": [
     "Short range: stops at 42 m"
+   ]
+  },
+  {
+   "id": "twin_burst",
+   "name": "Twin Burst",
+   "type": "Burst Pistol",
+   "slot": "secondary",
+   "archived": false,
+   "damage": 48,
+   "pellets": 1,
+   "headshotMult": 2,
+   "headDamage": 96,
+   "damagePerShot": 48,
+   "fireRateMs": 80,
+   "shotsPerSec": 12.5,
+   "auto": false,
+   "dps": 600,
+   "magazine": 12,
+   "reserve": 36,
+   "reloadSec": 1.8,
+   "reloadStyle": "magazine",
+   "noReload": false,
+   "timeToEmptySec": 0.88,
+   "bulletSpeed": 150,
+   "adsZoom": 50,
+   "falloff": {
+    "nearM": 18,
+    "farM": 50,
+    "minPct": 45
+   },
+   "damageByRange": [
+    48,
+    48,
+    46,
+    38,
+    30,
+    22,
+    22,
+    22,
+    22,
+    22,
+    22
+   ],
+   "shotsToKill": {
+    "body": 7,
+    "head": 4
+   },
+   "ttkBodySec": 0.48,
+   "scatterDeg": 4.004,
+   "bloom": null,
+   "recoil": {
+    "kickPerShotDeg": 0.527,
+    "sideKickDeg": 0.361,
+    "climbPerShotPct": 14,
+    "climbMaxX": 1.8,
+    "steadyKickDeg": 0.949,
+    "shotsToMaxClimb": 6,
+    "recoverPerSec": 8,
+    "adsKickPct": 13
+   },
+   "screenKick": 1.707,
+   "ability": null,
+   "traits": [
+    "Overheats after 2 shots, 0.92 s lockout"
    ]
   },
   {
