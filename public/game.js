@@ -68169,6 +68169,7 @@ function hitConfirmed(kind, o = {}) {
   showHitmarker(kind);
   playHitConfirmSound(kind, o.tier);
   if (o.damage > 0) addHitNumber(o.damage, kind === 'head');
+  if (o.fd && o.damage > 0) floatDamage(o.fd.id, o.fd.mesh, o.fd.raw, o.damage, kind === 'head', false);
 }
 // What a bullet has already been counted as (a bot's hit is confirmed here and then echoed by the server), and the grade it
 // had when it was fired, so a player's hit, confirmed by the server a moment later, rings the same.
@@ -68197,8 +68198,8 @@ function hitConfirmFromServer(data, knownHpBefore) {
   if (!(dealt > 0)) return false;
   const head = !!data.headshot;
   matchNoteHit(data.weapon, dealt, head);                                          // (the match analysis)
-  if (data.hp <= 0) { if (head) playHitConfirmSound('head', _hmTiers.get(data.bulletId)); addHitNumber(dealt, head); return true; }
-  hitConfirmed(head ? 'head' : 'hit', { tier: _hmTiers.get(data.bulletId), damage: dealt });
+  if (data.hp <= 0) { floatDamage(data.targetId, remoteMeshes[data.targetId], _fdRaw.get(data.bulletId), dealt, head, true); if (head) playHitConfirmSound('head', _hmTiers.get(data.bulletId)); addHitNumber(dealt, head); return true; }
+  hitConfirmed(head ? 'head' : 'hit', { tier: _hmTiers.get(data.bulletId), damage: dealt, fd: { id: data.targetId, mesh: remoteMeshes[data.targetId], raw: _fdRaw.get(data.bulletId) } });
   return true;
 }
 // The local hit path and the server's echo both report the same kill; only the first one counts.
@@ -69216,6 +69217,11 @@ const DMG_TOTAL_STYLE = [
 const DMG_TOTAL_LIFE = 1100;    // ms the running total stays up after your last hit (it was 3.5 s)
 function trackTotalDamage(targetId, damage, targetMesh, tier, label = null, hack = false) {
   if (!(damage > 0) || !targetMesh) return;
+  if (FLOATDMG.on && !String(targetId).startsWith('o_')) {                      // the floating number replaces the running total over my target's head
+    if (targetMesh._rig) flinchCharacter(targetMesh, damage, targetMesh.position.x - camera.position.x, targetMesh.position.z - camera.position.z);
+    if (!tier) floatDamage(targetId, targetMesh, damage, damage, false, false);   // (damage with no hit of its own to confirm it: an ability, an explosion)
+    return;
+  }
   if (!damageTracker[targetId]) {
     const el = document.createElement('div');
     el.setAttribute('style', DMG_TOTAL_STYLE);
@@ -69242,7 +69248,7 @@ function hitFeedback(targetId, mesh, hitPos, damage, headshot, falloff, headMiss
   const label = weaponId === 'omega_pistol' ? '\u03a9' : null;
   const hack = _hitKind(weaponId);                                          // the style of its skin's hit look, if it has one (hack / error / gold)
   if (hack && at) skinHitFX(hack, at, true);                            // a blade or a blast has no round to do it: every such hit does it here (skinHitFX drops the twin from a round)
-  spawnHitNumber(targetId, at, damage, tier, label, hack);
+  if (!FLOATDMG.on) spawnHitNumber(targetId, at, damage, tier, label, hack);
   if (mesh) trackTotalDamage(targetId, damage, mesh, tier, label, hack);
   if (damage > 0 && !quiet) {
     const crit = headshot;
@@ -69253,8 +69259,138 @@ function hitFeedback(targetId, mesh, hitPos, damage, headshot, falloff, headMiss
   return tier;
 }
 
+// ── 💥 Floating damage numbers ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+// A short pop of the damage you dealt, just above the enemy's head and tied to their body: body hit = white, headshot = bold gold with a "!", the hit that eliminates = red with a "✕". It appears at once,
+// pops (115%), floats about 25 px up and fades in 0.75 s. A slight random sideways offset keeps hits from landing exactly on each other, and hits on one target inside 0.12 s are added into one number so a
+// P90 does not paint a column. Only YOUR hits (the paths that confirm a hit: a bot or dummy here, the server's playerHit for a real player). It shows the damage the weapon dealt (raw: 120 even if the
+// target had 40 left) or what actually came off (effective: 40); the choice is in Settings -> Floating Damage. The old fling-away numbers and the running total over the head give way to it.
+const FLOATDMG_DEFAULT = { on: true, life: 0.75, pop: 1.15, combine: true, kill: true, mode: 'raw' };
+let FLOATDMG = (() => { try { const s = JSON.parse(localStorage.getItem('pvp_floatdmg') || 'null'); return Object.assign({}, FLOATDMG_DEFAULT, s && typeof s === 'object' ? s : {}); } catch (e) { return { ...FLOATDMG_DEFAULT }; } })();
+function saveFloatDmg() { try { localStorage.setItem('pvp_floatdmg', JSON.stringify(FLOATDMG)); } catch (e) {} }
+const FLOATDMG_COMBINE_MS = 120, FLOATDMG_RISE_PX = 25, FLOATDMG_MAX = 28;
+const _fdRaw = new Map();                                   // bulletId -> what the weapon dealt, for the server's later word on a real player's hit
+function _fdRememberRaw(bulletId, raw) {
+  if (!bulletId || !(raw > 0)) return;
+  if (_fdRaw.size > 80) _fdRaw.delete(_fdRaw.keys().next().value);
+  _fdRaw.set(bulletId, raw);
+}
+const FLOATDMG_STYLE = ['position:fixed', 'pointer-events:none', 'user-select:none', 'z-index:99998', 'font-family:Arial Black,Arial,sans-serif', 'font-weight:900', 'white-space:nowrap',
+  'text-shadow:-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000,0 0 7px rgba(0,0,0,.85)', 'transform:translate(-50%,-100%)', 'transform-origin:50% 100%'].join(';');
+// How a number looks: its text, colour and size, from what it was
+function floatDmgLook(total, head, lethal) {
+  const n = Math.max(0, Math.min(999, Math.round(total)));
+  const red = lethal && FLOATDMG.kill;
+  return {
+    text: n + (head ? '!' : '') + (lethal ? ' ✕' : ''),
+    color: red ? '#ff3030' : head ? '#ffd23a' : '#ffffff',
+    size: (head ? 30 : lethal ? 25 : 22) + Math.min(6, Math.floor(n / 60)) + (red && head ? 2 : 0),
+    glow: red ? '0 0 12px #ff1010' : head ? '0 0 10px #ffb400' : '',
+  };
+}
+// Where a number is at time t (0..1 of its life): scale, rise in px, opacity. Pure, so a preview and the game run the very same curve.
+function floatDmgPose(t, pop) {
+  const e = Math.min(1, t / 0.2), s = t < 0.2 ? 0.9 + (pop - 0.9) * e : pop - (pop - 1) * Math.min(1, (t - 0.2) / 0.8);
+  const rise = FLOATDMG_RISE_PX * (1 - (1 - t) * (1 - t));
+  return { scale: s, rise, opacity: t < 0.55 ? 1 : Math.max(0, 1 - (t - 0.55) / 0.45) };
+}
+const _floatNums = [];
+const _floatLast = {};                                      // targetId -> the number a quick follow-up hit can still be added into
+function floatDamage(targetId, mesh, raw, effective, headshot, lethal) {
+  if (!FLOATDMG.on || !targetId) return null;
+  const shown = FLOATDMG.mode === 'effective' ? effective : (raw > 0 ? raw : effective);
+  if (!(shown > 0)) return null;
+  const now = performance.now(), last = _floatLast[targetId];
+  if (FLOATDMG.combine && last && !last.dead && now - last.first <= FLOATDMG_COMBINE_MS) {      // one number for a burst of quick hits
+    last.total += shown; last.head = last.head || !!headshot; last.lethal = last.lethal || !!lethal;
+    _floatPaint(last); return last;
+  }
+  const pos = mesh && mesh.position ? mesh.position.clone() : null;
+  if (!pos) return null;
+  while (_floatNums.length >= FLOATDMG_MAX) { const o = _floatNums.shift(); o.dead = true; o.el.remove(); }
+  const el = document.createElement('div');
+  el.setAttribute('style', FLOATDMG_STYLE);
+  document.body.appendChild(el);
+  const entry = { el, mesh, pos, targetId, t0: now, first: now, total: shown, head: !!headshot, lethal: !!lethal, dx: (Math.random() < 0.5 ? -1 : 1) * (6 + Math.random() * 20), dead: false };
+  _floatPaint(entry);
+  _floatNums.push(entry); _floatLast[targetId] = entry;
+  return entry;
+}
+function _floatPaint(o) {
+  const L = floatDmgLook(o.total, o.head, o.lethal);
+  o.el.textContent = L.text; o.el.style.color = L.color; o.el.style.fontSize = L.size + 'px';
+  o.el.style.textShadow = (L.glow ? L.glow + ',' : '') + '-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000,0 0 7px rgba(0,0,0,.85)';
+}
+function updateFloatDamage() {
+  if (!_floatNums.length) return;
+  const now = performance.now(), life = Math.max(150, FLOATDMG.life * 1000);
+  for (let i = _floatNums.length - 1; i >= 0; i--) {
+    const o = _floatNums[i], age = now - o.t0;
+    if (age >= life) { o.dead = true; o.el.remove(); _floatNums.splice(i, 1); if (_floatLast[o.targetId] === o) delete _floatLast[o.targetId]; continue; }
+    if (o.mesh && o.mesh.position && o.mesh.visible !== false) o.pos.copy(o.mesh.position);        // it stays with the body while the body is there
+    const sc = worldToScreen(o.pos.clone().setY(o.pos.y + 2.05));                                 // just above the head (the crown is at 1.78)
+    if (!sc) { o.el.style.display = 'none'; continue; }
+    const P = floatDmgPose(age / life, FLOATDMG.pop * (o.lethal && FLOATDMG.kill ? 1.1 : 1));
+    o.el.style.display = 'block';
+    o.el.style.left = (sc.x + o.dx) + 'px';
+    o.el.style.top = (sc.y - P.rise) + 'px';
+    o.el.style.opacity = String(P.opacity);
+    o.el.style.transform = 'translate(-50%,-100%) scale(' + P.scale.toFixed(3) + ')';
+  }
+}
+function openFloatDmgPanel() {
+  closeOtherDialogs('floatdmg-panel');
+  let panel = document.getElementById('floatdmg-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'floatdmg-panel';
+    panel.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9900;background:#12100a;border:2px solid #ffcc44;border-radius:8px;padding:22px;color:#fff;font-family:"Courier New",monospace;width:380px;max-width:92vw;max-height:90vh;overflow-y:auto;';
+    document.body.appendChild(panel);
+  }
+  panel.style.display = 'block';
+  const btn = (attrs, label, on) => `<button ${attrs} style="padding:6px 10px;cursor:pointer;font-family:inherit;font-size:11px;font-weight:bold;letter-spacing:1px;border-radius:4px;background:${on ? '#4a3a10' : '#1c1a12'};color:${on ? '#ffe28a' : '#d8cfa8'};border:1px solid ${on ? '#ffcc44' : '#6a5420'};">${label}</button>`;
+  const toggle = (id, label, on) => `<div style="display:flex;align-items:center;justify-content:space-between;margin:10px 0 4px;"><div style="font-size:11px;letter-spacing:1px;color:#f0e2b0;">${label}</div>${btn('id="' + id + '"', on ? 'ON' : 'OFF', on)}</div>`;
+  const fmt = { life: v => v.toFixed(2) + ' s', pop: v => Math.round(v * 100) + '%' };
+  const slider = (key, label, min, max, step) => `<div style="margin:9px 0;"><div style="display:flex;justify-content:space-between;font-size:11px;letter-spacing:1px;color:#f0e2b0;"><span>${label}</span><span id="fd-${key}-val" style="color:#ffe28a;">${fmt[key](FLOATDMG[key])}</span></div><input data-fd="${key}" type="range" min="${min}" max="${max}" step="${step}" value="${FLOATDMG[key]}" style="width:100%;"></div>`;
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;border-bottom:1px solid #6a5420;padding-bottom:10px;">
+      <div style="font-size:18px;letter-spacing:3px;color:#ffd866;">💥 FLOATING DAMAGE</div>
+      <button id="fd-close" style="background:#3a2a1a;color:#ffaaaa;border:1px solid #ff6666;padding:4px 10px;cursor:pointer;font-family:inherit;border-radius:3px;">✕</button>
+    </div>
+    <div id="fd-stage" style="position:relative;height:120px;margin-bottom:10px;border-radius:6px;background:linear-gradient(135deg,#3b4a5a,#1b232c);overflow:hidden;"></div>
+    <div style="display:flex;gap:6px;margin-bottom:6px;">${btn('data-fdtest="body"', 'BODY', false)}${btn('data-fdtest="head"', 'HEADSHOT', false)}${btn('data-fdtest="kill"', 'ELIMINATION', false)}</div>
+    ${toggle('fd-on', 'FLOATING DAMAGE NUMBERS', FLOATDMG.on)}
+    ${slider('life', 'NUMBER DURATION', 0.4, 1.5, 0.05)}
+    ${slider('pop', 'POP ANIMATION SCALE', 1, 1.5, 0.05)}
+    ${toggle('fd-combine', 'COMBINE RAPID-FIRE DAMAGE NUMBERS', FLOATDMG.combine)}
+    ${toggle('fd-kill', 'SPECIAL RED NUMBERS ON ELIMINATION', FLOATDMG.kill)}
+    <div style="margin:14px 0 6px;font-size:11px;letter-spacing:1px;color:#f0e2b0;">WHICH DAMAGE SHOULD BE DISPLAYED?</div>
+    <div style="display:flex;gap:6px;">${btn('data-fdmode="raw"', 'RAW DAMAGE', FLOATDMG.mode === 'raw')}${btn('data-fdmode="effective"', 'EFFECTIVE DAMAGE', FLOATDMG.mode === 'effective')}</div>
+    <div style="margin-top:5px;font-size:10px;color:#a8996a;letter-spacing:.5px;">RAW: 120 even if the target had 40 left. EFFECTIVE: 40.</div>
+    <button id="fd-reset" style="display:block;width:100%;margin-top:12px;padding:10px;background:#2a1a1a;color:#ff9988;border:1px solid #ff5544;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">RESET TO DEFAULTS</button>`;
+  const stage = document.getElementById('fd-stage');
+  const test = kind => {                                                          // the very same look and curve, played in the box
+    const head = kind === 'head', lethal = kind === 'kill', L = floatDmgLook(kind === 'head' ? 999 : kind === 'kill' ? 125 : 120, head, lethal);
+    const el = document.createElement('div'); el.setAttribute('style', FLOATDMG_STYLE);
+    el.textContent = L.text; el.style.color = L.color; el.style.fontSize = L.size + 'px';
+    el.style.left = (50 + (Math.random() - 0.5) * 30) + '%'; el.style.top = '78px'; stage.appendChild(el);
+    const t0 = performance.now(), life = FLOATDMG.life * 1000, pop = FLOATDMG.pop * (lethal && FLOATDMG.kill ? 1.1 : 1);
+    const tick = () => { const t = (performance.now() - t0) / life; if (t >= 1 || !el.isConnected) { el.remove(); return; } const P = floatDmgPose(t, pop); el.style.top = (78 - P.rise) + 'px'; el.style.opacity = String(P.opacity); el.style.transform = 'translate(-50%,-100%) scale(' + P.scale.toFixed(3) + ')'; requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+  };
+  test('body');
+  document.getElementById('fd-close').addEventListener('click', () => { panel.style.display = 'none'; });
+  panel.querySelectorAll('[data-fdtest]').forEach(b => b.addEventListener('click', () => test(b.dataset.fdtest)));
+  panel.querySelectorAll('input[data-fd]').forEach(inp => inp.addEventListener('input', () => { const k = inp.dataset.fd; FLOATDMG[k] = parseFloat(inp.value); saveFloatDmg(); const v = document.getElementById('fd-' + k + '-val'); if (v) v.textContent = fmt[k](FLOATDMG[k]); test('body'); }));
+  panel.querySelectorAll('[data-fdmode]').forEach(b => b.addEventListener('click', () => { FLOATDMG.mode = b.dataset.fdmode; saveFloatDmg(); openFloatDmgPanel(); }));
+  document.getElementById('fd-on').addEventListener('click', () => { FLOATDMG.on = !FLOATDMG.on; saveFloatDmg(); openFloatDmgPanel(); });
+  document.getElementById('fd-combine').addEventListener('click', () => { FLOATDMG.combine = !FLOATDMG.combine; saveFloatDmg(); openFloatDmgPanel(); });
+  document.getElementById('fd-kill').addEventListener('click', () => { FLOATDMG.kill = !FLOATDMG.kill; saveFloatDmg(); openFloatDmgPanel(); });
+  document.getElementById('fd-reset').addEventListener('click', () => { FLOATDMG = { ...FLOATDMG_DEFAULT }; saveFloatDmg(); openFloatDmgPanel(); });
+}
+
 function updateDamageNumbers() {
   updateFlyNumbers();
+  updateFloatDamage();
   if (!gameStarted) return;
   const now = performance.now();
   for (const [id, tr] of Object.entries(damageTracker)) {
@@ -69444,7 +69580,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
   const hitTier = hitFeedback(pid, mesh, hitWorldPos, dmg, headshot, Number.isFinite(opts.damageOverride) ? 1 : falloff, headMiss, weaponId, true);
   // (No hitmarker here: it is drawn once the hit is CONFIRMED. A bot this client simulates is confirmed below, when its health
   //  comes off; a real player's hit is confirmed by the server's 'playerHit', so a deflected or shielded shot shows nothing.)
-  if (!isBot) _hmRememberTier(bulletId, hitTier);
+  if (!isBot) { _hmRememberTier(bulletId, hitTier); _fdRememberRaw(bulletId, instakill ? 999 : dmg); }
   // Switchblade Gun: any successful hit re-charges to the 100-dmg shot
   if (weaponId === 'switchblade_gun' || weaponId === 'switchblade_charged') {
     switchbladeCharged = true;
@@ -69526,12 +69662,12 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
         const kc = document.getElementById('kill-count');
         if (kc) kc.textContent = `Kills: ${myKills}`;
         const botName = players[pid]?.name || 'Bot';
-        if (firstCount) { if (headshot && dealtToBot > 0) playHitConfirmSound('head', hitTier); addHitNumber(dealtToBot, headshot); }       // (the gold marker and the tone are confirmKill's; a killing headshot rings the ding first)
+        if (firstCount) { if (headshot && dealtToBot > 0) playHitConfirmSound('head', hitTier); addHitNumber(dealtToBot, headshot); floatDamage(pid, remoteMeshes[pid], instakill ? 999 : dmg, dealtToBot, headshot, true); }       // (the gold marker and the tone are confirmKill's; a killing headshot rings the ding first)
         if (confirmKill(pid, botName)) showAnnouncement('ELIMINATED', botName, '#ff4444', 1200);
         onEntityDied(pid, myId);
         // Schedule local respawn after 3s (in case server isn't responding)
         setTimeout(() => clientRespawnBot(pid), 3000);
-      } else if (firstCount) hitConfirmed(headshot ? 'head' : 'hit', { tier: hitTier, damage: dealtToBot });
+      } else if (firstCount) hitConfirmed(headshot ? 'head' : 'hit', { tier: hitTier, damage: dealtToBot, fd: { id: pid, mesh: remoteMeshes[pid], raw: instakill ? 999 : dmg } });
     }
   }
 }
@@ -69677,7 +69813,7 @@ function handleDummyHit(dummy, mesh, opts, hitPos) {
   if (activeMapName !== 'lobby13' || !mesh?.visible) return;
   const dmg = opts.damage ?? getClientWeaponDamage(opts.weaponId);
   const dummyTier = hitFeedback(dummy.id, mesh, hitPos, dmg, !!opts.headshot, opts.falloff, opts.headMiss, opts.weaponId, true);
-  if (dummy.infinite || dummy.hp > 0) hitConfirmed(opts.headshot ? 'head' : 'hit', { tier: dummyTier, damage: dummy.infinite ? dmg : Math.min(dmg, dummy.hp) });   // (a dummy greyed out and waiting to come back takes nothing)
+  if (dummy.infinite || dummy.hp > 0) hitConfirmed(opts.headshot ? 'head' : 'hit', { tier: dummyTier, damage: dummy.infinite ? dmg : Math.min(dmg, dummy.hp), fd: { id: dummy.id, mesh, raw: dmg } });   // (a dummy greyed out and waiting to come back takes nothing)
   if (dummy.infinite) {
     flashDummyMesh(mesh);
     return;
@@ -86528,6 +86664,7 @@ function openSettingsHub() {
     </div>
     <button id="settings-display" style="display:block;width:100%;margin:8px 0;padding:12px;background:#0f2a24;color:#88ffcc;border:1px solid #44cc99;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">🎛 PRESETS & DISPLAY</button>
     <button id="settings-analysis" style="display:block;width:100%;margin:8px 0;padding:12px;background:#10303a;color:#aaf0ff;border:1px solid #44ddff;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">📊 MATCH ANALYSIS</button>
+    <button id="settings-floatdmg" style="display:block;width:100%;margin:8px 0;padding:12px;background:#2a2410;color:#ffe9a0;border:1px solid #ffcc44;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">💥 FLOATING DAMAGE</button>
     <button id="settings-hitmarker" style="display:block;width:100%;margin:8px 0;padding:12px;background:#2a2410;color:#ffd866;border:1px solid #ffcc44;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">💥 HITMARKER</button>
     <button id="settings-shoot-fx" style="display:block;width:100%;margin:8px 0;padding:12px;background:#2a1a3a;color:#cc99ff;border:1px solid #aa77ff;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">🔊 SHOOT FX</button>
     <button id="settings-aim-assist" style="display:block;width:100%;margin:8px 0;padding:12px;background:#3a1a1a;color:#ff9988;border:1px solid #ff5544;cursor:pointer;font-family:inherit;letter-spacing:2px;border-radius:4px;">🎯 AIM ASSIST</button>
@@ -86571,6 +86708,7 @@ function openSettingsHub() {
   document.getElementById('settings-display').addEventListener('click', () => { panel.style.display = 'none'; openDisplayPanel(); });
   document.getElementById('settings-analysis').addEventListener('click', () => { panel.style.display = 'none'; openMatchAnalysis(); });
   document.getElementById('settings-hitmarker').addEventListener('click', () => { panel.style.display = 'none'; openHitmarkerPanel(); });
+  document.getElementById('settings-floatdmg').addEventListener('click', () => { panel.style.display = 'none'; openFloatDmgPanel(); });
   document.getElementById('settings-shoot-fx').addEventListener('click', () => { panel.style.display = 'none'; openShootFxPanel(); });
   document.getElementById('settings-aim-assist').addEventListener('click', () => { panel.style.display = 'none'; openAimAssistPanel(); });
   const resume = document.getElementById('settings-resume');

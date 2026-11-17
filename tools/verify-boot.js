@@ -3865,6 +3865,69 @@ if (ok && process.argv.includes('--leverrifle')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+// FLOATING DAMAGE: a number over the enemy's head -- white body, gold headshot with a "!", red elimination with a "x" -- popping 115% and floating 25 px in 0.75 s, hits within 0.12 s added into one, raw or effective damage.
+if (ok && process.argv.includes('--floatdmg')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [], keep = Object.assign({}, FLOATDMG), keepPh = playHitConfirmSound, keepHm = showHitmarker;
+    const clear = () => { for (const o of _floatNums) o.el.remove(); _floatNums.length = 0; for (const k of Object.keys(_floatLast)) delete _floatLast[k]; };
+    try {
+      FLOATDMG = { ...FLOATDMG_DEFAULT }; clear(); playHitConfirmSound = () => {}; showHitmarker = () => {};
+      if (!(FLOATDMG.on && FLOATDMG.life === 0.75 && FLOATDMG.pop === 1.15 && FLOATDMG.combine && FLOATDMG.kill && FLOATDMG.mode === 'raw')) issues.push('defaults: on, 0.75 s, 115%, combine, red kills, raw');
+      const mesh = new THREE.Group(); mesh.position.set(3, 0, -8);
+      // the look
+      const body = floatDmgLook(120, false, false), head = floatDmgLook(999, true, false), kill = floatDmgLook(125, false, true), hk = floatDmgLook(300, true, true);
+      if (body.text !== '120' || body.color !== '#ffffff') issues.push('body: white 120: ' + body.text + ' ' + body.color);
+      if (head.text !== '999!' || head.color !== '#ffd23a' || !(head.size > body.size)) issues.push('headshot: gold, bigger, "!": ' + head.text);
+      if (!kill.text.startsWith('125') || !kill.text.endsWith('\\u2715') || kill.color !== '#ff3030') issues.push('elimination: red with a cross: ' + kill.text);
+      if (hk.text !== '300! \\u2715') issues.push('a killing headshot keeps its "!": ' + hk.text);
+      FLOATDMG.kill = false; if (floatDmgLook(125, false, true).color === '#ff3030') issues.push('red kills can be turned off'); FLOATDMG.kill = true;
+      if (floatDmgLook(5000, false, false).text !== '999') issues.push('capped at 999');
+      // the curve
+      const p0 = floatDmgPose(0, 1.15), p2 = floatDmgPose(0.2, 1.15), p1 = floatDmgPose(1, 1.15), ph = floatDmgPose(0.5, 1.15);
+      if (!(p0.opacity === 1 && Math.abs(p2.scale - 1.15) < 1e-9 && Math.abs(p1.scale - 1) < 1e-9 && p1.opacity < 1e-6)) issues.push('curve: instant, pops to 115% at 20%, ends at 100% and clear: ' + JSON.stringify([p0, p2, p1]));
+      if (!(ph.rise > 18 && ph.rise <= 25.0001 && p1.rise === 25)) issues.push('it floats 25 px: ' + ph.rise + ' / ' + p1.rise);
+      // a number
+      const e1 = floatDamage('zz1', mesh, 120, 40, false, false);
+      if (!e1 || e1.el.textContent !== '120') issues.push('raw mode shows what the weapon dealt: ' + (e1 && e1.el.textContent));
+      clear(); FLOATDMG.mode = 'effective';
+      const e2 = floatDamage('zz1', mesh, 120, 40, false, false);
+      if (!e2 || e2.el.textContent !== '40') issues.push('effective mode shows what came off: ' + (e2 && e2.el.textContent));
+      clear(); FLOATDMG.mode = 'raw';
+      // combining
+      const a = floatDamage('zz2', mesh, 19, 19, false, false), b = floatDamage('zz2', mesh, 19, 19, false, false), c = floatDamage('zz2', mesh, 19, 19, true, false);
+      if (_floatNums.length !== 1 || a !== b || b !== c || c.total !== 57 || c.el.textContent !== '57!') issues.push('quick hits are one number: ' + _floatNums.length + ' ' + (c && c.el.textContent));
+      c.first -= 300; const d = floatDamage('zz2', mesh, 19, 19, false, false);
+      if (d === c || _floatNums.length !== 2) issues.push('after 0.12 s it is a new number');
+      FLOATDMG.combine = false; const f = floatDamage('zz3', mesh, 10, 10, false, false), g2 = floatDamage('zz3', mesh, 10, 10, false, false);
+      if (f === g2) issues.push('combining can be turned off'); FLOATDMG.combine = true;
+      const l = floatDamage('zz4', mesh, 125, 40, false, true);
+      if (!l.lethal || !l.el.textContent.includes('\\u2715')) issues.push('a lethal hit gets the cross');
+      clear();
+      for (let i = 0; i < 60; i++) floatDamage('many' + i, mesh, 10, 10, false, false);
+      if (_floatNums.length > FLOATDMG_MAX) issues.push('capped so a 10v10 stays readable: ' + _floatNums.length);
+      // it goes away by itself
+      clear(); const e3 = floatDamage('zz5', mesh, 50, 50, false, false); e3.t0 -= 2000; updateFloatDamage();
+      if (_floatNums.includes(e3) || e3.el.isConnected) issues.push('after its life it is gone');
+      // the paths that confirm a hit feed it
+      clear(); hitConfirmed('head', { damage: 50, fd: { id: 'zz6', mesh, raw: 90 } });
+      if (!(_floatLast['zz6'] && _floatLast['zz6'].total === 90 && _floatLast['zz6'].head)) issues.push('a confirmed hit makes a number (raw 90)');
+      clear(); hitConfirmed('hit', { damage: 50 }); if (_floatNums.length) issues.push('no target, no number');
+      // off means off
+      FLOATDMG.on = false; if (floatDamage('zz7', mesh, 50, 50, false, false)) issues.push('off: no numbers');
+      FLOATDMG.on = true;
+      // the old running total gives way (a hit with a grade) but damage with no hit of its own still gets a number
+      const tmesh = new THREE.Group(); tmesh.position.set(0, 0, -6); clear();
+      for (const k of Object.keys(damageTracker)) { try { damageTracker[k].el.remove(); } catch (e) {} delete damageTracker[k]; }
+      trackTotalDamage('zz8', 33, tmesh, 'yellow'); if (damageTracker['zz8']) issues.push('the running total gives way to the floating number');
+      trackTotalDamage('zz9', 33, tmesh); if (!_floatLast['zz9']) issues.push('damage with no hit of its own (an explosion) still shows a number');
+    } catch (e) { issues.push('threw: ' + (e && e.stack || e)); }
+    finally { FLOATDMG = keep; clear(); playHitConfirmSound = keepPh; showHitmarker = keepHm; }
+    return issues;
+  })()`);
+  console.log('FLOATING DAMAGE checks: look (white / gold ! / red x), the 0.75 s pop-float-fade, combining, raw vs effective, the cap, and the confirmed-hit paths');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 // HOUSE OF CARDS (the Throwing Knives skin): a legendary from the Gen 2 case: a fan of three cards and a floating ace that shuffle on every throw, the Impossible Shuffle on inspect (the deck is
 // thrown up, spirals, interleaves, four aces stop in the air, become one knife that lands in the hand), a card for a round, and the ace of spades behind what it kills.
 if (ok && process.argv.includes('--houseofcards')) {

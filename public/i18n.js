@@ -448,6 +448,7 @@
     'Comms wheel 2': '通讯轮盘 2', 'Scoreboard': '计分板', 'PRESS A KEY…': '请按键…',
     'RESET ALL TO DEFAULT': '全部恢复默认', 'RESET TO DEFAULT': '恢复默认', 'SIZE': '大小', 'THICKNESS': '粗细',
     'CENTER GAP': '中心间隙', 'DOT SIZE': '圆点大小', 'OPACITY': '透明度', 'BLACK OUTLINE': '黑色描边',
+    '💥 FLOATING DAMAGE': '💥 浮动伤害', 'FLOATING DAMAGE NUMBERS': '浮动伤害数字', 'NUMBER DURATION': '数字持续时间', 'POP ANIMATION SCALE': '弹出动画大小', 'COMBINE RAPID-FIRE DAMAGE NUMBERS': '合并连发伤害数字', 'SPECIAL RED NUMBERS ON ELIMINATION': '击杀时显示红色数字', 'WHICH DAMAGE SHOULD BE DISPLAYED?': '显示哪种伤害?', 'RAW DAMAGE': '原始伤害', 'EFFECTIVE DAMAGE': '有效伤害', 'RAW: 120 even if the target had 40 left. EFFECTIVE: 40.': '原始:即使目标只剩 40 也显示 120。有效:显示 40。', 'BODY': '身体', 'HEADSHOT': '爆头', 'ELIMINATION': '击杀', 'RESET TO DEFAULTS': '恢复默认',
     '💥 HITMARKER': '💥 命中标记', 'SHOW HITMARKER': '显示命中标记', 'HITMARKER SOUND VOLUME': '命中音效音量', 'DAMAGE NUMBERS': '伤害数字',
     'BODY': '身体', 'HEADSHOT': '爆头', 'ELIMINATION': '击杀',
     'KILLCAM (AFTER YOU DIE)': '击杀回放（阵亡后）', 'REPLAY': '回放', 'LIVE VIEW': '实时视角',
