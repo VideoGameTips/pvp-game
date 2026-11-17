@@ -2060,6 +2060,11 @@ const BOT_SPEED_MULT = 1.5 * DEFAULT_MOVE_MULT * 0.65;  // NPCs move 35% slower 
 const SLIDE_MS      = 1250;  // slide duration (was 800)
 const SLIDE_BOOST   = 2.6;   // slide speed at its start, decaying to 1.0 (was 2.0)
 const SLIDE_JUMP_CARRY = 11; // m/s of the slide carried into a slide jump
+// 🏃 Momentum you can chain: a running jump keeps a little of the run (HOP_CARRY of the speed, up to 9 m/s), a jump's push fades slowly in the air (AIR_EXT_DECAY left after a second, the
+// ground still takes it off at BLAST_DECAY) and survives a landing (LAND_KEEP), and a slide asked for in the last SLIDE_BUFFER_MS before touching down starts the moment you land (with
+// LAND_SLIDE_BOOST of the usual opening burst, so a chain is quick but does not snowball). Slide-jump -> land -> slide -> jump keeps its pace.
+const HOP_CARRY = 0.18, AIR_EXT_DECAY = 0.55, LAND_KEEP = 0.6, SLIDE_BUFFER_MS = 140, LAND_SLIDE_BOOST = 0.65;
+function _extAirborne() { return !!(slamState || !isPlayerGrounded()); }
 const SLIDE_JUMP_LIFT  = 0.88; // slide jumps go farther, so they go a little lower
 // With exponential decay the ground covered is v / ln(1/BLAST_DECAY), so 17 m/s
 // buys a ~7.4 m lunge. 26 looked reasonable as a speed and turned out to be an
@@ -50313,6 +50318,27 @@ let _realismLandKick = 0;
 let _nearMissUntil = 0;
 let _lastNearMissAt = 0;
 const _gunKick = { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 };
+// 🎯 HANDLING: how each gun FEELS (look and feel only: no damage, spread or aim changes). Every number multiplies what the shot already does.
+//   back/flip/rise/twist: the kick into the shoulder, the muzzle flip, the lift and the twist of the viewmodel;  cap: how far the kick may go (x the usual ceiling);  fov: the little shove of the view
+//   settle: what is LEFT of the kick after one second (smaller = comes back faster);  sway/hz: how much the idle sway moves and how fast;  snap: extra jolts that follow the shot (ms after, forward, twist, flip)
+const HANDLING_NEUTRAL = { back: 1, flip: 1, rise: 1, twist: 1, fov: 1, cap: 1, settle: 0.018, sway: 1, hz: 1 };
+const HANDLING = {
+  // a heavy hand cannon: it slams back into the palm, the muzzle flips up, it takes a beat to come down, and it sways lazily
+  revolver:     { back: 1.6, flip: 2.0, rise: 1.5, twist: 1.35, fov: 1.5, cap: 1.7, settle: 0.09, sway: 1.5, hz: 0.8 },
+  hand_cannon:  { back: 1.9, flip: 2.3, rise: 1.7, twist: 1.5, fov: 1.8, cap: 2.0, settle: 0.12, sway: 1.7, hz: 0.75 },
+  desert_eagle: { back: 1.7, flip: 2.1, rise: 1.6, twist: 1.4, fov: 1.6, cap: 1.8, settle: 0.10, sway: 1.5, hz: 0.8 },
+  snub_revolver:{ back: 1.25, flip: 1.5, rise: 1.2, twist: 1.2, fov: 1.2, cap: 1.4, settle: 0.05, sway: 1.2, hz: 0.9 },
+  // a controllable bullet hose: almost no kick per shot, straight back to centre, a steady hold
+  p90:          { back: 0.5, flip: 0.4, rise: 0.45, twist: 0.45, fov: 0.55, cap: 1, settle: 0.0006, sway: 0.55, hz: 1.2 },
+  vector:       { back: 0.6, flip: 0.5, rise: 0.5, twist: 0.5, fov: 0.6, cap: 1, settle: 0.0008, sway: 0.6, hz: 1.15 },
+  mp40:         { back: 0.7, flip: 0.6, rise: 0.6, twist: 0.6, fov: 0.7, cap: 1, settle: 0.0012, sway: 0.7, hz: 1.1 },
+  machine_pistol:{ back: 0.6, flip: 0.5, rise: 0.5, twist: 0.5, fov: 0.6, cap: 1, settle: 0.0008, sway: 0.6, hz: 1.15 },
+  // a crossbow: a hard mechanical release -- a short, dry thunk, the limbs and string springing past, then it is still
+  crossbow:     { back: 0.9, flip: 0.5, rise: 0.6, twist: 0.8, fov: 0.9, cap: 1, settle: 0.00015, sway: 0.8, hz: 1.0,
+                  snap: [{ at: 45, z: -0.014, rz: 0.034, rx: -0.012 }, { at: 100, z: 0.008, rz: -0.022, rx: 0.006 }, { at: 150, z: -0.003, rz: 0.010 }] },
+};
+function handlingOf(w) { return (w && HANDLING[w.baseId || w.id]) || null; }
+let _gunSettle = HANDLING_NEUTRAL.settle;
 
 function realisticRecoilProfile(w) {
   if (!w || w.perfectAccuracy || w.slot === 'support') return null;
@@ -50482,13 +50508,14 @@ function updateRealismFeedback(dt) {
     const t = performance.now() * 0.001;
     const ads = isADS ? 0.06 : 1;
     const crouch = (window._crouchEye || 1.65) < 1.4 ? 0.55 : 1;
-    const amp = 0.0035 * ads * crouch;
+    const Hs = handlingOf(currentWeapon) || HANDLING_NEUTRAL;
+    const amp = 0.0035 * ads * crouch * Hs.sway;
     const ready = heldWeaponReady();
     const walk = heldWalkPose(t), walkScale = (isADS ? 0.008 : ready ? 0.12 : 1) * crouch;
     const readyBlend = 1-Math.exp(-Math.max(0,dt)*38);
     const aimRotation = isADS ? weaponSightPose(model).rotation : _ZERO3;
-    const targetX = model._homePos.x + Math.sin(t * 1.8) * amp + walk.x * walkScale + _gunKick.x;
-    const targetY = model._homePos.y + Math.cos(t * 2.2) * amp * 0.65 + walk.y * walkScale - _realismLandKick * 0.035 + _gunKick.y;
+    const targetX = model._homePos.x + Math.sin(t * 1.8 * Hs.hz) * amp + walk.x * walkScale + _gunKick.x;
+    const targetY = model._homePos.y + Math.cos(t * 2.2 * Hs.hz) * amp * 0.65 + walk.y * walkScale - _realismLandKick * 0.035 + _gunKick.y;
     const targetZ = model._homePos.z + walk.z * walkScale + _gunKick.z;
     model.position.x += (targetX - model.position.x) * (ready?readyBlend:Math.min(1, dt * 7));
     model.position.y += (targetY - model.position.y) * (ready?readyBlend:Math.min(1, dt * 7));
@@ -50498,7 +50525,7 @@ function updateRealismFeedback(dt) {
     model.rotation.z += (aimRotation.z + _gunKick.rz + walk.rz * walkScale - model.rotation.z) * (ready?readyBlend:Math.min(1, dt * 18));
     if (model._spinFx && !isADS && !_equip) { const sa = gunSpinAngle(model); if (sa) { model.rotation.x += sa; model._spinApplied = sa; } }
   }
-  const settle = Math.pow(0.018, dt);
+  const settle = Math.pow(_gunSettle, dt);
   _gunKick.x *= settle; _gunKick.y *= settle; _gunKick.z *= settle;
   _gunKick.rx *= settle; _gunKick.ry *= settle; _gunKick.rz *= settle;
   if (_realismLandKick > 0) _realismLandKick = Math.max(0, _realismLandKick - dt * 5.5);
@@ -50562,6 +50589,8 @@ function kickWeaponVisual(w, pellets = 1) {
   const adsGunBack = isADS ? ADS_RECOIL_DAMPING.gunBack : 1;
   const adsGunTilt = isADS ? ADS_RECOIL_DAMPING.gunTilt : 1;
   const adsGunSide = isADS ? ADS_RECOIL_DAMPING.gunSide : 1;
+  const Hm = handlingOf(w) || HANDLING_NEUTRAL;
+  _gunSettle = Hm.settle;
   if (w?.id === 'throwing_knives') {
     _kickHold('z', -Math.min(0.32, 0.16 + s * 0.060) * GUN_KICK_SCALE);
     _kickHold('y', Math.min(0.012, 0.004 + s * 0.002) * GUN_KICK_SCALE);
@@ -50580,21 +50609,22 @@ function kickWeaponVisual(w, pellets = 1) {
   }
   // Backwards, not upwards: the gun is driven into your shoulder (z, toward the
   // camera) much harder than before, and climbs (y) and muzzle-flips (rx) much less.
-  _kickHold('z', Math.min(0.39, (model._kickZ || 0.015) * (9.2 + s * 3.3)) * adsGunBack * GUN_KICK_SCALE);
-  _kickHold('y', Math.min(0.017, 0.0022 + s * 0.0044) * adsGunUp * GUN_KICK_SCALE);
-  _gunKick.x = side * Math.min(0.066, 0.008 + s * 0.012) * adsGunSide * GUN_KICK_SCALE;
-  _kickHold('rx', Math.min(0.092, 0.012 + s * 0.021) * adsGunTilt * GUN_KICK_SCALE);
-  _fovPunch = Math.max(_fovPunch, Math.min(1.4, (isADS ? ADS_RECOIL_DAMPING.fov : 0.55) * Math.sqrt(Math.max(0.3, s))));
+  _kickHold('z', Math.min(0.39, (model._kickZ || 0.015) * (9.2 + s * 3.3)) * adsGunBack * GUN_KICK_SCALE * Hm.back);
+  _kickHold('y', Math.min(0.017, 0.0022 + s * 0.0044) * adsGunUp * GUN_KICK_SCALE * Hm.rise);
+  _gunKick.x = side * Math.min(0.066, 0.008 + s * 0.012) * adsGunSide * GUN_KICK_SCALE * Hm.twist;
+  _kickHold('rx', Math.min(0.092, 0.012 + s * 0.021) * adsGunTilt * GUN_KICK_SCALE * Hm.flip);
+  _fovPunch = Math.max(_fovPunch, Math.min(1.4, (isADS ? ADS_RECOIL_DAMPING.fov : 0.55) * Math.sqrt(Math.max(0.3, s))) * Hm.fov);
   // Down the sights the gun stays LEVEL: it still kicks back and up, but it does not twist or roll,
   // because a canted gun is what covers the ring you are trying to see through.
   if (!isADS) {
-    _gunKick.ry = side * Math.min(0.102, 0.014 + s * 0.020) * adsGunTilt * GUN_KICK_SCALE;
-    _gunKick.rz = -side * Math.min(0.136, 0.020 + s * 0.026) * adsGunTilt * GUN_KICK_SCALE;
+    _gunKick.ry = side * Math.min(0.102, 0.014 + s * 0.020) * adsGunTilt * GUN_KICK_SCALE * Hm.twist;
+    _gunKick.rz = -side * Math.min(0.136, 0.020 + s * 0.026) * adsGunTilt * GUN_KICK_SCALE * Hm.twist;
   }
   for (const key of ['x', 'y', 'z', 'rx', 'ry', 'rz']) {
-    const max = (hyperrealisticOn() ? _GUN_KICK_HYPER_MAX : _GUN_KICK_MAX)[key];
+    const max = (hyperrealisticOn() ? _GUN_KICK_HYPER_MAX : _GUN_KICK_MAX)[key] * Hm.cap;
     _gunKick[key] = Math.max(-max, Math.min(max, _gunKick[key]));
   }
+  if (Hm.snap && !isADS) for (const sn of Hm.snap) setTimeout(() => { _gunKick.z += sn.z || 0; _gunKick.rz += (sn.rz || 0) * (side || 1); _gunKick.rx += sn.rx || 0; }, sn.at);   // the release rings through it
 }
 
 document.addEventListener('mousemove', e => {
@@ -51533,6 +51563,7 @@ function doJump(repeat) {
       const carry = SLIDE_JUMP_CARRY * (0.55 + 0.45 * Math.max(0, t));
       _extVel.x += window._slideDir.x * carry;
       _extVel.z += window._slideDir.z * carry;
+      window._momCarry = true;
       window._slideUntil = 0;
       // You are 0.95 m lower than standing when you push off, so the eye has
       // that to climb before it is even level with where a normal jump
@@ -51556,6 +51587,8 @@ function doJump(repeat) {
       window._crouchEye = Math.min(PLAYER_EYE_HEIGHT, playerHeadroomEye());          // you stand up as you leave the ground (as far as the ceiling lets you)
       playSoundEvent('footstep', { volume: 0.5, pitch: 1.3, minGap: 60 });
     } else {
+      // 🦘 A running jump keeps a little of the run: it pushes the way you were going, so it carries further and a chain of them holds its pace.
+      { const hv = Math.hypot(playerVelocity.x, playerVelocity.z); if (hv > 2) { const k = Math.min(hv, 9) * HOP_CARRY / hv; _extVel.x += playerVelocity.x * k; _extVel.z += playerVelocity.z * k; window._momCarry = true; } }
       // Same debt for a crouch jump, which had the same problem more quietly.
       const standGap = Math.max(0, PLAYER_EYE_HEIGHT - (window._crouchEye ?? PLAYER_EYE_HEIGHT));
       slamState = { vel: Math.sqrt(JUMP_VEL * JUMP_VEL + 2 * GRAVITY * standGap), type: 'jump' };
@@ -55303,7 +55336,11 @@ function updateMovement(dt, socialBlocked = false) {
   const crouchEdge = crouchHeld && !window._prevCrouchHeld;
   window._prevCrouchHeld = crouchHeld;
   const slideEdge = shiftEdge || (crouchEdge && dir.lengthSq() > 0.001);
-  if (slideEdge && groundedNow && dir.lengthSq() > 0.001 && !window._slideUntil) {
+  if (slideEdge && !groundedNow) window._slideBufferAt = nowMs;                       // a slide asked for just before touching down still happens
+  const slideBuffered = groundedNow && !slideEdge && !!window._slideBufferAt && nowMs - window._slideBufferAt <= SLIDE_BUFFER_MS;
+  if ((slideEdge || slideBuffered) && groundedNow && dir.lengthSq() > 0.001 && !window._slideUntil) {
+    window._slideBufferAt = 0;
+    window._slideChained = slideBuffered;
     window._slideUntil = nowMs + SLIDE_MS;
     window._slideDir = dir.clone();
   } else if (shiftEdge && !groundedNow && (window._dashLeft || 0) > 0
@@ -55341,7 +55378,7 @@ function updateMovement(dt, socialBlocked = false) {
   let slideMult = 1;
   if (sliding) {
     const t = (window._slideUntil - nowMs) / SLIDE_MS; // 1 → 0
-    slideMult = 1.0 + (SLIDE_BOOST - 1.0) * t;
+    slideMult = 1.0 + (SLIDE_BOOST - 1.0) * t * (window._slideChained ? LAND_SLIDE_BOOST : 1);
   }
   // 📐 On a ramp a slide follows the slope: downhill it gains speed and does not
   // run out (you keep sliding for as long as it goes down), uphill it costs you
@@ -55429,7 +55466,7 @@ function updateMovement(dt, socialBlocked = false) {
         playerYVel = 0;
         airTouch(dt);
         window._slideUntil = 0;
-        _extVel.x *= 0.2; _extVel.z *= 0.2;
+        { const _lk = (!window._blastCarry && window._momCarry) ? LAND_KEEP : 0.2; _extVel.x *= _lk; _extVel.z *= _lk; }
         window._blastCarry = false;
       }
     } else {
@@ -55527,7 +55564,7 @@ function updateMovement(dt, socialBlocked = false) {
       camera.position.y = groundEyeY;
       airTouch(dt);
       window._slideUntil = 0;
-      _extVel.x *= 0.2; _extVel.z *= 0.2;
+      { const _lk = (!window._blastCarry && window._momCarry) ? LAND_KEEP : 0.2; _extVel.x *= _lk; _extVel.z *= _lk; }
       window._blastCarry = false;
       if (landingHardness > 0.18) {
         _realismLandKick = Math.max(_realismLandKick, landingHardness);
@@ -55617,7 +55654,7 @@ function updateMovement(dt, socialBlocked = false) {
       if (window._blastCarryGround > 0.25) window._blastCarry = false;
     }
     if (!window._blastCarry) {
-      const keep = Math.pow(BLAST_DECAY, dt);
+      const keep = Math.pow((window._momCarry && _extAirborne()) ? AIR_EXT_DECAY : BLAST_DECAY, dt);
       _extVel.x *= keep; _extVel.z *= keep;
     }
   } else {

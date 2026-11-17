@@ -3928,6 +3928,63 @@ if (ok && process.argv.includes('--floatdmg')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+// HANDLING + MOMENTUM: guns feel like what they are (revolver heavy, P90 a steady hose, crossbow a dry mechanical release), and a jump / slide / landing chain keeps its pace.
+if (ok && process.argv.includes('--handling')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const keep = { st: setTimeout, ads: isADS, dead: isDead, started: gameStarted, slam: slamState, yv: playerYVel, pos: camera.position.clone(), pv: { x: playerVelocity.x, z: playerVelocity.z },
+      ev: { x: _extVel.x, z: _extVel.z }, gs: _gunSettle, kick: { ..._gunKick }, keys: { ...keys } };
+    try {
+      // ── handling ──
+      const model = weaponModels[currentWeaponIdx]; if (!model._homePos) model._homePos = model.position.clone();
+      const timers = []; setTimeout = (f, ms) => { timers.push({ f, ms }); return 0; };
+      isADS = false;
+      const kick = id => { for (const k in _gunKick) _gunKick[k] = 0; timers.length = 0; kickWeaponVisual({ id, damage: 50, pellets: 1, auto: false, bulletSpeed: 150 }); return { z: _gunKick.z, rx: _gunKick.rx, y: _gunKick.y, settle: _gunSettle, n: timers.length }; };
+      const rev = kick('revolver'), base = kick('pistol'), hose = kick('p90'), xb = kick('crossbow'), hc = kick('hand_cannon');
+      if (!(rev.z > base.z * 1.2 && rev.rx > base.rx * 1.3)) issues.push('revolver should slam and flip more than a plain pistol: z ' + rev.z.toFixed(4) + ' vs ' + base.z.toFixed(4) + ', rx ' + rev.rx.toFixed(4) + ' vs ' + base.rx.toFixed(4));
+      if (!(hc.z >= rev.z)) issues.push('the hand cannon is the heavier of the two');
+      if (!(hose.z < base.z * 0.7 && hose.rx < base.rx * 0.6)) issues.push('the P90 should hardly kick: z ' + hose.z.toFixed(4) + ' vs ' + base.z.toFixed(4));
+      if (!(rev.settle > base.settle && base.settle > hose.settle && xb.settle < base.settle)) issues.push('settle: revolver slow, P90 and crossbow quick: ' + [rev.settle, base.settle, hose.settle, xb.settle].join(' '));
+      if (xb.n !== 3) issues.push('the crossbow release should ring through the gun (3 jolts): ' + xb.n);
+      else { kick('crossbow'); const before = { ..._gunKick }; for (const t of timers) t.f(); if (Math.abs(_gunKick.z - before.z) < 1e-6 || Math.abs(_gunKick.rz - before.rz) < 1e-6) issues.push('the release should move the gun'); }
+      if (handlingOf({ id: 'ak20' }) || handlingOf({ id: 'revolver', baseId: 'revolver' }) !== HANDLING.revolver) issues.push('only the listed guns have a profile (a skin counts as its gun)');
+      setTimeout = keep.st;
+      // ── momentum ──
+      gameStarted = true; isDead = false; slamState = null; playerYVel = 0;
+      const ground = () => getGroundEyeY() + ((window._crouchEye ?? PLAYER_EYE_HEIGHT) - PLAYER_EYE_HEIGHT);
+      camera.position.set(0, ground(), 0); camera.updateMatrixWorld(true);
+      _extVel.x = 0; _extVel.z = 0; window._momCarry = false; window._slideUntil = 0; window._blastCarry = false;
+      playerVelocity.x = 6; playerVelocity.z = 0;
+      doJump(false);
+      if (!(Math.abs(_extVel.x - 6 * HOP_CARRY) < 0.05 && window._momCarry)) issues.push('a running jump keeps a little of the run: ' + _extVel.x.toFixed(2));
+      // it fades slowly in the air when it is a jump's push, fast when it is anything else
+      const air = flag => { camera.position.set(0, ground() + 4, 0); slamState = { vel: 6, type: 'jump' }; playerYVel = 0; _extVel.x = 5; _extVel.z = 0; window._momCarry = flag; window._blastCarry = false; for (let i = 0; i < 20; i++) updateMovement(0.016); return _extVel.x; };
+      const withCarry = air(true), without = air(false);
+      if (!(withCarry > without * 1.4 && withCarry > 2.5)) issues.push('a jump push should last in the air: ' + withCarry.toFixed(2) + ' vs ' + without.toFixed(2));
+      // a slide asked for just before touching down starts when you land
+      slamState = null; playerYVel = 0; _extVel.x = 0; _extVel.z = 0; window._slideUntil = 0;
+      camera.position.set(0, ground() + 3, 0); keys['KeyW'] = true; keys['ShiftLeft'] = true; window._prevShiftHeld = false; window._slideBufferAt = 0;
+      updateMovement(0.016);
+      if (!window._slideBufferAt) issues.push('a slide pressed in the air is remembered');
+      camera.position.set(0, ground(), 0); slamState = null; playerYVel = 0;
+      updateMovement(0.016);
+      if (!(window._slideUntil > Date.now() && window._slideChained === true)) issues.push('it should start the moment you land, as a chained (weaker) slide: ' + window._slideUntil + ' ' + window._slideChained);
+      // too early is forgotten
+      window._slideUntil = 0; window._slideChained = false; window._slideBufferAt = Date.now() - 600; keys['ShiftLeft'] = true; window._prevShiftHeld = true;
+      camera.position.set(0, ground(), 0); updateMovement(0.016);
+      if (window._slideUntil) issues.push('a press more than 0.14 s before landing is forgotten');
+    } catch (e) { issues.push('threw: ' + (e && e.stack || e)); }
+    finally {
+      setTimeout = keep.st; isADS = keep.ads; isDead = keep.dead; gameStarted = keep.started; slamState = keep.slam; playerYVel = keep.yv; camera.position.copy(keep.pos);
+      playerVelocity.x = keep.pv.x; playerVelocity.z = keep.pv.z; _extVel.x = keep.ev.x; _extVel.z = keep.ev.z; _gunSettle = keep.gs; for (const k in keep.kick) _gunKick[k] = keep.kick[k];
+      for (const k of Object.keys(keys)) delete keys[k]; Object.assign(keys, keep.keys); window._slideUntil = 0; window._momCarry = false; window._slideBufferAt = 0;
+    }
+    return issues;
+  })()`);
+  console.log('HANDLING + MOMENTUM checks: revolver heavy / P90 steady / crossbow release, running-jump carry, a jump push that lasts in the air, a slide buffered into the landing');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 // HOUSE OF CARDS (the Throwing Knives skin): a legendary from the Gen 2 case: a fan of three cards and a floating ace that shuffle on every throw, the Impossible Shuffle on inspect (the deck is
 // thrown up, spirals, interleaves, four aces stop in the air, become one knife that lands in the hand), a card for a round, and the ace of spades behind what it kills.
 if (ok && process.argv.includes('--houseofcards')) {
