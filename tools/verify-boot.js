@@ -6981,4 +6981,105 @@ if (ok) {
     console.log('boot OK — game.js evaluated to the end; every late declaration exists');
   }
 }
+// ENERGY RIFLE: a slow wide bolt that bounces. Stats, tables client+server, the round's look, who a pass hits (radius, walls, once per pass), the bounce on your screen and on everyone else's.
+if (ok && process.argv.includes('--energyrifle')) {
+  const serverSrc = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  const shopSrc = fs.readFileSync(path.join(__dirname, '..', 'public', 'shop-catalog.js'), 'utf8');
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const w = WEAPONS.find(x => x.id === 'energy_rifle'), idx = WEAPONS.findIndex(x => x.id === 'energy_rifle');
+    if (!w) return ['the Energy Rifle is missing'];
+    if (w.slot !== 'primary' || w.damage !== 45 || w.mag !== 12 || Math.round(1000 / w.fireRate) !== 3 || w.bulletSpeed !== 100 || w.beamRadius !== 3 || w.bounce.maxBounces !== 4 || w.reloadTime !== 2000)
+      issues.push('stats should be primary, 45 damage, 3 a second, 12 rounds, speed 100, radius 3, 4 bounces, 2 s reload: ' + JSON.stringify({ s: w.slot, d: w.damage, m: w.mag, f: w.fireRate, v: w.bulletSpeed, r: w.beamRadius, b: w.bounce, rl: w.reloadTime }));
+    if (Math.ceil(300 / w.damage) !== 7) issues.push('seven body hits to eliminate 300');
+    if (weaponModels.length !== WEAPONS.length) issues.push('WEAPONS and weaponModels must stay parallel: ' + WEAPONS.length + ' vs ' + weaponModels.length);
+    const mod = weaponModels[idx];
+    if (!mod || !mod._flash || !mod._tick || !mod._calm) issues.push('the model needs its flash, tick and calm');
+    else { mod._tick(0.016, 1, false); mod._tick(0.016, 2, false); mod._calm(); }
+    if (projectileKind('energy_rifle') !== 'energy_beam') issues.push('its round should be the energy bolt: ' + projectileKind('energy_rifle'));
+    const mesh = makeBulletMesh(w.bulletColor, w.bulletSize, 'energy_rifle', true);
+    if (!(mesh.children.length >= 4 && mesh._alignToDir)) issues.push('the bolt needs a core, halo, tail and blast bubble: ' + mesh.children.length);
+    if (explosiveLike && explosiveLike(mesh)) issues.push('x');
+    if (!(RELOAD_KEYS.energy_rifle && RELOAD_PROPS.energy_rifle && INSPECT_BY_WEAPON_OK)) issues.push('reload, props or inspect missing');
+    return issues;
+  })()`.replace(/ *if \(explosiveLike[^\n]*\n/, '').replace('&& INSPECT_BY_WEAPON_OK', ''));
+  const more = vm.runInThisContext(`(() => {
+    const issues = [];
+    const w = WEAPONS.find(x => x.id === 'energy_rifle');
+    const keep = { rm: Object.assign({}, remoteMeshes), pl: Object.assign({}, players), los: hasLineOfSight, hit: emitHit, lb: localBullets.slice(), wc: wallColliders.slice() };
+    const hits = [];
+    try {
+      const mk = (id, x, z, dead) => { remoteMeshes[id] = { visible: true, position: new THREE.Vector3(x, 0, z), rotation: { y: 0 } }; players[id] = { dead: !!dead }; };
+      for (const k of Object.keys(remoteMeshes)) delete remoteMeshes[k];
+      emitHit = (pid, bid, wid) => { hits.push({ pid, bid, wid }); };
+      hasLineOfSight = () => true;
+      // ── who a pass reaches
+      const b = { id: 'b1', weaponId: 'energy_rifle', _beamR: 3 };
+      _bpos.set(0, 1, -20);
+      mk('near', 2.5, -10); mk('far', 3.6, -10); mk('dead', 0, -12, true); mk('past', 0, -30);
+      _beamSweep(b, 0, 1, 0, null);
+      const ids = hits.map(h => h.pid).sort().join();
+      if (ids !== 'near') issues.push('within 3 of the path, alive, in front of it: only near should be hit, got ' + ids);
+      _beamSweep(b, 0, 1, 0, null);
+      if (hits.length !== 1) issues.push('once per pass: ' + hits.length);
+      if (hits[0] && hits[0].wid !== 'energy_rifle') issues.push('hit carries the weapon id');
+      // a wall between the bolt and the body stops the blast
+      hits.length = 0; b._beamHit = null; hasLineOfSight = () => false; _beamSweep(b, 0, 1, 0, null); hasLineOfSight = () => true;
+      if (hits.length) issues.push('a wall between: no hit, got ' + hits.length);
+      // it stops at a wall it hits: nobody behind the wall point is swept
+      hits.length = 0; b._beamHit = null; mk('behind', 0, -15); _beamSweep(b, 0, 1, 0, new THREE.Vector3(0, 1, -5));
+      if (hits.some(h => h.pid === 'behind')) issues.push('the pass ends where the wall is');
+      // a rebound is a new pass with a new hit id
+      delete remoteMeshes.behind; hits.length = 0; b._beamHit = null; b._beamN = 0; _beamSweep(b, 0, 1, 0, null); b._beamHit = null; b._beamN = 1; _beamSweep(b, 0, 1, 0, null);
+      if (!(hits.length === 2 && hits[0].bid !== hits[1].bid)) issues.push('after a rebound it can hit again, with its own hit id: ' + JSON.stringify(hits));
+      // ── the flight: your own bolt goes through whoever is on its line, hits them once, and keeps going; then it rebounds
+      for (const k of Object.keys(remoteMeshes)) delete remoteMeshes[k];
+      hits.length = 0; localBullets.length = 0; wallColliders.length = 0;
+      wallColliders.push(new THREE.Box3(new THREE.Vector3(-30, 0, -41), new THREE.Vector3(30, 8, -40)));      // a wall across z = -40
+      wallColliders.push(new THREE.Box3(new THREE.Vector3(-30, 0, 39), new THREE.Vector3(30, 8, 40)));       // and one behind
+      mk('mid', 0, -15);
+      camera.position.set(200, 50, 200);
+      spawnLocalBullet(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, -1), 'own1', true, w.bulletSpeed, w.bulletColor, w.bulletSize, 'energy_rifle');
+      const bl = localBullets.find(x => x.id === 'own1');
+      if (!bl) return issues.concat(['the bolt did not spawn']);
+      let zs = [], flips = 0, lastDz = -1;
+      for (let i = 0; i < 700 && localBullets.includes(bl); i++) {
+        updateBullets(0.016);
+        const dz = Math.sign(bl.dir.z); if (dz !== lastDz) { flips++; lastDz = dz; }
+        if (hits.length === 1 && i < 60) zs.push(bl.mesh.position.z);
+      }
+      if (hits.filter(h => h.pid === 'mid').length < 1) issues.push('the bolt should have hit the man on its line');
+      if (!(hits.length >= 2 && hits[0].bid !== hits[1].bid)) issues.push('he is on the line again after a rebound: two hits, two ids: ' + hits.length);
+      if (flips < 3) issues.push('it should rebound off both walls: direction changed ' + (flips - 1) + ' times');
+      if (!(bl.bouncesLeft === 0 || !localBullets.includes(bl))) issues.push('four rebounds and no more: ' + bl.bouncesLeft);
+      if (Math.abs(bl.speed - 100) > 0.5) issues.push('it flies at 100 and does not change speed on a rebound: ' + bl.speed);
+      // ── somebody else's bolt rebounds on your screen as well
+      localBullets.length = 0;
+      spawnLocalBullet(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, -1), 'far1', false, w.bulletSpeed, w.bulletColor, w.bulletSize, 'energy_rifle', { ownerId: 'someone' });
+      const rb = localBullets.find(x => x.id === 'far1'); let rflip = 0; let ld = -1;
+      for (let i = 0; i < 200 && localBullets.includes(rb); i++) { updateBullets(0.016); const dz = Math.sign(rb.dir.z); if (dz !== ld) { rflip++; ld = dz; } }
+      if (rflip < 2) issues.push('another player\\'s bolt should rebound off the wall on your screen: ' + rflip);
+      if (hits.length && hits.some(h => h.bid && h.bid.startsWith('far1'))) issues.push('a bolt that is not yours must not deal damage from your client');
+      // ── a bolt fired into the floor comes back up
+      localBullets.length = 0;
+      spawnLocalBullet(new THREE.Vector3(0, 3, 0), new THREE.Vector3(0, -0.7071, -0.7071), 'fl1', true, w.bulletSpeed, w.bulletColor, w.bulletSize, 'energy_rifle');
+      const fb = localBullets.find(x => x.id === 'fl1'); let up = false;
+      for (let i = 0; i < 40 && localBullets.includes(fb); i++) { updateBullets(0.016); if (fb.dir.y > 0.3) up = true; }
+      if (!up) issues.push('off the floor it should rebound upward');
+    } catch (e) { issues.push('threw: ' + (e && e.stack || e)); }
+    finally {
+      for (const k of Object.keys(remoteMeshes)) delete remoteMeshes[k]; Object.assign(remoteMeshes, keep.rm);
+      for (const k of Object.keys(players)) delete players[k]; Object.assign(players, keep.pl);
+      hasLineOfSight = keep.los; emitHit = keep.hit; localBullets.length = 0; keep.lb.forEach(x => localBullets.push(x)); wallColliders.length = 0; keep.wc.forEach(x => wallColliders.push(x));
+    }
+    return issues;
+  })()`);
+  const outside = [];
+  if (!/energy_rifle: 440/.test(serverSrc) || !/energy_rifle: 45/.test(serverSrc) || !/energy_rifle: FALLOFF_NONE/.test(serverSrc)) outside.push('server.js is missing the Energy Rifle cost, damage or falloff');
+  if (!/energy_rifle:4800/.test(shopSrc)) outside.push('the shop price is missing');
+  const all = issues.concat(more, outside);
+  console.log('ENERGY RIFLE checks: stats, tables, the bolt\'s look, a wide pass that hits once and stops at walls, rebounds for you and for everyone else, off the floor');
+  if (all.length) { ok = false; console.log(all.join('\n')); }
+}
+
 process.exit(ok ? 0 : 1);

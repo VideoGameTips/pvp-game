@@ -936,6 +936,14 @@ const WEAPONS = [
     auto: false, pellets: 1, spread: 0.07, adsSpreadMult: 0, adsZoom: 50, bulletSpeed: 150, noReload: false,
     heatShots: 2, heatCooldown: 920, quietBurst: true, bulletColor: 0xffa03a, falloffLift: 0.05,
     recoil: { up: 0.010, side: 0.006, climb: 0.18, max: 1.8, recover: 8, adsMult: 0.55 } },
+  // ⚡ Energy Rifle: a slow, fat bolt of energy that bounces. Nothing about it is hitscan: it travels at 100, so it can be seen coming and dodged, and it is wide --
+  // anyone within beamRadius (3) of its path takes the whole 45, whether it passed through them or only close by (a wall in between stops it), once per pass.
+  // It rebounds off walls, floors and ceilings up to 4 times, and every rebound is a fresh pass. 3 a second, 12 in the magazine: seven body hits to drop 300.
+  { id: 'energy_rifle', name: 'Energy Rifle', type: 'Energy Rifle', slot: 'primary',
+    mag: 12, reserve: 36, damage: 45, fireRate: 333, reloadTime: 2000,
+    headshotMult: 1, auto: true, pellets: 1, spread: 0.004, adsZoom: 46, bulletSpeed: 100, bulletSpeedMult: 0.4348, noReload: false,   // (every round flies 2.3x its listed speed, so this one is slowed to fly its own 100)
+    bulletColor: 0x8f6bff, bulletSize: 0.30, beamRadius: 3, bounce: { maxBounces: 4, speedMult: 1.0 }, flightMs: 3400,
+    recoil: { up: 0.012, side: 0.006, climb: 0.20, max: 2.0, recover: 8, adsMult: 0.55 } },
   { id: 'm4_commando', name: 'M4 Commando', type: 'AR', slot: 'primary',
     // 🎖️ Mobile precision: the AK20's lighter, quicker-handling cousin. 28 a shot at 10 a second is 280 DPS (the AK20's 300), a 24-round magazine,
     // and you carry it 5% faster (moveMult: only while it is in your hands). Bullets fly dead straight, like the AK20's.
@@ -999,7 +1007,7 @@ Object.assign(WEAPON_FALLOFF, {
   minigun: FALLOFF_MINIGUN, m134: FALLOFF_MINIGUN,
   ak20: FALLOFF_AR, burst: { near: 31, far: 76, min: 0.68 }, cyroclasm: FALLOFF_AR,
   freeze_gun: FALLOFF_AR, plasma_carbine: FALLOFF_AR, arc_rifle: FALLOFF_AR, flechette: FALLOFF_AR,
-  burst_cannon: FALLOFF_AR, twin_ar: FALLOFF_AR, m4_commando: FALLOFF_AR, glassmaker: FALLOFF_AR, auto_revolver: FALLOFF_AR,
+  burst_cannon: FALLOFF_AR, twin_ar: FALLOFF_AR, m4_commando: FALLOFF_AR, energy_rifle: FALLOFF_NONE, glassmaker: FALLOFF_AR, auto_revolver: FALLOFF_AR,
   xm7: { near: 38, far: 96, min: 0.72 }, hkmp7: FALLOFF_SMG, m4a1_arena: FALLOFF_ARENA_AR,
   paintball: FALLOFF_PAINT, nail_gun: FALLOFF_PAINT, sticker_blaster: FALLOFF_PAINT,
   srx: FALLOFF_SNIPER, railgun: FALLOFF_SNIPER, coilgun: FALLOFF_SNIPER, amr: FALLOFF_SNIPER, barrett: FALLOFF_SNIPER,
@@ -1601,7 +1609,7 @@ const BOT_MOVE_INTERVAL = 0.033; // send position updates every 33ms (30 Hz, lik
 // Admin items are NOT priced — they're claimed via promo codes only.
 const WEAPON_COSTS = {
   // Primaries — ARs / SMGs
-  ak20: 250, m4_commando: 400,  mp40: 200, p90: 350, vector: 300, burst: 280,
+  ak20: 250, m4_commando: 400, energy_rifle: 440,  mp40: 200, p90: 350, vector: 300, burst: 280,
   // Primaries — Shotguns
   sg8: 220,
   // Primaries — Snipers / Marksman
@@ -4155,6 +4163,7 @@ function weaponAudioProfile(id, baseWeapon) {
   if (lowerId === 'omega_pistol') return { kind:'crack', vol:.50, dur:.22, f1:110, f2:35, action:'single' };
   if (lowerId === 'flamethrower') return { kind:'flamethrower', vol:0.24, dur:0.18, f1:95, f2:58 };
   if (lowerId === 'plasma_carbine') return { kind:'energy', vol:0.30, dur:0.14, f1:880, f2:540 };
+  if (lowerId === 'energy_rifle')   return { kind:'energy', vol:0.34, dur:0.22, f1:760, f2:260 };
   if (lowerId === 'railgun')        return { kind:'energy', vol:0.42, dur:0.32, f1:1620, f2:120 };
   if (lowerId === 'coilgun')        return { kind:'energy', vol:0.36, dur:0.24, f1:1320, f2:160 };
   if (lowerId === 'arc_rifle')      return { kind:'arc',    vol:0.30, dur:0.13, f1:1240, f2:380 };
@@ -22956,7 +22965,7 @@ function muzzleStyleFor(w) {
   if (id === 'flamethrower') return MUZZLE_STYLES.rapid;                                                              // (a stream, not a bang)
   if (/shotgun/.test(type) || (w.pellets || 1) >= 4) return MUZZLE_STYLES.shotgun;
   if (/^(railgun|coilgun|barrett|amr|srx)/.test(id)) return MUZZLE_STYLES.heavy;        // (a railgun sounds like energy, and fires like artillery)
-  if (kind === 'energy' || kind === 'arc' || kind === 'freeze' || kind === 'pop') return MUZZLE_STYLES.energy;
+  if (kind === 'energy' || kind === 'energy_beam' || kind === 'arc' || kind === 'freeze' || kind === 'pop') return MUZZLE_STYLES.energy;
   if (/sniper|marksman|anti-material|anti material|cannon|railgun/.test(type) || kind === 'crack' || kind === 'boom' || (w.damage || 0) >= 90) return MUZZLE_STYLES.heavy;
   if (w.auto && (w.fireRate || 999) <= 75) return MUZZLE_STYLES.rapid;                    // 13+ rounds a second: an SMG, a minigun
   if (/pistol|revolver|secondary/.test(type) || w.slot === 'secondary' || kind === 'pistol') return MUZZLE_STYLES.pistol;
@@ -41460,8 +41469,55 @@ const weaponModels = [
   buildPhaseRifle(),  // phase_rifle
   buildChronoPistol(),  // chrono_pistol
   buildTwinBurst(),  // twin_burst
+  buildEnergyRifle(),  // energy_rifle
   buildM4Commando(),  // m4_commando
 ];
+function buildEnergyRifle() {
+  // ⚡ ENERGY RIFLE: a pale armoured receiver with a violet charge you can see in a glass tube along the top, three focusing rings down a dark barrel, and a lens at the
+  // muzzle. Glowing strips run down both flanks and the power cell glows through its window. The charge breathes; a shot flares the lens.
+  const g = new THREE.Group();
+  const steel = GUN_MATS.steel(), bright = GUN_MATS.bright(), inner = GUN_MATS.inner(), grip = GUN_MATS.grip(), poly = GUN_MATS.polymer();
+  const shell = new THREE.MeshPhongMaterial({ color: 0xdfe3ea, shininess: 120, specular: 0xffffff });
+  const dark  = new THREE.MeshPhongMaterial({ color: 0x23262e, shininess: 60, specular: 0x6a7080 });
+  const glow  = new THREE.MeshBasicMaterial({ color: 0x8f6bff });
+  const hot   = new THREE.MeshBasicMaterial({ color: 0xece4ff });
+  const glass = new THREE.MeshPhongMaterial({ color: 0x7a5cff, shininess: 160, specular: 0xffffff, transparent: true, opacity: 0.45, depthWrite: false });
+  gpBox(g, shell, 0.040, 0.050, 0.200, 0, 0.012, 0.030);                         // the receiver
+  gpBox(g, dark, 0.042, 0.010, 0.170, 0, -0.014, 0.030);                         // its lower band
+  gpBox(g, dark, 0.041, 0.006, 0.170, 0, 0.038, 0.030);                          // the top rail
+  [-1, 1].forEach(sd => gpBox(g, glow, 0.0026, 0.005, 0.150, sd * 0.0212, 0.012, 0.010));   // a glowing strip down each flank
+  gpCyl(g, glass, 0.017, 0.017, 0.130, 16, 0, 0.058, -0.040);                    // the charge tube
+  gpCyl(g, glow, 0.0085, 0.0085, 0.118, 12, 0, 0.058, -0.040);                   // ...and the charge in it
+  [-0.1085, 0.0285].forEach(z => gpCyl(g, dark, 0.0195, 0.0195, 0.010, 16, 0, 0.058, z));
+  gpCyl(g, dark, 0.016, 0.016, 0.150, 14, 0, 0.008, -0.190);                     // the barrel
+  for (let i = 0; i < 3; i++) {                                                  // three focusing rings, each with a lit edge
+    gpCyl(g, bright, 0.026 - i * 0.002, 0.026 - i * 0.002, 0.010, 18, 0, 0.008, -0.150 - i * 0.050);
+    gpCyl(g, glow, 0.0275 - i * 0.002, 0.0275 - i * 0.002, 0.003, 18, 0, 0.008, -0.150 - i * 0.050);
+  }
+  gpCyl(g, dark, 0.030, 0.021, 0.030, 18, 0, 0.008, -0.290);                     // the flared emitter
+  const lens = gpCyl(g, hot, 0.0135, 0.0135, 0.004, 16, 0, 0.008, -0.3065);     // and its lens
+  gpBox(g, dark, 0.030, 0.026, 0.056, 0, 0.0765, 0.040);                         // the sight
+  gpBox(g, glow, 0.012, 0.010, 0.004, 0, 0.0765, 0.070);
+  gpBox(g, poly, 0.030, 0.022, 0.050, 0, -0.024, 0.000);                         // the power cell and its window
+  gpBox(g, dark, 0.026, 0.080, 0.046, 0, -0.076, 0.000);
+  for (let i = 0; i < 4; i++) gpBox(g, glow, 0.028, 0.006, 0.014, 0, -0.048 - i * 0.020, 0.000);
+  gpPlate(g, grip, [[0.070, -0.024], [0.098, -0.038], [0.102, -0.110], [0.072, -0.124], [0.050, -0.064], [0.048, -0.030]], 0.034, 0);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.0036, 6, 12, Math.PI * 1.05), poly);
+  guard.rotation.set(0, Math.PI / 2, -0.4); guard.position.set(0, -0.036, 0.038); g.add(guard);
+  gpBox(g, bright, 0.005, 0.016, 0.005, 0, -0.026, 0.038, 0.2);                  // trigger
+  gpBox(g, shell, 0.036, 0.046, 0.124, 0, 0.010, 0.179);                         // the stock starts inside the body
+  gpBox(g, dark, 0.038, 0.048, 0.012, 0, 0.010, 0.246, 0.08);
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.034, 8, 7), new THREE.MeshBasicMaterial({ color: 0xc9b4ff }));
+  flash.visible = false; flash.position.set(0, 0.008, -0.322); g.add(flash);
+  g._flash = flash; g._kickZ = 0.010; g._greebled = true; g._handDetailed = true;
+  g._tick = (dt, now, assembling) => {
+    if (assembling) return;
+    glass.opacity = 0.36 + 0.14 * (0.5 + 0.5 * Math.sin(now * 3.1));              // the charge breathes
+    lens.visible = !(g._reloadStart && g._reloadDur && !g._inspectMode) || Math.sin(now * 40) > 0;   // and flickers while the cell is out
+  };
+  g._calm = () => { glass.opacity = 0.45; lens.visible = true; };
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
 function buildM4Commando() {
   // 🎖️ M4 Commando: the M4A1's shape in desert-olive furniture with a tan band round the handguard and a stripe down the top rail: the compact, quick carbine.
   const g = buildM4A1();
@@ -48677,6 +48733,7 @@ const PROJECTILE_KIND_BY_ID = {
   grenade_launcher:'grenade', firework_launcher:'grenade', mortar_rifle:'grenade',
   nebula_mortar:'grenade', pinball_launcher:'grenade', shockwave_launcher:'grenade',
   storm_cannon:'grenade', gravity_launcher:'grenade', potato_cannon:'grenade',
+  energy_rifle:'energy_beam',
   crossbow:'bolt', boombow:'bolt', boombow_ab:'bolt', boombow_c1:'bolt', dart_gun:'bolt', harpoon_gun:'bolt',
   slingshot:'stone', air_rifle:'bullet',
   // These five used to share the generic 'solid' ball, so a thrown knife flew
@@ -48859,6 +48916,24 @@ function _buildEnergy(tint, r) {
   const core = new THREE.Mesh(P.core, P.coreM); core.scale.y = 1.9; g.add(core);
   const halo = new THREE.Mesh(P.halo, P.haloM); halo.scale.y = 1.7; g.add(halo);
   const tail = new THREE.Mesh(P.tail, P.tailM); tail.rotation.x = Math.PI; tail.position.y = -r*3.2; g.add(tail);
+  g._alignToDir = true;
+  return g;
+}
+function _buildEnergyBeam(tint, r) {
+  // The Energy Rifle's round: a bright core in a halo, a tail of light behind it, and a faint bubble round the lot (the reach of its blast).
+  const c = tint || 0x8f6bff, len = Math.max(1.6, r * 7);
+  const P = _projCache('ebeam|' + c + '|' + r, () => ({
+    core: new THREE.SphereGeometry(r * 0.55, 12, 9), halo: new THREE.SphereGeometry(r * 1.5, 12, 9),
+    tail: new THREE.CylinderGeometry(r * 0.9, r * 0.12, len, 12, 1, true), zone: new THREE.SphereGeometry(r * 10, 16, 12),
+    coreM: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false }),
+    haloM: _glow(c), tailM: _glow(c),
+    zoneM: new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.05, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide }),
+  }));
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(P.core, P.coreM));
+  g.add(new THREE.Mesh(P.halo, P.haloM));
+  const tail = new THREE.Mesh(P.tail, P.tailM); tail.position.y = -len * 0.5; g.add(tail);
+  g.add(new THREE.Mesh(P.zone, P.zoneM));
   g._alignToDir = true;
   return g;
 }
@@ -50187,6 +50262,7 @@ function makeBulletMesh(color, size, weaponId, own, lookArg) {
     case 'grenade': return _buildGrenade(color, r);
     case 'bolt':    return _buildBolt(color, r);
     case 'energy':  return _buildEnergy(color, r);
+    case 'energy_beam': return _buildEnergyBeam(color, r);
     case 'beam':    return _buildBeamShot(color, r);
     case 'icebeam': return _buildBeamShot(color || 0xbdf3ff, Math.max(r, 0.075));
     case 'ball_lightning': return _buildBallLightning(color, r);
@@ -65075,6 +65151,11 @@ cycler:[K(.14,{py:.02,rx:.14,rz:.08,hy:-.02}), K(.28,{py:.04,rx:.24,rz:.12,hy:-.
         K(.40,{py:.04,rx:.26,rz:.12,hx:-.05,hy:-.13,hr:.6}), K(.54,{py:.04,rx:.26,rz:.12,hy:-.06,hz:-.02}),
         K(.66,{py:.05,rx:.24,rz:.10,hy:-.01}), K(.75,{py:.02,rx:.08,rz:.03}), K(.81,{py:.05,rx:.14,rz:.06}),
         K(.87,{py:.02,rx:.08,rz:.03}), K(.93,{py:.05,rx:.14,rz:.06}), K(.98,{py:.02,rx:.06})],
+energy_rifle:[K(.09,{py:.03,rx:.20,rz:-.12,hy:-.04}), K(.22,{py:.05,rx:.28,rz:-.16,hy:-.14,hz:.02}),
+                K(.32,{py:.05,rx:.30,rz:-.16,hx:.08,hy:-.19,hr:-.7}), K(.45,{py:.06,rx:.30,rz:-.16,hx:-.03,hy:-.23,hz:.02}),
+                K(.57,{py:.06,rx:.30,rz:-.16,hy:-.11,hz:.05}), K(.68,{py:.05,rx:.32,rz:-.16,hy:-.02,hz:.06}),
+                K(.76,{py:.08,rx:.28,rz:-.14,hy:0,hz:.03}), K(.84,{py:.03,rx:.10,rz:-.06,hy:.05,hz:-.05,hr:-.5}),
+                K(.90,{py:.05,rx:.16,rz:-.08}), K(.96,{py:.02,rx:.06,rz:-.02})],
 plasma_carbine:[K(.09,{py:.03,rx:.20,rz:-.12,hy:-.04}), K(.22,{py:.05,rx:.28,rz:-.16,hy:-.14,hz:.02}),
                 K(.32,{py:.05,rx:.30,rz:-.16,hx:.08,hy:-.19,hr:-.7}), K(.45,{py:.06,rx:.30,rz:-.16,hx:-.03,hy:-.23,hz:.02}),
                 K(.57,{py:.06,rx:.30,rz:-.16,hy:-.11,hz:.05}), K(.68,{py:.05,rx:.32,rz:-.16,hy:-.02,hz:.06}),
@@ -65395,6 +65476,7 @@ const INSPECT_EXACT = {
   cycler: INSPECT_LIBRARY.energy_tune,
   taser: INSPECT_LIBRARY.energy_tune,
   plasma_carbine: INSPECT_LIBRARY.energy_tune,
+  energy_rifle: INSPECT_LIBRARY.energy_tune,
   arc_rifle: INSPECT_LIBRARY.energy_tune,
   arc_torrent: INSPECT_LIBRARY.energy_tune,
 };
@@ -66304,6 +66386,7 @@ const RELOAD_PROPS = {
   lever:[RP(.19,'case',null,1,'breech'),RP(.38,'case'),RP(.57,'case'),RP(.76,'case'),RP(.94,'round','arrive',1,'breech')],
   coilgun:[RP(.32,'mag'),RP(.57,'mag','arrive')],
   plasma_carbine:[RP(.32,'cell'),RP(.57,'cell','arrive')],
+  energy_rifle:[RP(.32,'cell'),RP(.57,'cell','arrive')],
   airburst_projector:[RP(.31,'mag'),RP(.56,'mag','arrive'),RP(.85,'grenade','arrive',1,'breech')],
   pulse_needle:[RP(.37,'mag'),RP(.62,'mag','arrive')],
   nail_gun:[RP(.37,'mag'),RP(.62,'mag','arrive'),RP(.83,'nail',null,2,'breech')],
@@ -66639,7 +66722,7 @@ function _bakeReloadPostures(T) {
   const GROUPS = {
     pistol: 'pistol twin_burst five_seven glock18 m1911 desert_eagle hand_cannon switchblade_gun duelist_pistol signal_pistol taser flare nail_gun gatecrasher',
     smg: 'vector mp40 hkmp7 machine_pistol smart_smg p90 p90_spec cycler',
-    rifle: 'ak20 xm7 burst swarm_rifle twin_ar lancer flechette burst_cannon m4a1_arena coilgun plasma_carbine pulse_needle',
+    rifle: 'ak20 xm7 burst swarm_rifle twin_ar lancer flechette burst_cannon m4a1_arena coilgun plasma_carbine energy_rifle pulse_needle',
     lmg: 'rpd mg42 minigun chain_gun gau19 m134 mk44',
     sniper: 'srx barrett amr lever m1_garand mauser air_rifle railgun crossbow',
     shotgun: 'sg8 shorty sawed_off boomstick dart_gun',
@@ -68466,7 +68549,7 @@ function _pickFinisher(weaponId) {
   const kind = projectileKind(weaponId, WEAPONS.find(w => w.id === weaponId));
   const id = String(weaponId || '');
   if (kind === 'ice' || FROST_WEAPONS.has(id)) return FINISHERS.find(f => f.id === 'shatter');
-  if (kind === 'energy' || ELECTRIC_WEAPONS.has(id)) return FINISHERS.find(f => f.id === 'lightning');
+  if (kind === 'energy' || kind === 'energy_beam' || ELECTRIC_WEAPONS.has(id)) return FINISHERS.find(f => f.id === 'lightning');
   if (/black|void|gravity|event_horizon|magnetar|quantum/.test(id)) return FINISHERS.find(f => f.id === 'collapse');
   if (/confetti|paintball|sticker|firework/.test(id)) return FINISHERS.find(f => f.id === 'confetti');
   if (/melee|knife|katana|sabre|axe|blade|chainsaw|fists|bat|sledge|hammer/.test(id)) return FINISHERS.find(f => f.id === 'spin');
@@ -70060,6 +70143,39 @@ function interceptConeRockets(dt) {
     }
   }
 }
+// ⚡ The Energy Rifle's bolt is wide: whoever is within its radius of the path it swept this frame takes the hit, once per pass (a rebound starts a new pass),
+// unless a wall stands between. The bolt itself flies on, through them.
+function _beamSweep(b, x0, y0, z0, wallPt) {
+  const R = b._beamR; if (!R) return;
+  const end = wallPt || _bpos;
+  const sx = end.x - x0, sy = end.y - y0, sz = end.z - z0, L2 = sx * sx + sy * sy + sz * sz;
+  if (!b._beamHit) b._beamHit = new Set();
+  for (const [pid, mesh] of Object.entries(remoteMeshes)) {
+    if (b._beamHit.has(pid) || !mesh.visible || players[pid]?.dead || (mesh._ragdoll && !players[pid]?.dead)) continue;
+    const cx = mesh.position.x, cz = mesh.position.z, cy = mesh.position.y + 1.0 * (mesh._bodyScale || 1);
+    const t = L2 > 1e-6 ? Math.max(0, Math.min(1, ((cx - x0) * sx + (cy - y0) * sy + (cz - z0) * sz) / L2)) : 0;
+    const qx = x0 + t * sx, qy = y0 + t * sy, qz = z0 + t * sz;
+    const dx = qx - cx, dy = qy - cy, dz = qz - cz;
+    if (dx * dx + dy * dy + dz * dz > R * R) continue;
+    if (!hasLineOfSight(qx, qz, cx, cz, qy, cy)) continue;                         // a wall between the bolt and the body
+    b._beamHit.add(pid);
+    const at = new THREE.Vector3(cx, cy, cz);
+    spawnHitParticle(at);
+    const dummy = TRAINING_DUMMIES.find(d => d.id === pid);
+    if (dummy) handleDummyHit(dummy, mesh, { damage: Math.round(getClientWeaponDamage(b.weaponId)), headshot: false, falloff: 1, headMiss: null, weaponId: b.weaponId }, at.clone());
+    else emitHit(pid, `${b.id}_${b._beamN || 0}_${pid}`, b.weaponId, at, false, {});
+  }
+}
+function _beamBounce(b, normal, pt, spec) {
+  const dn = b.dir.x * normal.x + b.dir.y * normal.y + b.dir.z * normal.z;
+  b.dir.x -= 2 * dn * normal.x; b.dir.y -= 2 * dn * normal.y; b.dir.z -= 2 * dn * normal.z;
+  b.dir.normalize();
+  b.mesh.position.copy(pt).addScaledVector(b.dir, 0.15);
+  if (b.mesh._alignToDir) b.mesh.quaternion.setFromUnitVectors(_BEAM_Y, b.dir);
+  b.speed *= spec.bounce.speedMult || 1;
+  b._beamHit = null; b._beamN = (b._beamN || 0) + 1;                                 // a rebound is a fresh pass
+}
+const _BEAM_Y = new THREE.Vector3(0, 1, 0);
 function updateBullets(dt) {
   const now = Date.now();
   _updateDonutPuffs(dt);
@@ -70248,6 +70364,17 @@ function updateBullets(dt) {
           }
         }
         if (wallHit && !b.isOwn) {
+          if (b._beamR === undefined) b._beamR = projectileWeaponSpec(b.weaponId)?.beamRadius || 0;
+          if (b._beamR && !b.botId) {                                              // somebody else's Energy Rifle: it rebounds on your screen too
+            const spec = projectileWeaponSpec(b.weaponId);
+            if (spec && spec.bounce && (b.bouncesLeft == null ? spec.bounce.maxBounces : b.bouncesLeft) > 0) {
+              if (b.bouncesLeft == null) b.bouncesLeft = spec.bounce.maxBounces;
+              b.bouncesLeft--;
+              spawnHitParticle(wallHitPt);
+              _beamBounce(b, wallHitNormal, wallHitPt, spec);
+              continue;
+            }
+          }
           if (b.skinLook && b.skinLook.hit && wallHitPt.distanceToSquared(camera.position) < 3600) skinHitFX(b.skinLook.hit, wallHitPt.clone(), false);   // their Hacker rounds puff on the wall too (close enough to see)
           spawnHitParticle(wallHitPt);
           if (EXPLOSIVE_KINDS.has(projectileKind(b.weaponId, WEAPONS.find(w => w.id === b.weaponId)))) {
@@ -70281,8 +70408,11 @@ function updateBullets(dt) {
       // standard way to test sphere-vs-sphere with a point-vs-sphere check.
       const bulletR = b.size || 0;
       const headR = 0.28 + bulletR, bodyR = 0.65 + bulletR;
+      if (b._beamR === undefined) b._beamR = projectileWeaponSpec(b.weaponId)?.beamRadius || 0;
+      if (b._beamR) _beamSweep(b, px0, py0, pz0, wallHitPt);                       // a wide bolt: everyone near its path, not whoever it touches
 
       for (const [pid, mesh] of Object.entries(remoteMeshes)) {
+        if (b._beamR) break;
         if (b._pierced && b._pierced.has(pid)) continue;                     // a round that has already gone through this one does not hit it twice
         if (mesh._ragdoll && !players[pid]?.dead) {
           const hit = window.PVP_RAGDOLL?.hit(mesh, new THREE.Vector3(px0,py0,pz0), _bpos, bulletR);
@@ -70403,6 +70533,7 @@ function updateBullets(dt) {
           // Initialize bounces remaining
           if (b.bouncesLeft == null) b.bouncesLeft = wSpec.bounce.maxBounces;
           b.bouncesLeft--;
+          if (b._beamR) { b._beamHit = null; b._beamN = (b._beamN || 0) + 1; }   // (the Energy Rifle: a rebound is a fresh pass)
           // Reflect off the surface that was actually hit: d' = d - 2(d.n)n.
           // This used to re-walk wallColliders to find the box and flip either X
           // or Z, whichever face was nearer. That could not bounce off the FLOOR
@@ -70419,6 +70550,7 @@ function updateBullets(dt) {
           b.mesh.position.copy(wallHitPt).addScaledVector(b.dir, 0.15);
           // Speed up per bounce
           b.speed *= wSpec.bounce.speedMult || 1.2;
+          if (b._beamR && b.mesh._alignToDir) b.mesh.quaternion.setFromUnitVectors(_BEAM_Y, b.dir);
           // Out of energy on a floor or ledge: it stops and lies there until it expires.
           if (wSpec.linger && wallHitNormal.y > 0.5 && b.speed < (wSpec.linger.restSpeed || 14)) {
             b.rest = true; b.speed = 0;
@@ -73198,7 +73330,7 @@ function applyBotDamageToPlayer(weaponId, botId, damageOverride, reflectedDamage
       else if (weaponId === 'cyroclasm' || weaponId === 'cyroclasm_laser') chillPlayer();   // a chill, not a stack
       else playerFrostSlow = Math.max(0, playerFrostSlow - 8);
     }
-    if (k === 'energy' && !isDead) flashScreen('rgba(255,255,255,0.55)', 260);
+    if ((k === 'energy' || k === 'energy_beam') && !isDead) flashScreen('rgba(255,255,255,0.55)', 260);
   }
   // 🎨 Weapon-specific vision effect (paintball splatter, etc.) on top of the normal flash.
   {
@@ -76434,7 +76566,7 @@ const DICE_POOL = {
   SS: ['gunslinger', 'ak20', 'event_horizon', 'omega_pistol', 'm:lightsabre', 'u:orbital_strike'],
   S:  ['air_rifle', 'vector', 'minigun', 'revolver', 'lever', 'p90', 'storm_core', 'quantum_repeater', 'abs_zero', 'prism_engine',
        'solar_lance', 'm:titan_hammer', 'u:specter_drone', 'u:hunter_drone'],
-  A:  ['burst', 'rpd', 'slingshot', 'mauser', 'chain_gun', 'hand_cannon', 'nail_gun', 'grenade_launcher', 'mp40', 'akimbo',
+  A:  ['burst', 'energy_rifle', 'rpd', 'slingshot', 'mauser', 'chain_gun', 'hand_cannon', 'nail_gun', 'grenade_launcher', 'mp40', 'akimbo',
        'flechette', 'magnetar', 'void_harvester', 'boomstick', 'pinball_launcher', 'seismic_hammer',
        'm:chainsaw', 'm:katana', 'm:gravity_hammer',
        'u:black_hole_seed', 'u:satchel', 'u:mini_turret', 'u:drone_strike', 'u:guardian_drone', 'u:tesla_coil'],

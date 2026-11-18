@@ -6417,6 +6417,71 @@
    ]
   },
   {
+   "id": "energy_rifle",
+   "name": "Energy Rifle",
+   "type": "Energy Rifle",
+   "slot": "primary",
+   "archived": false,
+   "damage": 45,
+   "pellets": 1,
+   "headshotMult": 1,
+   "headDamage": 45,
+   "damagePerShot": 45,
+   "fireRateMs": 333,
+   "shotsPerSec": 3.003,
+   "auto": true,
+   "dps": 135.135,
+   "magazine": 12,
+   "reserve": 36,
+   "reloadSec": 2,
+   "reloadStyle": "magazine",
+   "noReload": false,
+   "timeToEmptySec": 3.663,
+   "bulletSpeed": 100,
+   "adsZoom": 46,
+   "projectileSpeed": 100.004,
+   "falloff": {
+    "nearM": 9999,
+    "farM": 9999,
+    "minPct": 100
+   },
+   "damageByRange": [
+    45,
+    45,
+    45,
+    45,
+    45,
+    45,
+    45,
+    45,
+    45,
+    45,
+    45
+   ],
+   "shotsToKill": {
+    "body": 7,
+    "head": 7
+   },
+   "ttkBodySec": 1.998,
+   "scatterDeg": 0.229,
+   "bloom": null,
+   "recoil": {
+    "kickPerShotDeg": 0.43,
+    "sideKickDeg": 0.361,
+    "climbPerShotPct": 6,
+    "climbMaxX": 1.85,
+    "steadyKickDeg": 0.795,
+    "shotsToMaxClimb": 15,
+    "recoverPerSec": 8,
+    "adsKickPct": 12
+   },
+   "screenKick": 0.781,
+   "ability": null,
+   "traits": [
+    "Bounces off surfaces"
+   ]
+  },
+  {
    "id": "m4_commando",
    "name": "M4 Commando",
    "type": "AR",
