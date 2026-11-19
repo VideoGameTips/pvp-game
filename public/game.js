@@ -70270,13 +70270,13 @@ function interceptConeRockets(dt) {
 }
 // 🌀 The Gravity Cannon's spheres. A sphere in flight drags what is near it toward itself -- you, if it is somebody else's (each player moves only themselves), and the bots of whoever
 // fired it -- but only a drag: it adds a little speed toward the sphere, capped well under a run, and you steer, aim and shoot throughout. It goes off on a surface or at the end of its range.
-const GRAV_PULL_CAP = 9;
+const GRAV_PULL_CAP = 5;      // (was 9: the pull was far too strong; a sphere now only nudges you, a little under a walk)
 function _gravPull(b, dt) {
   const G = b._grav, p = b.mesh.position;
   if (!b.isOwn && !isDead && !pilotedVehicle && !pilotedMortar && !inLobby && !(b.ownerId && friendlyFireBlocked(myId, b.ownerId))) {
     const dx = p.x - camera.position.x, dy = p.y - camera.position.y, dz = p.z - camera.position.z, d3 = Math.sqrt(dx * dx + dy * dy + dz * dz), hd = Math.hypot(dx, dz);
     if (d3 < G.pullR && hd > 0.2) {
-      const acc = 46 * (1 - d3 / G.pullR), before = Math.hypot(_extVel.x, _extVel.z);
+      const acc = 20 * (1 - d3 / G.pullR), before = Math.hypot(_extVel.x, _extVel.z);
       _extVel.x += dx / hd * acc * dt; _extVel.z += dz / hd * acc * dt;
       const sp = Math.hypot(_extVel.x, _extVel.z), cap = Math.max(before, GRAV_PULL_CAP);
       if (sp > cap) { _extVel.x *= cap / sp; _extVel.z *= cap / sp; }
@@ -70287,9 +70287,9 @@ function _gravPull(b, dt) {
     if (bot.dead || friendlyFireBlocked(bot.id, myId)) continue;
     const dx = p.x - bot.x, dz = p.z - bot.z, d = Math.hypot(dx, dz);
     if (d > G.pullR || d < 0.3 || Math.abs(p.y - 1.0) > G.pullR) continue;
-    const acc = 138 * (1 - d / G.pullR);
-    bot.kbVX = Math.max(-16, Math.min(16, (bot.kbVX || 0) + dx / d * acc * dt));
-    bot.kbVZ = Math.max(-16, Math.min(16, (bot.kbVZ || 0) + dz / d * acc * dt));
+    const acc = 60 * (1 - d / G.pullR);      // (was 138, capped at 16: bots were dragged about three times as hard as a player, and far too hard)
+    bot.kbVX = Math.max(-7, Math.min(7, (bot.kbVX || 0) + dx / d * acc * dt));
+    bot.kbVZ = Math.max(-7, Math.min(7, (bot.kbVZ || 0) + dz / d * acc * dt));
   }
 }
 const _GRAV_FX = [], _GRAV_POP_GEO = new THREE.SphereGeometry(1, 14, 10);
