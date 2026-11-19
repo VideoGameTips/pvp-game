@@ -937,12 +937,12 @@ const WEAPONS = [
     heatShots: 2, heatCooldown: 920, quietBurst: true, bulletColor: 0xffa03a, falloffLift: 0.05,
     recoil: { up: 0.010, side: 0.006, climb: 0.18, max: 1.8, recover: 8, adsMult: 0.55 } },
   // ⚡ Energy Rifle: a slow, fat bolt of energy that bounces. Nothing about it is hitscan: it travels at 100, so it can be seen coming and dodged, and it is wide --
-  // anyone within beamRadius (3) of its path takes the whole 45, whether it passed through them or only close by (a wall in between stops it), once per pass.
+  // anyone within beamRadius (1.4) of its path takes the whole 45, whether it passed through them or only close by (a wall in between stops it), once per pass.
   // It rebounds off walls, floors and ceilings up to 4 times, and every rebound is a fresh pass. 3 a second, 12 in the magazine: seven body hits to drop 300.
   { id: 'energy_rifle', name: 'Energy Rifle', type: 'Energy Rifle', slot: 'primary',
     mag: 12, reserve: 36, damage: 45, fireRate: 333, reloadTime: 2000,
     headshotMult: 1, auto: true, pellets: 1, spread: 0.004, adsZoom: 46, bulletSpeed: 100, bulletSpeedMult: 0.4348, noReload: false,   // (every round flies 2.3x its listed speed, so this one is slowed to fly its own 100)
-    bulletColor: 0x8f6bff, bulletSize: 0.30, beamRadius: 3, afterTrailMs: 800, bounce: { maxBounces: 4, speedMult: 1.0 }, flightMs: 3400,
+    bulletColor: 0x8f6bff, bulletSize: 0.30, beamRadius: 1.4, afterTrailMs: 800, bounce: { maxBounces: 4, speedMult: 1.0 }, flightMs: 3400,
     recoil: { up: 0.012, side: 0.006, climb: 0.20, max: 2.0, recover: 8, adsMult: 0.55 } },
   // 🌀 Gravity Cannon: one pull sends five slow spheres out together (and costs five rounds: 7 volleys a magazine). Each pulls everyone within 5 toward it as it flies -- a pull, never
   // a hold: you can still move, aim and shoot -- and goes through whoever it touches for 13. It goes off on a solid surface or at the end of its range, 20 to everyone within 4;
@@ -49001,7 +49001,7 @@ function _buildEnergyBeam(tint, r) {
   const c = tint || 0x8f6bff, len = Math.max(1.6, r * 7);
   const P = _projCache('ebeam|' + c + '|' + r, () => ({
     core: new THREE.SphereGeometry(r * 0.55, 12, 9), halo: new THREE.SphereGeometry(r * 1.5, 12, 9),
-    tail: new THREE.CylinderGeometry(r * 0.9, r * 0.12, len, 12, 1, true), zone: new THREE.SphereGeometry(r * 10, 16, 12),
+    tail: new THREE.CylinderGeometry(r * 0.9, r * 0.12, len, 12, 1, true), zone: new THREE.SphereGeometry(r * 4.67, 16, 12),
     coreM: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false }),
     haloM: _glow(c), tailM: _glow(c),
     zoneM: new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.05, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide }),

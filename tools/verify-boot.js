@@ -6989,8 +6989,8 @@ if (ok && process.argv.includes('--energyrifle')) {
     const issues = [];
     const w = WEAPONS.find(x => x.id === 'energy_rifle'), idx = WEAPONS.findIndex(x => x.id === 'energy_rifle');
     if (!w) return ['the Energy Rifle is missing'];
-    if (w.slot !== 'primary' || w.damage !== 45 || w.mag !== 12 || Math.round(1000 / w.fireRate) !== 3 || w.bulletSpeed !== 100 || w.beamRadius !== 3 || w.bounce.maxBounces !== 4 || w.reloadTime !== 2000)
-      issues.push('stats should be primary, 45 damage, 3 a second, 12 rounds, speed 100, radius 3, 4 bounces, 2 s reload: ' + JSON.stringify({ s: w.slot, d: w.damage, m: w.mag, f: w.fireRate, v: w.bulletSpeed, r: w.beamRadius, b: w.bounce, rl: w.reloadTime }));
+    if (w.slot !== 'primary' || w.damage !== 45 || w.mag !== 12 || Math.round(1000 / w.fireRate) !== 3 || w.bulletSpeed !== 100 || w.beamRadius !== 1.4 || w.bounce.maxBounces !== 4 || w.reloadTime !== 2000)
+      issues.push('stats should be primary, 45 damage, 3 a second, 12 rounds, speed 100, radius 1.4, 4 bounces, 2 s reload: ' + JSON.stringify({ s: w.slot, d: w.damage, m: w.mag, f: w.fireRate, v: w.bulletSpeed, r: w.beamRadius, b: w.bounce, rl: w.reloadTime }));
     if (Math.ceil(300 / w.damage) !== 7) issues.push('seven body hits to eliminate 300');
     if (weaponModels.length !== WEAPONS.length) issues.push('WEAPONS and weaponModels must stay parallel: ' + WEAPONS.length + ' vs ' + weaponModels.length);
     const mod = weaponModels[idx];
@@ -7014,12 +7014,12 @@ if (ok && process.argv.includes('--energyrifle')) {
       emitHit = (pid, bid, wid) => { hits.push({ pid, bid, wid }); };
       hasLineOfSight = () => true;
       // ── who a pass reaches
-      const b = { id: 'b1', weaponId: 'energy_rifle', _beamR: 3 };
+      const b = { id: 'b1', weaponId: 'energy_rifle', _beamR: 1.4 };
       _bpos.set(0, 1, -20);
-      mk('near', 2.5, -10); mk('far', 3.6, -10); mk('dead', 0, -12, true); mk('past', 0, -30);
+      mk('near', 1.2, -10); mk('far', 1.7, -10); mk('dead', 0, -12, true); mk('past', 0, -30);
       _beamSweep(b, 0, 1, 0, null);
       const ids = hits.map(h => h.pid).sort().join();
-      if (ids !== 'near') issues.push('within 3 of the path, alive, in front of it: only near should be hit, got ' + ids);
+      if (ids !== 'near') issues.push('within 1.4 of the path, alive, in front of it: only near should be hit, got ' + ids);
       _beamSweep(b, 0, 1, 0, null);
       if (hits.length !== 1) issues.push('once per pass: ' + hits.length);
       if (hits[0] && hits[0].wid !== 'energy_rifle') issues.push('hit carries the weapon id');
