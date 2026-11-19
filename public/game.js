@@ -942,7 +942,7 @@ const WEAPONS = [
   { id: 'energy_rifle', name: 'Energy Rifle', type: 'Energy Rifle', slot: 'primary',
     mag: 12, reserve: 36, damage: 45, fireRate: 333, reloadTime: 2000,
     headshotMult: 1, auto: true, pellets: 1, spread: 0.004, adsZoom: 46, bulletSpeed: 100, bulletSpeedMult: 0.4348, noReload: false,   // (every round flies 2.3x its listed speed, so this one is slowed to fly its own 100)
-    bulletColor: 0x8f6bff, bulletSize: 0.30, beamRadius: 3, bounce: { maxBounces: 4, speedMult: 1.0 }, flightMs: 3400,
+    bulletColor: 0x8f6bff, bulletSize: 0.30, beamRadius: 3, afterTrailMs: 800, bounce: { maxBounces: 4, speedMult: 1.0 }, flightMs: 3400,
     recoil: { up: 0.012, side: 0.006, climb: 0.20, max: 2.0, recover: 8, adsMult: 0.55 } },
   { id: 'm4_commando', name: 'M4 Commando', type: 'AR', slot: 'primary',
     // 🎖️ Mobile precision: the AK20's lighter, quicker-handling cousin. 28 a shot at 10 a second is 280 DPS (the AK20's 300), a 24-round magazine,
@@ -70143,6 +70143,51 @@ function interceptConeRockets(dt) {
     }
   }
 }
+// ⚡ The Energy Rifle's afterglow: behind the bolt a thick ribbon of light is laid down and stays for afterTrailMs (0.8 s), shrinking and fading as it goes. It is cut in
+// short capsules, one per frame, from where the bolt was to where it is; a rebound ends one run and starts another at the wall.
+const _TRAIL = { segs: [], levels: null, glowGeo: null, coreGeo: null };
+const _TRAIL_MAX = 220;
+function _trailInit(color) {
+  if (_TRAIL.levels) return;
+  _TRAIL.glowGeo = new THREE.CylinderGeometry(1, 1, 1, 10, 1, true);
+  _TRAIL.coreGeo = new THREE.CylinderGeometry(1, 1, 1, 8, 1, true);
+  _TRAIL.levels = [];
+  for (let i = 0; i < 10; i++) {
+    const k = 1 - i / 10, f = Math.pow(k, 1.4);
+    _TRAIL.levels.push({
+      glow: new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.62 * f, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
+      core: new THREE.MeshBasicMaterial({ color: 0xf1eaff, transparent: true, opacity: 0.95 * f, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
+    });
+  }
+}
+const _TRAIL_Y = new THREE.Vector3(0, 1, 0), _TRAIL_D = new THREE.Vector3();
+function _trailSeg(b, a, c) {
+  const spec = projectileWeaponSpec(b.weaponId); if (!spec || !spec.afterTrailMs) return;
+  const dx = c.x - a.x, dy = c.y - a.y, dz = c.z - a.z, len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  if (len < 0.02) return;
+  _trailInit(spec.bulletColor || 0x8f6bff);
+  const group = new THREE.Group();
+  const glow = new THREE.Mesh(_TRAIL.glowGeo, _TRAIL.levels[0].glow), core = new THREE.Mesh(_TRAIL.coreGeo, _TRAIL.levels[0].core);
+  group.add(glow); group.add(core);
+  group.position.set((a.x + c.x) / 2, (a.y + c.y) / 2, (a.z + c.z) / 2);
+  group.quaternion.setFromUnitVectors(_TRAIL_Y, _TRAIL_D.set(dx / len, dy / len, dz / len));
+  group.scale.set(1, len * 1.15, 1);                                               // (a little overlap, so a turn does not leave a gap)
+  glow.scale.set(0.34, 1, 0.34); core.scale.set(0.10, 1, 0.10);
+  scene.add(group);
+  _TRAIL.segs.push({ group, glow, core, born: Date.now(), ms: spec.afterTrailMs });
+  if (_TRAIL.segs.length > _TRAIL_MAX) { const old = _TRAIL.segs.shift(); scene.remove(old.group); }
+}
+function _updateTrails(now) {
+  const segs = _TRAIL.segs;
+  for (let i = segs.length - 1; i >= 0; i--) {
+    const s = segs[i], u = (now - s.born) / s.ms;
+    if (u >= 1) { scene.remove(s.group); segs.splice(i, 1); continue; }
+    const lv = _TRAIL.levels[Math.min(9, Math.floor(u * 10))];
+    s.glow.material = lv.glow; s.core.material = lv.core;
+    const r = 1 - 0.7 * u;                                                         // it thins as it fades
+    s.glow.scale.set(0.34 * r, 1, 0.34 * r); s.core.scale.set(0.10 * r, 1, 0.10 * r);
+  }
+}
 // ⚡ The Energy Rifle's bolt is wide: whoever is within its radius of the path it swept this frame takes the hit, once per pass (a rebound starts a new pass),
 // unless a wall stands between. The bolt itself flies on, through them.
 function _beamSweep(b, x0, y0, z0, wallPt) {
@@ -70167,6 +70212,7 @@ function _beamSweep(b, x0, y0, z0, wallPt) {
   }
 }
 function _beamBounce(b, normal, pt, spec) {
+  if (b._trailP) { _trailSeg(b, b._trailP, pt); b._trailP = null; }                  // the run ends at the wall
   const dn = b.dir.x * normal.x + b.dir.y * normal.y + b.dir.z * normal.z;
   b.dir.x -= 2 * dn * normal.x; b.dir.y -= 2 * dn * normal.y; b.dir.z -= 2 * dn * normal.z;
   b.dir.normalize();
@@ -70178,6 +70224,7 @@ function _beamBounce(b, normal, pt, spec) {
 const _BEAM_Y = new THREE.Vector3(0, 1, 0);
 function updateBullets(dt) {
   const now = Date.now();
+  _updateTrails(now);
   _updateDonutPuffs(dt);
   _updateLegendEmbers(dt);
   interceptConeRockets(dt);
@@ -70198,6 +70245,8 @@ function updateBullets(dt) {
     if (b.rest) continue;        // a pellet lying where it landed: nothing left to simulate
     // Save start position for swept (CCD) hit detection
     const px0 = b.mesh.position.x, py0 = b.mesh.position.y, pz0 = b.mesh.position.z;
+    if (b._trailOn === undefined) b._trailOn = !!projectileWeaponSpec(b.weaponId)?.afterTrailMs;
+    if (b._trailOn) { const tp = _bulletPrevTrail.set(px0, py0, pz0); if (b._trailP) _trailSeg(b, b._trailP, tp); (b._trailP || (b._trailP = new THREE.Vector3())).copy(tp); }
     // Projectiles that fall. Apply before moving so the swept collision segment
     // includes this frame's drop instead of letting arcing shots skim through
     // the floor for one frame.
@@ -70533,7 +70582,7 @@ function updateBullets(dt) {
           // Initialize bounces remaining
           if (b.bouncesLeft == null) b.bouncesLeft = wSpec.bounce.maxBounces;
           b.bouncesLeft--;
-          if (b._beamR) { b._beamHit = null; b._beamN = (b._beamN || 0) + 1; }   // (the Energy Rifle: a rebound is a fresh pass)
+          if (b._beamR) { b._beamHit = null; b._beamN = (b._beamN || 0) + 1; if (b._trailP) { _trailSeg(b, b._trailP, wallHitPt); b._trailP = null; } }   // (the Energy Rifle: a rebound is a fresh pass, and the trail turns with it)
           // Reflect off the surface that was actually hit: d' = d - 2(d.n)n.
           // This used to re-walk wallColliders to find the box and flip either X
           // or Z, whichever face was nearer. That could not bounce off the FLOOR

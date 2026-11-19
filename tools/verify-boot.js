@@ -7082,4 +7082,69 @@ if (ok && process.argv.includes('--energyrifle')) {
   if (all.length) { ok = false; console.log(all.join('\n')); }
 }
 
+// ENERGY RIFLE AFTERGLOW: the bolt leaves a thick trail that stays 0.8 s, thinning and fading, round its rebounds, and on other players' bolts.
+if (ok && process.argv.includes('--energytrail')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const w = WEAPONS.find(x => x.id === 'energy_rifle');
+    if (!w || w.afterTrailMs !== 800) return ['the Energy Rifle should keep its trail 800 ms'];
+    const keep = { now: Date.now, lb: localBullets.slice(), wc: wallColliders.slice(), rm: Object.assign({}, remoteMeshes) };
+    let clock = 5e9; Date.now = () => clock;
+    try {
+      for (const s of _TRAIL.segs.slice()) { scene.remove(s.group); } _TRAIL.segs.length = 0;
+      localBullets.length = 0; wallColliders.length = 0;
+      wallColliders.push(new THREE.Box3(new THREE.Vector3(-30, 0, -41), new THREE.Vector3(30, 8, -40)));
+      camera.position.set(200, 50, 200);
+      const step = () => { clock += 16; updateBullets(0.016); };
+      spawnLocalBullet(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, -1), 't1', true, w.bulletSpeed, w.bulletColor, w.bulletSize, 'energy_rifle');
+      const bl = localBullets.find(x => x.id === 't1');
+      for (let i = 0; i < 20; i++) step();
+      const n1 = _TRAIL.segs.length;
+      if (n1 < 15) issues.push('a bolt in flight lays a segment a frame: ' + n1);
+      // it follows the bolt: the newest segment is right behind it
+      const last = _TRAIL.segs[_TRAIL.segs.length - 1];
+      if (!(last.group.position.distanceTo(bl.mesh.position) < 4)) issues.push('the trail should end at the bolt: ' + last.group.position.distanceTo(bl.mesh.position).toFixed(2));
+      // all of it, nose to tail, is where the bolt has been: the first piece is near the muzzle
+      const first = _TRAIL.segs[0];
+      if (!(first.group.position.z > -6 && first.group.position.z < 0.5)) issues.push('the oldest piece sits near the muzzle: ' + first.group.position.z.toFixed(2));
+      // fade and thin
+      const g0 = first.glow.scale.x;
+      for (let i = 0; i < 20; i++) step();
+      if (!(first.glow.scale.x < g0) || !(first.glow.material.opacity < _TRAIL.levels[0].glow.opacity)) issues.push('it thins and fades as it ages');
+      // a rebound turns the trail with it: pieces on both sides of the wall (z about -40), the run closing at the wall
+      for (let i = 0; i < 20 && localBullets.includes(bl); i++) step();
+      if (!(bl.dir.z > 0)) issues.push('test setup: the bolt should have rebounded');
+      const zs = _TRAIL.segs.map(s => s.group.position.z);
+      const nearWall = _TRAIL.segs.some(s => s.group.position.z < -38.5);
+      if (!nearWall) issues.push('the run should reach the wall: min z ' + Math.min(...zs).toFixed(1));
+      // after it is gone every piece goes by 0.8 s, none before ~0.7
+      localBullets.length = 0;
+      const born = Math.max(..._TRAIL.segs.map(s => s.born));
+      clock = born + 700; updateBullets(0.016);
+      if (!_TRAIL.segs.length) issues.push('the newest piece should still be there at 0.7 s');
+      clock = born + 810; updateBullets(0.016);
+      if (_TRAIL.segs.length) issues.push('everything is gone by 0.8 s: ' + _TRAIL.segs.length + ' left');
+      // somebody else's bolt leaves one too
+      localBullets.length = 0;
+      spawnLocalBullet(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, -1), 'r1', false, w.bulletSpeed, w.bulletColor, w.bulletSize, 'energy_rifle', { ownerId: 'x' });
+      for (let i = 0; i < 12; i++) step();
+      if (_TRAIL.segs.length < 8) issues.push('another player\\'s bolt should leave a trail on your screen: ' + _TRAIL.segs.length);
+      // the cap
+      localBullets.length = 0;
+      for (let k = 0; k < 400; k++) _trailSeg({ weaponId: 'energy_rifle' }, new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -2));
+      if (_TRAIL.segs.length > 220) issues.push('the trail is capped: ' + _TRAIL.segs.length);
+      // another gun leaves nothing
+      const before = _TRAIL.segs.length; _trailSeg({ weaponId: 'ak20' }, new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -2));
+      if (_TRAIL.segs.length !== before) issues.push('only the Energy Rifle has an afterglow');
+    } catch (e) { issues.push('threw: ' + (e && e.stack || e)); }
+    finally {
+      Date.now = keep.now; for (const s of _TRAIL.segs.slice()) scene.remove(s.group); _TRAIL.segs.length = 0;
+      localBullets.length = 0; keep.lb.forEach(x => localBullets.push(x)); wallColliders.length = 0; keep.wc.forEach(x => wallColliders.push(x));
+    }
+    return issues;
+  })()`);
+  console.log('ENERGY RIFLE AFTERGLOW checks: a trail a frame behind the bolt, thinning and fading, gone in 0.8 s, turning at rebounds, on other players\' bolts, capped');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 process.exit(ok ? 0 : 1);
