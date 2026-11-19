@@ -6620,6 +6620,71 @@
    ]
   },
   {
+   "id": "thorncaster",
+   "name": "Thorncaster",
+   "type": "Thorn Launcher",
+   "slot": "primary",
+   "archived": false,
+   "damage": 32,
+   "pellets": 1,
+   "headshotMult": 1,
+   "headDamage": 32,
+   "damagePerShot": 32,
+   "fireRateMs": 111,
+   "shotsPerSec": 9.009,
+   "auto": true,
+   "dps": 288.288,
+   "magazine": 24,
+   "reserve": 72,
+   "reloadSec": 2.2,
+   "reloadStyle": "magazine",
+   "noReload": false,
+   "timeToEmptySec": 2.553,
+   "bulletSpeed": 140,
+   "adsZoom": 50,
+   "projectileSpeed": 140.006,
+   "falloff": {
+    "nearM": 9999,
+    "farM": 9999,
+    "minPct": 100
+   },
+   "damageByRange": [
+    32,
+    32,
+    32,
+    32,
+    32,
+    32,
+    32,
+    32,
+    32,
+    32,
+    32
+   ],
+   "shotsToKill": {
+    "body": 8,
+    "head": 8
+   },
+   "ttkBodySec": 0.777,
+   "scatterDeg": 0.688,
+   "bloom": null,
+   "recoil": {
+    "kickPerShotDeg": 0.43,
+    "sideKickDeg": 0.372,
+    "climbPerShotPct": 6,
+    "climbMaxX": 1.85,
+    "steadyKickDeg": 0.795,
+    "shotsToMaxClimb": 15,
+    "recoverPerSec": 8,
+    "adsKickPct": 12
+   },
+   "screenKick": 0.777,
+   "ability": null,
+   "traits": [
+    "THORNBURST: the 4th thorn on the same person, with the other 3 still in (3 s), explodes for +40"
+   ]
+  },
+  {
    "id": "m4_commando",
    "name": "M4 Commando",
    "type": "AR",

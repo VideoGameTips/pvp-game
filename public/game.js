@@ -958,6 +958,13 @@ const WEAPONS = [
     bulletColor: 0xa77bff, bulletSize: 0.22, maxRange: 55, pierce: { extra: 99, keep: 1 },
     gravSphere: { pullR: 5, boomR: 4, boom: 20, topup: 7 },
     recoil: { up: 0.016, side: 0.008, climb: 0.22, max: 2.0, recover: 7, adsMult: 0.55 } },
+  // 🌵 Thorncaster: an automatic thorn launcher. 32 a thorn, nine a second, 24 in the magazine. THORNBURST: every thorn that lands on someone stays in them for 3 s; the fourth
+  // to land on the same person (all four still in) goes off for 40 more, and the count starts again. Direct hits only. 8 thorns drop 300: 7 x 32 = 224, + 40 for the burst at 4, + 40 more at 8.
+  { id: 'thorncaster', name: 'Thorncaster', type: 'Thorn Launcher', slot: 'primary',
+    mag: 24, reserve: 72, damage: 32, fireRate: 111, reloadTime: 2200, headshotMult: 1,
+    auto: true, pellets: 1, spread: 0.012, adsZoom: 50, bulletSpeed: 140, bulletSpeedMult: 0.4348, noReload: false,   // (every round flies 2.3x its listed speed, so this one is slowed to fly its own 140)
+    bulletColor: 0xa6e85a, bulletSize: 0.045, thornburst: { hits: 4, ms: 3000, bonus: 40 },
+    recoil: { up: 0.012, side: 0.008, climb: 0.20, max: 2.2, recover: 8, adsMult: 0.55 } },
   { id: 'm4_commando', name: 'M4 Commando', type: 'AR', slot: 'primary',
     // 🎖️ Mobile precision: the AK20's lighter, quicker-handling cousin. 28 a shot at 10 a second is 280 DPS (the AK20's 300), a 24-round magazine,
     // and you carry it 5% faster (moveMult: only while it is in your hands). Bullets fly dead straight, like the AK20's.
@@ -1042,7 +1049,7 @@ Object.assign(WEAPON_FALLOFF, {
   minigun: FALLOFF_MINIGUN, m134: FALLOFF_MINIGUN,
   ak20: FALLOFF_AR, burst: { near: 31, far: 76, min: 0.68 }, cyroclasm: FALLOFF_AR,
   freeze_gun: FALLOFF_AR, plasma_carbine: FALLOFF_AR, arc_rifle: FALLOFF_AR, flechette: FALLOFF_AR,
-  burst_cannon: FALLOFF_AR, twin_ar: FALLOFF_AR, m4_commando: FALLOFF_AR, m12: { near: 5, far: 15, min: 0.02 }, energy_rifle: FALLOFF_NONE, gravity_cannon: FALLOFF_NONE, glassmaker: FALLOFF_AR, auto_revolver: FALLOFF_AR,
+  burst_cannon: FALLOFF_AR, twin_ar: FALLOFF_AR, m4_commando: FALLOFF_AR, m12: { near: 5, far: 15, min: 0.02 }, energy_rifle: FALLOFF_NONE, thorncaster: FALLOFF_NONE, gravity_cannon: FALLOFF_NONE, glassmaker: FALLOFF_AR, auto_revolver: FALLOFF_AR,
   xm7: { near: 38, far: 96, min: 0.72 }, hkmp7: FALLOFF_SMG, m4a1_arena: FALLOFF_ARENA_AR,
   paintball: FALLOFF_PAINT, nail_gun: FALLOFF_PAINT, sticker_blaster: FALLOFF_PAINT,
   srx: FALLOFF_SNIPER, railgun: FALLOFF_SNIPER, coilgun: FALLOFF_SNIPER, amr: FALLOFF_SNIPER, barrett: FALLOFF_SNIPER,
@@ -1647,7 +1654,7 @@ const WEAPON_COSTS = {
   asmg9:320,
   rad_pulse:600,
   // Primaries — ARs / SMGs
-  ak20: 250, m4_commando: 400, m12: 500, energy_rifle: 440, gravity_cannon: 520, mmg: 300, mp40: 200, p90: 350, vector: 300, burst: 280,
+  ak20: 250, m4_commando: 400, m12: 500, energy_rifle: 440, thorncaster: 460, gravity_cannon: 520, mmg: 300, mp40: 200, p90: 350, vector: 300, burst: 280,
   // Primaries — Shotguns
   sg8: 220,
   // Primaries — Snipers / Marksman
@@ -4204,6 +4211,7 @@ function weaponAudioProfile(id, baseWeapon) {
   if (lowerId === 'flamethrower') return { kind:'flamethrower', vol:0.24, dur:0.18, f1:95, f2:58 };
   if (lowerId === 'plasma_carbine') return { kind:'energy', vol:0.30, dur:0.14, f1:880, f2:540 };
   if (lowerId === 'energy_rifle')   return { kind:'energy', vol:0.34, dur:0.22, f1:760, f2:260 };
+  if (lowerId === 'thorncaster')    return { kind:'pop', vol:0.30, dur:0.08, f1:960, f2:300 };
   if (lowerId === 'gravity_cannon') return { kind:'energy', vol:0.40, dur:0.30, f1:420, f2:130 };
   if (lowerId === 'railgun')        return { kind:'energy', vol:0.42, dur:0.32, f1:1620, f2:120 };
   if (lowerId === 'coilgun')        return { kind:'energy', vol:0.36, dur:0.24, f1:1320, f2:160 };
@@ -44491,6 +44499,7 @@ const weaponModels = [
   buildTwinBurst(),  // twin_burst
   buildEnergyRifle(),  // energy_rifle
   buildGravityCannon(),  // gravity_cannon
+  buildThorncaster(),  // thorncaster
   buildM4Commando(),  // m4_commando
   buildM12(),  // m12
   buildMMG(),  // mmg
@@ -44735,6 +44744,61 @@ function buildM12() {
   gpReflexSight(g, 0, 0.062, -0.040, 0.046);
   const flash = makeMuzzleFlash(); flash.position.set(0, 0.018, -0.410); g.add(flash);
   g._flash = flash; g._kickZ = 0.030; g._greebled = true; g._handDetailed = true;
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+function buildThorncaster() {
+  // 🌵 THORNCASTER: a mechanical thorn launcher gone to seed. A dark steel receiver and a long barrel strangled by twisted vines, thorns standing out of every coil, a lime-lit
+  // seed chamber on top, a magazine of green cells. The chamber glows brighter as it fires.
+  const g = new THREE.Group(); g.userData.builtFor = 'thorncaster';
+  const steel = GUN_MATS.steel(), bright = GUN_MATS.bright(), inner = GUN_MATS.inner(), grip = GUN_MATS.grip(), poly = GUN_MATS.polymer();
+  const body  = new THREE.MeshPhongMaterial({ color: 0x2b3326, shininess: 70, specular: 0x6f8a60 });
+  const vine  = new THREE.MeshPhongMaterial({ color: 0x3f8a3a, shininess: 60, specular: 0x9bd88a });
+  const vine2 = new THREE.MeshPhongMaterial({ color: 0x2a5c2a, shininess: 50, specular: 0x6fae6a });
+  const thornM = new THREE.MeshPhongMaterial({ color: 0xe9e2b4, shininess: 40, specular: 0xffffff });
+  const glow  = new THREE.MeshBasicMaterial({ color: 0xa6e85a });
+  const glass = new THREE.MeshPhongMaterial({ color: 0x8fe05a, shininess: 150, specular: 0xffffff, transparent: true, opacity: 0.45, depthWrite: false });
+  gpBox(g, body, 0.042, 0.054, 0.190, 0, 0.012, 0.030);                          // the receiver
+  gpBox(g, steel, 0.044, 0.010, 0.160, 0, -0.016, 0.030);
+  gpCyl(g, steel, 0.014, 0.014, 0.200, 12, 0, 0.010, -0.180);                    // the barrel
+  gpCyl(g, bright, 0.018, 0.018, 0.012, 14, 0, 0.010, -0.282);                   // muzzle ring
+  gpCyl(g, inner, 0.0095, 0.0095, 0.004, 10, 0, 0.010, -0.289);
+  const thornAt = (x, y, z, a, s = 1) => {                                       // a thorn standing out of the vine, away from the barrel's axis
+    const th = new THREE.Mesh(new THREE.ConeGeometry(0.0034 * s, 0.017 * s, 5), thornM);
+    th.position.set(x + Math.cos(a) * 0.006 * s, y + Math.sin(a) * 0.006 * s, z); th.rotation.z = a - Math.PI / 2; g.add(th);
+  };
+  for (let i = 0; i < 22; i++) {                                                 // the vine winding up the barrel
+    const a = i * 0.95, z = -0.092 - i * 0.0088, r = 0.0185, x = Math.cos(a) * r, y = 0.010 + Math.sin(a) * r;
+    gpBox(g, i % 2 ? vine : vine2, 0.0085, 0.0085, 0.0145, x, y, z);
+    if (i % 2 === 0) thornAt(x, y, z, a);
+  }
+  for (let i = 0; i < 14; i++) {                                                 // and a second one round the receiver
+    const t = i / 13, a = i * 1.1, x = Math.sin(a) * 0.024, y = 0.012 + (t - 0.5) * 0.046, z = 0.095 - t * 0.19;
+    gpBox(g, i % 2 ? vine2 : vine, 0.0075, 0.0075, 0.0135, x, y, z);
+    if (i % 3 === 0) thornAt(x, y, z, Math.sign(x || 1) > 0 ? 0 : Math.PI, 0.9);
+  }
+  gpCyl(g, glass, 0.0165, 0.0165, 0.092, 14, 0, 0.050, -0.034);                  // the seed chamber
+  const seeds = gpCyl(g, glow, 0.0085, 0.0085, 0.080, 10, 0, 0.050, -0.034);
+  [-0.082, 0.014].forEach(z => gpCyl(g, vine2, 0.0185, 0.0185, 0.008, 14, 0, 0.050, z));
+  gpBox(g, poly, 0.030, 0.022, 0.050, 0, -0.024, 0.000);                         // the magazine of green cells
+  gpBox(g, body, 0.026, 0.078, 0.046, 0, -0.074, 0.000);
+  for (let i = 0; i < 4; i++) gpBox(g, glow, 0.028, 0.006, 0.014, 0, -0.046 - i * 0.019, 0.000);
+  gpPlate(g, grip, [[0.070, -0.024], [0.098, -0.038], [0.102, -0.110], [0.072, -0.124], [0.050, -0.064], [0.048, -0.030]], 0.034, 0);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.0036, 6, 12, Math.PI * 1.05), poly);
+  guard.rotation.set(0, Math.PI / 2, -0.4); guard.position.set(0, -0.036, 0.038); g.add(guard);
+  gpBox(g, bright, 0.005, 0.016, 0.005, 0, -0.026, 0.038, 0.2);
+  gpBox(g, body, 0.036, 0.046, 0.124, 0, 0.010, 0.179);                          // the stock starts inside the body
+  gpBox(g, vine2, 0.038, 0.048, 0.012, 0, 0.010, 0.246, 0.08);
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.024, 8, 7), new THREE.MeshBasicMaterial({ color: 0xd2ff9a }));
+  flash.visible = false; flash.position.set(0, 0.010, -0.300); g.add(flash);
+  g._flash = flash; g._kickZ = 0.010; g._greebled = true; g._handDetailed = true;
+  let heat = 0;
+  g._tick = (dt, now, assembling) => {
+    if (assembling) return;
+    heat = (g._flash && g._flash.visible) ? 1 : heat * Math.exp(-dt * 5);
+    glass.opacity = 0.34 + 0.10 * (0.5 + 0.5 * Math.sin(now * 2.4)) + 0.25 * heat;
+    seeds.visible = !(g._reloadStart && g._reloadDur && !g._inspectMode) || Math.sin(now * 30) > 0;
+  };
+  g._calm = () => { glass.opacity = 0.45; seeds.visible = true; };
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 function buildM4Commando() {
@@ -52467,7 +52531,7 @@ const PROJECTILE_KIND_BY_ID = {
   grenade_launcher:'grenade', firework_launcher:'grenade', mortar_rifle:'grenade',
   nebula_mortar:'grenade', pinball_launcher:'grenade', shockwave_launcher:'grenade',
   storm_cannon:'grenade', gravity_launcher:'grenade', potato_cannon:'grenade',
-  energy_rifle:'energy_beam', gravity_cannon:'gravity_sphere',
+  energy_rifle:'energy_beam', gravity_cannon:'gravity_sphere', thorncaster:'thorn',
   crossbow:'bolt', boombow:'bolt', boombow_ab:'bolt', boombow_c1:'bolt', dart_gun:'bolt', harpoon_gun:'bolt',
   slingshot:'stone', air_rifle:'bullet',
   // These five used to share the generic 'solid' ball, so a thrown knife flew
@@ -52651,6 +52715,19 @@ function _buildEnergy(tint, r) {
   const core = new THREE.Mesh(P.core, P.coreM); core.scale.y = 1.9; g.add(core);
   const halo = new THREE.Mesh(P.halo, P.haloM); halo.scale.y = 1.7; g.add(halo);
   const tail = new THREE.Mesh(P.tail, P.tailM); tail.rotation.x = Math.PI; tail.position.y = -r*3.2; g.add(tail);
+  g._alignToDir = true;
+  return g;
+}
+function _buildThorn(tint, r) {
+  // The Thorncaster's round: a long pale thorn with a green glow behind it.
+  const c = tint || 0xa6e85a;
+  const P = _projCache('thorn|' + c + '|' + r, () => ({
+    spike: new THREE.ConeGeometry(r * 0.9, r * 8, 6), tail: new THREE.CylinderGeometry(r * 0.18, r * 0.9, r * 6, 6, 1, true),
+    spikeM: new THREE.MeshBasicMaterial({ color: 0xece6b8 }), tailM: _glow(c),
+  }));
+  const g = new THREE.Group();
+  const spike = new THREE.Mesh(P.spike, P.spikeM); spike.position.y = r * 1.0; g.add(spike);
+  const tail = new THREE.Mesh(P.tail, P.tailM); tail.position.y = -r * 3.8; g.add(tail);
   g._alignToDir = true;
   return g;
 }
@@ -54093,6 +54170,7 @@ function makeBulletMesh(color, size, weaponId, own, lookArg) {
     case 'energy':  return _buildEnergy(color, r);
     case 'energy_beam': return _buildEnergyBeam(color, r);
     case 'gravity_sphere': return _buildGravitySphere(color, r);
+    case 'thorn': return _buildThorn(color, r);
     case 'beam':    return _buildBeamShot(color, r);
     case 'icebeam': return _buildBeamShot(color || 0xbdf3ff, Math.max(r, 0.075));
     case 'ball_lightning': return _buildBallLightning(color, r);
@@ -70465,6 +70543,11 @@ energy_rifle:[K(.09,{py:.03,rx:.20,rz:-.12,hy:-.04}), K(.22,{py:.05,rx:.28,rz:-.
                 K(.57,{py:.06,rx:.30,rz:-.16,hy:-.11,hz:.05}), K(.68,{py:.05,rx:.32,rz:-.16,hy:-.02,hz:.06}),
                 K(.76,{py:.08,rx:.28,rz:-.14,hy:0,hz:.03}), K(.84,{py:.03,rx:.10,rz:-.06,hy:.05,hz:-.05,hr:-.5}),
                 K(.90,{py:.05,rx:.16,rz:-.08}), K(.96,{py:.02,rx:.06,rz:-.02})],
+thorncaster:[K(.09,{py:.03,rx:.20,rz:-.12,hy:-.04}), K(.22,{py:.05,rx:.28,rz:-.16,hy:-.14,hz:.02}),
+                K(.32,{py:.05,rx:.30,rz:-.16,hx:.08,hy:-.19,hr:-.7}), K(.45,{py:.06,rx:.30,rz:-.16,hx:-.03,hy:-.23,hz:.02}),
+                K(.57,{py:.06,rx:.30,rz:-.16,hy:-.11,hz:.05}), K(.68,{py:.05,rx:.32,rz:-.16,hy:-.02,hz:.06}),
+                K(.76,{py:.08,rx:.28,rz:-.14,hy:0,hz:.03}), K(.84,{py:.03,rx:.10,rz:-.06,hy:.05,hz:-.05,hr:-.5}),
+                K(.90,{py:.05,rx:.16,rz:-.08}), K(.96,{py:.02,rx:.06,rz:-.02})],
 gravity_cannon:[K(.09,{py:.03,rx:.20,rz:-.12,hy:-.04}), K(.22,{py:.05,rx:.28,rz:-.16,hy:-.14,hz:.02}),
                 K(.32,{py:.05,rx:.30,rz:-.16,hx:.08,hy:-.19,hr:-.7}), K(.45,{py:.06,rx:.30,rz:-.16,hx:-.03,hy:-.23,hz:.02}),
                 K(.57,{py:.06,rx:.30,rz:-.16,hy:-.11,hz:.05}), K(.68,{py:.05,rx:.32,rz:-.16,hy:-.02,hz:.06}),
@@ -70792,6 +70875,7 @@ const INSPECT_EXACT = {
   plasma_carbine: INSPECT_LIBRARY.energy_tune,
   energy_rifle: INSPECT_LIBRARY.energy_tune,
   gravity_cannon: INSPECT_LIBRARY.energy_tune,
+  thorncaster: INSPECT_LIBRARY.energy_tune,
   arc_rifle: INSPECT_LIBRARY.energy_tune,
   arc_torrent: INSPECT_LIBRARY.energy_tune,
 };
@@ -71704,6 +71788,7 @@ const RELOAD_PROPS = {
   plasma_carbine:[RP(.32,'cell'),RP(.57,'cell','arrive')],
   energy_rifle:[RP(.32,'cell'),RP(.57,'cell','arrive')],
   gravity_cannon:[RP(.34,'cell'),RP(.58,'cell','arrive')],
+  thorncaster:[RP(.32,'mag'),RP(.57,'mag','arrive')],
   airburst_projector:[RP(.31,'mag'),RP(.56,'mag','arrive'),RP(.85,'grenade','arrive',1,'breech')],
   pulse_needle:[RP(.37,'mag'),RP(.62,'mag','arrive')],
   nail_gun:[RP(.37,'mag'),RP(.62,'mag','arrive'),RP(.83,'nail',null,2,'breech')],
@@ -72043,7 +72128,7 @@ function _bakeReloadPostures(T) {
   const GROUPS = {
     pistol: 'pistol twin_burst five_seven glock18 m1911 desert_eagle hand_cannon switchblade_gun duelist_pistol signal_pistol taser flare nail_gun gatecrasher',
     smg: 'vector mp40 hkmp7 machine_pistol smart_smg p90 p90_spec cycler',
-    rifle: 'ak20 xm7 burst swarm_rifle twin_ar lancer flechette burst_cannon m4a1_arena coilgun plasma_carbine energy_rifle gravity_cannon pulse_needle',
+    rifle: 'ak20 xm7 burst swarm_rifle twin_ar lancer flechette burst_cannon m4a1_arena coilgun plasma_carbine energy_rifle gravity_cannon thorncaster pulse_needle',
     lmg: 'rpd mg42 minigun chain_gun gau19 m134 mk44',
     sniper: 'srx barrett amr lever m1_garand mauser air_rifle railgun crossbow',
     shotgun: 'sg8 shorty sawed_off boomstick dart_gun',
@@ -75695,7 +75780,7 @@ function getClientWeaponDamage(weaponId) {
   if (m) return m.damage;
   const s = SUPPORT_ITEMS.find(x => x.id === weaponId && x.damage);
   if (s) return s.damage;
-  const ab = { gravity_cannon_splash:20, gravity_cannon_c1:7, sg8_wave:20, crossbow_ab:220, crossbow_c1:140, sg100_ab:140, lever_ab:150,
+  const ab = { gravity_cannon_splash:20, gravity_cannon_c1:7, thorncaster_ab:40, sg8_wave:20, crossbow_ab:220, crossbow_c1:140, sg100_ab:140, lever_ab:150,
                railgun_ab:330, boombow_ab:83, boombow_c1:53, cycler_ab:32, hand_cannon_ab:175, phase_rifle_ph:22 };
   if (ab[weaponId] != null) return ab[weaponId];
   // Fall through to the big table the bot->player path uses, so synthetic ids
@@ -76055,6 +76140,45 @@ function pulseStormBloom(bullet, directId, at) {
   }
 }
 
+// 🌵 THORNBURST (the Thorncaster). Each thorn that lands on someone stays in them for 3 s -- drawn, so you can count them. The fourth on the same person, with the other three
+// still in, goes off: 40 more (its own hit, weapon 'thorncaster_ab'), the thorns are gone and the count starts again. Direct hits only; only the shooter's own screen keeps count.
+const _THORNS = new Map();                                                         // target id -> [{ t, mesh, host }]
+let _thornGeo = null, _thornMat = null;
+function _thornDrop(rec) { try { rec.host.remove(rec.mesh); } catch (e) {} }
+function _thornClear(pid) { const L = _THORNS.get(pid); if (L) for (const r of L) _thornDrop(r); _THORNS.delete(pid); }
+function _updateThorns(now) {
+  for (const [pid, L] of _THORNS) {
+    const dead = players[pid]?.dead || !remoteMeshes[pid];
+    for (let i = L.length - 1; i >= 0; i--) if (dead || now - L[i].t > 3000) { _thornDrop(L[i]); L.splice(i, 1); }
+    if (!L.length) _THORNS.delete(pid);
+  }
+}
+function _thornHit(pid, tmesh, at, dir) {
+  const spec = WEAPONS.find(w => w.id === 'thorncaster')?.thornburst; if (!spec || !tmesh) return;
+  const now = Date.now();
+  _updateThorns(now);
+  const L = _THORNS.get(pid) || []; _THORNS.set(pid, L);
+  if (!_thornGeo) { _thornGeo = new THREE.ConeGeometry(0.035, 0.30, 6); _thornMat = new THREE.MeshBasicMaterial({ color: 0xece6b8 }); }
+  const mesh = new THREE.Mesh(_thornGeo, _thornMat);                                // stuck in them, pointing the way it went in
+  try {
+    tmesh.updateWorldMatrix(true, false);
+    const local = tmesh.worldToLocal(at.clone()); mesh.position.copy(local);
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize()), qw = new THREE.Quaternion();
+    tmesh.getWorldQuaternion(qw); mesh.quaternion.copy(qw.invert().multiply(q));
+    tmesh.add(mesh);
+  } catch (e) {}
+  L.push({ t: now, mesh, host: tmesh });
+  if (L.length < spec.hits) return;
+  _thornClear(pid);                                                                // the fourth: all of them go off
+  const hp = at.clone();
+  for (let k = 0; k < 14; k++) _spawnFinisherSpark(hp, k % 3 ? 0xa6e85a : 0xece6b8, { size: 0.05, life: 420, vel: new THREE.Vector3((Math.random() - 0.5) * 7, Math.random() * 4 + 1, (Math.random() - 0.5) * 7) });
+  _gravPop(hp, 1.3, 0xa6e85a, 280);
+  playSoundEvent('explosion', { position: hp, volume: 0.35, minGap: 60 });
+  flashAbilityName('THORNBURST! +' + spec.bonus);
+  const dummy = TRAINING_DUMMIES.find(d => d.id === pid);
+  if (dummy) handleDummyHit(dummy, tmesh, { damage: spec.bonus, headshot: false, falloff: 1, headMiss: null, weaponId: 'thorncaster_ab' }, hp);
+  else emitHit(pid, `thornburst_${myId}_${now}_${pid}`, 'thorncaster_ab', hp, false, {});
+}
 // 🌀 The Gravity Cannon's spheres. A sphere in flight drags what is near it toward itself -- you, if it is somebody else's (each player moves only themselves), and the bots of whoever
 // fired it -- but only a drag: it adds a little speed toward the sphere, capped well under a run, and you steer, aim and shoot throughout. It goes off on a surface or at the end of its range.
 const GRAV_PULL_CAP = 5;      // (was 9: the pull was far too strong; a sphere now only nudges you, a little under a walk)
@@ -76190,7 +76314,7 @@ function _beamBounce(b, normal, pt, spec) {
 const _BEAM_Y = new THREE.Vector3(0, 1, 0);
 function updateBullets(dt) {
   const now = Date.now();
-  _updateTrails(now); _updateGravFx(now);
+  _updateTrails(now); _updateGravFx(now); _updateThorns(now);
   _updateDonutPuffs(dt);
   _updateApexTrails(dt);
   _updateLegendEmbers(dt);
@@ -76644,6 +76768,7 @@ function updateBullets(dt) {
           applyDotOnHit(b.weaponId || currentWeapon.id, bestHit.pid);
         }
         if (b.bloomPulse) pulseStormBloom(b,bestHit.pid,_bpos);
+        if (b.weaponId === 'thorncaster') _thornHit(bestHit.pid, bestHit.mesh, _bpos, b.dir);                // (THORNBURST: the thorn stays in them, and the fourth sets them all off)
         if (b.skinLook && b.skinLook.hit) skinHitFX(b.skinLook.hit, _bpos.clone(), true);                  // the skin's own hit: the Hacker Pistol's flash and code
         // Firework Launcher: also spawn burn zone on direct hit
         if (b.weaponId === 'firework_launcher') {
@@ -82920,7 +83045,7 @@ const DICE_POOL = {
   SS: ['gunslinger', 'ak20', 'event_horizon', 'omega_pistol', 'm:lightsabre', 'u:orbital_strike'],
   S:  ['air_rifle', 'vector', 'minigun', 'revolver', 'lever', 'p90', 'storm_core', 'quantum_repeater', 'abs_zero', 'prism_engine',
        'solar_lance', 'm:titan_hammer', 'u:specter_drone', 'u:hunter_drone'],
-  A:  ['burst', 'energy_rifle', 'gravity_cannon', 'rpd', 'slingshot', 'mauser', 'chain_gun', 'hand_cannon', 'nail_gun', 'grenade_launcher', 'mp40', 'akimbo',
+  A:  ['burst', 'energy_rifle', 'gravity_cannon', 'thorncaster', 'rpd', 'slingshot', 'mauser', 'chain_gun', 'hand_cannon', 'nail_gun', 'grenade_launcher', 'mp40', 'akimbo',
        'flechette', 'magnetar', 'void_harvester', 'boomstick', 'pinball_launcher', 'seismic_hammer',
        'm:chainsaw', 'm:katana', 'm:gravity_hammer',
        'u:black_hole_seed', 'u:satchel', 'u:mini_turret', 'u:drone_strike', 'u:guardian_drone', 'u:tesla_coil'],

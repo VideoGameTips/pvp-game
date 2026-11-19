@@ -310,7 +310,7 @@ const WEAPON_COSTS = {
   asmg9:320,
   rad_pulse:600,
   // Primaries — ARs / SMGs
-  ak20: 250, m4_commando: 400, m12: 500, energy_rifle: 440, gravity_cannon: 520, mmg: 300, mp40: 200, p90: 350, vector: 300, burst: 280,
+  ak20: 250, m4_commando: 400, m12: 500, energy_rifle: 440, thorncaster: 460, gravity_cannon: 520, mmg: 300, mp40: 200, p90: 350, vector: 300, burst: 280,
   // Primaries — Shotguns
   sg8: 220,
   // Primaries — Snipers / Marksman
@@ -2395,7 +2395,7 @@ function tryPairPvpQueue(mode) {
 // Weapon damage table (must match client WEAPONS array)
 // Headshot multipliers, mirroring headshotMult in WEAPONS[] (CLAUDE.md gotcha
 // #4). Anything not listed is the x2 every weapon has always had.
-const WEAPON_HS_MULT = { m12: 1, energy_rifle: 1, gravity_cannon: 1, rad_pulse:1, ak20: 2.333, flechette: 4, storm_bloom: 1, javelin_launcher: 1 };
+const WEAPON_HS_MULT = { thorncaster: 1, m12: 1, energy_rifle: 1, gravity_cannon: 1, rad_pulse:1, ak20: 2.333, flechette: 4, storm_bloom: 1, javelin_launcher: 1 };
 const WEAPON_DAMAGE = {
   rad_pulse:18, rad_pulse_dot:6,
   // Damage-over-time ticks arrive as their own weapon ids, one tick a second.
@@ -2429,7 +2429,7 @@ event_horizon: 75,
   cream_pie: 34,
   slingshot: 9,   // mirrors WEAPONS[] in public/game.js — see CLAUDE.md gotcha #4
   // Primaries
-  ak20: 25, m4_commando: 28, m12: 15, energy_rifle: 45, gravity_cannon: 13, gravity_cannon_splash: 20, gravity_cannon_c1: 7,  sg8: 24,
+  ak20: 25, m4_commando: 28, m12: 15, energy_rifle: 45, thorncaster: 32, thorncaster_ab: 40, gravity_cannon: 13, gravity_cannon_splash: 20, gravity_cannon_c1: 7,  sg8: 24,
   srx: 120, rpd: 10, mp40: 20, p90: 10,
   paintball: 60, burst: 47, lever: 105,
   vector: 18, mmg: 19, asmg9: 16, crossbow: 100, flamethrower: 3,
@@ -2631,7 +2631,7 @@ const WEAPON_FALLOFF = {
   machine_pistol: FALLOFF_MACHINEPISTOL, asmg9: FALLOFF_MACHINEPISTOL, glock18: FALLOFF_MACHINEPISTOL, machine_revolver: FALLOFF_MACHINEPISTOL,
   rpd: FALLOFF_LMG, mg42: FALLOFF_LMG, chain_gun: FALLOFF_LMG, gau19: FALLOFF_LMG, mk44: FALLOFF_LMG, cycler: FALLOFF_LMG,
   minigun: FALLOFF_MINIGUN, m134: FALLOFF_MINIGUN,
-  ak20: FALLOFF_AR, m4_commando: FALLOFF_AR, m12: { near: 5, far: 15, min: 0.02 }, energy_rifle: FALLOFF_NONE, gravity_cannon: FALLOFF_NONE, burst: { near: 31, far: 76, min: 0.68 }, cyroclasm: FALLOFF_AR, freeze_gun: FALLOFF_AR, plasma_carbine: FALLOFF_AR, arc_rifle: FALLOFF_AR, flechette: FALLOFF_AR, burst_cannon: FALLOFF_AR, twin_ar: FALLOFF_AR, glassmaker: FALLOFF_AR, auto_revolver: FALLOFF_AR, xm7: { near: 38, far: 96, min: 0.72 }, hkmp7: FALLOFF_SMG, m4a1_arena: FALLOFF_ARENA_AR,
+  ak20: FALLOFF_AR, m4_commando: FALLOFF_AR, m12: { near: 5, far: 15, min: 0.02 }, energy_rifle: FALLOFF_NONE, thorncaster: FALLOFF_NONE, gravity_cannon: FALLOFF_NONE, burst: { near: 31, far: 76, min: 0.68 }, cyroclasm: FALLOFF_AR, freeze_gun: FALLOFF_AR, plasma_carbine: FALLOFF_AR, arc_rifle: FALLOFF_AR, flechette: FALLOFF_AR, burst_cannon: FALLOFF_AR, twin_ar: FALLOFF_AR, glassmaker: FALLOFF_AR, auto_revolver: FALLOFF_AR, xm7: { near: 38, far: 96, min: 0.72 }, hkmp7: FALLOFF_SMG, m4a1_arena: FALLOFF_ARENA_AR,
   paintball: FALLOFF_PAINT, nail_gun: FALLOFF_PAINT, sticker_blaster: FALLOFF_PAINT,
   srx: FALLOFF_SNIPER, railgun: FALLOFF_SNIPER, coilgun: FALLOFF_SNIPER, amr: FALLOFF_SNIPER, barrett: FALLOFF_SNIPER,
   lever: FALLOFF_MARKSMAN, m1_garand: FALLOFF_MARKSMAN, air_rifle: FALLOFF_MARKSMAN, harpoon_gun: FALLOFF_SNIPER,

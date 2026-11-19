@@ -59,6 +59,7 @@
   const restricted=new Set(['hellfire','omega_pistol','m4a1_arena','gau19','mk44','xm7','barrett','m134','hkmp7','p90_spec','desert_eagle','m1911','glock18','five_seven','chrono_pistol','phase_rifle','karambit','bayonet','tomahawk','ots04','garrote','c4','claymore','stun_grenade','thermite','predator_uav','care_package','tac_nuke']);
   const tierById=Object.fromEntries(Object.entries(tierGroups).flatMap(([tier,ids])=>ids.map(id=>[id,tier])));
   tierById.rad_pulse='prime';
+  tierById.thorncaster='prime';
   tierById.asmg9='prime';
   function category(id,item={}) {
     if(restricted.has(id)||item.adminItem||item.prototype||item.ddayOnly||item.modeOnly)return 'exclusive';
@@ -67,6 +68,7 @@
   // Final donut prices, not multiplier inputs. Shared by the display and purchase authority.
   const weaponPrices={
     rad_pulse:7200,
+    thorncaster:5800,
     asmg9:3200,
     mp40:700,paintball:450,revolver:350,shorty:500,cycler:650,throwing_knives:700,taser:1000,
     machine_pistol:1100,traffic_cone:300,cream_pie:250,dart_gun:600,laser_pointer:200,

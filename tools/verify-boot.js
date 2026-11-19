@@ -6315,4 +6315,392 @@ if (ok) {
     console.log('boot OK — game.js evaluated to the end; every late declaration exists');
   }
 }
+// ENERGY RIFLE: a slow wide bolt that bounces. Stats, tables client+server, the round's look, who a pass hits (radius, walls, once per pass), the bounce on your screen and on everyone else's.
+if (ok && process.argv.includes('--energyrifle')) {
+  const serverSrc = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  const shopSrc = fs.readFileSync(path.join(__dirname, '..', 'public', 'shop-catalog.js'), 'utf8');
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const w = WEAPONS.find(x => x.id === 'energy_rifle'), idx = WEAPONS.findIndex(x => x.id === 'energy_rifle');
+    if (!w) return ['the Energy Rifle is missing'];
+    if (w.slot !== 'primary' || w.damage !== 45 || w.mag !== 12 || Math.round(1000 / w.fireRate) !== 3 || w.bulletSpeed !== 100 || w.beamRadius !== 1.4 || w.bounce.maxBounces !== 4 || w.reloadTime !== 2000)
+      issues.push('stats should be primary, 45 damage, 3 a second, 12 rounds, speed 100, radius 1.4, 4 bounces, 2 s reload: ' + JSON.stringify({ s: w.slot, d: w.damage, m: w.mag, f: w.fireRate, v: w.bulletSpeed, r: w.beamRadius, b: w.bounce, rl: w.reloadTime }));
+    if (Math.ceil(300 / w.damage) !== 7) issues.push('seven body hits to eliminate 300');
+    if (weaponModels.length !== WEAPONS.length) issues.push('WEAPONS and weaponModels must stay parallel: ' + WEAPONS.length + ' vs ' + weaponModels.length);
+    const mod = weaponModels[idx];
+    if (!mod || !mod._flash || !mod._tick || !mod._calm) issues.push('the model needs its flash, tick and calm');
+    else { mod._tick(0.016, 1, false); mod._tick(0.016, 2, false); mod._calm(); }
+    if (projectileKind('energy_rifle') !== 'energy_beam') issues.push('its round should be the energy bolt: ' + projectileKind('energy_rifle'));
+    const mesh = makeBulletMesh(w.bulletColor, w.bulletSize, 'energy_rifle', true);
+    if (!(mesh.children.length >= 4 && mesh._alignToDir)) issues.push('the bolt needs a core, halo, tail and blast bubble: ' + mesh.children.length);
+    if (explosiveLike && explosiveLike(mesh)) issues.push('x');
+    if (!(RELOAD_KEYS.energy_rifle && RELOAD_PROPS.energy_rifle && INSPECT_BY_WEAPON_OK)) issues.push('reload, props or inspect missing');
+    return issues;
+  })()`.replace(/ *if \(explosiveLike[^\n]*\n/, '').replace('&& INSPECT_BY_WEAPON_OK', ''));
+  const more = vm.runInThisContext(`(() => {
+    const issues = [];
+    const w = WEAPONS.find(x => x.id === 'energy_rifle');
+    const keep = { rm: Object.assign({}, remoteMeshes), pl: Object.assign({}, players), los: hasLineOfSight, hit: emitHit, lb: localBullets.slice(), wc: wallColliders.slice() };
+    const hits = [];
+    try {
+      const mk = (id, x, z, dead) => { remoteMeshes[id] = { visible: true, position: new THREE.Vector3(x, 0, z), rotation: { y: 0 } }; players[id] = { dead: !!dead }; };
+      for (const k of Object.keys(remoteMeshes)) delete remoteMeshes[k];
+      emitHit = (pid, bid, wid) => { hits.push({ pid, bid, wid }); };
+      hasLineOfSight = () => true;
+      // ── who a pass reaches
+      const b = { id: 'b1', weaponId: 'energy_rifle', _beamR: 1.4 };
+      _bpos.set(0, 1, -20);
+      mk('near', 1.2, -10); mk('far', 1.7, -10); mk('dead', 0, -12, true); mk('past', 0, -30);
+      _beamSweep(b, 0, 1, 0, null);
+      const ids = hits.map(h => h.pid).sort().join();
+      if (ids !== 'near') issues.push('within 1.4 of the path, alive, in front of it: only near should be hit, got ' + ids);
+      _beamSweep(b, 0, 1, 0, null);
+      if (hits.length !== 1) issues.push('once per pass: ' + hits.length);
+      if (hits[0] && hits[0].wid !== 'energy_rifle') issues.push('hit carries the weapon id');
+      // a wall between the bolt and the body stops the blast
+      hits.length = 0; b._beamHit = null; hasLineOfSight = () => false; _beamSweep(b, 0, 1, 0, null); hasLineOfSight = () => true;
+      if (hits.length) issues.push('a wall between: no hit, got ' + hits.length);
+      // it stops at a wall it hits: nobody behind the wall point is swept
+      hits.length = 0; b._beamHit = null; mk('behind', 0, -15); _beamSweep(b, 0, 1, 0, new THREE.Vector3(0, 1, -5));
+      if (hits.some(h => h.pid === 'behind')) issues.push('the pass ends where the wall is');
+      // a rebound is a new pass with a new hit id
+      delete remoteMeshes.behind; hits.length = 0; b._beamHit = null; b._beamN = 0; _beamSweep(b, 0, 1, 0, null); b._beamHit = null; b._beamN = 1; _beamSweep(b, 0, 1, 0, null);
+      if (!(hits.length === 2 && hits[0].bid !== hits[1].bid)) issues.push('after a rebound it can hit again, with its own hit id: ' + JSON.stringify(hits));
+      // ── the flight: your own bolt goes through whoever is on its line, hits them once, and keeps going; then it rebounds
+      for (const k of Object.keys(remoteMeshes)) delete remoteMeshes[k];
+      hits.length = 0; localBullets.length = 0; wallColliders.length = 0;
+      wallColliders.push(new THREE.Box3(new THREE.Vector3(-30, 0, -41), new THREE.Vector3(30, 8, -40)));      // a wall across z = -40
+      wallColliders.push(new THREE.Box3(new THREE.Vector3(-30, 0, 39), new THREE.Vector3(30, 8, 40)));       // and one behind
+      mk('mid', 0, -15);
+      camera.position.set(200, 50, 200);
+      spawnLocalBullet(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, -1), 'own1', true, w.bulletSpeed, w.bulletColor, w.bulletSize, 'energy_rifle');
+      const bl = localBullets.find(x => x.id === 'own1');
+      if (!bl) return issues.concat(['the bolt did not spawn']);
+      let zs = [], flips = 0, lastDz = -1;
+      for (let i = 0; i < 700 && localBullets.includes(bl); i++) {
+        updateBullets(0.016);
+        const dz = Math.sign(bl.dir.z); if (dz !== lastDz) { flips++; lastDz = dz; }
+        if (hits.length === 1 && i < 60) zs.push(bl.mesh.position.z);
+      }
+      if (hits.filter(h => h.pid === 'mid').length < 1) issues.push('the bolt should have hit the man on its line');
+      if (!(hits.length >= 2 && hits[0].bid !== hits[1].bid)) issues.push('he is on the line again after a rebound: two hits, two ids: ' + hits.length);
+      if (flips < 3) issues.push('it should rebound off both walls: direction changed ' + (flips - 1) + ' times');
+      if (!(bl.bouncesLeft === 0 || !localBullets.includes(bl))) issues.push('four rebounds and no more: ' + bl.bouncesLeft);
+      if (Math.abs(bl.speed - 100) > 0.5) issues.push('it flies at 100 and does not change speed on a rebound: ' + bl.speed);
+      // ── somebody else's bolt rebounds on your screen as well
+      localBullets.length = 0;
+      spawnLocalBullet(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, -1), 'far1', false, w.bulletSpeed, w.bulletColor, w.bulletSize, 'energy_rifle', { ownerId: 'someone' });
+      const rb = localBullets.find(x => x.id === 'far1'); let rflip = 0; let ld = -1;
+      for (let i = 0; i < 200 && localBullets.includes(rb); i++) { updateBullets(0.016); const dz = Math.sign(rb.dir.z); if (dz !== ld) { rflip++; ld = dz; } }
+      if (rflip < 2) issues.push('another player\\'s bolt should rebound off the wall on your screen: ' + rflip);
+      if (hits.length && hits.some(h => h.bid && h.bid.startsWith('far1'))) issues.push('a bolt that is not yours must not deal damage from your client');
+      // ── a bolt fired into the floor comes back up
+      localBullets.length = 0;
+      spawnLocalBullet(new THREE.Vector3(0, 3, 0), new THREE.Vector3(0, -0.7071, -0.7071), 'fl1', true, w.bulletSpeed, w.bulletColor, w.bulletSize, 'energy_rifle');
+      const fb = localBullets.find(x => x.id === 'fl1'); let up = false;
+      for (let i = 0; i < 40 && localBullets.includes(fb); i++) { updateBullets(0.016); if (fb.dir.y > 0.3) up = true; }
+      if (!up) issues.push('off the floor it should rebound upward');
+    } catch (e) { issues.push('threw: ' + (e && e.stack || e)); }
+    finally {
+      for (const k of Object.keys(remoteMeshes)) delete remoteMeshes[k]; Object.assign(remoteMeshes, keep.rm);
+      for (const k of Object.keys(players)) delete players[k]; Object.assign(players, keep.pl);
+      hasLineOfSight = keep.los; emitHit = keep.hit; localBullets.length = 0; keep.lb.forEach(x => localBullets.push(x)); wallColliders.length = 0; keep.wc.forEach(x => wallColliders.push(x));
+    }
+    return issues;
+  })()`);
+  const outside = [];
+  if (!/energy_rifle: 440/.test(serverSrc) || !/energy_rifle: 45/.test(serverSrc) || !/energy_rifle: FALLOFF_NONE/.test(serverSrc)) outside.push('server.js is missing the Energy Rifle cost, damage or falloff');
+  if (!/energy_rifle:4800/.test(shopSrc)) outside.push('the shop price is missing');
+  const all = issues.concat(more, outside);
+  console.log('ENERGY RIFLE checks: stats, tables, the bolt\'s look, a wide pass that hits once and stops at walls, rebounds for you and for everyone else, off the floor');
+  if (all.length) { ok = false; console.log(all.join('\n')); }
+}
+
+// ENERGY RIFLE AFTERGLOW: the bolt leaves a thick trail that stays 0.8 s, thinning and fading, round its rebounds, and on other players' bolts.
+if (ok && process.argv.includes('--energytrail')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const w = WEAPONS.find(x => x.id === 'energy_rifle');
+    if (!w || w.afterTrailMs !== 800) return ['the Energy Rifle should keep its trail 800 ms'];
+    const keep = { now: Date.now, lb: localBullets.slice(), wc: wallColliders.slice(), rm: Object.assign({}, remoteMeshes) };
+    let clock = 5e9; Date.now = () => clock;
+    try {
+      for (const s of _TRAIL.segs.slice()) { scene.remove(s.group); } _TRAIL.segs.length = 0;
+      localBullets.length = 0; wallColliders.length = 0;
+      wallColliders.push(new THREE.Box3(new THREE.Vector3(-30, 0, -41), new THREE.Vector3(30, 8, -40)));
+      camera.position.set(200, 50, 200);
+      const step = () => { clock += 16; updateBullets(0.016); };
+      spawnLocalBullet(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, -1), 't1', true, w.bulletSpeed, w.bulletColor, w.bulletSize, 'energy_rifle');
+      const bl = localBullets.find(x => x.id === 't1');
+      for (let i = 0; i < 20; i++) step();
+      const n1 = _TRAIL.segs.length;
+      if (n1 < 15) issues.push('a bolt in flight lays a segment a frame: ' + n1);
+      // it follows the bolt: the newest segment is right behind it
+      const last = _TRAIL.segs[_TRAIL.segs.length - 1];
+      if (!(last.group.position.distanceTo(bl.mesh.position) < 4)) issues.push('the trail should end at the bolt: ' + last.group.position.distanceTo(bl.mesh.position).toFixed(2));
+      // all of it, nose to tail, is where the bolt has been: the first piece is near the muzzle
+      const first = _TRAIL.segs[0];
+      if (!(first.group.position.z > -6 && first.group.position.z < 0.5)) issues.push('the oldest piece sits near the muzzle: ' + first.group.position.z.toFixed(2));
+      // fade and thin
+      const g0 = first.glow.scale.x;
+      for (let i = 0; i < 20; i++) step();
+      if (!(first.glow.scale.x < g0) || !(first.glow.material.opacity < _TRAIL.levels[0].glow.opacity)) issues.push('it thins and fades as it ages');
+      // a rebound turns the trail with it: pieces on both sides of the wall (z about -40), the run closing at the wall
+      for (let i = 0; i < 20 && localBullets.includes(bl); i++) step();
+      if (!(bl.dir.z > 0)) issues.push('test setup: the bolt should have rebounded');
+      const zs = _TRAIL.segs.map(s => s.group.position.z);
+      const nearWall = _TRAIL.segs.some(s => s.group.position.z < -38.5);
+      if (!nearWall) issues.push('the run should reach the wall: min z ' + Math.min(...zs).toFixed(1));
+      // after it is gone every piece goes by 0.8 s, none before ~0.7
+      localBullets.length = 0;
+      const born = Math.max(..._TRAIL.segs.map(s => s.born));
+      clock = born + 700; updateBullets(0.016);
+      if (!_TRAIL.segs.length) issues.push('the newest piece should still be there at 0.7 s');
+      clock = born + 810; updateBullets(0.016);
+      if (_TRAIL.segs.length) issues.push('everything is gone by 0.8 s: ' + _TRAIL.segs.length + ' left');
+      // somebody else's bolt leaves one too
+      localBullets.length = 0;
+      spawnLocalBullet(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, -1), 'r1', false, w.bulletSpeed, w.bulletColor, w.bulletSize, 'energy_rifle', { ownerId: 'x' });
+      for (let i = 0; i < 12; i++) step();
+      if (_TRAIL.segs.length < 8) issues.push('another player\\'s bolt should leave a trail on your screen: ' + _TRAIL.segs.length);
+      // the cap
+      localBullets.length = 0;
+      for (let k = 0; k < 400; k++) _trailSeg({ weaponId: 'energy_rifle' }, new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -2));
+      if (_TRAIL.segs.length > 220) issues.push('the trail is capped: ' + _TRAIL.segs.length);
+      // another gun leaves nothing
+      const before = _TRAIL.segs.length; _trailSeg({ weaponId: 'ak20' }, new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -2));
+      if (_TRAIL.segs.length !== before) issues.push('only the Energy Rifle has an afterglow');
+    } catch (e) { issues.push('threw: ' + (e && e.stack || e)); }
+    finally {
+      Date.now = keep.now; for (const s of _TRAIL.segs.slice()) scene.remove(s.group); _TRAIL.segs.length = 0;
+      localBullets.length = 0; keep.lb.forEach(x => localBullets.push(x)); wallColliders.length = 0; keep.wc.forEach(x => wallColliders.push(x));
+    }
+    return issues;
+  })()`);
+  console.log('ENERGY RIFLE AFTERGLOW checks: a trail a frame behind the bolt, thinning and fading, gone in 0.8 s, turning at rebounds, on other players\' bolts, capped');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
+// GRAVITY CANNON: five slow spheres a pull (five rounds), a drag that is never a hold, 13 on contact (they go through), 20 where they go off (7 to whoever the same sphere hit), tables client+server.
+if (ok && process.argv.includes('--gravitycannon')) {
+  const serverSrc = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  const shopSrc = fs.readFileSync(path.join(__dirname, '..', 'public', 'shop-catalog.js'), 'utf8');
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const w = WEAPONS.find(x => x.id === 'gravity_cannon'), idx = WEAPONS.findIndex(x => x.id === 'gravity_cannon');
+    if (!w) return ['the Gravity Cannon is missing'];
+    if (w.slot !== 'primary' || w.damage !== 13 || w.mag !== 35 || w.pellets !== 5 || w.ammoPerShot !== 5 || w.reloadTime !== 2800 || w.gravSphere.pullR !== 5 || w.gravSphere.boomR !== 4 || w.gravSphere.boom !== 20 || w.bulletSpeed !== 100 / 100 * 65)
+      issues.push('stats: ' + JSON.stringify({ s: w.slot, d: w.damage, m: w.mag, p: w.pellets, a: w.ammoPerShot, r: w.reloadTime, g: w.gravSphere, v: w.bulletSpeed }));
+    if (weaponModels.length !== WEAPONS.length) issues.push('WEAPONS and weaponModels must stay parallel');
+    const mod = weaponModels[idx];
+    if (!mod || !mod._flash || !mod._tick || !mod._calm) issues.push('model needs flash, tick, calm'); else { mod._tick(0.016, 1, false); mod._calm(); }
+    if (projectileKind('gravity_cannon') !== 'gravity_sphere') issues.push('kind: ' + projectileKind('gravity_cannon'));
+    const mesh = makeBulletMesh(w.bulletColor, w.bulletSize, 'gravity_cannon', true);
+    if (!(mesh.children.length >= 4 && mesh._spin)) issues.push('the sphere needs a core, halo and two tumbling rings');
+    if (!(RELOAD_KEYS.gravity_cannon && RELOAD_PROPS.gravity_cannon)) issues.push('reload missing');
+    if (getClientWeaponDamage('gravity_cannon_splash') !== 20 || getClientWeaponDamage('gravity_cannon_c1') !== 7) issues.push('client damage table for the explosion and the top-up');
+    return issues;
+  })()`);
+  const more = vm.runInThisContext(`(() => {
+    const issues = [];
+    const w = WEAPONS.find(x => x.id === 'gravity_cannon');
+    const keep = { rm: Object.assign({}, remoteMeshes), pl: Object.assign({}, players), los: hasLineOfSight, hit: emitHit, lb: localBullets.slice(), wc: wallColliders.slice(), gb: gameBots.slice(), ev: { x: _extVel.x, z: _extVel.z }, dead: isDead, lobby: inLobby, ff: friendlyFireBlocked, cam: camera.position.clone(), snd: playSoundEvent };
+    const hits = [];
+    try {
+      const mk = (id, x, z, dead) => { remoteMeshes[id] = { visible: true, position: new THREE.Vector3(x, 0, z), rotation: { y: 0 } }; players[id] = { dead: !!dead }; };
+      for (const k of Object.keys(remoteMeshes)) delete remoteMeshes[k];
+      emitHit = (pid, bid, wid) => { hits.push({ pid, bid, wid }); }; playSoundEvent = () => {};
+      hasLineOfSight = () => true; friendlyFireBlocked = () => false; isDead = false; inLobby = false; gameBots.length = 0;
+      localBullets.length = 0; wallColliders.length = 0;
+      wallColliders.push(new THREE.Box3(new THREE.Vector3(-30, 0, -41), new THREE.Vector3(30, 8, -40)));        // a wall across z = -40
+      camera.position.set(200, 1.65, 200);
+      // ── one sphere: slow, goes THROUGH a man for 13, goes off on the wall for 20 to the people near it, and only tops up the man it hit
+      mk('mid', 0, -15); mk('nearwall', 2, -37); mk('farwall', 9, -37); mk('behind', 0, -45);
+      spawnLocalBullet(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, -1), 's1', true, w.bulletSpeed, w.bulletColor, w.bulletSize, 'gravity_cannon');
+      const b = localBullets.find(x => x.id === 's1');
+      if (Math.abs(b.speed - 65) > 0.5) issues.push('a sphere flies at 65: ' + b.speed);
+      let went = false;
+      for (let i = 0; i < 200 && localBullets.includes(b); i++) { updateBullets(0.016); if (b.mesh.position.z < -20) went = true; }
+      if (!went) issues.push('it should have gone on past the man it hit');
+      const direct = hits.filter(h => h.wid === 'gravity_cannon'), boom = hits.filter(h => /boom/.test(h.bid));
+      if (!(direct.length === 1 && direct[0].pid === 'mid')) issues.push('13 on contact, once, to the man on its line: ' + JSON.stringify(direct));
+      if (localBullets.includes(b)) issues.push('it should have gone off on the wall');
+      const bp = boom.map(h => h.pid + ':' + h.wid).sort().join();
+      if (bp !== 'nearwall:gravity_cannon_splash') issues.push('20 to who is within 4 of where it went off, and only them (not 9 away, not behind the wall): ' + bp);
+      // the top-up: a man the same sphere hit AND the explosion catches takes 7, not 20
+      hits.length = 0; localBullets.length = 0;
+      for (const k of Object.keys(remoteMeshes)) delete remoteMeshes[k];
+      mk('both', 0, -36);
+      spawnLocalBullet(new THREE.Vector3(0, 1, -30), new THREE.Vector3(0, 0, -1), 's2', true, w.bulletSpeed, w.bulletColor, w.bulletSize, 'gravity_cannon');
+      for (let i = 0; i < 100 && localBullets.length; i++) updateBullets(0.016);
+      const both = hits.map(h => h.wid).join();
+      if (both !== 'gravity_cannon,gravity_cannon_c1') issues.push('hit by the sphere and then its explosion: 13, then the 7 that tops up to 20: ' + both);
+      // range: a sphere into open air goes off at 55
+      hits.length = 0; localBullets.length = 0; for (const k of Object.keys(remoteMeshes)) delete remoteMeshes[k]; wallColliders.length = 0;
+      spawnLocalBullet(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, -1), 's3', true, w.bulletSpeed, w.bulletColor, w.bulletSize, 'gravity_cannon');
+      const s3 = localBullets.find(x => x.id === 's3'); const fxBefore = _GRAV_FX.length; let endZ = null;
+      for (let i = 0; i < 200 && localBullets.includes(s3); i++) { endZ = s3.mesh.position.z; updateBullets(0.016); }
+      if (!(endZ < -50 && endZ > -62)) issues.push('it goes off at the end of its range (55): ' + endZ);
+      if (_GRAV_FX.length <= fxBefore) issues.push('and you see it');
+      // ── the drag: somebody else's sphere pulls YOU, a little, and never holds you
+      localBullets.length = 0; _extVel.x = 0; _extVel.z = 0; camera.position.set(0, 1.65, 0);
+      const other = { mesh: new THREE.Group(), dir: new THREE.Vector3(0, 0, -1), speed: 0, isOwn: false, ownerId: 'foe', weaponId: 'gravity_cannon', id: 'o1', createdAt: Date.now(), size: 0.22, _grav: w.gravSphere };
+      other.mesh.position.set(3, 1.65, 0);
+      _gravPull(other, 0.016);
+      if (!(_extVel.x > 0.1 && Math.abs(_extVel.z) < 1e-6)) issues.push('you are drawn toward it: ' + _extVel.x.toFixed(3));
+      for (let i = 0; i < 300; i++) _gravPull(other, 0.016);
+      if (Math.hypot(_extVel.x, _extVel.z) > GRAV_PULL_CAP + 1e-6) issues.push('the drag is capped under a run: ' + Math.hypot(_extVel.x, _extVel.z).toFixed(2));
+      // ...it adds to what you have, it does not take it: moving the other way you are still faster than it
+      _extVel.x = 0; other.mesh.position.set(6.5, 1.65, 0); _gravPull(other, 0.016);
+      if (_extVel.x !== 0) issues.push('outside 5 there is no pull: ' + _extVel.x);
+      // not your own, not a teammate's, not when dead
+      _extVel.x = 0; other.mesh.position.set(3, 1.65, 0); other.isOwn = true; _gravPull(other, 0.016); other.isOwn = false;
+      if (_extVel.x !== 0) issues.push('your own sphere does not pull you');
+      friendlyFireBlocked = () => true; _gravPull(other, 0.016); friendlyFireBlocked = () => false;
+      if (_extVel.x !== 0) issues.push('a teammate\\'s sphere does not pull you');
+      isDead = true; _gravPull(other, 0.016); isDead = false;
+      if (_extVel.x !== 0) issues.push('nor when you are dead');
+      // your bots (your own sphere only), pulled toward it
+      gameBots.push({ id: 'bot1', x: 1, z: 0, dead: false });
+      const mine = Object.assign({}, other, { isOwn: true, ownerId: myId });
+      _gravPull(mine, 0.016);
+      if (!(gameBots[0].kbVX > 0)) issues.push('a bot near your sphere is dragged toward it: ' + gameBots[0].kbVX);
+      // another gun has no pull
+      if (projectileWeaponSpec('ak20').gravSphere) issues.push('only the Gravity Cannon has one');
+      // a volley: five rounds a pull, from a full magazine
+      const gi = WEAPONS.findIndex(x => x.id === 'gravity_cannon'); const pool = weaponAmmo[gi]; const kc = currentWeaponIdx, kw = currentWeapon;
+      if (pool.ammo !== 35) issues.push('a full magazine is 35: ' + pool.ammo);
+      const sv = { gac: getAudioCtx, pws: playWeaponSound, as: activeSlot, gs: gameStarted, ra: equipReadyAt, em: socket.emit, rl: reloading, sh: shooting, ls: lastShot, el: equipReady };
+      const sent = [];
+      try {
+        getAudioCtx = () => null; playWeaponSound = () => {};
+        activeSlot = 'primary'; gameStarted = true; isDead = false; reloading = false; equipReadyAt = 0; lastShot = 0; currentWeaponIdx = gi; currentWeapon = WEAPONS[gi];
+        selectedPrimaryIdx = gi; countdownActive = false; localBullets.length = 0; wallColliders.length = 0;
+        socket.emit = (ev, d) => { sent.push([ev, d]); };
+        pool.ammo = 35; ammo = 35;
+        tryShoot();
+      } catch (e) { issues.push('shooting threw: ' + (e && e.stack || e)); }
+      const shots = sent.filter(x => x[0] === 'shoot');
+      if (pool.ammo !== 30) issues.push('a volley costs five rounds: ' + pool.ammo + ' left of 35');
+      if (shots.length !== 5) issues.push('a pull sends five spheres: ' + shots.length);
+      else if (new Set(shots.map(x => x[1].volley)).size !== 1 || !shots[0][1].volley) issues.push('one volley id on all five');
+      if (localBullets.filter(x => x.weaponId === 'gravity_cannon').length !== 5) issues.push('five spheres in the air: ' + localBullets.length);
+      socket.emit = sv.em; getAudioCtx = sv.gac; playWeaponSound = sv.pws; activeSlot = sv.as; gameStarted = sv.gs; equipReadyAt = sv.ra; reloading = sv.rl; shooting = sv.sh; lastShot = sv.ls; currentWeaponIdx = kc; currentWeapon = kw; pool.ammo = 35;
+    } catch (e) { issues.push('threw: ' + (e && e.stack || e)); }
+    finally {
+      for (const k of Object.keys(remoteMeshes)) delete remoteMeshes[k]; Object.assign(remoteMeshes, keep.rm);
+      for (const k of Object.keys(players)) delete players[k]; Object.assign(players, keep.pl);
+      hasLineOfSight = keep.los; emitHit = keep.hit; playSoundEvent = keep.snd; friendlyFireBlocked = keep.ff; isDead = keep.dead; inLobby = keep.lobby; camera.position.copy(keep.cam);
+      _extVel.x = keep.ev.x; _extVel.z = keep.ev.z; gameBots.length = 0; keep.gb.forEach(x => gameBots.push(x));
+      localBullets.length = 0; keep.lb.forEach(x => localBullets.push(x)); wallColliders.length = 0; keep.wc.forEach(x => wallColliders.push(x));
+      for (const f of _GRAV_FX.slice()) { scene.remove(f.m); } _GRAV_FX.length = 0;
+    }
+    return issues;
+  })()`);
+  const outside = [];
+  if (!/wStats\.ammoPerShot \|\| 1/.test(src) || !/gcContinue/.test(serverSrc)) outside.push('ammoPerShot or the server volley gate is missing');
+  if (!/gravity_cannon: 520/.test(serverSrc) || !/gravity_cannon: 13, gravity_cannon_splash: 20, gravity_cannon_c1: 7/.test(serverSrc) || !/gravity_cannon: FALLOFF_NONE/.test(serverSrc)) outside.push('server.js is missing the Gravity Cannon cost, damage or falloff');
+  if (!/gravity_cannon:5600/.test(shopSrc)) outside.push('the shop price is missing');
+  const all = issues.concat(more, outside);
+  console.log('GRAVITY CANNON checks: stats, tables, the sphere, 13 through a man / 20 where it goes off / 7 top-up, range, a capped drag that is never a hold');
+  if (all.length) { ok = false; console.log(all.join('\n')); }
+}
+
+
+// THORNCASTER: an automatic thorn launcher; THORNBURST -- thorns stay in for 3 s, the fourth on the same person sets them all off for 40 more, then the count restarts.
+if (ok && process.argv.includes('--thorncaster')) {
+  const serverSrc = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  const shopSrc = fs.readFileSync(path.join(__dirname, '..', 'public', 'shop-catalog.js'), 'utf8');
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const w = WEAPONS.find(x => x.id === 'thorncaster'), idx = WEAPONS.findIndex(x => x.id === 'thorncaster');
+    if (!w) return ['the Thorncaster is missing'];
+    if (w.slot !== 'primary' || w.damage !== 32 || w.mag !== 24 || Math.round(1000 / w.fireRate) !== 9 || !w.auto || w.reloadTime !== 2200 || w.bulletSpeed !== 140 || w.thornburst.hits !== 4 || w.thornburst.ms !== 3000 || w.thornburst.bonus !== 40)
+      issues.push('stats: ' + JSON.stringify({ s: w.slot, d: w.damage, m: w.mag, f: w.fireRate, a: w.auto, r: w.reloadTime, v: w.bulletSpeed, t: w.thornburst }));
+    // the maths in the design: 4 hits 168, 7 hits 264, 8 hits 336, 0.78 s
+    const total = n => n * 32 + Math.floor(n / 4) * 40;
+    if (total(4) !== 168 || total(7) !== 264 || total(8) !== 336 || Math.ceil(300 / 32) !== 10) issues.push('the design numbers');
+    if (Math.abs(7 * w.fireRate / 1000 - 0.777) > 0.01) issues.push('eight perfect hits take 0.78 s');
+    if (weaponModels.length !== WEAPONS.length) issues.push('WEAPONS and weaponModels must stay parallel');
+    const mod = weaponModels[idx];
+    if (!mod || mod.userData.builtFor !== 'thorncaster') issues.push('weaponModels is out of step: the model at its slot is ' + (mod && mod.userData.builtFor));
+    else if (!mod._flash || !mod._tick || !mod._calm) issues.push('model needs flash, tick, calm'); else { mod._tick(0.016, 1, false); mod._calm(); }
+    if (projectileKind('thorncaster') !== 'thorn') issues.push('kind: ' + projectileKind('thorncaster'));
+    const mesh = makeBulletMesh(w.bulletColor, w.bulletSize, 'thorncaster', true);
+    if (!(mesh.children.length >= 2 && mesh._alignToDir)) issues.push('the thorn needs a spike and a glow');
+    if (!(RELOAD_KEYS.thorncaster && RELOAD_PROPS.thorncaster)) issues.push('reload missing');
+    if (getClientWeaponDamage('thorncaster_ab') !== 40) issues.push('client damage for the burst');
+    return issues;
+  })()`);
+  const more = vm.runInThisContext(`(() => {
+    const issues = [];
+    const w = WEAPONS.find(x => x.id === 'thorncaster');
+    const keep = { rm: Object.assign({}, remoteMeshes), pl: Object.assign({}, players), hit: emitHit, lb: localBullets.slice(), wc: wallColliders.slice(), dead: isDead, lobby: inLobby, ff: friendlyFireBlocked, cam: camera.position.clone(), snd: playSoundEvent, fan: flashAbilityName, now: Date.now, los: hasLineOfSight };
+    const hits = [], banners = [];
+    let clock = 7e9;
+    try {
+      Date.now = () => clock;
+      for (const k of Object.keys(remoteMeshes)) delete remoteMeshes[k];
+      emitHit = (pid, bid, wid) => { hits.push({ pid, bid, wid }); }; playSoundEvent = () => {}; flashAbilityName = t => banners.push(t); hasLineOfSight = () => true;
+      friendlyFireBlocked = () => false; isDead = false; inLobby = false; localBullets.length = 0; wallColliders.length = 0; camera.position.set(200, 1.65, 200);
+      const man = (id, x, z) => { const m = new THREE.Group(); m.position.set(x, 0, z); m.rotation.y = 0; scene.add(m); remoteMeshes[id] = m; m.visible = true; players[id] = { dead: false }; return m; };
+      const at = new THREE.Vector3(0, 1.0, -10), dir = new THREE.Vector3(0, 0, -1);
+      const A = man('A', 0, -10), B = man('B', 5, -10);
+      const bursts = () => hits.filter(h => h.wid === 'thorncaster_ab').length;
+      for (let i = 0; i < 3; i++) _thornHit('A', A, at, dir);
+      if (bursts() !== 0 || A.children.length !== 3) issues.push('three thorns: no burst yet, three stuck in them: ' + bursts() + ' bursts, ' + A.children.length + ' thorns');
+      _thornHit('B', B, at, dir);
+      if (bursts() !== 0) issues.push('another person has their own count');
+      _thornHit('A', A, at, dir);
+      if (!(bursts() === 1 && hits[hits.length - 1].pid === 'A')) issues.push('the fourth on the same person goes off: ' + bursts());
+      if (A.children.length !== 0) issues.push('and the thorns are gone: ' + A.children.length);
+      if (!banners.some(t => /THORNBURST.*40/.test(t))) issues.push('it says so: ' + banners.join('|'));
+      for (let i = 0; i < 4; i++) _thornHit('A', A, at, dir);
+      if (bursts() !== 2) issues.push('the count starts again: another four, another burst: ' + bursts());
+      // 3 s: thorns older than that are out of them and do not count
+      hits.length = 0; _thornClear('A'); _thornClear('B');
+      _thornHit('A', A, at, dir); _thornHit('A', A, at, dir); _thornHit('A', A, at, dir);
+      clock += 3100; updateBullets(0.016);
+      if (A.children.length !== 0) issues.push('they fall out after 3 s: ' + A.children.length);
+      _thornHit('A', A, at, dir);
+      if (bursts() !== 0) issues.push('three old thorns and one new one is only one thorn');
+      clock += 1000; _thornHit('A', A, at, dir); clock += 1000; _thornHit('A', A, at, dir); clock += 900; _thornHit('A', A, at, dir);
+      if (bursts() !== 1) issues.push('four inside 3 s, however slowly, go off: ' + bursts());
+      // a dead target is cleared
+      hits.length = 0; _thornClear('A'); _thornHit('A', A, at, dir); _thornHit('A', A, at, dir); players.A.dead = true; updateBullets(0.016);
+      if (A.children.length !== 0 || _THORNS.has('A')) issues.push('somebody who has died carries none');
+      players.A.dead = false;
+      // ── the real flight: eight thorns into one man = eight 32s and two bursts (elimination at 336)
+      hits.length = 0; _thornClear('A'); localBullets.length = 0;
+      for (let i = 0; i < 8; i++) {
+        spawnLocalBullet(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, -1), 'th' + i, true, w.bulletSpeed, w.bulletColor, w.bulletSize, 'thorncaster');
+        if (i === 0 && Math.abs(localBullets[0].speed - 140) > 0.7) issues.push('a thorn flies at 140: ' + localBullets[0].speed);
+        for (let f = 0; f < 40 && localBullets.length; f++) { clock += 16; updateBullets(0.016); }
+      }
+      const direct = hits.filter(h => h.wid === 'thorncaster' && h.pid === 'A').length;
+      if (!(direct === 8 && bursts() === 2)) issues.push('eight thorns into one man: eight direct and two bursts, got ' + direct + ' and ' + bursts());
+      if (hits.some(h => h.pid === 'B')) issues.push('he was not in the line');
+      // somebody else's thorns do not count on your screen
+      hits.length = 0; _thornClear('A'); localBullets.length = 0;
+      for (let i = 0; i < 5; i++) { spawnLocalBullet(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, -1), 'ot' + i, false, w.bulletSpeed, w.bulletColor, w.bulletSize, 'thorncaster', { ownerId: 'foe' }); for (let f = 0; f < 40 && localBullets.length; f++) { clock += 16; updateBullets(0.016); } }
+      if (hits.length || A.children.length) issues.push('another player\\'s thorns neither hurt nor stick on your screen');
+    } catch (e) { issues.push('threw: ' + (e && e.stack || e)); }
+    finally {
+      for (const m of Object.values(remoteMeshes)) scene.remove(m);
+      for (const k of Object.keys(remoteMeshes)) delete remoteMeshes[k]; Object.assign(remoteMeshes, keep.rm);
+      for (const k of Object.keys(players)) delete players[k]; Object.assign(players, keep.pl);
+      for (const pid of [..._THORNS.keys()]) _thornClear(pid);
+      Date.now = keep.now; emitHit = keep.hit; playSoundEvent = keep.snd; flashAbilityName = keep.fan; hasLineOfSight = keep.los; friendlyFireBlocked = keep.ff; isDead = keep.dead; inLobby = keep.lobby; camera.position.copy(keep.cam);
+      localBullets.length = 0; keep.lb.forEach(x => localBullets.push(x)); wallColliders.length = 0; keep.wc.forEach(x => wallColliders.push(x));
+    }
+    return issues;
+  })()`);
+  const outside = [];
+  if (!/thorncaster: 460/.test(serverSrc) || !/thorncaster: 32, thorncaster_ab: 40/.test(serverSrc) || !/thorncaster: FALLOFF_NONE/.test(serverSrc) || !/WEAPON_HS_MULT = \{ thorncaster: 1/.test(serverSrc)) outside.push('server.js is missing the Thorncaster cost, damage, falloff or headshot multiplier');
+  if (!/thorncaster:5800/.test(shopSrc) || !/tierById\.thorncaster='prime'/.test(shopSrc)) outside.push('the shop price (5,800) or its Prime tier is missing');
+  const all = issues.concat(more, outside);
+  console.log('THORNCASTER checks: stats and the design maths, model in step, the thorn round, THORNBURST (4th goes off for 40, resets, 3 s expiry, per person, own screen only), eight thorns into one man');
+  if (all.length) { ok = false; console.log(all.join('\n')); }
+}
+
 process.exit(ok ? 0 : 1);
