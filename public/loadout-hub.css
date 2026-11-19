@@ -19,7 +19,20 @@
 #loadout-count { font-size: 12px; color: #9baab5; white-space: nowrap; }
 #loadout-tier { max-width:210px;min-width:0;min-height:44px;background:#18232c;color:#eef3f6;border:1px solid #61717e;border-radius:4px;padding:8px;font:13px system-ui,sans-serif; }
 #loadout-screen .lh-tools { flex-wrap:wrap; }
-@media(max-width:650px) { #loadout-search { flex:1 1 50%; } #loadout-tier { flex:1 1 35%;max-width:48%; } #loadout-count { flex-basis:100%; } }
+#loadout-favorites, .lh-favorite {
+  display: grid; place-items: center; width: 44px; height: 44px; flex: 0 0 44px;
+  padding: 0; border: 1px solid #61717e; border-radius: 4px;
+  background: #18232c; color: #d7dee5; font: 22px/1 system-ui, sans-serif; cursor: pointer; touch-action: manipulation;
+}
+#loadout-favorites[aria-pressed="true"], .lh-favorite[aria-pressed="true"] {
+  color: #ffd476; border-color: #ffd476; background: #3a2a17;
+}
+#loadout-screen .lh-favorite { position: absolute; z-index: 2; right: 4px; bottom: 4px; }
+@media(max-width:650px) {
+  #loadout-search { flex: 1; min-width: 0; }
+  #loadout-tier { flex: 0 1 38%; }
+  #loadout-count { flex-basis: 100%; }
+}
 #loadout-screen #loadout-cols { display: block; width: 100%; max-width: 1200px; min-height: 0; flex: 1 1 0; overflow: hidden; }
 #loadout-screen .loadout-col { height: 100%; min-height: 0; }
 #loadout-screen .loadout-col-title { display: none; }
@@ -50,6 +63,39 @@
 #loadout-screen .lh-footer #loadout-next { min-width: 0; white-space: normal; }
 #loadout-screen .auto-respawn-sub { max-width: 138px; white-space: normal; overflow-wrap: anywhere; }
 #loadout-screen :focus-visible, #player-record-panel :focus-visible { outline: 2px solid #97e9dc; outline-offset: 2px; }
+#best-loadouts-panel {
+  box-sizing: border-box; width: min(500px, calc(100% - 24px)); max-height: calc(100dvh - 24px);
+  overflow: auto; overscroll-behavior: contain; color: #edf1f4; background: #141c24;
+  border: 1px solid #52616f; border-radius: 6px; padding: 16px; font: 14px/1.4 system-ui, sans-serif;
+}
+#best-loadouts-panel *, #best-loadouts-panel *::before { box-sizing: border-box; letter-spacing: 0; }
+#best-loadouts-panel::backdrop { background: #000a; }
+#best-loadouts-panel .kit-header, #best-loadouts-panel .kit-form { display: flex; align-items: center; gap: 8px; }
+#best-loadouts-panel .kit-header { justify-content: space-between; margin-bottom: 14px; }
+#best-loadouts-panel h2 { margin: 0; font-size: 18px; }
+#best-loadouts-panel button, #best-loadouts-panel input {
+  min-height: 44px; padding: 6px 10px; border: 1px solid #52616f; border-radius: 4px;
+  background: #26323e; color: #e2ebf3; font: 600 13px/1.2 system-ui, sans-serif; touch-action: manipulation;
+}
+#best-loadouts-panel button { cursor: pointer; }
+#best-loadouts-panel button:disabled { opacity: .62; cursor: default; }
+#best-loadouts-panel button:focus-visible, #best-loadouts-panel input:focus-visible, #best-loadouts-panel summary:focus-visible {
+  outline: 2px solid #97e9dc; outline-offset: 2px;
+}
+#best-loadouts-panel .kit-form input { min-width: 0; flex: 1 1 100px; background: #080d12; font-size: 16px; }
+#best-loadouts-panel .kit-form button { flex: 0 0 auto; color: #ffe3a5; border-color: #986f3e; background: #3a2a17; }
+#best-loadouts-panel .kit-status { min-height: 20px; margin: 4px 0; color: #ffe3a5; overflow-wrap: anywhere; }
+#best-loadouts-panel .kit-empty { color: #a6b4c0; margin: 0 0 16px; }
+#best-loadouts-panel .kit-row {
+  display: grid; grid-template-columns: minmax(0,1fr) auto 44px; gap: 8px; align-items: center;
+  border-top: 1px solid #384754; padding: 8px 0;
+}
+#best-loadouts-panel strong, #best-loadouts-panel small { display: block; overflow-wrap: anywhere; }
+#best-loadouts-panel small { margin-top: 3px; color: #bac7d2; font-size: 11px; }
+#best-close { width: 44px; padding: 0 !important; }
+#best-loadouts-panel details { border-top: 1px solid #384754; }
+#best-loadouts-panel summary { padding: 13px 0; cursor: pointer; }
+#best-loadouts-panel .bl-card { width: 100%; text-align: left; margin-bottom: 6px; }
 #lobby-record-btn { position: fixed; top: 14px; left: 290px; z-index: 60; min-height: 42px; padding: 8px 18px; color: #d1e4f8; background: #192d3ee8; border: 2px solid #8cb8df; border-radius: 6px; font: 700 13px system-ui,sans-serif; cursor: pointer; }
 body.touch-ui #lobby-record-btn { top: 6px; left: 222px; min-height: 36px; padding: 6px 12px; }
 #player-record-panel { position: fixed; inset: 0; z-index: 102; padding: 16px; display: none; align-items: center; justify-content: center; background: #000b; color: #e6edf3; font: 14px/1.45 system-ui,sans-serif; }

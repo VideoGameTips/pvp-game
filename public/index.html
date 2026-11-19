@@ -16,6 +16,7 @@
   <meta property="og:image" content="https://sushigamelab.com/og-cover.png" />
   <link rel="stylesheet" href="underworld.css" />
   <link rel="stylesheet" href="backrooms.css" />
+  <link rel="stylesheet" href="match-mvp.css?v=2" />
   <link rel="stylesheet" href="stealth-showroom.css?v=a6b8e6ce6c15" />
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -105,7 +106,8 @@
     #kill-confirm {
       position: absolute; top: calc(50% + 30px); left: 50%; transform: translateX(-50%);
       font: 700 15px/1.2 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
-      color: #ff6b6b; letter-spacing: 1px; white-space: nowrap; pointer-events: none; opacity: 0;
+      color: #ff6b6b; letter-spacing: 0; white-space: nowrap; pointer-events: none; opacity: 0;
+      max-width: calc(100% - 24px); overflow: hidden; text-overflow: ellipsis;
       text-shadow: 0 1px 2px #000, 0 0 10px rgba(0,0,0,0.7);
     }
     #ammo-hint {
@@ -153,6 +155,9 @@
     /* 🧭 Incoming damage (#36): an arc on the ring around the crosshair, turned toward the shooter;
        a red edge that stays while HP is low; a short edge pulse for damage with no direction. */
     #dmg-dir, #low-hp, #dmg-edge { position: fixed; inset: 0; pointer-events: none; z-index: 79; }
+    #suppression-edge { position: fixed; inset: 0; pointer-events: none; z-index: 78; opacity: 0;
+      background: radial-gradient(ellipse at center, transparent 55%, #141923 100%); }
+    @media (prefers-reduced-motion: reduce) { #suppression-edge { visibility: hidden; } }
     .dmg-arc {
       position: absolute; top: 50%; left: 50%; width: min(58vw, 58vh); height: min(58vw, 58vh);
       margin: calc(min(58vw, 58vh) / -2) 0 0 calc(min(58vw, 58vh) / -2); border-radius: 50%;
@@ -625,6 +630,16 @@
       position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
       font-size: 14px; color: #ffd700; display: none; margin-top: 52px;   /* the ammo-hint line; +30 is the kill confirm (#34) */
     }
+    #frag-fuse {
+      position:absolute; top:calc(50% + 42px); left:50%; transform:translateX(-50%);
+      width:72px; height:7px; border:1px solid #151515; border-radius:2px;
+      appearance:none; background:#222; accent-color:#ffc04d; pointer-events:none;
+    }
+    #frag-fuse::-webkit-progress-bar { background:#222; }
+    #frag-fuse::-webkit-progress-value { background:#ffc04d; }
+    #frag-fuse::-moz-progress-bar { background:#ffc04d; }
+    #frag-fuse.urgent::-webkit-progress-value { background:#ff4b36; }
+    #frag-fuse.urgent::-moz-progress-bar { background:#ff4b36; }
 
     #interact-hint {
       position: absolute; bottom: 130px; left: 50%; transform: translateX(-50%);
@@ -1128,7 +1143,7 @@
       100% { color: #ff2222; text-shadow: 0 0 18px #ff2222; }
     }
   </style>
-  <link rel="stylesheet" href="loadout-hub.css?v=75ba9ff4bdb5" />
+  <link rel="stylesheet" href="loadout-hub.css?v=saved-kits-1" />
   <link rel="stylesheet" href="battle-simulator.css">
 </head>
 <body class="login-open">
@@ -1353,6 +1368,7 @@
     <div id="dmg-dir"></div>
     <div id="low-hp"></div>
     <div id="dmg-edge"></div>
+    <div id="suppression-edge" aria-hidden="true"></div>
 
     <div id="health-bar">
       <div id="health-label">HEALTH</div>
@@ -1406,6 +1422,7 @@
       <div id="ability-desc"></div>
     </div>
     <div id="reload-flash">RELOADING...</div>
+    <progress id="frag-fuse" max="3000" value="0" aria-label="Grenade fuse" hidden></progress>
     <div id="interact-hint">🗑 F · SWAP WEAPONS</div>
 
     <div id="scoreboard">
@@ -1477,7 +1494,7 @@
   <!-- Message feed: kills, comms, pickups, round banners — newest on top (#29) -->
   <div id="msg-feed"></div>
 
-  <!-- Pre-match 5-second countdown -->
+  <!-- Pre-match countdown -->
   <div id="countdown-overlay">
     <div id="countdown-number">5</div>
     <div id="countdown-label">GET READY</div>
@@ -1500,6 +1517,24 @@
     <div id="match-over-title">VICTORY</div>
     <div id="match-over-sub"></div>
     <div id="match-over-score"></div>
+    <section id="match-mvp" aria-labelledby="mvp-name" hidden>
+      <div class="mvp-kicker"><span>MATCH MVP</span><span id="mvp-team"></span></div>
+      <div class="mvp-main">
+        <div class="mvp-player">
+          <div class="mvp-emblem" aria-hidden="true"></div>
+          <div class="mvp-identity"><h2 id="mvp-name" data-no-i18n></h2><span id="mvp-rank"></span></div>
+        </div>
+        <figure class="mvp-weapon">
+          <img alt="" hidden>
+          <figcaption><small>EQUIPPED WEAPON</small><strong id="mvp-weapon-name"></strong></figcaption>
+        </figure>
+      </div>
+      <dl class="mvp-totals">
+        <div><dt>KILLS</dt><dd id="mvp-kills"></dd></div>
+        <div><dt>DEATHS</dt><dd id="mvp-deaths"></dd></div>
+        <div><dt>K/D</dt><dd id="mvp-kd"></dd></div>
+      </dl>
+    </section>
     <div id="match-over-stats"></div>
     <!-- Wired in game.js (click + touchstart): an onclick here never fires on a phone mid-match. -->
     <div id="match-over-actions">
@@ -1613,27 +1648,44 @@
   <script src="weapon-finish.js?v=39f750e0a4ec"></script>
   <script src="stealth-series.js?v=63f3f99bd95c"></script>
   <script src="stealth-showroom.js?v=c602f701ccb1"></script>
-  <script src="loadout-hub.js?v=75659f55aba5"></script>
+  <script src="loadout-hub.js?v=saved-kits-1"></script>
   <script src="player-record.js?v=d4d03c911b26"></script>
   <script src="volcano-map.js?v=5323073934b5"></script>
   <script src="lobby-case.js?v=abe88eccb927"></script>
   <script src="map-shapes.js"></script>
+  <script src="vesper-textures.js?v=1"></script>
+  <script src="nova-textures.js?v=1"></script>
+  <script src="ember-textures.js?v=1"></script>
+  <script src="raven-textures.js?v=1"></script>
+  <script src="pixel-textures.js?v=1"></script>
+  <script src="arena-character-textures.js?v=1"></script>
   <script src="chronos-engine.js?v=1"></script>
   <script src="clockwork-requiem.js?v=1"></script>
   <script src="combat-visuals.js?v=1"></script>
+  <link rel="stylesheet" href="damage-symbols.css?v=1" />
+  <script src="damage-symbols.js?v=1"></script>
   <script src="nightmare-ai.js?v=1"></script>
-  <script src="game.js?v=d88349adb91d"></script>
+  <script src="arsenal-remodels.js?v=1"></script>
+  <script src="collection-wraps.js?v=prestige-1"></script>
+  <script src="impossible-round4.js?v=1"></script>
+  <script src="impossible-round5.js?v=2"></script>
+  <script src="hungry-garden.js?v=3"></script>
+  <script src="impossible-skins.js?v=7"></script>
+  <script src="match-mvp.js?v=1"></script>
+  <script src="radiation.js"></script>
+  <script src="fission-disc.js?v=1"></script>
+  <script src="game.js?v=fission-disc-1"></script>
   <script src="tether-weapons.js"></script>
   <script src="swap-portals.js"></script>
   <script src="boss-arsenal.js"></script>
-  <script src="battle-simulator.js"></script>
+  <script src="battle-simulator.js?v=gb-archive-1"></script>
   <script src="underworld-adapter.js"></script>
   <script src="backrooms-data.js"></script>
   <script src="backrooms.js"></script>
   <script src="ragdoll.js"></script>
   <script src="chat.js"></script>
   <script src="rank-core.js"></script>
-  <script src="ranked.js"></script>   <!-- ranked 1v1 / 2v2: the badges, the ladder panel, the result report -->
+  <script src="ranked.js?v=rank-badges-2"></script>   <!-- ranked 1v1 / 2v2: the badges, the ladder panel, the result report -->
   <script src="sound-data.js"></script>   <!-- the recordings (WEAPON_SAMPLES), as data: generated by tools/embed-sounds.js -->
 </body>
 </html>

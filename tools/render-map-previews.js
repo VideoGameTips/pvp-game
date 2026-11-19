@@ -47,6 +47,9 @@ const VIEWS = {
         try { weaponModels.forEach(m => { m.visible = false; }); } catch (e) {}
         camera.children.forEach(c => { if (!c.isLight) c.visible = false; });
         activateMap(id);
+        const gridConcept = MAP_GROUPS[id]._gridConcept;
+        const hidden = gridConcept ? scene.children.filter(o => o.visible && o !== MAP_GROUPS[id] && !o.isLight) : [];
+        hidden.forEach(o => { o.visible = false; });
         if (RED) for (const m of MAP_GROUPS[id].children) if (m.userData && m.userData.mapWear && m.material && m.material.map) { m.material.vertexColors = false; m.material.color.setHex(0xff0000); m.material.needsUpdate = true; }   // PREVIEW_RED: show where the wear is
         const sky = MAP_GROUPS[id] && MAP_GROUPS[id]._skyColor;
         if (sky != null && scene.background && scene.background.setHex) scene.background.setHex(sky);
@@ -78,6 +81,7 @@ const VIEWS = {
         };
         let best = null;
         if (views[id]) best = views[id];
+        else if (gridConcept) best = { from: [R * 1.23, R * 1.63, R * 1.33], to: [0, .5, 0], fov: 60 };
         else {
           // Corners and the middles of the sides, two heights, looking across the map; the plain corner-to-far-side
           // view is the favourite and the others only win by being clearly better (not facing a wall, not dark).
@@ -111,6 +115,7 @@ const VIEWS = {
         renderer.render(scene, camera);
         const small = document.createElement('canvas'); small.width = OUT_W; small.height = OUT_H;
         small.getContext('2d').drawImage(renderer.domElement, 0, 0, OUT_W, OUT_H);
+        hidden.forEach(o => { o.visible = true; });
         if (scene.userData._previewLift) { scene.remove(scene.userData._previewLift); scene.userData._previewLift = null; }
         if (RED) window.__lastView = best;
         return small.toDataURL('image/jpeg', 0.8);

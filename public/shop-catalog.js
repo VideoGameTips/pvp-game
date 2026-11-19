@@ -52,18 +52,22 @@
     p2w:{name:'Straight Pay to Win',color:'#f46f82',min:75000,max:300000},
   };
   const tierGroups={
-    prime:['p90','vector','burst','srx','lever','rpd','rpg','bazooka','crossbow','flamethrower','grenade_launcher','freeze_gun','boombow','mortar_rifle','air_rifle','hand_cannon','gatecrasher','akimbo','frost_blaster','freeze_ray','auto_revolver','sawed_off','machine_revolver','katana','sledge','spear','chainsaw','combat_axe','fire_axe','nunchucks','riot_shield','satchel','sticky_charge','adrenaline','land_mine','emp_grenade','tesla_coil','mini_turret','guardian_drone','hologram','magnet_mine','healing_pulse','teleport_beacon','cloak','berserker_serum','drone_strike','hunter_drone','heal_gun','vampire_syringe'],
+    prime:['p90','vector','mmg','burst','srx','lever','rpd','rpg','bazooka','crossbow','flamethrower','grenade_launcher','freeze_gun','boombow','mortar_rifle','air_rifle','hand_cannon','gatecrasher','akimbo','frost_blaster','freeze_ray','auto_revolver','sawed_off','machine_revolver','katana','sledge','spear','chainsaw','combat_axe','fire_axe','nunchucks','riot_shield','satchel','sticky_charge','adrenaline','land_mine','emp_grenade','tesla_coil','mini_turret','guardian_drone','hologram','magnet_mine','healing_pulse','teleport_beacon','cloak','berserker_serum','drone_strike','hunter_drone','heal_gun','vampire_syringe'],
     exclusive:['minigun','chain_gun','railgun','cyroclasm','storm_bloom','continuum','gunslinger','lightsabre','scythe','chain_hammer','grapple_hook','blink_pearl','glitch_cube','lancer','nano_shield'],
     p2w:['javelin_launcher','event_horizon','storm_core','abs_zero','solar_lance','quantum_repeater','magnetar','nebula_mortar','prism_engine','void_harvester','pulse_needle','phase_blade','gravity_hammer','volt_whip','nano_swarm','warp_beacon','stasis_mine','specter_drone','quantum_barrier','black_hole_seed','orbital_strike','titan_hammer','vampire_blade'],
   };
   const restricted=new Set(['hellfire','omega_pistol','m4a1_arena','gau19','mk44','xm7','barrett','m134','hkmp7','p90_spec','desert_eagle','m1911','glock18','five_seven','chrono_pistol','phase_rifle','karambit','bayonet','tomahawk','ots04','garrote','c4','claymore','stun_grenade','thermite','predator_uav','care_package','tac_nuke']);
   const tierById=Object.fromEntries(Object.entries(tierGroups).flatMap(([tier,ids])=>ids.map(id=>[id,tier])));
+  tierById.rad_pulse='prime';
+  tierById.asmg9='prime';
   function category(id,item={}) {
     if(restricted.has(id)||item.adminItem||item.prototype||item.ddayOnly||item.modeOnly)return 'exclusive';
     return tierById[id] || 'normal';
   }
   // Final donut prices, not multiplier inputs. Shared by the display and purchase authority.
   const weaponPrices={
+    rad_pulse:7200,
+    asmg9:3200,
     mp40:700,paintball:450,revolver:350,shorty:500,cycler:650,throwing_knives:700,taser:1000,
     machine_pistol:1100,traffic_cone:300,cream_pie:250,dart_gun:600,laser_pointer:200,
     snub_revolver:400,twin_burst:950,duelist_pistol:1200,mauser:750,nail_gun:600,slingshot:300,
@@ -71,7 +75,7 @@
     umbrella:450,yoyo:900,shock_baton:1400,tennis_racket:350,golf_club:600,
     stim:250,smoke:200,molotov:500,air_grenade:400,air_blaster:1200,ammo_fountain:800,
     confetti_cannon:150,rubber_duck:100,bounce_pad:700,tripwire:700,hamburger:350,acid_grenade:900,bee_jar:1000,
-    p90:4200,energy_rifle:4800,gravity_cannon:5600,vector:5000,burst:3500,srx:6500,lever:3900,rpd:6000,rpg:8500,bazooka:10000,
+    p90:4200,energy_rifle:4800,gravity_cannon:5600,vector:5000,mmg:4500,burst:3500,srx:6500,lever:3900,rpd:6000,rpg:8500,bazooka:10000,
     crossbow:3000,flamethrower:5500,grenade_launcher:7500,freeze_gun:6000,boombow:4500,
     mortar_rifle:7000,air_rifle:3200,hand_cannon:4000,gatecrasher:9000,
     akimbo:5000,frost_blaster:6500,freeze_ray:6500,auto_revolver:5000,sawed_off:3800,machine_revolver:4500,

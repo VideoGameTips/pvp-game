@@ -42,7 +42,7 @@ assert.ok(a > 0 && b > a, 'the ranked block was not found in server.js');
 function world(names) {
   const users = {}, players = {}, sent = [];
   for (const n of names) { users[n] = {}; players[n + '-sid'] = { account: n }; }
-  const ctx = { RANK, users, players, io: { to: sid => ({ emit: (ev, d) => sent.push({ sid, ev, d }) }) }, saveUsers() {}, setTimeout: () => 0, clearTimeout() {}, Date, Math, Set };
+  const ctx = { RANK, PRESTIGE_WRAP: require('../prestige-wraps'), users, players, io: { to: sid => ({ emit: (ev, d) => sent.push({ sid, ev, d }) }) }, saveUsers() {}, setTimeout: () => 0, clearTimeout() {}, Date, Math, Set };
   vm.createContext(ctx);
   vm.runInContext(src.slice(a, b) + '\n__api = { rankedMatches, rankedTryResolve, rankedLeft, rankedSettle };', ctx);   // (a top-level const is not a property of the context)
   const api = ctx.__api;

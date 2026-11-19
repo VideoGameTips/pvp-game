@@ -17,6 +17,7 @@ const GAME = path.join(__dirname, '..', 'public', 'game.js');
 const src = fs.readFileSync(GAME, 'utf8');
 const THREE = require('../public/three.min.js');
 global.PVP_SHOP_CATALOG = require('../public/shop-catalog.js');
+global.PVP_DAMAGE_SYMBOLS = require('../public/damage-symbols.js');
 
 const noop = () => {};
 const el = () => new Proxy({
@@ -113,7 +114,16 @@ try {
 }
 try {
   if (ok) vm.runInThisContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'volcano-map.js'), 'utf8'), { filename: 'public/volcano-map.js' });
+  if (ok) vm.runInThisContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'vesper-textures.js'), 'utf8'), { filename: 'public/vesper-textures.js' });
+  if (ok) vm.runInThisContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'nova-textures.js'), 'utf8'), { filename: 'public/nova-textures.js' });
+  if (ok) vm.runInThisContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'ember-textures.js'), 'utf8'), { filename: 'public/ember-textures.js' });
+  if (ok) vm.runInThisContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'raven-textures.js'), 'utf8'), { filename: 'public/raven-textures.js' });
+  if (ok) vm.runInThisContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'pixel-textures.js'), 'utf8'), { filename: 'public/pixel-textures.js' });
+  if (ok) vm.runInThisContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'arena-character-textures.js'), 'utf8'), { filename: 'public/arena-character-textures.js' });
   if (ok) vm.runInThisContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'map-shapes.js'), 'utf8'), { filename: 'public/map-shapes.js' });   // (map outlines)
+  for (const file of ['fission-disc.js','radiation.js','chronos-engine.js', 'arsenal-remodels.js', 'collection-wraps.js', 'impossible-round4.js', 'impossible-round5.js', 'clockwork-requiem.js', 'hungry-garden.js', 'impossible-skins.js', 'match-mvp.js']) {
+    if (ok) vm.runInThisContext(fs.readFileSync(path.join(__dirname, '..', 'public', file), 'utf8'), { filename: 'public/' + file });
+  }
   if (ok) vm.runInThisContext(src, { filename: 'public/game.js' });
 } catch (e) {
   ok = false;
@@ -277,9 +287,9 @@ if (ok && process.argv.includes('--hitmarker')) {
         calls.length = 0; T += 5000; _hmSoundLog.length = 0;
         for (let i = 0; i < rate * 2; i++) { T += 1000 / rate; playHitConfirmSound('hit'); }
         const vols = calls.map(c => c[1].volume);
-        if (calls.length > rate * 2 * 0.85 && label === 'Minigun') issues.push(label + ' plays ' + calls.length + ' clicks for ' + rate * 2 + ' hits: no limit');
+        if (calls.length !== rate * 2) issues.push(label + ' plays ' + calls.length + ' clicks for ' + rate * 2 + ' hits');
         if (!(vols[vols.length - 1] < vols[0] * 0.65)) issues.push(label + ' clicks do not get quieter as they pile up: ' + vols[0].toFixed(2) + ' -> ' + vols[vols.length - 1].toFixed(2));
-        if (calls.some(c => c[1].minGap < 60)) issues.push(label + ': the click gap is too short');
+        if (calls.some(c => c[1].minGap !== 0)) issues.push(label + ': body hits should start without waiting');
       }
       calls.length = 0; T += 5000; _hmSoundLog.length = 0; for (let i = 0; i < 12; i++) { T += 10; playHitConfirmSound('hit'); }
       const crowded = calls.length; playHitConfirmSound('kill'); if (calls.length !== crowded + 1) issues.push('an elimination should always be heard, even in a crowd of clicks');
@@ -325,11 +335,26 @@ if (ok && process.argv.includes('--hitmarker')) {
       if (!HITMARKER_NUMBERS.last || HITMARKER_NUMBERS.last.total !== 40) issues.push('without a dealt figure the drop in health should be used');
       T += 500; HITMARKER_VIEW.clear(); calls.length = 0; const before2 = HITMARKER_VIEW.t0;
       hitConfirmFromServer({ ...taken, bulletId: 'k9', hp: 0, dealt: 30 }, 30);
-      if (HITMARKER_VIEW.t0 !== before2 || calls.length) issues.push('a killing blow should leave the marker and the tone to the elimination, not play a body click first');
-      T += 5000; HITMARKER_VIEW.clear(); calls.length = 0; _lastKillConfirm = { id: null, t: 0 };
+      if (HITMARKER_VIEW.t0 !== before2 || calls.length !== 1 || calls[0][0] !== 'hm_body') issues.push('a lethal body hit should play its impact without replacing the elimination marker');
+      T += 5000; HITMARKER_VIEW.clear(); calls.length = 0; resetKillChain(); _killConfirms.clear();
+      const banners = [], keepBanner = showKillBanner;
+      showKillBanner = (...args) => banners.push(args);
       confirmKill('v1', 'Victim');
       if (HITMARKER_VIEW.kind !== 'kill' || calls.length !== 1 || calls[0][0] !== 'hm_kill') issues.push('an elimination should draw the gold marker and play its tone once');
       confirmKill('v1', 'Victim'); if (calls.length !== 1) issues.push('the elimination tone played twice for one kill');
+      const basePitch = calls[0][1].pitch;
+      for (let i = 0; i < 28; i++) { T += i === 0 ? 10000 : 10; confirmKill('chain' + i, 'Victim'); }
+      confirmKill('chain0', 'Victim');
+      const pitches = calls.map(c => c[1].pitch);
+      if (basePitch !== 1 || pitches.length !== 29 || pitches.some((p, i) => i && p <= pitches[i - 1])) issues.push('each distinct elimination should keep raising the pitch');
+      if (banners[0]?.[0] !== 2 || banners.length !== 28) issues.push('banners should share the inclusive 10-second audio window');
+      T += 10001; confirmKill('afterChain', 'Victim');
+      if (calls[calls.length - 1][1].pitch !== 1) issues.push('elimination pitch should reset after more than ten seconds');
+      const oldMatch = match;
+      resetKillChain(); match = { type: 'elim', roundActive: true, _aceRound: { remaining: new Set(['one','two']), total: 2 } };
+      confirmKill('one', 'One'); T += 10001; confirmKill('two', 'Two');
+      if (banners.at(-1)?.join(',') !== '1,true,2') issues.push('an Ace should be earned for eliminating the entire round roster even after the chain expires');
+      match = oldMatch; showKillBanner = keepBanner;
       // the lobby: grey, no damage
       inLobby = true; T += 5000; HITMARKER_VIEW.clear();
       emitHit('lobby_target', 'lb1', 'ak20', new THREE.Vector3(0, 1, -5));
@@ -1096,6 +1121,166 @@ if (ok && process.argv.includes('--equipment-sway')) {
   else console.log('equipment sway: idle, running, no accumulated drift and attack/use ownership');
 }
 
+if (ok && process.argv.includes('--gbarchive')) {
+  const result = vm.runInThisContext(`(() => {
+    const modes=['1v1','2v2','3v3','5v5','10v10','ffa5'];
+    const pools=Object.fromEntries(modes.map(mode=>[mode,mapPoolForMode(mode)]));
+    const missing=GB_MAP_IDS.filter(id=>!MAP_GROUPS[id] || !ARCHIVED_MAP_IDS.has(id) || modes.some(mode=>pools[mode].includes(id) || effectivePickedMap(mode,id)!=='auto'));
+    return { pools, missing, count:GB_MAP_IDS.length };
+  })()`);
+  const server = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  const registry = server.slice(server.indexOf('const MAP_IDS ='), server.indexOf('function randomMapFor(mode)'));
+  const remote = vm.runInNewContext(registry + '\nObject.fromEntries(modes.map(mode=>[mode,mapPoolFor(mode)]))', { modes:Object.keys(result.pools) });
+  if (result.count!==16 || result.missing.length || JSON.stringify(result.pools)!==JSON.stringify(remote)) {
+    ok=false; console.log('GB archive: unexpected registry or client/server map pool mismatch', result.missing);
+  } else console.log('GB archive: 16 maps still load, and none appear in client or server rotations');
+}
+
+if (ok && process.argv.includes('--whiteconcepts')) {
+  const audit = vm.runInThisContext(`(() => {
+    const issues=[],ids=CONCEPT_MAP_IDS, modes=['1v1','2v2','3v3','5v5','10v10','ffa5'];
+    if(ids.length!==24||new Set(ids).size!==24||ids.some(id=>MAP_IDS.filter(m=>m===id).length!==1))issues.push('expected 24 unique white-grid map IDs');
+    const maps=ids.concat(TEN_MAP_IDS);
+    const pools=Object.fromEntries(modes.map(mode=>[mode,mapPoolForMode(mode)]));
+    const bridgeMaps=['low_grav','multi_level_yard','skybridge','industrial_complex','canyon_ridge','fortress_keep','space_dock'];
+    const sideHeights={low_grav:4.5,multi_level_yard:4.5,skybridge:6.75,industrial_complex:6.75,canyon_ridge:6.75,space_dock:6.75};
+    const ray=new THREE.Ray(),hit=new THREE.Vector3(),cameraHome=camera.position.clone();
+    const original={name:activeMapName,colliders:wallColliders.slice(),eye:window._crouchEye,gimmicks:activeMapGimmicks};
+    let ramps=0,doors=0;
+    try {
+      for(const id of maps){
+        const group=MAP_GROUPS[id],sp=MAP_SPAWNS[id],cols=MAP_COLLIDERS[id],bounds=MAP_BOUNDS[id];
+        const issue=msg=>issues.push(id+': '+msg);
+        if(!group?._gridConcept||!sp||!cols||!bounds){issue('missing map');continue;}
+        const ten=TEN_MAP_IDS.includes(id);
+        const eligible=ten?['10v10','ffa5']:CONCEPT_SMALL_IDS.includes(id)?['1v1','2v2']:CONCEPT_MEDIUM_IDS.includes(id)?['1v1','2v2','3v3']:['3v3','5v5'];
+        if(ARCHIVED_MAP_IDS.has(id)||modes.some(mode=>pools[mode].includes(id)!==eligible.includes(mode)))issue('incorrect vote eligibility');
+        if(group.children.some(m=>m.visible&&(!m.isMesh||m.material!==CONCEPT_WHITE)))issue('visible non-grid geometry');
+        if(Object.values(MAP_GIMMICKS[id]).some(zones=>zones.length))issue('white-grid map must stay static');
+        for(const m of group.children)if(!ten&&m.visible&&m.geometry.type==='BoxGeometry'){
+          const box=new THREE.Box3().setFromObject(m);
+          if(box.min.y>.01&&!cols.some(c=>Math.abs(c.max.y-box.min.y)<.015&&
+            Math.min(c.max.x,box.max.x)-Math.max(c.min.x,box.min.x)>.25&&
+            Math.min(c.max.z,box.max.z)-Math.max(c.min.z,box.min.z)>.25))issue('floating deck');
+        }
+        const high=cols.filter(b=>b.min.y===0&&b.max.y>=9.9);
+        if(high.length<4)issue('missing perimeter walls');
+        activeMapName=id;activeMapGimmicks=MAP_GIMMICKS[id];wallColliders.splice(0,wallColliders.length,...cols);
+        window._crouchEye=PLAYER_EYE_HEIGHT;
+        const samples=r=>{
+          const n=Math.ceil((r.x1-r.x0+2)/.4);
+          return Array.from({length:n+1},(_,i)=>i/n).flatMap(u=>[0,.5,1].map(v=>
+            new THREE.Vector3(r.x0-1+(r.x1-r.x0+2)*u,PLAYER_EYE_HEIGHT,r.z0+(r.z1-r.z0)*v)));
+        };
+        const allies=samples(sp.ally),enemies=samples(sp.enemy);
+        for(const p of allies.concat(enemies)){
+          if(!floorExistsAt(p.x,p.z)||cols.some(b=>b.min.y<p.y+.18&&b.max.y>.25&&
+            p.x>b.min.x-.4&&p.x<b.max.x+.4&&p.z>b.min.z-.4&&p.z<b.max.z+.4)){issue('spawn overlaps a wall or void');break;}
+        }
+        if(allies.some(a=>enemies.some(b=>{
+          const len=ray.direction.subVectors(b,a).length();ray.origin.copy(a);ray.direction.normalize();
+          return !cols.some(c=>ray.intersectBox(c,hit)&&hit.distanceTo(a)<len);
+        })))issue('exposed spawn sightline');
+        const nav=_botNavGrid(),at=(x,z)=>Math.floor((z-nav.z0)/nav.cell)*nav.W+Math.floor((x-nav.x0)/nav.cell);
+        const a=at(0,(sp.ally.z0+sp.ally.z1)/2),b=at(0,(sp.enemy.z0+sp.enemy.z1)/2);
+        if(nav.blocked[a]||nav.blocked[b])issue('bot navigation blocks spawn');
+        const entries=group._spawnEntries;
+        if(entries.length!==2||entries[0].z*entries[1].z>=0)issue('expected one entrance wall per team');
+        for(const {z,depth,centers,headroom} of entries){
+          const side=Math.sign(z),s=side>0?sp.ally:sp.enemy,spawnZ=(s.z0+s.z1)/2;
+          const exitZ=z-side*(depth/2+1.1),dir=new THREE.Vector3(0,0,-side);
+          if(!centers.length||centers.length>2)issue('expected one or two open doors per team');
+          for(const x of centers){
+            doors++;
+            const roof=cols.some(c=>Math.abs(c.min.y-headroom)<.01&&c.min.x<x&&c.max.x>x&&c.min.z<z&&c.max.z>z);
+            if(!roof||headroom<2.5)issue('spawn door lacks rectangular headroom');
+            const exit=at(x,exitZ),mid=at(x,z);
+            if(nav.blocked[exit]||nav.blocked[mid])issue('bot navigation blocks spawn doorway');
+            else{
+              _botNavFill(nav,exit);
+              const distance=nav.dist[side>0?a:b];
+              if(distance<0||distance*nav.cell>Math.abs(spawnZ-exitZ)+Math.abs(x)+4)issue('spawn doorway still requires a side detour');
+            }
+            const steps=Math.ceil(Math.abs(spawnZ-exitZ)/.13);
+            camera.position.set(x,PLAYER_EYE_HEIGHT,spawnZ);
+            for(let i=0;i<steps;i++){
+              moveWithWalls(dir,Math.abs(spawnZ-exitZ)/steps);resolveWallCollisions();
+            }
+            if(Math.hypot(camera.position.x-x,camera.position.z-exitZ)>.22||
+              Math.abs(camera.position.y-PLAYER_EYE_HEIGHT)>.08)issue('cannot walk straight through spawn doorway');
+          }
+        }
+        if(ten)continue;
+        for(const side of [-1,1]){
+          const blocked=nav.blocked.slice();
+          for(let j=0;j<nav.H;j++) if(Math.abs(nav.z0+(j+.5)*nav.cell)<1.75){
+            for(let i=0;i<nav.W;i++) if(side*(nav.x0+(i+.5)*nav.cell)<1.5)blocked[j*nav.W+i]=1;
+          }
+          const test={...nav,blocked};_botNavFill(test,b);
+          if(test.dist[a]<0)issue('no '+(side<0?'west':'east')+' ground crossing for bots');
+        }
+        const list=MAP_RAMPS[id]||[];ramps+=list.length;
+        if(list.length<2)issue('needs two ramp approaches');
+        _botNavFill(nav,b);
+        for(const r of list){
+          const direction=new THREE.Vector3(r.ux,0,r.uz);
+          const entryX=r.x0-r.ux*.75,entryZ=r.z0-r.uz*.75;
+          if(!nav.dist.some((d,k)=>d>=0&&Math.hypot(nav.x0+(k%nav.W+.5)*nav.cell-entryX,
+            nav.z0+(Math.floor(k/nav.W)+.5)*nav.cell-entryZ)<3))issue('isolated ramp entrance at '+r.x0+','+r.z0);
+          for(const offset of [0,-r.halfW*.6,r.halfW*.6]){
+            const startX=r.x0-r.ux*.75-r.uz*offset,startZ=r.z0-r.uz*.75+r.ux*offset;
+            if(cols.some(b=>b.min.y<1.8&&b.max.y>.65&&startX>b.min.x-.38&&startX<b.max.x+.38&&
+              startZ>b.min.z-.38&&startZ<b.max.z+.38)){issue('blocked ramp run-up at '+r.x0+','+r.z0);break;}
+            camera.position.set(startX,PLAYER_EYE_HEIGHT,startZ);
+            const travel=r.run+1.3,steps=Math.ceil(travel/.13);
+            for(let i=0;i<steps;i++){
+              moveWithWalls(direction,travel/steps);resolveWallCollisions();
+            }
+            const along=(camera.position.x-r.x0)*r.ux+(camera.position.z-r.z0)*r.uz;
+            if(along<r.run+.32||Math.abs(camera.position.y-PLAYER_EYE_HEIGHT-r.rise)>.12){issue('blocked ramp or missing landing at '+r.x0+','+r.z0);break;}
+          }
+        }
+        const stand=(x,z,y)=>camera.position.set(x,y+PLAYER_EYE_HEIGHT,z);
+        const walkLevel=(x,z,y)=>{
+          const dir=new THREE.Vector3(x-camera.position.x,0,z-camera.position.z),dist=dir.length();
+          const steps=Math.ceil(dist/.13);dir.normalize();
+          for(let i=0;i<steps;i++){
+            moveWithWalls(dir,dist/steps);resolveWallCollisions();
+            if(Math.abs(getGroundEyeY()-PLAYER_EYE_HEIGHT-y)>.55)return false;
+          }
+          return Math.hypot(camera.position.x-x,camera.position.z-z)<.2;
+        };
+        if(bridgeMaps.includes(id)){
+          const [a,b]=list, land=r=>[r.x0+r.ux*(r.run+.6),r.z0+r.uz*(r.run+.6)];
+          stand(...land(a),a.rise);
+          if(!walkLevel(...land(b),b.rise))issue('upper route does not connect the two ramp landings');
+        }
+        if(sideHeights[id]!=null)for(const r of list){
+          const y=sideHeights[id],t=y/r.tan,side=id==='skybridge'?-1:1;
+          const x=r.x0+r.ux*t,z=r.z0+r.uz*t,s=(r.halfW+.7)*side;
+          stand(x,z,y);
+          if(!walkLevel(x-r.uz*s,z+r.ux*s,y))issue('side landing cannot be reached from the main ramp');
+        }
+        if(id==='reactor_core'){
+          const points=[[6.5,5.5],[24.5,5.5],[24.5,17.5],[6.5,17.5]].map(([x,z])=>[(z-11.5)*2.15,(x-15.5)*2.15]);
+          stand(...points[0],CONCEPT_DECK);
+          if(!points.slice(1).concat([points[0]]).every(point=>walkLevel(...point,CONCEPT_DECK)))issue('raised catwalk is not a continuous loop');
+        }
+      }
+    } finally {
+      activeMapName=original.name;activeMapGimmicks=original.gimmicks;window._crouchEye=original.eye;
+      wallColliders.splice(0,wallColliders.length,...original.colliders);camera.position.copy(cameraHome);
+    }
+    return {issues,maps,pools,ramps,doors};
+  })()`);
+  const server = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  const registry = server.slice(server.indexOf('const MAP_IDS ='), server.indexOf('function randomMapFor(mode)'));
+  const remotePools = vm.runInNewContext(registry + '\nObject.fromEntries(modes.map(mode=>[mode,mapPoolFor(mode)]))', { modes: Object.keys(audit.pools) });
+  if (JSON.stringify(audit.pools) !== JSON.stringify(remotePools)) audit.issues.push('client and server vote pools differ');
+  if (audit.issues.length) { ok = false; console.log(audit.issues.join('\n')); }
+  else console.log('white-grid maps: ' + audit.maps.length + ' layouts, ' + audit.doors + ' walkable spawn doors, blocked spawn sightlines, ' + audit.ramps + ' audited ramps, and matching vote pools');
+}
+
 if (ok && process.argv.includes('--maps')) {
   const issues = vm.runInThisContext(`(() => {
     const issues = [], names = [...Object.keys(_BESPOKE), ...M4_TOWER_MAP_NAMES];
@@ -1570,9 +1755,9 @@ if (ok && process.argv.includes('--combat-feedback')) {
       noteKillInfo('feedback-target', myId, 'pistol', false, { tags: ['COMBO'] });
       if (!killfeedShotTags('pistol', { targetId: 'feedback-target' }).includes('COMBO')) issues.push('same-weapon follow-up lost combo');
       match = {}; _killfeedChains.clear();
-      if (killfeedChain('a', 'killer', 1000) !== 1 || killfeedChain('b', 'killer', 2000) !== 2 || killfeedChain('c', 'killer', 8001) !== 1) issues.push('multi-kill window wrong');
-      killfeedChain('killer', null, 8100);
-      if (killfeedChain('d', 'killer', 8200) !== 1 || killfeedChain('killer', 'killer', 8300) !== 0) issues.push('death/self-kill did not reset streak');
+      if (killfeedChain('a', 'killer', 1000) !== 1 || killfeedChain('b', 'killer', 11000) !== 2 || killfeedChain('c', 'killer', 21001) !== 1) issues.push('multi-kill window wrong');
+      killfeedChain('killer', null, 21100);
+      if (killfeedChain('d', 'killer', 21200) !== 1 || killfeedChain('killer', 'killer', 21300) !== 0) issues.push('death/self-kill did not reset streak');
       if (!killfeedLaser('gatecrasher_beam') || !killfeedLaser('cyroclasm_laser') || !killfeedLaser('laser') || killfeedLaser('ak20') || killfeedLaser('taser')) issues.push('laser gag classification wrong');
       for (const [weapon, info, self, want] of [
         ['rpg', {}, false, 'boom'], ['freeze_gun', {}, false, 'ice'], ['taser', {}, false, 'electric'],
@@ -3169,879 +3354,6 @@ if (ok && process.argv.includes('--knife')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
-// GLITCH.EXE (the Vector skin): in the Gen 2 case, a round with a trail of neon pixels, a model that flickers and always puts itself back, a magazine that
-// breaks into 0s and 1s, and a pixel hit look whose kill is a hologram that glitches out.
-if (ok && process.argv.includes('--glitchexe')) {
-  const issues = vm.runInThisContext(`(() => {
-    const issues = [];
-    const sk = MODEL_SKINS.find(s => s.id === 'vector_glitch_exe');
-    if (!sk || sk.weapon !== 'vector') return ['the GLITCH.EXE skin of the Vector is missing'];
-    if (!GEN2_MODEL_SKIN_IDS.has(sk.id)) issues.push('GLITCH.EXE is not dealt by the Gen 2 case (no skin is free)');
-    if (!SKIN_FX[sk.id] || !SKIN_FX[sk.id].equip || !SKIN_FX[sk.id].reload) issues.push('GLITCH.EXE has no entrance or no reload');
-    if (!HIT_STYLES.pixel) issues.push('there is no pixel hit style');
-    if (_hitKindOfSkin(sk.id) !== 'pixel') issues.push('the skin does not carry the pixel hit look');
-    const shot = SKIN_SHOT[sk.id];
-    if (!shot) issues.push('no neon pixel round');
-    else { const m = _skinShotMesh(shot.shot, 0.05); if (!m || m.children.length < 8) issues.push('the round has no trail of pixels: ' + (m && m.children.length)); }
-    const model = sk.build();
-    if (!model._flash || typeof model._tick !== 'function' || typeof model._calm !== 'function') issues.push('the model has no flash, flicker or calm');
-    else {
-      const before = model.children.map(c => c.position.toArray().join() + c.visible);
-      let t = 0; for (let i = 0; i < 400; i++) { t += 0.05; model._tick(0.05, t, false); }
-      model._calm();
-      const loose = model.children.filter(c => c.geometry && c.geometry.type === 'BoxGeometry' && c.geometry.parameters.width === 0.008);
-      for (const c of loose) c.visible = true;
-      const after = model.children.map(c => c.position.toArray().join() + c.visible);
-      if (before.join('|') !== after.join('|')) issues.push('the flicker does not put every piece back');
-    }
-    const holder = new THREE.Group();
-    if (!_makeObjectProp('bit', () => new THREE.MeshBasicMaterial(), holder) || !holder.children.length) issues.push('the reload piece "bit" is not built');
-    const body = new THREE.Group(); body.add(new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.7, 0.3), new THREE.MeshBasicMaterial()));
-    body.visible = true; remoteMeshes.gx = body; players.gx = { dead: true };
-    const keepSound = playSoundEvent, keepFeed = pushFeedLine, keepRaf = typeof requestAnimationFrame !== 'undefined' ? requestAnimationFrame : null;
-    playSoundEvent = () => {}; pushFeedLine = () => {}; requestAnimationFrame = () => 0;
-    try { if (_playSkinFinisher('pixel', 'gx') !== true) issues.push('the pixel kill does not play'); }
-    finally { playSoundEvent = keepSound; pushFeedLine = keepFeed; if (keepRaf) requestAnimationFrame = keepRaf; delete remoteMeshes.gx; delete players.gx; }
-    return issues;
-  })()`);
-  console.log('GLITCH.EXE checks: Gen 2, neon pixel trail, flicker, binary reload, hologram kill');
-  if (issues.length) { ok = false; console.log(issues.join('\n')); }
-}
-
-// Hammer & Sickle (the Knife skin): in the Gen 2 case, changes form on every swing, and its inspect crosses the two tools into an X and puts everything back.
-if (ok && process.argv.includes('--hammersickle')) {
-  const issues = vm.runInThisContext(`(() => {
-    const issues = [];
-    const sk = MELEE_MODEL_SKINS.find(s => s.id === 'knife_hammer_sickle');
-    if (!sk || sk.melee !== 'knife') return ['the Hammer & Sickle skin of the Knife is missing'];
-    if (!GEN2_MELEE_MODEL_SKIN_IDS.has(sk.id)) issues.push('Hammer & Sickle is not dealt by the Gen 2 case (no skin is free)');
-    if (!sk.equip) issues.push('Hammer & Sickle has no entrance');
-    const m = sk.build();
-    if (!m._hs || typeof m._onSwing !== 'function') return issues.concat(['the model has no tools or no swing hook']);
-    const h = m._hs;
-    if (!(h.sickle.visible && !h.hammer.visible)) issues.push('it should start as the sickle');
-    const keepSkin = _hsSkin; _hsSkin = { _model: m };
-    const keepBeat = _itemInspectBeat, keepTimeout = setTimeout;
-    _itemInspectBeat = () => {}; setTimeout = () => 0;
-    try {
-      m._onSwing(); for (let i = 0; i < 20; i++) updateHammerSickle(0.02);
-      if (!(h.hammer.visible && !h.sickle.visible && h.form === 1)) issues.push('one swing should turn the sickle into the hammer');
-      m._onSwing(); for (let i = 0; i < 20; i++) updateHammerSickle(0.02);
-      if (!(h.sickle.visible && !h.hammer.visible && h.form === 0)) issues.push('the next swing should turn it back');
-      // inspect: jump to the middle (crossed) and to the end
-      const s = hammerSickleInspectBegin(m);
-      s.t0 = performance.now() - s.ms * 0.56; hammerSickleInspectStep(s);
-      const up = Math.abs(h.sickle.rotation.x - Math.PI / 2) < 0.2 && Math.abs(h.hammer.rotation.x - Math.PI / 2) < 0.2;
-      const cross = h.sickle.rotation.z > 0.3 && h.hammer.rotation.z < -0.3;
-      if (!(up && cross)) issues.push('mid-inspect the two tools should point up and cross: ' + [h.sickle.rotation.x, h.sickle.rotation.z, h.hammer.rotation.x, h.hammer.rotation.z].map(n => n.toFixed(2)));
-      if (!h.glow.visible) issues.push('the emblem should glow while crossed');
-      s.t0 = performance.now() - s.ms * 2; if (hammerSickleInspectStep(s)) issues.push('the inspect should be over');
-      hammerSickleInspectEnd(s);
-      const clean = [h.sickle, h.hammer].every(t => t.rotation.x === 0 && t.rotation.y === 0 && t.rotation.z === 0 && t.position.lengthSq() === 0 && t.scale.x === 1);
-      if (!clean) issues.push('after the inspect the tools are not back in place');
-      if (!(h.sickle.visible && !h.hammer.visible && !h.glow.visible && !h.insp)) issues.push('after the inspect only the current form should show');
-      if (m.position.distanceTo(s.base) > 1e-6) issues.push('the model is not back where it was');
-    } finally { _itemInspectBeat = keepBeat; setTimeout = keepTimeout; _hsSkin = keepSkin; }
-    return issues;
-  })()`);
-  console.log('Hammer & Sickle checks: Gen 2, form change per swing, crossed inspect, everything put back');
-  if (issues.length) { ok = false; console.log(issues.join('\n')); }
-}
-
-// WIDOWMAKER (the Crossbow skin): a legendary from the Gen 2 case whose eight legs fold, unfold with the aim, snap on a shot, crawl a bolt along the rail on a reload and
-// walk it across the view on inspect; and what it kills hangs in a red web that shatters.
-if (ok && process.argv.includes('--widowmaker')) {
-  const issues = vm.runInThisContext(`(() => {
-    const issues = [];
-    const sk = MODEL_SKINS.find(s => s.id === 'crossbow_widowmaker');
-    if (!sk || sk.weapon !== 'crossbow') return ['the Widowmaker skin of the Crossbow is missing'];
-    if (!GEN2_MODEL_SKIN_IDS.has(sk.id)) issues.push('Widowmaker is not dealt by the Gen 2 case (no skin is free)');
-    const fx = SKIN_FX[sk.id];
-    if (!fx || !fx.equip || !fx.inspect) issues.push('Widowmaker has no entrance or no inspect track');
-    if (_hitKindOfSkin(sk.id) !== 'web') issues.push('the skin does not carry the web hit look');
-    const m = sk.build();
-    if (!m._legs || m._legs.length !== 8 || !m._tick || !m._calm || !m._steamShot || !m._flash) return issues.concat(['the model is missing its eight legs, its tick, its calm, its shot hook or its flash']);
-    const fr = m._legs.find(L => L.sd > 0 && L.row === 0), rr = m._legs.find(L => L.sd > 0 && L.row === 3), fl = m._legs.find(L => L.sd < 0 && L.row === 0);
-    const frame = (n, dt = 0.016) => { let t = performance.now() / 1000; for (let i = 0; i < n; i++) { t += dt; m._tick(dt, t, false); } };
-    const keep = { ads: isADS };
-    try {
-      frame(2);
-      const folded = fr.root.rotation.y, rearFolded = rr.root.rotation.y;
-      if (!(folded > 0 && fr.j3.rotation.y > 0.6)) issues.push('idle: the front legs should already be the bow limbs, front-right yaw ' + folded.toFixed(2));
-      if (!(rearFolded < -1.2)) issues.push('idle: the other legs should be folded back along the body, rear-right yaw ' + rearFolded.toFixed(2));
-      if (!m._string || m._string.length !== 2 || !(m._string[0].scale.z > 0.12)) issues.push('idle: a crossbow needs its string from limb tip to latch');
-      const stringYaw0 = m._string && m._string[0].rotation.y;
-      isADS = true; frame(80);
-      if (!(fr.root.rotation.y > 0 && fr.j3.rotation.y > 0.7)) issues.push('aim: the front legs should stay bow limbs: ' + [fr.root.rotation.y, fr.j3.rotation.y].map(n => n.toFixed(2)));
-      if (!(rr.root.rotation.y > rearFolded + 0.4 && rr.root.rotation.y < -0.5)) issues.push('aim: the rear legs should unfold and spread backward: ' + rr.root.rotation.y.toFixed(2));
-      if (!(Math.abs(fl.root.rotation.y - (Math.PI - fr.root.rotation.y)) < 1e-6)) issues.push('the left legs should mirror the right');
-      const aimJ3 = fr.j3.rotation.y;
-      m._steamShot(); frame(1, 0.016);
-      if (!(Math.abs(m._string[0].rotation.y - stringYaw0) > 0.02)) issues.push('fire: the string should snap');
-      if (!(fr.j3.rotation.y > aimJ3 + 0.3)) issues.push('fire: the front legs should snap in: ' + fr.j3.rotation.y.toFixed(2) + ' vs ' + aimJ3.toFixed(2));
-      if (m._bolt.visible) issues.push('fire: the bolt should be gone until the reload brings the next');
-      frame(40);
-      if (Math.abs(fr.j3.rotation.y - aimJ3) > 0.05) issues.push('fire: the front legs should reset after the snap');
-      isADS = false; frame(80);
-      m._reloadStart = Date.now() - 600; m._reloadDur = 1200; frame(1);
-      if (!m._crawler.visible || m._bolt.visible) issues.push('reload: a little spider should be carrying the bolt along the rail');
-      m._reloadStart = Date.now() - 1100; frame(1);
-      if (!m._bolt.visible) issues.push('reload: the bolt should be in the groove at the end');
-      m._reloadStart = 0; frame(2);
-      if (m._crawler.visible) issues.push('reload: the little spider should be gone afterwards');
-      m._inspectMode = true; m._reloadStart = Date.now() - 1300; m._reloadDur = 2400; frame(2);
-      if (!(rr.root.rotation.y > rearFolded + 0.4)) issues.push('inspect: the legs should be out, standing it up: ' + rr.root.rotation.y.toFixed(2));
-      m._inspectMode = false; m._reloadStart = 0; m._calm();
-      if (Math.abs(fr.root.rotation.y - folded) > 1e-6 || !m._bolt.visible) issues.push('calm should put the legs and the bolt back');
-    } finally { isADS = keep.ads; }
-    if (!(HIT_STYLES.web && typeof _buildWeb === 'function')) issues.push('no web');
-    else { const w = _buildWeb(1.75, 12, 6); if (w.pieces.length < 100) issues.push('the web is too thin: ' + w.pieces.length + ' strands'); }
-    const body = new THREE.Group(); body.add(new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.7, 0.3), new THREE.MeshBasicMaterial()));
-    body.visible = true; remoteMeshes.wx = body; players.wx = { dead: true };
-    const keepSound = playSoundEvent, keepFeed = pushFeedLine, keepRaf = typeof requestAnimationFrame !== 'undefined' ? requestAnimationFrame : null, keepTo = setTimeout;
-    playSoundEvent = () => {}; pushFeedLine = () => {}; requestAnimationFrame = () => 0; setTimeout = () => 0;
-    try { if (_playSkinFinisher('web', 'wx', 'someone') !== true) issues.push('the web kill does not play'); }
-    finally { playSoundEvent = keepSound; pushFeedLine = keepFeed; setTimeout = keepTo; if (keepRaf) requestAnimationFrame = keepRaf; delete remoteMeshes.wx; delete players.wx; }
-    return issues;
-  })()`);
-  console.log('WIDOWMAKER checks: Gen 2, folded legs, aim unfolds, fire snaps, reload crawler, inspect walk, web kill');
-  if (issues.length) { ok = false; console.log(issues.join('\n')); }
-}
-
-// Simple limbs: no elbows or knees. Walking swings an arm and the opposite leg; a crouch is a low staggered stance; a slide lies back with the legs out and the arms clear
-// of the floor; a jump leaves the legs hanging and raises the arms, unless the body holds a weapon (then the arms stay as they were).
-if (ok && process.argv.includes('--simplelimbs')) {
-  const issues = vm.runInThisContext(`(() => {
-    const issues = [];
-    const mesh = makePlayerMesh('limbs', false, 'enemy', 'default', {});
-    const rig = mesh._rig;
-    if (!rig) return ['no rig'];
-    const sign = v => (v > 0.05 ? 1 : v < -0.05 ? -1 : 0);
-    const step = (n, crouch, slide, jump, move, check) => {
-      for (let i = 0; i < n; i++) {
-        if (move) mesh.position.z += 0.12;
-        animateCharacterMesh(mesh, 0.016, crouch, slide, jump, 0, -1);
-        if (check) check();
-        if (rig.kneeL.rotation.x !== 0 || rig.kneeR.rotation.x !== 0) { issues.push('a knee is bent'); return; }
-        if (!rig.holdsGun && (rig.elbowL.rotation.x !== 0 || rig.elbowR.rotation.x !== 0)) { issues.push('an empty-handed elbow is bent'); return; }
-      }
-    };
-    // walking: the arm goes forward as the opposite leg does
-    let opp = 0, same = 0, maxLeg = 0, legsOpp = 0, legsSame = 0;
-    step(160, 0, 0, 0, true, () => {
-      const l = rig.legL.rotation.x, r = rig.legR.rotation.x, al = rig.armL.rotation.x;
-      maxLeg = Math.max(maxLeg, Math.abs(l));
-      if (Math.abs(l) > 0.2 && Math.abs(al) > 0.2) { if (sign(al) === -sign(l)) opp++; else same++; }
-      if (Math.abs(l) > 0.2 && Math.abs(r) > 0.2) { if (sign(l) === -sign(r)) legsOpp++; else legsSame++; }
-    });
-    if (maxLeg < 0.25) issues.push('walking: the legs barely swing ' + maxLeg.toFixed(2));
-    if (!(opp > same * 3)) issues.push('walking: an arm should swing against its own leg (' + opp + ' opposite, ' + same + ' together)');
-    if (!(legsOpp > legsSame * 3)) issues.push('walking: the legs should alternate (' + legsOpp + ' opposite, ' + legsSame + ' together)');
-    // sliding: lying back, legs straight out front, arms clear of the floor
-    step(80, 0, 1, 0, false);
-    if (!(rig.legL.rotation.x < -1.3 && rig.legR.rotation.x < -1.3)) issues.push('slide: both legs should be out in front: ' + [rig.legL.rotation.x, rig.legR.rotation.x].map(n => n.toFixed(2)));
-    if (!(rig.armL.rotation.x > -0.8 && rig.armL.rotation.x < -0.3)) issues.push('slide: the arms should be held off the floor: ' + rig.armL.rotation.x.toFixed(2));
-    if (!(rig.torso.rotation.x < -0.95)) issues.push('slide: the body should be lying back: ' + rig.torso.rotation.x.toFixed(2));
-    // crouching: a staggered stance, one leg forward, one back
-    step(80, 0.58, 0, 0, false);
-    if (!(rig.legL.rotation.x < -0.8 && rig.legR.rotation.x > 0.7)) issues.push('crouch: one leg forward and one back: ' + [rig.legL.rotation.x, rig.legR.rotation.x].map(n => n.toFixed(2)));
-    // jumping: legs hang still, arms rise
-    step(80, 0, 0, 1, false);
-    if (!(Math.abs(rig.legL.rotation.x) < 0.05 && Math.abs(rig.legR.rotation.x) < 0.05)) issues.push('jump: the legs should hang still: ' + [rig.legL.rotation.x, rig.legR.rotation.x].map(n => n.toFixed(2)));
-    if (!(rig.armL.rotation.x < -2.6 && rig.armR.rotation.x < -2.6)) issues.push('jump: the arms should rise: ' + [rig.armL.rotation.x, rig.armR.rotation.x].map(n => n.toFixed(2)));
-    // an armed body keeps its arms in the air
-    rig.holdsGun = true;
-    step(80, 0, 0, 0, false);
-    const armed0 = [rig.armL.rotation.x, rig.armR.rotation.x];
-    step(80, 0, 0, 1, false);
-    if (!(Math.abs(rig.armL.rotation.x - armed0[0]) < 0.05 && Math.abs(rig.armR.rotation.x - armed0[1]) < 0.05)) issues.push('jump with a weapon: the arms should not move: ' + armed0.map(n => n.toFixed(2)) + ' -> ' + [rig.armL.rotation.x, rig.armR.rotation.x].map(n => n.toFixed(2)));
-    if (!(Math.abs(rig.legL.rotation.x) < 0.05)) issues.push('jump with a weapon: the legs should still hang');
-    for (const k of ['legL', 'legR', 'armL', 'armR']) if (!Number.isFinite(rig[k].rotation.x)) issues.push(k + ' is not a number');
-    return issues;
-  })()`);
-  console.log('Simple limbs checks: straight limbs, opposite swing, crouch stance, lying slide, jump');
-  if (issues.length) { ok = false; console.log(issues.join('\n')); }
-}
-
-// Octopus (the Harpoon Gun skin): in the Gen 2 case, a model whose tentacles sway and settle, a round that is a tentacle, and an ink burst.
-if (ok && process.argv.includes('--octopus')) {
-  const issues = vm.runInThisContext(`(() => {
-    const issues = [];
-    const sk = MODEL_SKINS.find(s => s.id === 'harpoon_octopus');
-    if (!sk || sk.weapon !== 'harpoon_gun') return ['the Octopus skin of the Harpoon Gun is missing'];
-    if (!GEN2_MODEL_SKIN_IDS.has(sk.id)) issues.push('Octopus is not dealt by the Gen 2 case (no skin is free)');
-    if (!SKIN_FX[sk.id] || !SKIN_FX[sk.id].equip) issues.push('Octopus has no entrance');
-    if (!BOOM_THEMES.ink) issues.push('there is no ink burst');
-    const shot = SKIN_SHOT[sk.id];
-    if (!shot || shot.shot.shape !== 'tentacle') issues.push('the round is not a tentacle');
-    else { const m = _skinShotMesh(shot.shot, 0.08); if (!m || m.children.length < 10 || !m._alignToDir) issues.push('the tentacle round has too few parts: ' + (m && m.children.length)); }
-    const m = sk.build();
-    if (!m._flash || !m._parts || !m._parts.ammo || !m._parts.ammo.children.length) return issues.concat(['the model has no flash or no loaded round to hide']);
-    const rots = () => { const r = []; m.traverse(o => { if (o.isGroup || o === m) r.push(o.rotation.x); }); return r; };
-    const before = rots();
-    for (let i = 0; i < 90; i++) m._tick(0.016, 1 + i * 0.016, false);
-    const moved = rots().some((v, i) => Math.abs(v - before[i]) > 0.005);
-    if (!moved) issues.push('the tentacles do not sway');
-    m._calm();
-    if (rots().some((v, i) => Math.abs(v - before[i]) > 1e-9)) issues.push('calm does not put the tentacles back');
-    return issues;
-  })()`);
-  console.log('Octopus checks: Gen 2, tentacle round, swaying tentacles, ink');
-  if (issues.length) { ok = false; console.log(issues.join('\n')); }
-}
-
-// GRAVITY'S END (the Bow skin): a legendary from the Gen 2 case whose arms ring up when aimed, are flung out by a shot while the hole stretches and collapses, and whose inspect swallows
-// the whole bow, flashes, and throws every part back into place.
-if (ok && process.argv.includes('--gravityend')) {
-  const issues = vm.runInThisContext(`(() => {
-    const issues = [];
-    const sk = MODEL_SKINS.find(s => s.id === 'boombow_gravity_end');
-    if (!sk || sk.weapon !== 'boombow') return ['the Gravity\\'s End skin of the Bow is missing'];
-    if (!GEN2_MODEL_SKIN_IDS.has(sk.id)) issues.push('Gravity\\'s End is not dealt by the Gen 2 case (no skin is free)');
-    const fx = SKIN_FX[sk.id];
-    if (!fx || !fx.equip || !fx.inspect) issues.push('no entrance or inspect track');
-    if (!SKIN_SHOT[sk.id] || SKIN_SHOT[sk.id].shot.shape !== 'gravarrow' || !BOOM_THEMES.gravity) issues.push('the arrow is not the dark arrow in violet rings');
-    else { const a = _skinShotMesh(SKIN_SHOT[sk.id].shot, 0.1); if (!a || a.children.length < 5) issues.push('the arrow has too few parts'); }
-    const m = sk.build();
-    if (!m._S || !m._tick || !m._calm || !m._steamShot || !m._flash || !m._arrow || !m._pullables) return issues.concat(['the model is missing its state, tick, calm, shot hook, flash, arrow or parts']);
-    const S = m._S, keep = isADS;
-    const frame = (n, dt = 0.016) => { let t = performance.now() / 1000; for (let i = 0; i < n; i++) { t += dt; m._tick(dt, t, false); } };
-    try {
-      frame(3);
-      const ring0 = m._ring.rotation.y, half0 = S.half, R0 = S.R;
-      if (!(Math.abs(ring0) < 0.05)) issues.push('idle: the arms should stand in the plane of the bow');
-      isADS = true; frame(90);
-      if (!(m._ring.rotation.y > 1.4 && S.half > half0 + 0.5)) issues.push('aim: the arms should swing round into a ring: ' + [m._ring.rotation.y, S.half].map(n => n.toFixed(2)));
-      isADS = false; frame(90);
-      if (!(Math.abs(S.half - half0) < 0.05)) issues.push('aim: the arms should settle back');
-      m._steamShot(); frame(1, 0.1);
-      if (m._arrow.visible) issues.push('fire: the arrow should be gone');
-      if (!(S.bhz > 1.8)) issues.push('fire: the hole should be drawn back along the tether: ' + S.bhz.toFixed(2));
-      if (!(S.R > R0 * 1.2)) issues.push('fire: the arms should be flung outward: ' + S.R.toFixed(3) + ' vs ' + R0.toFixed(3));
-      frame(1, 0.12);
-      if (!m._flare.visible) issues.push('fire: a flash as the hole collapses');
-      if (!(S.bhz < 0.7)) issues.push('fire: the hole should have collapsed to a point: ' + S.bhz.toFixed(2));
-      frame(90);
-      if (!(Math.abs(S.R - R0) < 0.01 && Math.abs(S.bhz - 1) < 0.05)) issues.push('fire: gravity should have pulled it all back: ' + [S.R, S.bhz].map(n => n.toFixed(3)));
-      m._reloadStart = Date.now() - 400; m._reloadDur = 525; frame(1);
-      if (!m._arrow.visible) issues.push('reload: the next arrow should be on the bow');
-      m._reloadStart = 0; frame(2);
-      // inspect
-      const scales0 = m._pullables.map(c => c.scale.x);
-      const at = t => { m._inspectMode = true; m._reloadStart = Date.now() - t * 2400; m._reloadDur = 2400; frame(1); };
-      at(0.30);
-      if (!(S.spin > 1 && m._ring.rotation.y > 0.3)) issues.push('inspect: the arms should orbit the hole as a disk: ' + [S.spin, m._ring.rotation.y].map(n => n.toFixed(2)));
-      at(0.60);
-      if (!(S.pull > 0.5)) issues.push('inspect: the hole should be drawing the bow in: ' + S.pull.toFixed(2));
-      at(0.72);
-      if (!(m._pullables.every(c => c.scale.x < scales0[m._pullables.indexOf(c)] * 0.1 + 1e-6 || !c.visible))) issues.push('inspect: for a moment the whole weapon should be gone');
-      if (!m._flare.visible) issues.push('inspect: a white flash');
-      at(0.99);
-      if (!(S.pull < 0.1)) issues.push('inspect: the parts should be back by the end: ' + S.pull.toFixed(2));
-      m._inspectMode = false; m._reloadStart = 0; frame(3);
-      const back = m._pullables.every((c, i) => Math.abs(c.scale.x - scales0[i]) < 1e-6 && c.visible);
-      if (!back || S.pull !== 0 || Math.abs(m._ring.rotation.y) > 0.05) issues.push('inspect: everything should be exactly where it was');
-      m._calm();
-    } finally { isADS = keep; }
-    return issues;
-  })()`);
-  console.log("Gravity's End checks: Gen 2, ring on aim, fling and collapse on fire, swallow-flash-rebuild on inspect");
-  if (issues.length) { ok = false; console.log(issues.join('\n')); }
-}
-
-// NEON//ANARCHY (the Vector skin): a legendary from the Gen 2 case. A lopsided hacker gun: panels that slide back on aim, blocks that shuttle and a hologram counter that corrupts under sustained fire,
-// a reload that drops the magazine and reboots the circuits, and SYSTEM HIJACK on inspect (a red skull, UNAUTHORIZED USER DETECTED, ACCESS GRANTED, a violent snap shut, every strip flashing crimson).
-if (ok && process.argv.includes('--neonanarchy')) {
-  const issues = vm.runInThisContext(`(() => {
-    const issues = [];
-    const sk = MODEL_SKINS.find(s => s.id === 'vector_neon_anarchy');
-    if (!sk || sk.weapon !== 'vector') return ['the NEON//ANARCHY skin of the Vector is missing'];
-    if (!GEN2_MODEL_SKIN_IDS.has(sk.id)) issues.push('NEON//ANARCHY is not dealt by the Gen 2 case (no skin is free)');
-    const fx = SKIN_FX[sk.id];
-    if (!fx || !fx.equip || !fx.inspect) issues.push('no entrance or inspect track');
-    if (!SKIN_SHOT[sk.id]) issues.push('no round look');
-    const m = sk.build();
-    if (!m._S || !m._tick || !m._calm || !m._steamShot || !m._flash || !m._panL || !m._panR || !m._skull || !m._mag) return issues.concat(['the model is missing its state, tick, calm, shot hook, flash, panels, skull or magazine']);
-    const S = m._S, keep = isADS, keepAmmo = ammo;
-    const run = (n, dt = 0.016) => { let t = performance.now() / 1000; for (let i = 0; i < n; i++) { t += dt; m._tick(dt, t, false); } };
-    try {
-      run(3);
-      const z0 = m._panL.position.z, zr0 = m._panR.position.z, my0 = m._mag.position.y;
-      if (m._skull.visible) issues.push('idle: the skull should be hidden');
-      isADS = true; run(90);
-      if (!(m._panL.position.z > z0 + 0.08 && m._panR.position.z > zr0 + 0.08)) issues.push('aim: both panels should slide back: ' + [m._panL.position.z - z0, m._panR.position.z - zr0].map(n => n.toFixed(3)));
-      isADS = false; run(90);
-      if (!(Math.abs(m._panL.position.z - z0) < 0.004)) issues.push('aim: the panels should slide home again');
-      // sustained fire: the blocks shuttle, the counter degrades
-      const bz = m._blocks.map(b => b.position.z);
-      for (let i = 0; i < 40; i++) { m._steamShot(); run(1, 0.016); }
-      if (!(S.heat > 0.88)) issues.push('sustained fire: the display should reach SYSTEM ERROR: ' + S.heat.toFixed(2));
-      if (!m._blocks.some((b, i) => Math.abs(b.position.z - bz[i]) > 0.003)) issues.push('fire: the blocks should be moving');
-      run(200);
-      if (!(S.heat < 0.05)) issues.push('after fire: the display should recover: ' + S.heat.toFixed(2));
-      if (!m._blocks.every((b, i) => Math.abs(b.position.z - bz[i]) < 0.0005)) issues.push('after fire: the blocks should rest');
-      // reload: panels open, the magazine falls, comes back
-      const rl = f => { m._inspectMode = false; m._reloadStart = Date.now() - f * 1800; m._reloadDur = 1800; run(30); };
-      rl(0.22); if (!(m._panL.position.z > z0 + 0.04)) issues.push('reload: the panels should be open');
-      rl(0.28); if (!(m._mag.position.y < my0 - 0.01)) issues.push('reload: the magazine should be falling');
-      rl(0.40); if (m._mag.visible) issues.push('reload: the old magazine should be gone');
-      rl(0.56); if (!(m._mag.visible && m._mag.position.y < my0 && m._mag.position.y > my0 - 0.14)) issues.push('reload: the new magazine should be sliding in');
-      rl(0.97); if (!(Math.abs(m._mag.position.y - my0) < 0.002 && m._mag.visible)) issues.push('reload: the new magazine should be locked in');
-      m._reloadStart = 0; run(60);
-      if (!(Math.abs(m._panL.position.z - z0) < 0.004 && m._mag.visible && Math.abs(m._mag.position.y - my0) < 0.0001)) issues.push('after reload: everything should be where it was');
-      // inspect: SYSTEM HIJACK
-      const at = f => { m._inspectMode = true; m._reloadStart = Date.now() - f * 2600; m._reloadDur = 2600; run(20); };
-      at(0.20); if (!(m._panL.position.z > z0 + 0.05 && Math.abs(m._panL.rotation.y) > 0.3 && m._panR.rotation.y < -0.3)) issues.push('inspect: the panels should split open: ' + [m._panL.rotation.y, m._panR.rotation.y].map(n => n.toFixed(2)));
-      at(0.45); if (!(m._skull.visible && m._skull.position.y > 0.12)) issues.push('inspect: a skull should have risen over the receiver');
-      at(0.80); if (m._skull.visible) issues.push('inspect: the skull should be gone by the time the display says ACCESS GRANTED');
-      at(0.85); if (!(m._segMats.every(mt => mt.color.r > 0.6))) issues.push('inspect: every neon strip should flash');
-      at(0.99); if (!(Math.abs(m._panL.position.z - z0) < 0.004 && Math.abs(m._panL.rotation.y) < 0.01)) issues.push('inspect: the gun should be snapped shut by the end');
-      m._inspectMode = false; m._reloadStart = 0; run(60);
-      if (m._skull.visible || Math.abs(m._panL.rotation.y) > 0.01 || Math.abs(m._panL.position.z - z0) > 0.004) issues.push('after inspect: everything should be back');
-      m._calm();
-    } finally { isADS = keep; ammo = keepAmmo; }
-    return issues;
-  })()`);
-  console.log('NEON//ANARCHY checks: Gen 2, panels on aim, shuttle + corruption under fire, reload, SYSTEM HIJACK inspect');
-  if (issues.length) { ok = false; console.log(issues.join('\n')); }
-}
-
-// DISCO INFERNO (the Flamethrower skin): a rare from the Gen 2 case. A disco ball that spins and flashes, speakers that pulse and confetti that flies with the flames, four spotlights that unfold
-// under sustained fire, a reload that stops the ball and swaps the tank, and DISCO FEVER on inspect (the ball rises over a flashing dance floor, the speakers bounce twice, it drops back).
-if (ok && process.argv.includes('--discoinferno')) {
-  const issues = vm.runInThisContext(`(() => {
-    const issues = [];
-    const sk = MODEL_SKINS.find(s => s.id === 'flamethrower_disco_inferno');
-    if (!sk || sk.weapon !== 'flamethrower') return ['the DISCO INFERNO skin of the Flamethrower is missing'];
-    if (!GEN2_MODEL_SKIN_IDS.has(sk.id)) issues.push('DISCO INFERNO is not dealt by the Gen 2 case (no skin is free)');
-    const fx = SKIN_FX[sk.id];
-    if (!fx || !fx.equip || !fx.inspect) issues.push('no entrance or inspect track');
-    const m = sk.build();
-    if (!m._S || !m._tick || !m._calm || !m._steamShot || !m._flash || !m._ball || !m._tank || !m._spots || !m._floor) return issues.concat(['the model is missing its state, tick, calm, shot hook, flash, ball, tank, spotlights or floor']);
-    const S = m._S; let clk = performance.now() / 1000; const run = (n, dt = 0.016) => { for (let i = 0; i < n; i++) { clk += dt; m._tick(dt, clk, false); } };
-    const home = m._tank._home.clone(), y0 = m._ball.position.y, sp0 = m._speakers[0].home.y;
-    const reload = f => { m._inspectMode = false; m._reloadStart = Date.now() - f * 3200; m._reloadDur = 3200; run(20); };
-    const insp = f => { m._inspectMode = true; m._reloadStart = Date.now() - f * 2600; m._reloadDur = 2600; run(20); };
-    try {
-      run(3);
-      const r0 = m._ball.rotation.y; run(30);
-      if (!(m._ball.rotation.y > r0 + 0.3)) issues.push('idle: the ball should be turning');
-      if (m._floor.visible || m._spots.some(s => s.beam.visible)) issues.push('idle: no dance floor or spotlights yet');
-      // firing
-      for (let i = 0; i < 6; i++) { m._steamShot(); run(1, 0.035); }
-      if (!m._confetti.some(c => c.c.visible)) issues.push('fire: confetti should fly out');
-      if (!(m._speakers[0].cones[0].scale.x > 1.01 || S.pulse > 0.05)) issues.push('fire: the speakers should pulse');
-      for (let i = 0; i < 70; i++) { m._steamShot(); run(1, 0.035); }
-      if (!m._spots.every(s => s.beam.visible && s.arm.rotation.x > 0.5)) issues.push('sustained fire: the four spotlights should have unfolded: ' + m._spots.map(s => s.arm.rotation.x.toFixed(2)));
-      const rz = m._ring.rotation.z; run(10);
-      if (!(m._ring.rotation.z > rz + 0.02)) issues.push('sustained fire: the spotlights should sweep round the barrel');
-      run(150);
-      if (m._spots.some(s => s.beam.visible || s.arm.rotation.x > 0.05)) issues.push('after fire: the spotlights should fold away again');
-      // reload
-      reload(0.15); if (!(S.lights < 0.2 && m._tiles.filter(t => t.t.material === m._off).length > m._tiles.length * 0.9)) issues.push('reload: the lights should be out: ' + S.lights.toFixed(2));
-      reload(0.30); if (!(m._tank.position.x > home.x + 0.04)) issues.push('reload: the tank should be sliding off: ' + (m._tank.position.x - home.x).toFixed(3));
-      reload(0.45); if (!(m._tank.position.z > home.z + 0.08 && m._tank.position.x === home.x)) issues.push('reload: the new tank should be coming in from behind');
-      reload(0.99); if (!(Math.abs(m._tank.position.z - home.z) < 0.005 && S.lights > 0.9)) issues.push('reload: the tank should be seated and the lights back by the end');
-      m._reloadStart = 0; run(60);
-      if (!(m._tank.position.distanceTo(home) < 1e-6 && m._tank.visible && m._tank.rotation.z === 0)) issues.push('after reload: the tank should be exactly home');
-      // inspect: DISCO FEVER
-      insp(0.30); if (!(m._ball.position.y > y0 + 0.04 && m._floor.visible)) issues.push('inspect: the ball should have risen over a dance floor: ' + (m._ball.position.y - y0).toFixed(3));
-      const r1 = m._ball.rotation.y; run(10); if (!(m._ball.rotation.y - r1 > 0.8)) issues.push('inspect: the ball should be spinning hard');
-      insp(0.53); if (!(m._speakers[0].sp.position.y > sp0 + 0.006)) issues.push('inspect: the speakers should be bouncing');
-      insp(0.67); if (!(m._speakers[1].sp.position.y > sp0 + 0.006)) issues.push('inspect: the speakers should bounce a second time');
-      insp(0.99); if (!(Math.abs(m._ball.position.y - y0) < 0.002 && !m._floor.visible)) issues.push('inspect: the ball should be back in place and the floor gone');
-      m._inspectMode = false; m._reloadStart = 0; run(60);
-      if (m._floor.visible || Math.abs(m._ball.position.y - y0) > 0.0005 || Math.abs(m._speakers[0].sp.position.y - sp0) > 0.0005) issues.push('after inspect: everything should be back');
-      m._calm();
-    } catch (e) { issues.push('threw: ' + (e && e.stack || e)); }
-    return issues;
-  })()`);
-  console.log('DISCO INFERNO checks: Gen 2, ball + confetti + speakers, spotlights under sustained fire, tank swap on reload, DISCO FEVER inspect');
-  if (issues.length) { ok = false; console.log(issues.join('\n')); }
-}
-
-// ADMIN POWER: the sliders (fly up/forward, speed boost, health), no gravity while flying, the aimbot ring, explosive bullets and Octo mode.
-if (ok && process.argv.includes('--adminpower')) {
-  const issues = vm.runInThisContext(`(() => {
-    const issues = [];
-    const keepUser = currentUser, keepCheats = Object.assign({}, adminCheats), keepSet = Object.assign({}, adminSettings);
-    try {
-      currentUser = { username: 'a', isAdmin: true };
-      // health slider
-      const base = matchMaxHp();
-      setAdminSetting('hp', 5000);
-      if (matchMaxHp() !== 5000) issues.push('health: the slider should set the maximum: ' + matchMaxHp());
-      setAdminSetting('hp', 0);
-      if (matchMaxHp() !== base) issues.push('health: 0 should put the mode back: ' + matchMaxHp());
-      setAdminSetting('flyUp', 40); setAdminSetting('speed', 9);
-      if (adminSettings.flyUp !== 40 || adminSettings.speed !== 9) issues.push('sliders: values should stick');
-      setAdminSetting('flyUp', 9999); if (adminSettings.flyUp !== 100) issues.push('sliders: values are clamped');
-      // fly: no gravity
-      adminCheats.fly = true; isDead = false;
-      if (!adminFlyActive()) issues.push('fly: should be active');
-      camera.position.set(0, 12, 0); playerYVel = -30; airTime = 9; slamState = { vel: -40, type: 'fall' };
-      try { for (let i = 0; i < 20; i++) updateMovement(0.05); } catch (e) { issues.push('fly: updateMovement threw ' + e.message); }
-      if (Math.abs(camera.position.y - 12) > 0.01 || playerYVel !== 0 || airTime !== 0 || slamState) issues.push('fly: gravity should do nothing: y=' + camera.position.y.toFixed(2) + ' vy=' + playerYVel + ' airTime=' + airTime);
-      // fly speed: space goes up at the slider's speed
-      adminSettings.flyUp = 20; keys['Space'] = true; const y0 = camera.position.y; updateAdminCheats(0.1); keys['Space'] = false;
-      if (Math.abs(camera.position.y - y0 - 2) > 0.01) issues.push('fly: Space should climb flyUp * dt: ' + (camera.position.y - y0));
-      adminCheats.fly = false;
-      // explosive bullets
-      adminCheats.explosive = true;
-      if (!adminExplosiveShot({ isOwn: true }) || adminExplosiveShot({ isOwn: false })) issues.push('explosive: my rounds only');
-      adminCheats.explosive = false; if (adminExplosiveShot({ isOwn: true })) issues.push('explosive: off means off');
-      // aimbot ring
-      camera.position.set(0, 1.65, 0); camera.rotation.set(0, 0, 0); camera.updateMatrixWorld(true); camera.updateProjectionMatrix();
-      window.innerWidth = 1600; window.innerHeight = 900;
-      const bots0 = gameBots.length, mesh = { position: new THREE.Vector3(2, 0, -10), visible: true };
-      gameBots.push({ id: 'zz_test', team: 'enemy', dead: false, x: 2, z: -10 }); remoteMeshes['zz_test'] = mesh;
-      adminSettings.ring = 30; let t = adminAimbotTarget();
-      if (!t || t.id !== 'zz_test') issues.push('aimbot: an enemy inside the ring should be found');
-      adminSettings.ring = 5; t = adminAimbotTarget();
-      if (t) issues.push('aimbot: a small ring should not reach an enemy that far off the crosshair');
-      adminSettings.ring = 30; gameBots[gameBots.length - 1].team = 'ally';
-      if (adminAimbotTarget()) issues.push('aimbot: allies are never targets');
-      gameBots.pop(); delete remoteMeshes['zz_test'];
-      // octo
-      adminCheats.octoMode = true; gameStarted = true; isDead = false;
-      const i0 = currentWeaponIdx;
-      try { octoStep('primary', 1); } catch (e) { issues.push('octo: threw ' + e.message); }
-      if (currentWeaponIdx === i0 || activeSlot !== 'primary') issues.push('octo: ] should move to the next gun: ' + i0 + ' -> ' + currentWeaponIdx);
-      const mi = selectedMeleeIdx; try { octoStep('melee', 1); } catch (e) { issues.push('octo: melee threw ' + e.message); }
-      if (activeSlot !== 'melee' || selectedMeleeIdx === mi) issues.push('octo: = should move to the next melee weapon');
-      try { octoStep('support', 1); } catch (e) { issues.push('octo: support threw ' + e.message); }
-      if (activeSlot !== 'support') issues.push('octo: shift+] should move to a utility');
-    } catch (e) { issues.push('threw: ' + (e && e.stack || e)); }
-    finally { Object.assign(adminCheats, keepCheats); Object.assign(adminSettings, keepSet); currentUser = keepUser; keys['Space'] = false; }
-    return issues;
-  })()`);
-  console.log('ADMIN POWER checks: sliders, no gravity in flight, flight speed, the aimbot ring, explosive bullets, Octo mode');
-  if (issues.length) { ok = false; console.log(issues.join('\n')); }
-}
-
-// MISSILE CAM (the Javelin Launcher): Q rides a missile in the air; the mouse points it, W flies it faster, S slower; it ends when the missile is gone.
-if (ok && process.argv.includes('--missilecam')) {
-  const issues = vm.runInThisContext(`(() => {
-    const issues = [];
-    const keepStarted = gameStarted, keepDead = isDead, ex = euler.x, ey = euler.y;
-    try {
-      gameStarted = true; isDead = false; javelins.length = 0;
-      if (missileCamStart()) issues.push('no missile in the air: the camera should not start');
-      const mk = (id, y) => ({ id, mesh: makeJavelinMesh(), x: 0, y, z: 0, vx: 0, vy: 0, vz: -55, targetId: null, launchX: 0, launchY: 0, launchZ: 0, epoch: matchEpoch, map: activeMapName,
-        bornAt: Date.now(), homing: true, dir: new THREE.Vector3(0, 0, -1), omega: new THREE.Vector3(), slot: 0 });
-      const a = mk('t1', 120), b = mk('t2', 140);
-      javelins.push(a, b); scene.add(a.mesh); scene.add(b.mesh);
-      euler.x = 0; euler.y = 0;
-      if (!missileCamStart() || !MISSILE_CAM.active || MISSILE_CAM.id !== 't1') issues.push('Q should ride the oldest missile');
-      // the mouse: turn left (yaw +90 deg) -> the missile turns to face -x
-      euler.y = Math.PI / 2; camera.quaternion.setFromEuler(euler);
-      for (let i = 0; i < 40; i++) updateJavelins(0.05);
-      if (!(a.dir.x < -0.7)) issues.push('mouse: the missile should turn where the mouse points: dir=' + a.dir.toArray().map(n => n.toFixed(2)));
-      if (!(MISSILE_CAM.camera.position.distanceTo(new THREE.Vector3(a.x, a.y, a.z)) < 1)) issues.push('camera: should sit on the missile');
-      // the other missile is not steered by the mouse while I ride the first
-      if (!(Math.abs(b.dir.x) < 0.05)) issues.push('the other missile should fly straight on: dir=' + b.dir.toArray().map(n => n.toFixed(2)));
-      // W faster, S slower
-      keys['KeyW'] = true; for (let i = 0; i < 40; i++) updateJavelins(0.05);
-      if (!(MISSILE_CAM.speed > 1.5)) issues.push('W: should speed up: ' + MISSILE_CAM.speed.toFixed(2));
-      keys['KeyW'] = false; keys['KeyS'] = true; for (let i = 0; i < 40; i++) updateJavelins(0.05);
-      if (!(MISSILE_CAM.speed < 0.6)) issues.push('S: should slow down: ' + MISSILE_CAM.speed.toFixed(2));
-      keys['KeyS'] = false;
-      // my hands are busy: no shooting
-      // it is gone: the camera moves on to the next missile, and after the last one holds a moment, then ends
-      const ia = javelins.indexOf(a); javelins.splice(ia, 1); scene.remove(a.mesh);
-      updateJavelins(0.05);
-      if (!(MISSILE_CAM.active && MISSILE_CAM.id === 't2')) issues.push('when the missile is gone the camera should move to the next one');
-      javelins.length = 0; scene.remove(b.mesh);
-      updateJavelins(0.05);
-      if (!MISSILE_CAM.active) issues.push('the last picture should be held for a moment');
-      MISSILE_CAM.endAt = 1; updateJavelins(0.05);
-      if (MISSILE_CAM.active) issues.push('then the camera should end');
-      if (Math.abs(euler.x - 0) > 1e-9 || Math.abs(euler.y - 0) > 1e-9) issues.push('ending should give me back my own aim: ' + [euler.x, euler.y]);
-      // toggle with Q while riding
-      const c = mk('t3', 120); javelins.push(c); scene.add(c.mesh);
-      missileCamStart(); missileCamEnd(); if (MISSILE_CAM.active) issues.push('Q again should end it');
-      javelins.length = 0; scene.remove(c.mesh);
-    } catch (e) { issues.push('threw: ' + (e && e.stack || e)); }
-    finally { missileCamEnd(); javelins.length = 0; gameStarted = keepStarted; isDead = keepDead; euler.x = ex; euler.y = ey; keys['KeyW'] = false; keys['KeyS'] = false; }
-    return issues;
-  })()`);
-  console.log('MISSILE CAM checks: Q rides a missile, the mouse steers it, W/S set the speed, it moves on and ends cleanly');
-  if (issues.length) { ok = false; console.log(issues.join('\n')); }
-}
-
-// IRONCLAD (the P90 skin): an epic from the Gen 2 case. Armour that opens: clamps and cover plates, a cassette that lifts out and is replaced on reload, a bolt block that shuttles when it fires, and plates that open on the inspect.
-if (ok && process.argv.includes('--ironclad')) {
-  const issues = vm.runInThisContext(`(() => {
-    const issues = [];
-    const sk = MODEL_SKINS.find(s => s.id === 'p90_ironclad');
-    if (!sk || sk.weapon !== 'p90' || sk.rarity !== 'epic') return ['the IRONCLAD epic skin of the P90 is missing'];
-    if (!GEN2_MODEL_SKIN_IDS.has(sk.id)) issues.push('IRONCLAD is not dealt by the Gen 2 case (no skin is free)');
-    const fx = SKIN_FX[sk.id];
-    if (!fx || !fx.equip || !fx.inspect) issues.push('no entrance or inspect track');
-    const m = sk.build();
-    if (!m._S || !m._tick || !m._calm || !m._steamShot || !m._flash || !m._covers || !m._clamps || !m._cass || !m._bolts) return issues.concat(['the model is missing its state, tick, calm, shot hook, flash, covers, clamps, cassette or bolts']);
-    const S = m._S; let clk = performance.now() / 1000; const run = (n, dt = 0.016) => { for (let i = 0; i < n; i++) { clk += dt; m._tick(dt, clk, false); } };
-    const rl = f => { m._inspectMode = false; m._reloadStart = Date.now() - f * 1800; m._reloadDur = 1800; run(30); };
-    const insp = f => { m._inspectMode = true; m._reloadStart = Date.now() - f * 2600; m._reloadDur = 2600; run(30); };
-    try {
-      run(3);
-      const z0 = m._bolts[0].position.z;
-      if (m._covers.some(c => Math.abs(c.position.x) > 1e-6) || m._clamps.some(c => Math.abs(c.rotation.z) > 1e-6) || !m._cass.visible) issues.push('idle: closed, clamped and loaded');
-      for (let i = 0; i < 12; i++) { m._steamShot(); run(1, 0.02); }
-      if (!m._bolts.some(b => Math.abs(b.position.z - z0) > 0.003)) issues.push('fire: the bolt should be shuttling');
-      run(60); if (Math.abs(m._bolts[0].position.z - z0) > 0.0005) issues.push('after fire: the bolt should rest');
-      rl(0.20); if (!(m._clamps.every(c => Math.abs(c.rotation.z) > 0.5) && m._covers.every(c => Math.abs(c.position.x) > 0.01))) issues.push('reload: the clamps should be open and the covers parting');
-      rl(0.36); if (!(m._cass.position.y > 0.03 && m._cass.visible)) issues.push('reload: the cassette should be lifting out: ' + m._cass.position.y.toFixed(3));
-      rl(0.47); if (m._cass.visible) issues.push('reload: the old cassette should be gone');
-      rl(0.58); if (!(m._cass.visible && m._cass.position.y > 0.01 && m._cass.position.y < 0.11)) issues.push('reload: the new cassette should be coming down: ' + m._cass.position.y.toFixed(3));
-      rl(0.97); if (!(Math.abs(m._cass.position.y) < 0.003 && m._cass.visible && m._covers.every(c => Math.abs(c.position.x) < 0.003) && m._clamps.every(c => Math.abs(c.rotation.z) < 0.05))) issues.push('reload: locked and closed by the end');
-      m._reloadStart = 0; run(60);
-      if (!(m._covers.every(c => Math.abs(c.position.x) < 1e-3) && m._clamps.every(c => Math.abs(c.rotation.z) < 1e-3) && m._cass.visible && m._cass.position.lengthSq() < 1e-8)) issues.push('after reload: everything home');
-      insp(0.50); if (!(m._covers.every(c => Math.abs(c.position.x) > 0.01) && m._clamps.every(c => Math.abs(c.rotation.z) > 0.3))) issues.push('inspect: the plates and clamps should open');
-      insp(0.99); m._inspectMode = false; m._reloadStart = 0; run(60);
-      if (!(m._covers.every(c => Math.abs(c.position.x) < 1e-3) && m._clamps.every(c => Math.abs(c.rotation.z) < 1e-3))) issues.push('after inspect: closed again');
-      m._calm();
-    } catch (e) { issues.push('threw: ' + (e && e.stack || e)); }
-    return issues;
-  })()`);
-  console.log('IRONCLAD checks: Gen 2 epic, bolt shuttles on fire, clamps/covers/cassette on reload, plates open on inspect');
-  if (issues.length) { ok = false; console.log(issues.join('\n')); }
-}
-
-// THE ABYSSAL SOVEREIGN (the SG-8 skin): a mythic from the Gen 3 case. Six mouths that snap open together on a shot, teeth that chatter when an enemy in plain sight is near (and never through a wall), a gullet that swallows each shell on reload,
-// a lure and an eye on inspect, spectral teeth for rounds, and a giant anglerfish that swallows the body on a kill.
-if (ok && process.argv.includes('--abyssal')) {
-  const issues = vm.runInThisContext(`(() => {
-    const issues = [];
-    const sk = MODEL_SKINS.find(s => s.id === 'sg8_abyssal_sovereign');
-    if (!sk || sk.weapon !== 'sg8' || sk.rarity !== 'mythic') return ['the ABYSSAL SOVEREIGN mythic skin of the SG-8 is missing'];
-    if (!GEN3_MODEL_SKIN_IDS.has(sk.id)) issues.push('it is not dealt by the Gen 3 case (no skin is free)');
-    const fx = SKIN_FX[sk.id];
-    if (!fx || !fx.equip || !fx.inspect) issues.push('no entrance or inspect track');
-    if (!SKIN_SHOT[sk.id] || SKIN_SHOT[sk.id].shot.shape !== 'tooth') issues.push('the rounds should be spectral teeth');
-    else { const a = _skinShotMesh(SKIN_SHOT[sk.id].shot, 0.1); if (!a || a.children.length < 2) issues.push('the tooth has too few parts'); }
-    if (!HIT_STYLES.angler || sk.look.hit !== 'angler') issues.push('the kill look is missing');
-    const m = sk.build();
-    if (!m._S || !m._tick || !m._calm || !m._steamShot || !m._flash || !m._teeth || !m._jawU || !m._lure || !m._eye) return issues.concat(['the model is missing its state, tick, calm, shot hook, flash, teeth, gullet, lure or eye']);
-    if (m._mouths.length !== 6) issues.push('there should be six mouths: ' + m._mouths.length);
-    const S = m._S; let clk = performance.now() / 1000; const run = (n, dt = 0.016) => { for (let i = 0; i < n; i++) { clk += dt; m._tick(dt, clk, false); } };
-    const rl = f => { m._inspectMode = false; m._reloadStart = Date.now() - f * 3000; m._reloadDur = 3000; run(20); };
-    const insp = f => { m._inspectMode = true; m._reloadStart = Date.now() - f * 2600; m._reloadDur = 2600; run(20); };
-    const keepLOS = hasLineOfSight, keepBots = gameBots.slice(), keepRemote = Object.assign({}, remoteMeshes);
-    try {
-      run(3);
-      // all six mouths open on a shot
-      const angle0 = m._teeth.map(t => t.pv.quaternion.clone());
-      m._steamShot(); run(1, 0.03);
-      if (!(S.open > 0.3)) issues.push('fire: the mouths should snap open: ' + S.open.toFixed(2));
-      if (!m._teeth.every((t, i) => t.pv.quaternion.angleTo(angle0[i]) > 0.2)) issues.push('fire: every tooth of every mouth should move');
-      run(30); if (!(S.open < 0.05)) issues.push('fire: and shut again');
-      // the chatter: an enemy in plain sight, near -> teeth chatter; behind a wall -> nothing at all
-      camera.position.set(0, 1.65, 0);
-      gameBots.length = 0; gameBots.push({ id: 'zz_ab', team: 'enemy', dead: false, x: 0, z: -8 }); remoteMeshes['zz_ab'] = { position: new THREE.Vector3(0, 0, -8), visible: true };
-      hasLineOfSight = () => true; _abyssThreatAt = -9; run(40);
-      if (!(S.threat > 0.4)) issues.push('chatter: an enemy in plain sight 8 m away should be felt: ' + S.threat.toFixed(2));
-      const q0 = m._teeth[0].pv.quaternion.clone(); let moved = 0; for (let i = 0; i < 12; i++) { run(1, 0.016); moved = Math.max(moved, m._teeth[0].pv.quaternion.angleTo(q0)); }
-      if (!(moved > 0.05)) issues.push('chatter: the teeth should be moving');
-      hasLineOfSight = () => false; _abyssThreatAt = -9; run(120);
-      if (!(S.threat < 0.02)) issues.push('chatter: behind a wall it must say NOTHING: ' + S.threat.toFixed(3));
-      hasLineOfSight = () => true; gameBots[0].x = 0; remoteMeshes['zz_ab'].position.set(60, 0, 0); _abyssThreatAt = -9; run(120);
-      if (!(S.threat < 0.02)) issues.push('chatter: an enemy far away is not felt: ' + S.threat.toFixed(3));
-      gameBots[0].team = 'ally'; remoteMeshes['zz_ab'].position.set(0, 0, -5); _abyssThreatAt = -9; run(120);
-      if (!(S.threat < 0.02)) issues.push('chatter: allies never count: ' + S.threat.toFixed(3));
-      // reload: the gullet opens for a shell, bites shut, swallows
-      let sawOpen = false, sawShell = false, sawGulp = false;
-      for (let f = 0.10; f < 0.90; f += 0.01) { rl(f); if (Math.abs(m._jawU.rotation.z) > 0.3) sawOpen = true; if (m._shell.visible) sawShell = true; if (S.gulp > 0.3) sawGulp = true; }
-      if (!sawOpen) issues.push('reload: the gullet should open'); if (!sawShell) issues.push('reload: a shell should slide towards it'); if (!sawGulp) issues.push('reload: it should swallow');
-      m._reloadStart = 0; run(30); if (Math.abs(m._jawU.rotation.z) > 0.01 || m._shell.visible) issues.push('after reload: the gullet closed and empty');
-      // inspect: the lure grows, an eye opens in the top mouth
-      insp(0.45); if (!(m._lure.root.visible && m._lure.root.scale.x > 0.8)) issues.push('inspect: a long lure should have grown: ' + m._lure.root.scale.x.toFixed(2));
-      insp(0.78); if (!(m._eye.visible && m._eye.scale.x > 0.8 && m._lids[0].position.y > 0.01)) issues.push('inspect: the eye should be open: ' + m._eye.scale.x.toFixed(2));
-      insp(0.99); m._inspectMode = false; m._reloadStart = 0; run(60);
-      if (m._lure.root.visible || m._eye.visible) issues.push('after inspect: the lure is back in and the eye shut');
-      m._calm();
-    } catch (e) { issues.push('threw: ' + (e && e.stack || e)); }
-    finally { hasLineOfSight = keepLOS; gameBots.length = 0; gameBots.push(...keepBots); delete remoteMeshes['zz_ab']; }
-    // the kill: a giant anglerfish swallows the body
-    const keepPSE = playSoundEvent; playSoundEvent = () => {};                    // (no audio in here)
-    try {
-      const body = new THREE.Group(); body.add(new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.7, 0.3), new THREE.MeshBasicMaterial())); body.position.set(0, 0, -6); body.visible = true;
-      remoteMeshes['zz_kill'] = body; players['zz_kill'] = { name: 'x', dead: true };
-      const n0 = scene.children.length;
-      if (!_playSkinFinisher('angler', 'zz_kill', myId)) issues.push('kill: the finisher should play');
-      if (scene.children.length <= n0) issues.push('kill: the fish should be in the scene');
-      if (!(body._finisher && body._finisher.id === 'angler')) issues.push('kill: the body should be owned by the finisher');
-      delete remoteMeshes['zz_kill']; delete players['zz_kill'];
-    } catch (e) { issues.push('kill threw: ' + (e && e.stack || e)); }
-    finally { playSoundEvent = keepPSE; }
-    return issues;
-  })()`);
-  console.log('ABYSSAL SOVEREIGN checks: Gen 3 mythic, six mouths snap on fire, teeth chatter only for enemies in plain sight, gullet swallows shells, lure + eye on inspect, anglerfish kill');
-  if (issues.length) { ok = false; console.log(issues.join('\n')); }
-}
-
-// TWIN BURST (a secondary): one pull fires two 48s 0.08 s apart and you are committed to both; a second between bursts; from the hip every bullet scatters, aimed down the sights it does not.
-if (ok && process.argv.includes('--twinburst')) {
-  const issues = vm.runInThisContext(`(() => {
-    const issues = [];
-    const idx = WEAPONS.findIndex(w => w.id === 'twin_burst'), w = WEAPONS[idx];
-    if (!w) return ['the Twin Burst is missing'];
-    const want = { slot: 'secondary', damage: 48, mag: 12, fireRate: 80, reloadTime: 1800, heatShots: 2, auto: false, adsSpreadMult: 0 };
-    for (const k in want) if (w[k] !== want[k]) issues.push('stat ' + k + ' should be ' + want[k] + ': ' + w[k]);
-    if (!(w.spread > 0.03)) issues.push('it needs a real hip spread: ' + w.spread);
-    if (w.fireRate + w.heatCooldown !== 1000) issues.push('a burst every second: ' + (w.fireRate + w.heatCooldown));
-    if (weaponModels.length !== WEAPONS.length) issues.push('WEAPONS and weaponModels must stay the same length: ' + WEAPONS.length + ' / ' + weaponModels.length);
-    const m = weaponModels[idx];
-    if (!m || !m._flash || !m._shotPose) return issues.concat(['its model (at the same index) needs a flash and a shot pose']);
-    const a = m._shotPose(), b = m._shotPose(), c = m._shotPose();
-    if (a === b || a !== c) issues.push('the bullets of a burst should leave from alternate barrels');
-    if (typeof WEAPON_COSTS !== 'undefined' && !(WEAPON_COSTS.twin_burst > 0)) issues.push('it needs a price');
-    const saved = { slot: activeSlot, wi: currentWeaponIdx, cw: currentWeapon, dead: isDead, started: gameStarted, last: lastShot, slb: spawnLocalBullet, sound: playWeaponSound, ar: addRecoil, fa: flashAbilityName,
-      st: setTimeout, ads: isADS, pos: camera.position.clone(), quat: camera.quaternion.clone(), ammo: weaponAmmo[idx], heat: weaponHeatState.twin_burst, shooting };
-    const bullets = [], timers = []; let flashed = 0;
-    try {
-      activeSlot = 'secondary'; currentWeaponIdx = idx; currentWeapon = w; isDead = false; gameStarted = true; reloading = false; isADS = false;
-      camera.position.set(0, 1.65, 0); camera.quaternion.set(0, 0, 0, 1); camera.updateMatrixWorld(true);
-      weaponAmmo[idx] = { ammo: w.mag, reserve: w.reserve };
-      for (const wm of weaponModels) wm.visible = false; m.visible = true;
-      spawnLocalBullet = (o, d) => { bullets.push(d.clone()); };
-      playWeaponSound = () => {}; addRecoil = () => {}; flashAbilityName = () => { flashed++; };
-      setTimeout = (f, ms) => { timers.push({ f, ms }); return 0; };
-      const pull = () => { lastShot = 0; tryShoot(); };
-      weaponHeatState.twin_burst = { shotCount: 0, cooldownUntil: 0 };
-      pull();
-      if (bullets.length !== 1) issues.push('a pull fires its first bullet at once: ' + bullets.length);
-      const next = timers.find(t => t.ms === w.fireRate);
-      if (!next) issues.push('the second bullet should be queued 0.08 s later (a commitment: no trigger needed)');
-      else { shooting = false; lastShot = Date.now(); next.f(); }
-      if (bullets.length !== 2) issues.push('a burst is two bullets: ' + bullets.length);
-      if (weaponAmmo[idx].ammo !== w.mag - 2) issues.push('two rounds per burst: ' + weaponAmmo[idx].ammo);
-      pull();
-      if (bullets.length !== 2) issues.push('no new burst for a full second: ' + bullets.length);
-      weaponHeatState.twin_burst.cooldownUntil = 0; pull();
-      if (bullets.length !== 3) issues.push('after the second the next burst fires: ' + bullets.length);
-      if (flashed) issues.push('a burst is not an overheat: no OVERHEATED banner');
-      const dev = list => { const same = list.filter((_, i) => i % 2 === 0); return Math.max(0, ...same.map(d => d.angleTo(same[0]))); };   // (every other bullet leaves the same barrel)
-      const run = ads => { isADS = ads; bullets.length = 0; for (let i = 0; i < 20; i++) { weaponHeatState.twin_burst = { shotCount: 0, cooldownUntil: 0 }; weaponAmmo[idx] = { ammo: w.mag, reserve: w.reserve }; pull(); } return bullets.slice(); };
-      const hip = run(false), ads = run(true);
-      if (!(dev(hip) > 0.03)) issues.push('from the hip it should scatter: max ' + dev(hip).toFixed(4) + ' rad');
-      if (!(dev(ads) < 0.005 && dev(hip) > 6 * dev(ads))) issues.push('aimed down the sights the spread is gone (hip ' + dev(hip).toFixed(4) + '): max ' + dev(ads).toFixed(6) + ' rad');
-    } catch (e) { issues.push('threw: ' + (e && e.stack || e)); }
-    finally {
-      activeSlot = saved.slot; currentWeaponIdx = saved.wi; currentWeapon = saved.cw; isDead = saved.dead; gameStarted = saved.started; lastShot = saved.last; spawnLocalBullet = saved.slb;
-      playWeaponSound = saved.sound; addRecoil = saved.ar; flashAbilityName = saved.fa; setTimeout = saved.st; isADS = saved.ads; camera.position.copy(saved.pos); camera.quaternion.copy(saved.quat);
-      weaponAmmo[idx] = saved.ammo; if (saved.heat) weaponHeatState.twin_burst = saved.heat; else delete weaponHeatState.twin_burst; shooting = saved.shooting;
-    }
-    return issues;
-  })()`);
-  console.log('TWIN BURST checks: stats, two bullets a burst and committed to both, a second between bursts, hip spread and aimed-down-sights accuracy');
-  if (issues.length) { ok = false; console.log(issues.join('\n')); }
-}
-
-// LEVER RIFLE + M1 GARAND: one weapon now. The Lever Rifle has the average of the two, the Garand is archived (it keeps its slot) and returns as the Classic Garand skin, its skins and bundles moved over.
-if (ok && process.argv.includes('--leverrifle')) {
-  const issues = vm.runInThisContext(`(() => {
-    const issues = [];
-    const lever = WEAPONS.find(w => w.id === 'lever'), garand = WEAPONS.find(w => w.id === 'm1_garand');
-    if (!lever || !garand) return ['the Lever Rifle or the Garand slot is missing'];
-    if (lever.name !== 'Lever Rifle') issues.push('it is called the Lever Rifle: ' + lever.name);
-    const avg = { mag: 8, reserve: 36, damage: 105, fireRate: 460, reloadTime: 2250 };
-    for (const k in avg) if (lever[k] !== avg[k]) issues.push('averaged ' + k + ' should be ' + avg[k] + ': ' + lever[k]);
-    if (!garand.archived) issues.push('the Garand should be archived (it keeps its slot)');
-    if (weaponModels.length !== WEAPONS.length) issues.push('WEAPONS and weaponModels must stay the same length');
-    const stray = MODEL_SKINS.filter(s => s.weapon === 'm1_garand').map(s => s.id);
-    if (stray.length) issues.push('skins still on the archived Garand: ' + stray.join(', '));
-    const classic = MODEL_SKINS.find(s => s.id === 'lever_classic_garand');
-    if (!classic || classic.weapon !== 'lever') issues.push('the Classic Garand skin of the Lever Rifle is missing');
-    else {
-      if (!GEN2_MODEL_SKIN_IDS.has(classic.id)) issues.push('the Classic Garand is not dealt by a case (no skin is free)');
-      const m = classic.build(); if (!m || !m._flash) issues.push('the Classic Garand model needs a flash');
-    }
-    const archivedIds = new Set(WEAPONS.filter(w => w.archived).map(w => w.id));
-    for (const b of (PVP_SHOP_CATALOG.bundles || [])) for (const id of b.items) if (archivedIds.has(id)) issues.push('bundle ' + b.id + ' holds the archived ' + id);
-    return issues;
-  })()`);
-  console.log('LEVER RIFLE checks: averaged stats, Garand archived and its skins moved, Classic Garand skin, no archived item in a bundle');
-  if (issues.length) { ok = false; console.log(issues.join('\n')); }
-}
-
-// FLOATING DAMAGE: a number over the enemy's head -- white body, gold headshot with a "!", red elimination with a "x" -- popping 115% and floating 25 px in 0.75 s, hits within 0.12 s added into one, raw or effective damage.
-if (ok && process.argv.includes('--floatdmg')) {
-  const issues = vm.runInThisContext(`(() => {
-    const issues = [], keep = Object.assign({}, FLOATDMG), keepPh = playHitConfirmSound, keepHm = showHitmarker;
-    const clear = () => { for (const o of _floatNums) o.el.remove(); _floatNums.length = 0; for (const k of Object.keys(_floatLast)) delete _floatLast[k]; };
-    try {
-      FLOATDMG = { ...FLOATDMG_DEFAULT }; clear(); playHitConfirmSound = () => {}; showHitmarker = () => {};
-      if (!(FLOATDMG.on && FLOATDMG.life === 0.75 && FLOATDMG.pop === 1.15 && FLOATDMG.combine && FLOATDMG.kill && FLOATDMG.mode === 'raw')) issues.push('defaults: on, 0.75 s, 115%, combine, red kills, raw');
-      const mesh = new THREE.Group(); mesh.position.set(3, 0, -8);
-      // the look
-      const body = floatDmgLook(120, false, false), head = floatDmgLook(999, true, false), kill = floatDmgLook(125, false, true), hk = floatDmgLook(300, true, true);
-      if (body.text !== '120' || body.color !== '#ffffff') issues.push('body: white 120: ' + body.text + ' ' + body.color);
-      if (head.text !== '999!' || head.color !== '#ffd23a' || !(head.size > body.size)) issues.push('headshot: gold, bigger, "!": ' + head.text);
-      if (!kill.text.startsWith('125') || !kill.text.endsWith('\\u2715') || kill.color !== '#ff3030') issues.push('elimination: red with a cross: ' + kill.text);
-      if (hk.text !== '300! \\u2715') issues.push('a killing headshot keeps its "!": ' + hk.text);
-      FLOATDMG.kill = false; if (floatDmgLook(125, false, true).color === '#ff3030') issues.push('red kills can be turned off'); FLOATDMG.kill = true;
-      if (floatDmgLook(5000, false, false).text !== '999') issues.push('capped at 999');
-      // the curve
-      const p0 = floatDmgPose(0, 1.15), p2 = floatDmgPose(0.2, 1.15), p1 = floatDmgPose(1, 1.15), ph = floatDmgPose(0.5, 1.15);
-      if (!(p0.opacity === 1 && Math.abs(p2.scale - 1.15) < 1e-9 && Math.abs(p1.scale - 1) < 1e-9 && p1.opacity < 1e-6)) issues.push('curve: instant, pops to 115% at 20%, ends at 100% and clear: ' + JSON.stringify([p0, p2, p1]));
-      if (!(ph.rise > 18 && ph.rise <= 25.0001 && p1.rise === 25)) issues.push('it floats 25 px: ' + ph.rise + ' / ' + p1.rise);
-      // a number
-      const e1 = floatDamage('zz1', mesh, 120, 40, false, false);
-      if (!e1 || e1.el.textContent !== '120') issues.push('raw mode shows what the weapon dealt: ' + (e1 && e1.el.textContent));
-      clear(); FLOATDMG.mode = 'effective';
-      const e2 = floatDamage('zz1', mesh, 120, 40, false, false);
-      if (!e2 || e2.el.textContent !== '40') issues.push('effective mode shows what came off: ' + (e2 && e2.el.textContent));
-      clear(); FLOATDMG.mode = 'raw';
-      // combining
-      const a = floatDamage('zz2', mesh, 19, 19, false, false), b = floatDamage('zz2', mesh, 19, 19, false, false), c = floatDamage('zz2', mesh, 19, 19, true, false);
-      if (_floatNums.length !== 1 || a !== b || b !== c || c.total !== 57 || c.el.textContent !== '57!') issues.push('quick hits are one number: ' + _floatNums.length + ' ' + (c && c.el.textContent));
-      c.first -= 300; const d = floatDamage('zz2', mesh, 19, 19, false, false);
-      if (d === c || _floatNums.length !== 2) issues.push('after 0.12 s it is a new number');
-      FLOATDMG.combine = false; const f = floatDamage('zz3', mesh, 10, 10, false, false), g2 = floatDamage('zz3', mesh, 10, 10, false, false);
-      if (f === g2) issues.push('combining can be turned off'); FLOATDMG.combine = true;
-      const l = floatDamage('zz4', mesh, 125, 40, false, true);
-      if (!l.lethal || !l.el.textContent.includes('\\u2715')) issues.push('a lethal hit gets the cross');
-      clear();
-      for (let i = 0; i < 60; i++) floatDamage('many' + i, mesh, 10, 10, false, false);
-      if (_floatNums.length > FLOATDMG_MAX) issues.push('capped so a 10v10 stays readable: ' + _floatNums.length);
-      // it goes away by itself
-      clear(); const e3 = floatDamage('zz5', mesh, 50, 50, false, false); e3.t0 -= 2000; updateFloatDamage();
-      if (_floatNums.includes(e3) || e3.el.isConnected) issues.push('after its life it is gone');
-      // the paths that confirm a hit feed it
-      clear(); hitConfirmed('head', { damage: 50, fd: { id: 'zz6', mesh, raw: 90 } });
-      if (!(_floatLast['zz6'] && _floatLast['zz6'].total === 90 && _floatLast['zz6'].head)) issues.push('a confirmed hit makes a number (raw 90)');
-      clear(); hitConfirmed('hit', { damage: 50 }); if (_floatNums.length) issues.push('no target, no number');
-      // off means off
-      FLOATDMG.on = false; if (floatDamage('zz7', mesh, 50, 50, false, false)) issues.push('off: no numbers');
-      FLOATDMG.on = true;
-      // the old running total gives way (a hit with a grade) but damage with no hit of its own still gets a number
-      const tmesh = new THREE.Group(); tmesh.position.set(0, 0, -6); clear();
-      for (const k of Object.keys(damageTracker)) { try { damageTracker[k].el.remove(); } catch (e) {} delete damageTracker[k]; }
-      trackTotalDamage('zz8', 33, tmesh, 'yellow'); if (damageTracker['zz8']) issues.push('the running total gives way to the floating number');
-      trackTotalDamage('zz9', 33, tmesh); if (!_floatLast['zz9']) issues.push('damage with no hit of its own (an explosion) still shows a number');
-    } catch (e) { issues.push('threw: ' + (e && e.stack || e)); }
-    finally { FLOATDMG = keep; clear(); playHitConfirmSound = keepPh; showHitmarker = keepHm; }
-    return issues;
-  })()`);
-  console.log('FLOATING DAMAGE checks: look (white / gold ! / red x), the 0.75 s pop-float-fade, combining, raw vs effective, the cap, and the confirmed-hit paths');
-  if (issues.length) { ok = false; console.log(issues.join('\n')); }
-}
-
-// HANDLING + MOMENTUM: guns feel like what they are (revolver heavy, P90 a steady hose, crossbow a dry mechanical release), and a jump / slide / landing chain keeps its pace.
-if (ok && process.argv.includes('--handling')) {
-  const issues = vm.runInThisContext(`(() => {
-    const issues = [];
-    const keep = { st: setTimeout, ads: isADS, dead: isDead, started: gameStarted, slam: slamState, yv: playerYVel, pos: camera.position.clone(), pv: { x: playerVelocity.x, z: playerVelocity.z },
-      ev: { x: _extVel.x, z: _extVel.z }, gs: _gunSettle, kick: { ..._gunKick }, keys: { ...keys } };
-    try {
-      // ── handling ──
-      const model = weaponModels[currentWeaponIdx]; if (!model._homePos) model._homePos = model.position.clone();
-      const timers = []; setTimeout = (f, ms) => { timers.push({ f, ms }); return 0; };
-      isADS = false;
-      const kick = id => { for (const k in _gunKick) _gunKick[k] = 0; timers.length = 0; kickWeaponVisual({ id, damage: 50, pellets: 1, auto: false, bulletSpeed: 150 }); return { z: _gunKick.z, rx: _gunKick.rx, y: _gunKick.y, settle: _gunSettle, n: timers.length }; };
-      const rev = kick('revolver'), base = kick('pistol'), hose = kick('p90'), xb = kick('crossbow'), hc = kick('hand_cannon');
-      if (!(rev.z > base.z * 1.2 && rev.rx > base.rx * 1.3)) issues.push('revolver should slam and flip more than a plain pistol: z ' + rev.z.toFixed(4) + ' vs ' + base.z.toFixed(4) + ', rx ' + rev.rx.toFixed(4) + ' vs ' + base.rx.toFixed(4));
-      if (!(hc.z >= rev.z)) issues.push('the hand cannon is the heavier of the two');
-      if (!(hose.z < base.z * 0.7 && hose.rx < base.rx * 0.6)) issues.push('the P90 should hardly kick: z ' + hose.z.toFixed(4) + ' vs ' + base.z.toFixed(4));
-      if (!(rev.settle > base.settle && base.settle > hose.settle && xb.settle < base.settle)) issues.push('settle: revolver slow, P90 and crossbow quick: ' + [rev.settle, base.settle, hose.settle, xb.settle].join(' '));
-      if (xb.n !== 3) issues.push('the crossbow release should ring through the gun (3 jolts): ' + xb.n);
-      else { kick('crossbow'); const before = { ..._gunKick }; for (const t of timers) t.f(); if (Math.abs(_gunKick.z - before.z) < 1e-6 || Math.abs(_gunKick.rz - before.rz) < 1e-6) issues.push('the release should move the gun'); }
-      if (handlingOf({ id: 'ak20' }) || handlingOf({ id: 'revolver', baseId: 'revolver' }) !== HANDLING.revolver) issues.push('only the listed guns have a profile (a skin counts as its gun)');
-      setTimeout = keep.st;
-      // ── momentum ──
-      gameStarted = true; isDead = false; slamState = null; playerYVel = 0;
-      const ground = () => getGroundEyeY() + ((window._crouchEye ?? PLAYER_EYE_HEIGHT) - PLAYER_EYE_HEIGHT);
-      camera.position.set(0, ground(), 0); camera.updateMatrixWorld(true);
-      _extVel.x = 0; _extVel.z = 0; window._momCarry = false; window._slideUntil = 0; window._blastCarry = false;
-      playerVelocity.x = 6; playerVelocity.z = 0;
-      doJump(false);
-      if (!(Math.abs(_extVel.x - 6 * HOP_CARRY) < 0.05 && window._momCarry)) issues.push('a running jump keeps a little of the run: ' + _extVel.x.toFixed(2));
-      // it fades slowly in the air when it is a jump's push, fast when it is anything else
-      const air = flag => { camera.position.set(0, ground() + 4, 0); slamState = { vel: 6, type: 'jump' }; playerYVel = 0; _extVel.x = 5; _extVel.z = 0; window._momCarry = flag; window._blastCarry = false; for (let i = 0; i < 20; i++) updateMovement(0.016); return _extVel.x; };
-      const withCarry = air(true), without = air(false);
-      if (!(withCarry > without * 1.4 && withCarry > 2.5)) issues.push('a jump push should last in the air: ' + withCarry.toFixed(2) + ' vs ' + without.toFixed(2));
-      // a slide asked for just before touching down starts when you land
-      slamState = null; playerYVel = 0; _extVel.x = 0; _extVel.z = 0; window._slideUntil = 0;
-      camera.position.set(0, ground() + 3, 0); keys['KeyW'] = true; keys['ShiftLeft'] = true; window._prevShiftHeld = false; window._slideBufferAt = 0;
-      updateMovement(0.016);
-      if (!window._slideBufferAt) issues.push('a slide pressed in the air is remembered');
-      camera.position.set(0, ground(), 0); slamState = null; playerYVel = 0;
-      updateMovement(0.016);
-      if (!(window._slideUntil > Date.now() && window._slideChained === true)) issues.push('it should start the moment you land, as a chained (weaker) slide: ' + window._slideUntil + ' ' + window._slideChained);
-      // too early is forgotten
-      window._slideUntil = 0; window._slideChained = false; window._slideBufferAt = Date.now() - 600; keys['ShiftLeft'] = true; window._prevShiftHeld = true;
-      camera.position.set(0, ground(), 0); updateMovement(0.016);
-      if (window._slideUntil) issues.push('a press more than 0.14 s before landing is forgotten');
-    } catch (e) { issues.push('threw: ' + (e && e.stack || e)); }
-    finally {
-      setTimeout = keep.st; isADS = keep.ads; isDead = keep.dead; gameStarted = keep.started; slamState = keep.slam; playerYVel = keep.yv; camera.position.copy(keep.pos);
-      playerVelocity.x = keep.pv.x; playerVelocity.z = keep.pv.z; _extVel.x = keep.ev.x; _extVel.z = keep.ev.z; _gunSettle = keep.gs; for (const k in keep.kick) _gunKick[k] = keep.kick[k];
-      for (const k of Object.keys(keys)) delete keys[k]; Object.assign(keys, keep.keys); window._slideUntil = 0; window._momCarry = false; window._slideBufferAt = 0;
-    }
-    return issues;
-  })()`);
-  console.log('HANDLING + MOMENTUM checks: revolver heavy / P90 steady / crossbow release, running-jump carry, a jump push that lasts in the air, a slide buffered into the landing');
-  if (issues.length) { ok = false; console.log(issues.join('\n')); }
-}
-
-// HOUSE OF CARDS (the Throwing Knives skin): a legendary from the Gen 2 case: a fan of three cards and a floating ace that shuffle on every throw, the Impossible Shuffle on inspect (the deck is
-// thrown up, spirals, interleaves, four aces stop in the air, become one knife that lands in the hand), a card for a round, and the ace of spades behind what it kills.
-if (ok && process.argv.includes('--houseofcards')) {
-  const issues = vm.runInThisContext(`(() => {
-    const issues = [];
-    const sk = MODEL_SKINS.find(s => s.id === 'throwing_knives_house_of_cards');
-    if (!sk || sk.weapon !== 'throwing_knives') return ['the House of Cards skin of the Throwing Knives is missing'];
-    if (!GEN2_MODEL_SKIN_IDS.has(sk.id)) issues.push('House of Cards is not dealt by the Gen 2 case (no skin is free)');
-    const fx = SKIN_FX[sk.id];
-    if (!fx || !fx.equip || !fx.inspect) issues.push('no entrance or inspect track');
-    if (_hitKindOfSkin(sk.id) !== 'card' || !HIT_STYLES.card) issues.push('the skin does not carry the card hit look');
-    const shot = SKIN_SHOT[sk.id];
-    if (!shot || shot.shot.shape !== 'card' || !BOOM_THEMES.cards) issues.push('the round is not a card');
-    else { const a = _skinShotMesh(shot.shot, 0.05); if (!a || a.children.length < 7 || !a._alignToDir) issues.push('the card round has too few parts'); }
-    const m = sk.build();
-    if (!m._cards || !m._parts || !m._parts.ammo || m._parts.ammo.children.length !== 3 || !m._tick || !m._calm || !m._steamShot) return issues.concat(['the model needs a fan of three ammo cards, a tick, a calm and a shot hook']);
-    const { ammo, extra, deck, knife } = m._cards;
-    const frame = (n, dt = 0.016) => { let t = performance.now() / 1000; for (let i = 0; i < n; i++) { t += dt; m._tick(dt, t, false); } };
-    const keepBeat = _itemInspectBeat, keepTo = setTimeout; _itemInspectBeat = () => {}; setTimeout = () => 0;
-    try {
-      frame(3);
-      const xs = () => ammo.children.map(c => +c.position.x.toFixed(3)).sort((a, b) => a - b).join();
-      const fan0 = xs(), slots0 = ammo.children.map(c => c.userData.slot).join();
-      m._steamShot(); frame(3);
-      if (ammo.children.map(c => c.userData.slot).join() === slots0) issues.push('a throw should shuffle the cards into new places');
-      frame(40);
-      if (xs() !== fan0) issues.push('after the shuffle the cards should sit in the fan again: ' + fan0 + ' vs ' + xs());
-      if (!extra.visible || deck.visible || knife.visible) issues.push('the floating ace should show, and the deck and the knife should not');
-      const at = t => { m._inspectMode = true; m._reloadStart = Date.now() - t * 2400; m._reloadDur = 2400; frame(1); };
-      at(0.30);
-      if (!deck.visible || ammo.children.some(c => c.visible) || extra.visible) issues.push('inspect: the whole deck is in the air, the fan is not');
-      if (!deck.children.some(c => Math.abs(c.position.z + 0.05) > 0.02)) issues.push('inspect: the streams should be spiralling');
-      at(0.70);
-      const aces = deck.children.slice(0, 4);
-      if (!aces.every(c => c.visible && Math.abs(c.rotation.x - Math.PI / 2) < 0.2)) issues.push('inspect: the four aces should be standing in the air facing you');
-      const gaps = aces.map(c => c.position.x).sort((a, b) => a - b);
-      if (!(gaps[3] - gaps[0] > 0.12)) issues.push('inspect: the four aces should be spread out in a row');
-      if (deck.children.slice(4).some(c => c.visible)) issues.push('inspect: the rest of the deck should have gone');
-      at(0.86);
-      if (!knife.visible) issues.push('inspect: the aces should be becoming a knife');
-      at(0.995);
-      if (!knife.visible) issues.push('inspect: the knife should be about to land in the hand');
-      m._inspectMode = false; m._reloadStart = 0; frame(3);
-      if (deck.visible || knife.visible || !extra.visible) issues.push('after the inspect everything should be back to the fan');
-    } finally { _itemInspectBeat = keepBeat; setTimeout = keepTo; }
-    const body = new THREE.Group(); body.add(new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.7, 0.3), new THREE.MeshBasicMaterial()));
-    body.visible = true; remoteMeshes.cx = body; players.cx = { dead: true };
-    const keepSound = playSoundEvent, keepFeed = pushFeedLine, keepRaf = typeof requestAnimationFrame !== 'undefined' ? requestAnimationFrame : null, keepTo2 = setTimeout;
-    playSoundEvent = () => {}; pushFeedLine = () => {}; requestAnimationFrame = () => 0; setTimeout = () => 0;
-    try { if (_playSkinFinisher('card', 'cx', 'someone') !== true) issues.push('the ace of spades kill does not play'); }
-    finally { playSoundEvent = keepSound; pushFeedLine = keepFeed; setTimeout = keepTo2; if (keepRaf) requestAnimationFrame = keepRaf; delete remoteMeshes.cx; delete players.cx; }
-    return issues;
-  })()`);
-  console.log('House of Cards checks: Gen 2, shuffle on throw, Impossible Shuffle, card round, ace of spades kill');
-  if (issues.length) { ok = false; console.log(issues.join('\n')); }
-}
-
 // Bot strategy: on every map, ten random bot/enemy pairs 20-36 m apart each ask for a plan. A plan has to be a route a body can
 // walk (each step at most 0.65 m up and 2 m down, one cell at a time), end where it says it does (a perch is 2.4 m or higher
 // and sees the enemy), and most maps with a deck or a roof should have at least one.
@@ -4467,38 +3779,29 @@ if (ok && process.argv.includes('--match-finale')) {
   const issues = vm.runInThisContext(`(() => {
     const issues = [], check = (v, m) => { if (!v) issues.push(m); };
     myId = 'finale-self'; currentUser = { username: 'Finale Tester' };
-    players[myId] = { id: myId, team: 'ally', skin: 'default' };
-    players['finale-mate'] = { id: 'finale-mate', name: 'Teammate', team: 'ally', skin: 'spiky', weaponId: 'pistol' };
-    players['finale-enemy'] = { id: 'finale-enemy', name: 'Enemy', team: 'enemy', skin: 'default', weaponId: 'pistol', x: 6, z: 2 };
-    pvpMatch = null;
-    match = { type: 'race', active: false, over: true, cfg: {} };
-    matchScore = { [myId]: 7, 'finale-mate': 7, 'finale-enemy': 4 };
-    matchDeaths = { [myId]: 1, 'finale-mate': 2 };
-    check(finaleRoster()[0].id === myId, 'MVP must use match kills, then deaths');
-    noteKillInfo('finale-enemy', myId, 'pistol', true);
-    captureFinalKill('finale-enemy', myId);
-    const clip = MATCH_FINALE.lastKill;
-    captureFinalKill(myId, myId);
-    check(MATCH_FINALE.lastKill === clip, 'Self elimination must not replace final combat kill');
-    check(JSON.parse(JSON.stringify(clip)).frames.length > 0, 'Final kill must be network serializable');
-    MATCH_FINALE.lastKill = null;
-    check(startMatchFinale('ally'), 'Scored match should start finale without a replay');
-    check(MATCH_FINALE.phase === 'lineup', 'No recorded kill should go straight to MVP');
-    updateMatchFinale(MATCH_FINALE.startedAt + 200);
-    check(MATCH_FINALE.lineup.slice(1).every(x => !x.body.visible), 'Teammates should not appear immediately');
-    updateMatchFinale(MATCH_FINALE.startedAt + 4000);
-    check(MATCH_FINALE.lineup.length === 2, 'MVP lineup must exclude the other team');
-    check(MATCH_FINALE.lineup.every(x => x.body.visible), 'Teammates should reveal after MVP');
-    stopMatchFinale(true);
-    check(!MATCH_FINALE.active && !MATCH_FINALE.stage && !MATCH_FINALE.replay, 'Finale resources must clear');
+    players['finale-mate'] = { name: 'Teammate', weaponId: 'pistol' };
+    gameBots.push({ id: 'finale-enemy', name: 'Enemy', team: 'enemy', weaponId: 'ak20' });
+    pvpMatch = { team: 'enemy', mvpRank: 6, opponents: [{ socketId: 'finale-mate', team: 'enemy', mvpRank: 3 }] };
+    match = { type: 'race', cfg: {} };
+    matchScore = { [myId]: 7, 'finale-mate': 7, 'finale-enemy': 9 };
+    matchDeaths = { [myId]: 1, 'finale-mate': 2, 'finale-enemy': 2 };
+    const home = winningTeamMvp('ally'), away = winningTeamMvp('enemy');
+    check(home?.id === myId && home.rank === 6 && home.deaths === 1, 'Winning MVP must use match kills then deaths, from the local side');
+    check(away?.id === 'finale-enemy' && away.isBot && away.rank === null && away.weaponId === 'ak20', 'Opposing bot MVP must retain its real gear and no human rank');
+    check(winningTeamMvp('ally', away)?.id === 'finale-enemy', 'Guest must use the host snapshot');
+    check(winningTeamMvp(null) === null, 'Draws have no winning team');
+    match.forfeit = true;
+    check(winningTeamMvp('ally') === null, 'Forfeits should not reveal an MVP');
     resetMatchRivals();
-    check(!MATCH_FINALE.lastKill && KILLCAM.buf.length === 0, 'New matches must clear old replays');
+    check(!Object.keys(matchScore).length && !Object.keys(matchDeaths).length, 'New matches must clear MVP stats');
+    gameBots.pop(); delete players['finale-mate']; pvpMatch = null;
+    match.forfeit = false;
     match.type = 'wave_dash';
-    check(!startMatchFinale('ally'), 'Wave Dash must keep its own results');
+    check(winningTeamMvp('ally') === null, 'Wave Dash must keep its own results');
     match = null;
     return issues;
   })()`);
-  console.log('match finale checks: ranking, self kills, network clip, staggered team reveal, cleanup and non-combat modes');
+  console.log('match finale checks: winning-side MVP, rank and gear, guest snapshot, draw/forfeit handling, and cleanup');
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
@@ -5019,6 +4322,7 @@ if (ok && process.argv.includes('--sample')) {
   const itch = fs.readFileSync(path.join(__dirname, 'build-itch.sh'), 'utf8'), filesLine = (itch.match(/^FILES=\(([^)]*)\)/m) || [])[1] || '';
   const LENGTH = { stealth: 3.0, vector: 3.0, thump: 3.0, ring: 3.0, blast: 4.0, lightning: 3.0, isolated: 3.0, heavy: 4.0, rocket: 8.0, quick1: 0.5, quick2: 0.5, dry1: 3.0, dry4: 3.0, sharp1: 3.0, sharp3: 3.0, single: 3.0, heavy3: 3.0, isolatedB: 3.0, ak1: 3.0, ak2: 3.0, ak4: 3.0, laser1: 1.0, laser2: 1.0, laser4: 1.0, smgV3: 1.0, snappy2: 2.0, smgA1: 3.0, smgA3: 3.0, smgA4: 3.0, boomRoll: 8.0, boomTwin: 8.0, boomCrack: 8.0 };       // seconds in each file as it was made
   const more = [], cuts = [...Object.entries(tbl.samples), ...Object.entries(tbl.skins).map(([k, c]) => ['skin ' + k, c]), ...Object.entries(tbl.events).flatMap(([n, E]) => E.clips.map((c, i) => ['event ' + n + ' #' + (i + 1), c]))];
+  Object.assign(LENGTH, { bodyshot: 0.24, headshot: 3.0, elimination: 1.104 });
   for (const [k, u] of Object.entries(tbl.files)) {
     const f = path.join(__dirname, '..', 'public', u);
     if (!fs.existsSync(f) || fs.statSync(f).size < 5000) more.push('public/' + u + ' should be there');
@@ -5051,7 +4355,7 @@ if (ok && process.argv.includes('--sample')) {
   for (const [id, d] of cuts) {
     if (!tbl.files[d.file]) more.push(id + ' names a file that is not in SAMPLE_FILES: ' + d.file);
     else if (LENGTH[d.file] && d.from + d.len * d.rate[1] > LENGTH[d.file] + 0.01) more.push(id + ' plays past the end of its file (from ' + d.from + ' + ' + d.len + ' x ' + d.rate[1] + ' > ' + LENGTH[d.file] + ')');
-    if (!(d.gain > 0) || !(d.len > 0.2) || !(d.fade > 0 && d.fade <= d.len) || !(d.rate[0] > 0.5 && d.rate[1] < 2 && d.rate[0] <= d.rate[1])) more.push(id + ' has a setting that makes no sense: ' + JSON.stringify(d));
+    if (!(d.gain > 0) || !(d.len > 0.2) || !(d.fade > 0 && d.fade <= d.len) || !(d.rate[0] > 0.5 && d.rate[1] <= 2 && d.rate[0] <= d.rate[1])) more.push(id + ' has a setting that makes no sense: ' + JSON.stringify(d));
   }
   // One recording, one gun, unless they are really alike (Andy's rule). Two guns you can get may share a recording only if it is tweaked enough to be two sounds: pitch at least 12 % apart,
   // and no pitch outside 0.8 to 1.25 (less sounds identical, more distorts). A gun that can not be got (admin, or out of the shop) may play the very same sound as one you can get; two of
@@ -5072,7 +4376,7 @@ if (ok && process.argv.includes('--sample')) {
       } } }
   const out = vm.runInThisContext(`(() => {
     const issues = [];
-    const node = () => { const t = { connect: x => x, disconnect() {}, start() {}, stop() {}, setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {}, setTargetAtTime() {}, cancelScheduledValues() {}, value: 0 };
+    const node = () => { const t = { connect: x => x, disconnect() {}, start() {}, stop() {}, setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {}, setTargetAtTime() {}, cancelScheduledValues() {}, value: 0, playbackRate: { value: 1 } };
       return new Proxy(t, { get: (o, k) => (k in o ? o[k] : (typeof k === 'string' ? node() : undefined)), set: (o, k, v) => { o[k] = v; return true; } }); };
     let sources = 0, lastSrc = null, sampleHits = 0; const seen = []; const SAMPLE = { duration: 3, numberOfChannels: 2 };
     const ctx = new Proxy({ currentTime: 1, sampleRate: 48000, state: 'running', destination: node(), createBufferSource() { sources++; const n = node(); lastSrc = new Proxy(n, { get: (o, k) => o[k], set: (o, k, v) => { if (k === 'buffer') { if (v === SAMPLE) sampleHits++; if (v && v.tag) seen.push(v.tag); } o[k] = v; return true; } }); return lastSrc; }, createBuffer(ch, len) { return { numberOfChannels: ch, length: len, duration: len / 48000, getChannelData: () => new Float32Array(len) }; } },
@@ -5108,6 +4412,21 @@ if (ok && process.argv.includes('--sample')) {
       _sampleVoices = 0;
       // other guns are untouched
       for (const id of ['flamethrower', 'freeze_gun', 'crossbow', 'dart_gun', 'taser', 'paintball']) { clear(); sampleHits = 0; _sampleVoices = 0; playWeaponSound(id, {}); if (sampleHits) issues.push('the ' + id + ' must keep its own sound'); }
+      { const clip = EVENT_SAMPLES.hm_body.clips[0];
+        seen.length = 0; _sampleVoices = 49;
+        _sampleState[clip.file] = { buf: { duration: 0.24, numberOfChannels: 2, tag: clip.file }, loading: false, failed: false };
+        for (let i = 0; i < 12; i++) playHitConfirmSound('hit');
+        if (seen.length !== 12 || seen.some(tag => tag !== 'bodyshot') || _sampleVoices !== 61) issues.push('rapid body hits should start overlapping first-burst recordings even with crowded weapon audio');
+        _sampleVoices = 0;
+      }
+      { const clip = EVENT_SAMPLES.hm_kill.clips[0];
+        seen.length = 0; _sampleVoices = 49;
+        _sampleState[clip.file] = { buf: { duration: 1.104, numberOfChannels: 2, tag: clip.file }, loading: false, failed: false };
+        playSoundEvent('hm_kill', { minGap: 0, pitch: 1.25 });
+        if (seen.length !== 1 || seen[0] !== 'elimination' || lastSrc.playbackRate.value !== 1.25) issues.push('the elimination recording should play at its streak pitch even with crowded weapon audio');
+        if (!ctx._eliminationBus || ctx._eliminationBus === ctx._sampleBus || clip.gain <= 1) issues.push('the elimination recording should have a boosted mix independent of gunfire');
+        _sampleVoices = 0;
+      }
       // 💥 events: the big explosions are recordings (one of several, never the same one twice running; one roar per rocket), the little pops of a map keep the made-up boom
       { const E = EVENT_SAMPLES.explosion;
         if (!E || E.clips.length < 2) issues.push('the explosion should have several recordings to pick from');
@@ -5909,6 +5228,7 @@ if (ok && (process.argv.includes('--stats') || process.argv.includes('--dump-sta
       if (w.splashRadius) t.push('Explodes: ' + w.splashRadius + ' m blast' + (w.splashDamage ? ', ' + w.splashDamage + ' damage' : ''));
       if (w.burnOnHit) t.push('Sets the target on fire');
       if (w.poisonOnHit) t.push('Poisons the target');
+      if (w.radiationOnHit) t.push('Radiation: '+w.radiationOnHit.dps+' HP/s per stack, up to 3 stacks, lasts until death or match reset');
       if (w.slowOnHit || w.frostSlow) t.push('Slows the target');
       if (w.blindOnHit) t.push('Blinds the target');
       if (w.pinOnHit) t.push('Pins the target in place');
@@ -5919,6 +5239,7 @@ if (ok && (process.argv.includes('--stats') || process.argv.includes('--dump-sta
       if (w.bounce) t.push('Bounces off surfaces');
       if (w.tracking) t.push('Homes in on targets');
       if (w.ammoRegen) t.push('Ammo slowly regenerates');
+      if (w.returningDisc) t.push('One reusable disc; 35 studs outbound at 90 studs/sec; 65 damage once per target on each leg; 0.3s recovery after catching (travel time is additional)');
       if (w.silentShots) t.push('Silenced');
       if (w.ignoreDefenses) t.push('Ignores shields and deflects');
       if (w.pierce) t.push('Pierces: the round goes through up to ' + w.pierce.extra + ' more enem' + (w.pierce.extra > 1 ? 'ies' : 'y') + '; each one after takes ' + Math.round(w.pierce.keep * 100) + '% of what the one before did');
@@ -5927,6 +5248,8 @@ if (ok && (process.argv.includes('--stats') || process.argv.includes('--dump-sta
       if (w.lastBulletBonus) t.push('The last round in the magazine hits harder');
       if (w.doubleJump) t.push('Lets you jump a second time in the air');
       if (w.perfectAccuracy) t.push('Perfectly accurate, no recoil');
+      if (w.weight != null) t.push('Base movement while equipped: ' + Math.round((1 - w.weight) * (w.moveMult || 1) * 100) + '%');
+      if (w.movementSpread) t.push('Movement-dependent accuracy; sprint spread applies to slides and speed boosts');
       if (w.ddayOnly || w.modeOnly || w.prototype) t.push('Only found in a special mode');
       return t;
     };
@@ -5935,18 +5258,23 @@ if (ok && (process.argv.includes('--stats') || process.argv.includes('--dump-sta
       if (w.adminItem || w.skinOnly) continue;
       const pellets = w.pellets || 1, hs = w.headshotMult || 2, sps = w.fireRate ? 1000 / w.fireRate : 0, f = WEAPON_FALLOFF[w.id] || null;
       const perShot = (w.damage || 0) * pellets, rc = realisticRecoilProfile(w), bloom = w.spreadBloom || null;
-      const body = perShot > 0 ? Math.ceil(HP / perShot) : null, head = perShot > 0 ? Math.ceil(HP / (perShot * hs)) : null;
+      const lethalHeadshot = INSTAKILL_HS_WEAPONS.has(w.id);
+      const body = perShot > 0 ? Math.ceil(HP / perShot) : null;
+      const head = lethalHeadshot ? 1 : perShot > 0 ? Math.ceil(HP / (perShot * hs)) : null;
       guns.push({
         id: w.id, name: w.name, type: w.type, slot: w.slot, archived: !!w.archived,
-        damage: w.damage, pellets, headshotMult: hs, headDamage: Math.round((w.damage || 0) * hs), damagePerShot: perShot,
+        damage: w.damage, pellets, headshotMult: hs, headDamage: lethalHeadshot ? 999 : Math.round((w.damage || 0) * hs), damagePerShot: perShot,
+        ...(lethalHeadshot ? { lethalHeadshot } : {}),
         fireRateMs: w.fireRate, shotsPerSec: r3(sps), auto: !!w.auto, dps: r3(perShot * sps),
         magazine: w.mag, reserve: w.reserve, reloadSec: r3((w.reloadTime || 0) / 1000), reloadStyle: w.reloadStyle || 'magazine', noReload: !!w.noReload,
         timeToEmptySec: sps ? r3(Math.max(0, w.mag - 1) / sps) : null,
         bulletSpeed: w.bulletSpeed, adsZoom: w.adsZoom,
+        ...(w.bulletSpeedMult ? { projectileSpeed: r3(projectileBaseSpeed(w.id, w, w.bulletSpeed) * BULLET_SPEED_MULTIPLIER * w.bulletSpeedMult) } : {}),
         falloff: f ? { nearM: f.near, farM: f.far, minPct: Math.round(f.min * 100) } : null,
         damageByRange: RANGES.map(d => Math.round((w.damage || 0) * falloffMultiplier(w.id, d))),
         shotsToKill: { body, head }, ttkBodySec: body && sps ? r3((body - 1) / sps) : null,
         scatterDeg: deg(Math.atan(w.spread || 0)),
+        ...(w.movementSpread ? {movementSpreadDeg:{...w.movementSpread}} : {}),
         bloom: bloom ? { perShotDeg: deg(Math.atan(bloom.perShot)), maxDeg: deg(Math.atan(bloom.max)) } : null,
         recoil: rc ? {
           kickPerShotDeg: deg(rc.up), sideKickDeg: deg(rc.side), climbPerShotPct: Math.round(rc.climb * 100), climbMaxX: r3(rc.max),
@@ -6593,13 +5921,19 @@ if (ok && process.argv.includes('--saw')) {
       playSoundEvent = () => {};                                  // (no sound is made here)
       selectedMeleeIdx = MELEE_ITEMS.indexOf(it); activeSlot = 'melee'; gameStarted = true; isDead = false; countdownActive = false; meleeDash = null;
       chainsawFuel = CHAINSAW_FUEL_MAX; meleeAbilityBuff = null; for (const k of Object.keys(abilityCDs)) abilityCDs[k] = 0;
+      const normalMove = equippedMeleeMoveMult(it);
       activateMeleeAbility();
       if (!(meleeAbilityBuff && meleeAbilityBuff.type === 'revup' && meleeAbilityBuff.hold)) issues.push('pressing E should start the rev');
       else if (meleeAbilityBuff.endTime) issues.push('the rev should have no timer, it lasts as long as the key');
       if (meleeDash) issues.push('the rev should not dash');
       if (chainsawFuel !== CHAINSAW_FUEL_MAX) issues.push('the press itself should cost no fuel (the burn is per second): ' + chainsawFuel);
+      if (equippedMeleeMoveMult(it) !== normalMove * 3) issues.push('a fueled rev should increase Chainsaw movement by 200%');
+      chainsawFuel = 0;
+      if (equippedMeleeMoveMult(it) !== normalMove) issues.push('the movement boost should stop when fuel runs out');
+      chainsawFuel = CHAINSAW_FUEL_MAX;
       releaseHeldAbility();
       if (meleeAbilityBuff) issues.push('letting go should stop the rev at once');
+      if (equippedMeleeMoveMult(it) !== normalMove) issues.push('letting go should restore normal movement at once');
       chainsawFuel = 0; activateMeleeAbility();
       if (meleeAbilityBuff) issues.push('no fuel, no rev');
       chainsawFuel = CHAINSAW_FUEL_MAX; meleeAbilityBuff = { type: 'combo_frenzy_like', endTime: Date.now() + 1000 }; releaseHeldAbility();
@@ -6609,7 +5943,7 @@ if (ok && process.argv.includes('--saw')) {
     }
     return issues;
   })()`);
-  console.log('chainsaw checks: Rev Up is held (no timer, no dash, no cooldown, no cost for the press), swings faster than a click and burns more fuel, stops the instant it is released, will not start on an empty tank');
+  console.log('chainsaw checks: held Rev Up boosts swing and movement speed while fueled, stops on release, and has no dash or cooldown');
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
@@ -6629,7 +5963,7 @@ if (ok && process.argv.includes('--skinpitch')) {
       if (!(f >= LO && f <= HI)) issues.push(m.id + ' has pitch ' + f + ': outside ' + LO + ' to ' + HI + ' it distorts');
       if (!(Math.abs(f - 1) >= MIN_OFF)) issues.push(m.id + ' has pitch ' + f + ': within ' + MIN_OFF * 100 + ' % of the gun it sounds just the same');
     }
-    for (const id of Object.keys(SKIN_PITCH)) if (!MODEL_SKINS.some(m => m.id === id)) issues.push('SKIN_PITCH names "' + id + '": there is no such model skin');
+    for (const id of Object.keys(SKIN_PITCH)) if (![...MODEL_SKINS,...MELEE_MODEL_SKINS,...SUPPORT_MODEL_SKINS].some(m => m.id === id)) issues.push('SKIN_PITCH names "' + id + '": there is no such skin');
     if (!(skinPitchOf('aug') <= 0.92)) issues.push('the AUG should be low-pitched, it is ' + skinPitchOf('aug'));
     if (new Set(got).size < got.length * 0.2) issues.push('almost every skin has the same pitch (' + new Set(got).size + ' different in ' + got.length + ')');
     if (skinPitchOf('some_skin_nobody_wrote_down') !== skinPitchOf('some_skin_nobody_wrote_down')) issues.push('an unlisted skin has to get the same pitch every time');
@@ -6981,295 +6315,4 @@ if (ok) {
     console.log('boot OK — game.js evaluated to the end; every late declaration exists');
   }
 }
-// ENERGY RIFLE: a slow wide bolt that bounces. Stats, tables client+server, the round's look, who a pass hits (radius, walls, once per pass), the bounce on your screen and on everyone else's.
-if (ok && process.argv.includes('--energyrifle')) {
-  const serverSrc = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
-  const shopSrc = fs.readFileSync(path.join(__dirname, '..', 'public', 'shop-catalog.js'), 'utf8');
-  const issues = vm.runInThisContext(`(() => {
-    const issues = [];
-    const w = WEAPONS.find(x => x.id === 'energy_rifle'), idx = WEAPONS.findIndex(x => x.id === 'energy_rifle');
-    if (!w) return ['the Energy Rifle is missing'];
-    if (w.slot !== 'primary' || w.damage !== 45 || w.mag !== 12 || Math.round(1000 / w.fireRate) !== 3 || w.bulletSpeed !== 100 || w.beamRadius !== 1.4 || w.bounce.maxBounces !== 4 || w.reloadTime !== 2000)
-      issues.push('stats should be primary, 45 damage, 3 a second, 12 rounds, speed 100, radius 1.4, 4 bounces, 2 s reload: ' + JSON.stringify({ s: w.slot, d: w.damage, m: w.mag, f: w.fireRate, v: w.bulletSpeed, r: w.beamRadius, b: w.bounce, rl: w.reloadTime }));
-    if (Math.ceil(300 / w.damage) !== 7) issues.push('seven body hits to eliminate 300');
-    if (weaponModels.length !== WEAPONS.length) issues.push('WEAPONS and weaponModels must stay parallel: ' + WEAPONS.length + ' vs ' + weaponModels.length);
-    const mod = weaponModels[idx];
-    if (!mod || !mod._flash || !mod._tick || !mod._calm) issues.push('the model needs its flash, tick and calm');
-    else { mod._tick(0.016, 1, false); mod._tick(0.016, 2, false); mod._calm(); }
-    if (projectileKind('energy_rifle') !== 'energy_beam') issues.push('its round should be the energy bolt: ' + projectileKind('energy_rifle'));
-    const mesh = makeBulletMesh(w.bulletColor, w.bulletSize, 'energy_rifle', true);
-    if (!(mesh.children.length >= 4 && mesh._alignToDir)) issues.push('the bolt needs a core, halo, tail and blast bubble: ' + mesh.children.length);
-    if (explosiveLike && explosiveLike(mesh)) issues.push('x');
-    if (!(RELOAD_KEYS.energy_rifle && RELOAD_PROPS.energy_rifle && INSPECT_BY_WEAPON_OK)) issues.push('reload, props or inspect missing');
-    return issues;
-  })()`.replace(/ *if \(explosiveLike[^\n]*\n/, '').replace('&& INSPECT_BY_WEAPON_OK', ''));
-  const more = vm.runInThisContext(`(() => {
-    const issues = [];
-    const w = WEAPONS.find(x => x.id === 'energy_rifle');
-    const keep = { rm: Object.assign({}, remoteMeshes), pl: Object.assign({}, players), los: hasLineOfSight, hit: emitHit, lb: localBullets.slice(), wc: wallColliders.slice() };
-    const hits = [];
-    try {
-      const mk = (id, x, z, dead) => { remoteMeshes[id] = { visible: true, position: new THREE.Vector3(x, 0, z), rotation: { y: 0 } }; players[id] = { dead: !!dead }; };
-      for (const k of Object.keys(remoteMeshes)) delete remoteMeshes[k];
-      emitHit = (pid, bid, wid) => { hits.push({ pid, bid, wid }); };
-      hasLineOfSight = () => true;
-      // ── who a pass reaches
-      const b = { id: 'b1', weaponId: 'energy_rifle', _beamR: 1.4 };
-      _bpos.set(0, 1, -20);
-      mk('near', 1.2, -10); mk('far', 1.7, -10); mk('dead', 0, -12, true); mk('past', 0, -30);
-      _beamSweep(b, 0, 1, 0, null);
-      const ids = hits.map(h => h.pid).sort().join();
-      if (ids !== 'near') issues.push('within 1.4 of the path, alive, in front of it: only near should be hit, got ' + ids);
-      _beamSweep(b, 0, 1, 0, null);
-      if (hits.length !== 1) issues.push('once per pass: ' + hits.length);
-      if (hits[0] && hits[0].wid !== 'energy_rifle') issues.push('hit carries the weapon id');
-      // a wall between the bolt and the body stops the blast
-      hits.length = 0; b._beamHit = null; hasLineOfSight = () => false; _beamSweep(b, 0, 1, 0, null); hasLineOfSight = () => true;
-      if (hits.length) issues.push('a wall between: no hit, got ' + hits.length);
-      // it stops at a wall it hits: nobody behind the wall point is swept
-      hits.length = 0; b._beamHit = null; mk('behind', 0, -15); _beamSweep(b, 0, 1, 0, new THREE.Vector3(0, 1, -5));
-      if (hits.some(h => h.pid === 'behind')) issues.push('the pass ends where the wall is');
-      // a rebound is a new pass with a new hit id
-      delete remoteMeshes.behind; hits.length = 0; b._beamHit = null; b._beamN = 0; _beamSweep(b, 0, 1, 0, null); b._beamHit = null; b._beamN = 1; _beamSweep(b, 0, 1, 0, null);
-      if (!(hits.length === 2 && hits[0].bid !== hits[1].bid)) issues.push('after a rebound it can hit again, with its own hit id: ' + JSON.stringify(hits));
-      // ── the flight: your own bolt goes through whoever is on its line, hits them once, and keeps going; then it rebounds
-      for (const k of Object.keys(remoteMeshes)) delete remoteMeshes[k];
-      hits.length = 0; localBullets.length = 0; wallColliders.length = 0;
-      wallColliders.push(new THREE.Box3(new THREE.Vector3(-30, 0, -41), new THREE.Vector3(30, 8, -40)));      // a wall across z = -40
-      wallColliders.push(new THREE.Box3(new THREE.Vector3(-30, 0, 39), new THREE.Vector3(30, 8, 40)));       // and one behind
-      mk('mid', 0, -15);
-      camera.position.set(200, 50, 200);
-      spawnLocalBullet(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, -1), 'own1', true, w.bulletSpeed, w.bulletColor, w.bulletSize, 'energy_rifle');
-      const bl = localBullets.find(x => x.id === 'own1');
-      if (!bl) return issues.concat(['the bolt did not spawn']);
-      let zs = [], flips = 0, lastDz = -1;
-      for (let i = 0; i < 700 && localBullets.includes(bl); i++) {
-        updateBullets(0.016);
-        const dz = Math.sign(bl.dir.z); if (dz !== lastDz) { flips++; lastDz = dz; }
-        if (hits.length === 1 && i < 60) zs.push(bl.mesh.position.z);
-      }
-      if (hits.filter(h => h.pid === 'mid').length < 1) issues.push('the bolt should have hit the man on its line');
-      if (!(hits.length >= 2 && hits[0].bid !== hits[1].bid)) issues.push('he is on the line again after a rebound: two hits, two ids: ' + hits.length);
-      if (flips < 3) issues.push('it should rebound off both walls: direction changed ' + (flips - 1) + ' times');
-      if (!(bl.bouncesLeft === 0 || !localBullets.includes(bl))) issues.push('four rebounds and no more: ' + bl.bouncesLeft);
-      if (Math.abs(bl.speed - 100) > 0.5) issues.push('it flies at 100 and does not change speed on a rebound: ' + bl.speed);
-      // ── somebody else's bolt rebounds on your screen as well
-      localBullets.length = 0;
-      spawnLocalBullet(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, -1), 'far1', false, w.bulletSpeed, w.bulletColor, w.bulletSize, 'energy_rifle', { ownerId: 'someone' });
-      const rb = localBullets.find(x => x.id === 'far1'); let rflip = 0; let ld = -1;
-      for (let i = 0; i < 200 && localBullets.includes(rb); i++) { updateBullets(0.016); const dz = Math.sign(rb.dir.z); if (dz !== ld) { rflip++; ld = dz; } }
-      if (rflip < 2) issues.push('another player\\'s bolt should rebound off the wall on your screen: ' + rflip);
-      if (hits.length && hits.some(h => h.bid && h.bid.startsWith('far1'))) issues.push('a bolt that is not yours must not deal damage from your client');
-      // ── a bolt fired into the floor comes back up
-      localBullets.length = 0;
-      spawnLocalBullet(new THREE.Vector3(0, 3, 0), new THREE.Vector3(0, -0.7071, -0.7071), 'fl1', true, w.bulletSpeed, w.bulletColor, w.bulletSize, 'energy_rifle');
-      const fb = localBullets.find(x => x.id === 'fl1'); let up = false;
-      for (let i = 0; i < 40 && localBullets.includes(fb); i++) { updateBullets(0.016); if (fb.dir.y > 0.3) up = true; }
-      if (!up) issues.push('off the floor it should rebound upward');
-    } catch (e) { issues.push('threw: ' + (e && e.stack || e)); }
-    finally {
-      for (const k of Object.keys(remoteMeshes)) delete remoteMeshes[k]; Object.assign(remoteMeshes, keep.rm);
-      for (const k of Object.keys(players)) delete players[k]; Object.assign(players, keep.pl);
-      hasLineOfSight = keep.los; emitHit = keep.hit; localBullets.length = 0; keep.lb.forEach(x => localBullets.push(x)); wallColliders.length = 0; keep.wc.forEach(x => wallColliders.push(x));
-    }
-    return issues;
-  })()`);
-  const outside = [];
-  if (!/energy_rifle: 440/.test(serverSrc) || !/energy_rifle: 45/.test(serverSrc) || !/energy_rifle: FALLOFF_NONE/.test(serverSrc)) outside.push('server.js is missing the Energy Rifle cost, damage or falloff');
-  if (!/energy_rifle:4800/.test(shopSrc)) outside.push('the shop price is missing');
-  const all = issues.concat(more, outside);
-  console.log('ENERGY RIFLE checks: stats, tables, the bolt\'s look, a wide pass that hits once and stops at walls, rebounds for you and for everyone else, off the floor');
-  if (all.length) { ok = false; console.log(all.join('\n')); }
-}
-
-// ENERGY RIFLE AFTERGLOW: the bolt leaves a thick trail that stays 0.8 s, thinning and fading, round its rebounds, and on other players' bolts.
-if (ok && process.argv.includes('--energytrail')) {
-  const issues = vm.runInThisContext(`(() => {
-    const issues = [];
-    const w = WEAPONS.find(x => x.id === 'energy_rifle');
-    if (!w || w.afterTrailMs !== 800) return ['the Energy Rifle should keep its trail 800 ms'];
-    const keep = { now: Date.now, lb: localBullets.slice(), wc: wallColliders.slice(), rm: Object.assign({}, remoteMeshes) };
-    let clock = 5e9; Date.now = () => clock;
-    try {
-      for (const s of _TRAIL.segs.slice()) { scene.remove(s.group); } _TRAIL.segs.length = 0;
-      localBullets.length = 0; wallColliders.length = 0;
-      wallColliders.push(new THREE.Box3(new THREE.Vector3(-30, 0, -41), new THREE.Vector3(30, 8, -40)));
-      camera.position.set(200, 50, 200);
-      const step = () => { clock += 16; updateBullets(0.016); };
-      spawnLocalBullet(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, -1), 't1', true, w.bulletSpeed, w.bulletColor, w.bulletSize, 'energy_rifle');
-      const bl = localBullets.find(x => x.id === 't1');
-      for (let i = 0; i < 20; i++) step();
-      const n1 = _TRAIL.segs.length;
-      if (n1 < 15) issues.push('a bolt in flight lays a segment a frame: ' + n1);
-      // it follows the bolt: the newest segment is right behind it
-      const last = _TRAIL.segs[_TRAIL.segs.length - 1];
-      if (!(last.group.position.distanceTo(bl.mesh.position) < 4)) issues.push('the trail should end at the bolt: ' + last.group.position.distanceTo(bl.mesh.position).toFixed(2));
-      // all of it, nose to tail, is where the bolt has been: the first piece is near the muzzle
-      const first = _TRAIL.segs[0];
-      if (!(first.group.position.z > -6 && first.group.position.z < 0.5)) issues.push('the oldest piece sits near the muzzle: ' + first.group.position.z.toFixed(2));
-      // fade and thin
-      const g0 = first.glow.scale.x;
-      for (let i = 0; i < 20; i++) step();
-      if (!(first.glow.scale.x < g0) || !(first.glow.material.opacity < _TRAIL.levels[0].glow.opacity)) issues.push('it thins and fades as it ages');
-      // a rebound turns the trail with it: pieces on both sides of the wall (z about -40), the run closing at the wall
-      for (let i = 0; i < 20 && localBullets.includes(bl); i++) step();
-      if (!(bl.dir.z > 0)) issues.push('test setup: the bolt should have rebounded');
-      const zs = _TRAIL.segs.map(s => s.group.position.z);
-      const nearWall = _TRAIL.segs.some(s => s.group.position.z < -38.5);
-      if (!nearWall) issues.push('the run should reach the wall: min z ' + Math.min(...zs).toFixed(1));
-      // after it is gone every piece goes by 0.8 s, none before ~0.7
-      localBullets.length = 0;
-      const born = Math.max(..._TRAIL.segs.map(s => s.born));
-      clock = born + 700; updateBullets(0.016);
-      if (!_TRAIL.segs.length) issues.push('the newest piece should still be there at 0.7 s');
-      clock = born + 810; updateBullets(0.016);
-      if (_TRAIL.segs.length) issues.push('everything is gone by 0.8 s: ' + _TRAIL.segs.length + ' left');
-      // somebody else's bolt leaves one too
-      localBullets.length = 0;
-      spawnLocalBullet(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, -1), 'r1', false, w.bulletSpeed, w.bulletColor, w.bulletSize, 'energy_rifle', { ownerId: 'x' });
-      for (let i = 0; i < 12; i++) step();
-      if (_TRAIL.segs.length < 8) issues.push('another player\\'s bolt should leave a trail on your screen: ' + _TRAIL.segs.length);
-      // the cap
-      localBullets.length = 0;
-      for (let k = 0; k < 400; k++) _trailSeg({ weaponId: 'energy_rifle' }, new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -2));
-      if (_TRAIL.segs.length > 220) issues.push('the trail is capped: ' + _TRAIL.segs.length);
-      // another gun leaves nothing
-      const before = _TRAIL.segs.length; _trailSeg({ weaponId: 'ak20' }, new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -2));
-      if (_TRAIL.segs.length !== before) issues.push('only the Energy Rifle has an afterglow');
-    } catch (e) { issues.push('threw: ' + (e && e.stack || e)); }
-    finally {
-      Date.now = keep.now; for (const s of _TRAIL.segs.slice()) scene.remove(s.group); _TRAIL.segs.length = 0;
-      localBullets.length = 0; keep.lb.forEach(x => localBullets.push(x)); wallColliders.length = 0; keep.wc.forEach(x => wallColliders.push(x));
-    }
-    return issues;
-  })()`);
-  console.log('ENERGY RIFLE AFTERGLOW checks: a trail a frame behind the bolt, thinning and fading, gone in 0.8 s, turning at rebounds, on other players\' bolts, capped');
-  if (issues.length) { ok = false; console.log(issues.join('\n')); }
-}
-
-// GRAVITY CANNON: five slow spheres a pull (five rounds), a drag that is never a hold, 13 on contact (they go through), 20 where they go off (7 to whoever the same sphere hit), tables client+server.
-if (ok && process.argv.includes('--gravitycannon')) {
-  const serverSrc = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
-  const shopSrc = fs.readFileSync(path.join(__dirname, '..', 'public', 'shop-catalog.js'), 'utf8');
-  const issues = vm.runInThisContext(`(() => {
-    const issues = [];
-    const w = WEAPONS.find(x => x.id === 'gravity_cannon'), idx = WEAPONS.findIndex(x => x.id === 'gravity_cannon');
-    if (!w) return ['the Gravity Cannon is missing'];
-    if (w.slot !== 'primary' || w.damage !== 13 || w.mag !== 35 || w.pellets !== 5 || w.ammoPerShot !== 5 || w.reloadTime !== 2800 || w.gravSphere.pullR !== 5 || w.gravSphere.boomR !== 4 || w.gravSphere.boom !== 20 || w.bulletSpeed !== 100 / 100 * 65)
-      issues.push('stats: ' + JSON.stringify({ s: w.slot, d: w.damage, m: w.mag, p: w.pellets, a: w.ammoPerShot, r: w.reloadTime, g: w.gravSphere, v: w.bulletSpeed }));
-    if (weaponModels.length !== WEAPONS.length) issues.push('WEAPONS and weaponModels must stay parallel');
-    const mod = weaponModels[idx];
-    if (!mod || !mod._flash || !mod._tick || !mod._calm) issues.push('model needs flash, tick, calm'); else { mod._tick(0.016, 1, false); mod._calm(); }
-    if (projectileKind('gravity_cannon') !== 'gravity_sphere') issues.push('kind: ' + projectileKind('gravity_cannon'));
-    const mesh = makeBulletMesh(w.bulletColor, w.bulletSize, 'gravity_cannon', true);
-    if (!(mesh.children.length >= 4 && mesh._spin)) issues.push('the sphere needs a core, halo and two tumbling rings');
-    if (!(RELOAD_KEYS.gravity_cannon && RELOAD_PROPS.gravity_cannon)) issues.push('reload missing');
-    if (getClientWeaponDamage('gravity_cannon_splash') !== 20 || getClientWeaponDamage('gravity_cannon_c1') !== 7) issues.push('client damage table for the explosion and the top-up');
-    return issues;
-  })()`);
-  const more = vm.runInThisContext(`(() => {
-    const issues = [];
-    const w = WEAPONS.find(x => x.id === 'gravity_cannon');
-    const keep = { rm: Object.assign({}, remoteMeshes), pl: Object.assign({}, players), los: hasLineOfSight, hit: emitHit, lb: localBullets.slice(), wc: wallColliders.slice(), gb: gameBots.slice(), ev: { x: _extVel.x, z: _extVel.z }, dead: isDead, lobby: inLobby, ff: friendlyFireBlocked, cam: camera.position.clone(), snd: playSoundEvent };
-    const hits = [];
-    try {
-      const mk = (id, x, z, dead) => { remoteMeshes[id] = { visible: true, position: new THREE.Vector3(x, 0, z), rotation: { y: 0 } }; players[id] = { dead: !!dead }; };
-      for (const k of Object.keys(remoteMeshes)) delete remoteMeshes[k];
-      emitHit = (pid, bid, wid) => { hits.push({ pid, bid, wid }); }; playSoundEvent = () => {};
-      hasLineOfSight = () => true; friendlyFireBlocked = () => false; isDead = false; inLobby = false; gameBots.length = 0;
-      localBullets.length = 0; wallColliders.length = 0;
-      wallColliders.push(new THREE.Box3(new THREE.Vector3(-30, 0, -41), new THREE.Vector3(30, 8, -40)));        // a wall across z = -40
-      camera.position.set(200, 1.65, 200);
-      // ── one sphere: slow, goes THROUGH a man for 13, goes off on the wall for 20 to the people near it, and only tops up the man it hit
-      mk('mid', 0, -15); mk('nearwall', 2, -37); mk('farwall', 9, -37); mk('behind', 0, -45);
-      spawnLocalBullet(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, -1), 's1', true, w.bulletSpeed, w.bulletColor, w.bulletSize, 'gravity_cannon');
-      const b = localBullets.find(x => x.id === 's1');
-      if (Math.abs(b.speed - 65) > 0.5) issues.push('a sphere flies at 65: ' + b.speed);
-      let went = false;
-      for (let i = 0; i < 200 && localBullets.includes(b); i++) { updateBullets(0.016); if (b.mesh.position.z < -20) went = true; }
-      if (!went) issues.push('it should have gone on past the man it hit');
-      const direct = hits.filter(h => h.wid === 'gravity_cannon'), boom = hits.filter(h => /boom/.test(h.bid));
-      if (!(direct.length === 1 && direct[0].pid === 'mid')) issues.push('13 on contact, once, to the man on its line: ' + JSON.stringify(direct));
-      if (localBullets.includes(b)) issues.push('it should have gone off on the wall');
-      const bp = boom.map(h => h.pid + ':' + h.wid).sort().join();
-      if (bp !== 'nearwall:gravity_cannon_splash') issues.push('20 to who is within 4 of where it went off, and only them (not 9 away, not behind the wall): ' + bp);
-      // the top-up: a man the same sphere hit AND the explosion catches takes 7, not 20
-      hits.length = 0; localBullets.length = 0;
-      for (const k of Object.keys(remoteMeshes)) delete remoteMeshes[k];
-      mk('both', 0, -36);
-      spawnLocalBullet(new THREE.Vector3(0, 1, -30), new THREE.Vector3(0, 0, -1), 's2', true, w.bulletSpeed, w.bulletColor, w.bulletSize, 'gravity_cannon');
-      for (let i = 0; i < 100 && localBullets.length; i++) updateBullets(0.016);
-      const both = hits.map(h => h.wid).join();
-      if (both !== 'gravity_cannon,gravity_cannon_c1') issues.push('hit by the sphere and then its explosion: 13, then the 7 that tops up to 20: ' + both);
-      // range: a sphere into open air goes off at 55
-      hits.length = 0; localBullets.length = 0; for (const k of Object.keys(remoteMeshes)) delete remoteMeshes[k]; wallColliders.length = 0;
-      spawnLocalBullet(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, -1), 's3', true, w.bulletSpeed, w.bulletColor, w.bulletSize, 'gravity_cannon');
-      const s3 = localBullets.find(x => x.id === 's3'); const fxBefore = _GRAV_FX.length; let endZ = null;
-      for (let i = 0; i < 200 && localBullets.includes(s3); i++) { endZ = s3.mesh.position.z; updateBullets(0.016); }
-      if (!(endZ < -50 && endZ > -62)) issues.push('it goes off at the end of its range (55): ' + endZ);
-      if (_GRAV_FX.length <= fxBefore) issues.push('and you see it');
-      // ── the drag: somebody else's sphere pulls YOU, a little, and never holds you
-      localBullets.length = 0; _extVel.x = 0; _extVel.z = 0; camera.position.set(0, 1.65, 0);
-      const other = { mesh: new THREE.Group(), dir: new THREE.Vector3(0, 0, -1), speed: 0, isOwn: false, ownerId: 'foe', weaponId: 'gravity_cannon', id: 'o1', createdAt: Date.now(), size: 0.22, _grav: w.gravSphere };
-      other.mesh.position.set(3, 1.65, 0);
-      _gravPull(other, 0.016);
-      if (!(_extVel.x > 0.1 && Math.abs(_extVel.z) < 1e-6)) issues.push('you are drawn toward it: ' + _extVel.x.toFixed(3));
-      for (let i = 0; i < 300; i++) _gravPull(other, 0.016);
-      if (Math.hypot(_extVel.x, _extVel.z) > GRAV_PULL_CAP + 1e-6) issues.push('the drag is capped under a run: ' + Math.hypot(_extVel.x, _extVel.z).toFixed(2));
-      // ...it adds to what you have, it does not take it: moving the other way you are still faster than it
-      _extVel.x = 0; other.mesh.position.set(6.5, 1.65, 0); _gravPull(other, 0.016);
-      if (_extVel.x !== 0) issues.push('outside 5 there is no pull: ' + _extVel.x);
-      // not your own, not a teammate's, not when dead
-      _extVel.x = 0; other.mesh.position.set(3, 1.65, 0); other.isOwn = true; _gravPull(other, 0.016); other.isOwn = false;
-      if (_extVel.x !== 0) issues.push('your own sphere does not pull you');
-      friendlyFireBlocked = () => true; _gravPull(other, 0.016); friendlyFireBlocked = () => false;
-      if (_extVel.x !== 0) issues.push('a teammate\\'s sphere does not pull you');
-      isDead = true; _gravPull(other, 0.016); isDead = false;
-      if (_extVel.x !== 0) issues.push('nor when you are dead');
-      // your bots (your own sphere only), pulled toward it
-      gameBots.push({ id: 'bot1', x: 1, z: 0, dead: false });
-      const mine = Object.assign({}, other, { isOwn: true, ownerId: myId });
-      _gravPull(mine, 0.016);
-      if (!(gameBots[0].kbVX > 0)) issues.push('a bot near your sphere is dragged toward it: ' + gameBots[0].kbVX);
-      // another gun has no pull
-      if (projectileWeaponSpec('ak20').gravSphere) issues.push('only the Gravity Cannon has one');
-      // a volley: five rounds a pull, from a full magazine
-      const gi = WEAPONS.findIndex(x => x.id === 'gravity_cannon'); const pool = weaponAmmo[gi]; const kc = currentWeaponIdx, kw = currentWeapon;
-      if (pool.ammo !== 35) issues.push('a full magazine is 35: ' + pool.ammo);
-      const sv = { gac: getAudioCtx, pws: playWeaponSound, as: activeSlot, gs: gameStarted, ra: equipReadyAt, em: socket.emit, rl: reloading, sh: shooting, ls: lastShot, el: equipReady };
-      const sent = [];
-      try {
-        getAudioCtx = () => null; playWeaponSound = () => {};
-        activeSlot = 'primary'; gameStarted = true; isDead = false; reloading = false; equipReadyAt = 0; lastShot = 0; currentWeaponIdx = gi; currentWeapon = WEAPONS[gi];
-        selectedPrimaryIdx = gi; countdownActive = false; localBullets.length = 0; wallColliders.length = 0;
-        socket.emit = (ev, d) => { sent.push([ev, d]); };
-        pool.ammo = 35; ammo = 35;
-        tryShoot();
-      } catch (e) { issues.push('shooting threw: ' + (e && e.stack || e)); }
-      const shots = sent.filter(x => x[0] === 'shoot');
-      if (pool.ammo !== 30) issues.push('a volley costs five rounds: ' + pool.ammo + ' left of 35');
-      if (shots.length !== 5) issues.push('a pull sends five spheres: ' + shots.length);
-      else if (new Set(shots.map(x => x[1].volley)).size !== 1 || !shots[0][1].volley) issues.push('one volley id on all five');
-      if (localBullets.filter(x => x.weaponId === 'gravity_cannon').length !== 5) issues.push('five spheres in the air: ' + localBullets.length);
-      socket.emit = sv.em; getAudioCtx = sv.gac; playWeaponSound = sv.pws; activeSlot = sv.as; gameStarted = sv.gs; equipReadyAt = sv.ra; reloading = sv.rl; shooting = sv.sh; lastShot = sv.ls; currentWeaponIdx = kc; currentWeapon = kw; pool.ammo = 35;
-    } catch (e) { issues.push('threw: ' + (e && e.stack || e)); }
-    finally {
-      for (const k of Object.keys(remoteMeshes)) delete remoteMeshes[k]; Object.assign(remoteMeshes, keep.rm);
-      for (const k of Object.keys(players)) delete players[k]; Object.assign(players, keep.pl);
-      hasLineOfSight = keep.los; emitHit = keep.hit; playSoundEvent = keep.snd; friendlyFireBlocked = keep.ff; isDead = keep.dead; inLobby = keep.lobby; camera.position.copy(keep.cam);
-      _extVel.x = keep.ev.x; _extVel.z = keep.ev.z; gameBots.length = 0; keep.gb.forEach(x => gameBots.push(x));
-      localBullets.length = 0; keep.lb.forEach(x => localBullets.push(x)); wallColliders.length = 0; keep.wc.forEach(x => wallColliders.push(x));
-      for (const f of _GRAV_FX.slice()) { scene.remove(f.m); } _GRAV_FX.length = 0;
-    }
-    return issues;
-  })()`);
-  const outside = [];
-  if (!/wStats\.ammoPerShot \|\| 1/.test(src) || !/gcContinue/.test(serverSrc)) outside.push('ammoPerShot or the server volley gate is missing');
-  if (!/gravity_cannon: 520/.test(serverSrc) || !/gravity_cannon: 13, gravity_cannon_splash: 20, gravity_cannon_c1: 7/.test(serverSrc) || !/gravity_cannon: FALLOFF_NONE/.test(serverSrc)) outside.push('server.js is missing the Gravity Cannon cost, damage or falloff');
-  if (!/gravity_cannon:5600/.test(shopSrc)) outside.push('the shop price is missing');
-  const all = issues.concat(more, outside);
-  console.log('GRAVITY CANNON checks: stats, tables, the sphere, 13 through a man / 20 where it goes off / 7 top-up, range, a capped drag that is never a hold');
-  if (all.length) { ok = false; console.log(all.join('\n')); }
-}
-
 process.exit(ok ? 0 : 1);

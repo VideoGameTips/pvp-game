@@ -172,10 +172,12 @@
   function swap(b,hit){
     const p=players[hit.pid];
     if(!live()||!p||p.dead||p.isDummy||friendlyFireBlocked(hit.pid)||resolveBot(hit.pid)?.boss)return;
+    paradoxEngineEvent('swap-start',b.skinLook?.skinId);
     if(socket.connected)socket.emit('swapGunHit',{id:b.id,targetId:hit.pid});
     else {
       const dest={id:myId,x:hit.mesh.position.x,y:hit.mesh.position.y+1.65,z:hit.mesh.position.z};
       place({id:hit.pid,x:camera.position.x,y:camera.position.y,z:camera.position.z});place(dest);
+      paradoxEngineEvent('swap-complete',b.skinLook?.skinId);
     }
   }
   socket.on('harpoonState',data=>{
@@ -188,6 +190,10 @@
     remotes.set(key,{ownerId:data.ownerId,epoch:matchEpoch,point,line:rope(skin),bolt:makeBolt(point,dir,skin),target:data.targetId,offset:target?point.clone().sub(target.position):null});
   });
   socket.on('harpoonTripped',({id})=>{if(!players[id]?.dead)window.PVP_RAGDOLL?.knockdown(id);});
-  socket.on('weaponSwap',({positions})=>{if(gameStarted&&!inLobby&&Array.isArray(positions))positions.forEach(place);});
+  socket.on('weaponSwap',({positions})=>{
+    if(!gameStarted||inLobby||!Array.isArray(positions))return;
+    positions.forEach(place);
+    if(positions[0]?.id===myId)paradoxEngineEvent('swap-complete');
+  });
   window.PVP_TETHER_WEAPONS={fired,latch,recall,reel,reelHold,step,swap,clear,get deployed(){return bolts.size>0;},get full(){return bolts.size>=capacity();},get latched(){return [...bolts.values()].some(b=>b.phase==='latched');}};
 })();

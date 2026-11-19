@@ -12,7 +12,64 @@ vm.createContext(context);
 vm.runInContext(source.slice(from, to) + '\n' + source.slice(fnStart, fnEnd), context);
 const { GEN1_SKIN_IDS, GEN2_SKIN_IDS, GEN2_SKIN_WEIGHTS, SKIN_CASES, GEN2_EPIC_SKIN_IDS, GEN2_NEW_MYTHIC_SKIN_IDS, GEN2_RARE_SKIN_IDS, GEN2_GOOD_SKIN_IDS, GEN2_LEGENDARY_SKIN_IDS, DONUT_SKIN_IDS } = vm.runInContext('({ GEN1_SKIN_IDS, GEN2_SKIN_IDS, GEN2_SKIN_WEIGHTS, SKIN_CASES, GEN2_EPIC_SKIN_IDS, GEN2_NEW_MYTHIC_SKIN_IDS, GEN2_RARE_SKIN_IDS, GEN2_GOOD_SKIN_IDS, GEN2_LEGENDARY_SKIN_IDS, DONUT_SKIN_IDS })', context);
 
-assert.equal(JSON.stringify(GEN2_EPIC_SKIN_IDS), '["revolver_midas","pistol_frost","machine_pistol_overclocked"]'); assert.equal(JSON.stringify(GEN2_NEW_MYTHIC_SKIN_IDS), '["ak20_xerror","revolver_shatterpoint"]');   // (arrays made inside the vm are not this realm's: compare as text)
+const seasonId = 'ak20_phoenix_reign', relicId = 'revolver_relic_six';
+const seasonDecl = source.match(/^const SEASON_SKIN_IDS = .*?;/m)?.[0];
+assert.ok(seasonDecl);
+assert.equal(vm.runInNewContext(seasonDecl + '\nSEASON_SKIN_IDS[0]'), seasonId);
+assert.ok(Object.values(SKIN_CASES).every(c => !c.pool.includes(seasonId)), 'Phoenix Reign must stay exclusive to Season 1');
+assert.equal(SKIN_CASES.gen3_clockwork.weights[relicId], 2);
+assert.ok(SKIN_CASES.gen3_clockwork.pool.includes(relicId), 'Relic Six is awarded from Gen 3');
+assert.ok(SKIN_CASES.gen3_clockwork.pool.includes('revolver_broken_promise'), 'The Broken Promise is awarded from Gen 3');
+assert.equal(SKIN_CASES.gen3_clockwork.weights.revolver_broken_promise, SKIN_CASES.gen3_clockwork.weights[relicId]);
+assert.equal(SKIN_CASES.gen3_clockwork.weights.m1_garand_paradox, SKIN_CASES.gen3_clockwork.weights.amr_event_horizon);
+assert.ok(SKIN_CASES.gen3_clockwork.pool.includes('m1_garand_paradox'), 'Paradox is a Gen 3 Mythic');
+assert.equal(SKIN_CASES.gen3_clockwork.pool.filter(id => id === 'minigun_hungry_garden').length, 1);
+assert.equal(SKIN_CASES.gen3_clockwork.weights.minigun_hungry_garden, .75);
+for (const id of ['srx_railbreaker','ak20_phantom_protocol','minigun_iron_tempest','revolver_blackbox','javelin_ghost_lance','p90_zero_recoil']) {
+  assert.ok(SKIN_CASES.gen3_clockwork.pool.includes(id), id + ' must drop in Gen 3');
+  assert.equal(SKIN_CASES.gen3_clockwork.weights[id], id === 'srx_railbreaker' ? .75 : 2);
+}
+for (const id of ['p90_nullspace','rpg_leviathan','revolver_crown_of_thorns','lever_afterimage','spear_hollow_king','srx_glass_cathedral']) {
+  assert.equal(SKIN_CASES.gen3_clockwork.pool.filter(s => s === id).length, 1, id + ' is a Gen 3 drop');
+  assert.equal(SKIN_CASES.gen3_clockwork.weights[id], .75, id + ' is Mythic');
+  assert.ok(Object.values(SKIN_CASES).filter(c => c !== SKIN_CASES.gen3_clockwork).every(c => !c.pool.includes(id)));
+}
+for (const [id, weight] of [['srx_dead_frequency',.75], ['hand_cannon_hourglass',.75], ['ak20_paper_kingdom',2], ['rpg_false_sun',.75]]) {
+  assert.ok(SKIN_CASES.gen3_clockwork.pool.includes(id), id + ' must drop in Gen 3');
+  assert.equal(SKIN_CASES.gen3_clockwork.weights[id], weight);
+}
+const weaponStart = source.indexOf("socket.on('setWeapon',");
+const weaponEnd = source.indexOf('\n  });', weaponStart) + 7;
+assert.ok(weaponStart > 0 && weaponEnd > weaponStart);
+const owner = { account: 'test', matchId: 'test-match' };
+const account = { skinInventory: [] };
+let setWeapon;
+vm.runInNewContext(seasonDecl + '\n' + source.slice(weaponStart, weaponEnd), {
+  players: { sid: owner }, users: { test: account },
+  socket: { id: 'sid', on(name, fn) { setWeapon = fn; } },
+  hellfireWeapon: () => false, emitToMatch() {},
+});
+setWeapon({ weaponId: 'ak20', skin: seasonId });
+assert.equal(owner.weaponSkin, null, 'Unowned Phoenix Reign cannot be shown to others');
+account.skinInventory.push(seasonId);
+setWeapon({ weaponId: 'ak20', skin: seasonId });
+assert.equal(owner.weaponSkin, seasonId);
+setWeapon({ weaponId: 'revolver', skin: seasonId });
+assert.equal(owner.weaponSkin, null, 'Phoenix Reign must be AK20-only');
+
+const gen3 = SKIN_CASES.gen3_clockwork;
+assert.equal(gen3.weights.amr_event_horizon, .75);
+assert.ok(!gen3.pool.includes('amr_event_horizon'), 'No drops for the archived AMR');
+for (const [ids, weight] of [
+  [['revolver_deadeye', 'm1_garand_thunderclap', 'katana_glass_fang'], 1.4],
+  [['flamethrower_dragons_maw', 'crossbow_permafrost', 'chain_hammer_bonebreaker', 'minigun_iron_behemoth'], 2],
+]) for (const id of ids) {
+  assert.equal(gen3.pool.filter(entry => entry === id).length, 1, id + ' is a Gen 3 drop');
+  assert.equal(gen3.weights[id], weight);
+}
+
+for (const id of ['revolver_midas', 'pistol_frost', 'machine_pistol_overclocked']) assert.ok(GEN2_EPIC_SKIN_IDS.includes(id));
+for (const id of ['ak20_xerror', 'revolver_shatterpoint']) assert.ok(GEN2_NEW_MYTHIC_SKIN_IDS.includes(id));
 for (const id of ['revolver_midas', 'pistol_frost', 'machine_pistol_overclocked', 'ak20_xerror', 'revolver_shatterpoint']) {
   assert(GEN2_SKIN_IDS.includes(id), id + ' is in the Gen 2 skins');
   assert(SKIN_CASES.gen2_entrances.pool.includes(id), id + ' is dealt by the Gen 2 case');

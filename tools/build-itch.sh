@@ -45,13 +45,15 @@ fi
 # Files the game actually needs. Listed explicitly rather than globbing public/,
 # so a stray file (a scratch map, an editor backup) can never ride along into a
 # public upload.
-FILES=(index.html game.js chat.js i18n.js three.min.js socket.io.min.js wiki.html stats.html weapon-stats.json equipment-models.js shop-catalog.js underworld-data.js underworld.js underworld-adapter.js underworld.css backrooms-data.js backrooms.js backrooms.css ragdoll.js sound-data.js weapon-finish.js stealth-series.js stealth-showroom.js stealth-showroom.css loadout-hub.js player-record.js loadout-hub.css volcano-map.js map-shapes.js vendor/cannon-es.js vendor/cannon-es.LICENSE)
+FILES=(index.html game.js fission-disc.js radiation.js chat.js i18n.js three.min.js socket.io.min.js wiki.html stats.html weapon-stats.json equipment-models.js shop-catalog.js underworld-data.js underworld.js underworld-adapter.js underworld.css backrooms-data.js backrooms.js backrooms.css ragdoll.js sound-data.js weapon-finish.js stealth-series.js stealth-showroom.js stealth-showroom.css loadout-hub.js player-record.js loadout-hub.css volcano-map.js map-shapes.js vendor/cannon-es.js vendor/cannon-es.LICENSE)
 
-FILES+=(lobby-case.js boss-arsenal.js battle-simulator.js battle-simulator.css tether-weapons.js swap-portals.js)
+FILES+=(lobby-case.js boss-arsenal.js battle-simulator.js battle-simulator.css tether-weapons.js swap-portals.js vesper-textures.js nova-textures.js ember-textures.js)
 FILES+=(rank-core.js ranked.js)   # Ranked 1v1 / 2v2 (index.html loads both)
-FILES+=(nightmare-ai.js)   # the Nightmare bot's brain (index.html loads it)
-FILES+=(chronos-engine.js clockwork-requiem.js combat-visuals.js)   # the Chronos Engine builder and the combat-visuals settings / HUD polish
 FILES+=(rank-core.js ranked.js)
+FILES+=(raven-textures.js pixel-textures.js arena-character-textures.js)
+FILES+=(match-mvp.js match-mvp.css)
+FILES+=(damage-symbols.js damage-symbols.css)
+FILES+=(chronos-engine.js clockwork-requiem.js arsenal-remodels.js combat-visuals.js nightmare-ai.js collection-wraps.js impossible-skins.js impossible-round4.js impossible-round5.js hungry-garden.js)
 
 echo "==> staging"
 rm -rf "$STAGE" "$ZIP"

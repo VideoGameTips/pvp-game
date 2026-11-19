@@ -73,7 +73,7 @@ const code = [
 const camera = { position: new THREE.Vector3(0, 1.65, 0) };
 const wallColliders = [];
 const win = {};
-const G = new Function('THREE', 'camera', 'wallColliders', 'window', code)(THREE, camera, wallColliders, win);
+const G = new Function('THREE', 'camera', 'wallColliders', 'window', 'thornRooted', code)(THREE, camera, wallColliders, win, () => false);
 
 const problems = [];
 const fail = m => problems.push(m);

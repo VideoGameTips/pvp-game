@@ -128,6 +128,8 @@
         ['Hip spread', number(w.spread || 0) + ' rad'], ['ADS field of view', number(w.adsZoom || 75) + '\u00b0'],
       ]);
       const falloff = WEAPON_FALLOFF[w.id];
+      if (w.movementSpread) html += section('Movement accuracy', Object.entries(w.movementSpread)
+        .map(([state, degrees]) => [state[0].toUpperCase()+state.slice(1), number(degrees)+'\u00b0']));
       if (falloff && falloff.min < 1 && Number.isFinite(falloff.near) && Number.isFinite(falloff.far)) {
         html += section('Damage drop-off', [['Full damage through', number(falloff.near) + ' studs'],['Minimum damage from',number(falloff.far)+' studs'],['Minimum multiplier',number(falloff.min * 100)+'%']]);
         const distances = [...new Set([0,falloff.near,(falloff.near + falloff.far) / 2,falloff.far])];

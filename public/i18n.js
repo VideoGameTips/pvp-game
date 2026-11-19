@@ -17,6 +17,7 @@
   'use strict';
 
   const ZH = {
+    '\u2622 RADIATION {stacks}/3 · {dps} HP/s':'\u2622 辐射 {stacks}/3 · 每秒 {dps} 伤害',
     'BATTLE SIMULATOR': '战斗模拟器',
     'Battle Simulator': '战斗模拟器',
     'Choose a map / deploy blue and red squads': '选择地图 / 部署蓝队与红队',

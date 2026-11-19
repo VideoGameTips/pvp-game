@@ -28,12 +28,25 @@ function event(socket,name,filter=()=>true){return new Promise((resolve,reject)=
     const hits=[];a.on('playerHit',d=>hits.push(d));
     a.emit('hit',{targetId:B.id,weapon:'srx',bulletId:'lethal_sniper',damageOverride:190,headshot:true});
     const [damage,block]=await Promise.all([reflected,guard]);
+    assert.equal(damage.dealt,190,'Reflected damage feedback must report the actual HP loss');
     assert.equal(damage.hp,110);assert.equal(damage.shooterId,B.id);assert.equal(block.defenderId,B.id);assert(block.remainingMs>0&&block.remainingMs<=1100,'The deflect window is 1 s (+0.1 s a block): '+block.remainingMs);
     a.emit('hit',{targetId:B.id,weapon:'srx',bulletId:'lethal_sniper',damageOverride:190,headshot:true});await sleep(100);
     assert.equal(hits.filter(d=>d.targetId===A.id).length,1,'Duplicate network return damage');assert.equal(hits.filter(d=>d.targetId===B.id).length,0,'Defender took damage');
     const death=event(a,'playerDied',d=>d.targetId===A.id);
     a.emit('hit',{targetId:B.id,weapon:'srx',bulletId:'second_sniper',damageOverride:190,headshot:true});
     const killed=await death;assert.equal(killed.killerId,B.id);assert(killed.reflected);
+    const fresh=event(b,'playerRespawned',d=>d.id===B.id);
+    b.emit('resetSelf',{x:0,z:10});
+    await fresh;
+    b.emit('setWeapon',{weaponId:'ak20'});
+    await sleep(50);
+    const protectedHits=[];a.on('playerHit',d=>protectedHits.push(d));
+    const guarded=event(a,'damageGuarded',d=>d.targetId===B.id);
+    a.emit('hit',{targetId:B.id,weapon:'ak20',bulletId:'shield_feedback',damageOverride:25});
+    const shield=await guarded;
+    assert.equal(shield.bulletId,'shield_feedback');
+    await sleep(100);
+    assert.equal(protectedHits.length,0,'The shield symbol must not manufacture health damage');
     console.log('PASS: real two-client server: an idle katana returns nothing; with Deflect on, reflection, defender immunity, native damage, duplicate suppression, reflected kill credit');
   }finally{
     for(const socket of sockets)socket.close();

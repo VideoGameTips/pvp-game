@@ -4,27 +4,86 @@
   const R = window.PVP_RANK;
   if (!R || typeof socket === 'undefined') return;
 
-  // ── the badges: a shield with a gem, one colour per rank; wings from Gold up, a crown from Master up ──
-  const LOOK = [   // [dark, base, light]
-    ['#6b3a1c', '#b87333', '#ffb27a'], ['#6f4420', '#cd8a3c', '#f6c07a'], ['#5b6470', '#aeb7c2', '#f4f7fb'], ['#8a6410', '#e0a81c', '#ffe27a'],
-    ['#126f6b', '#29c7c1', '#a8fff7'], ['#4b1f8a', '#8a3fe0', '#dcb0ff'], ['#173f9a', '#2f66e8', '#9cc0ff'], ['#2c1a52', '#6a43b8', '#c09aff'],
-    ['#1f6aa8', '#3aa0f0', '#d4f0ff'], ['#8a1f55', '#e0388a', '#ffa6d2'], ['#7a1218', '#d9262f', '#ff9a9a'], ['#8a5a0a', '#f0b323', '#fff4b8'],
+  // Every rank builds around the same shield and diamond. The silhouette earns its layers before it earns a crown.
+  const LOOK = [ // shadow, metal, edge, jewel
+    ['#543124', '#9c6149', '#d09674', '#d9ab92'], // Copper
+    ['#533327', '#ad793b', '#efbe75', '#f6cd8a'], // Bronze
+    ['#33424b', '#84939b', '#d9e4ea', '#f0f5fa'], // Silver
+    ['#715020', '#c79839', '#ffe09a', '#fff0b1'], // Gold
+    ['#214450', '#779da5', '#e0ffff', '#91f3e1'], // Platinum
+    ['#38244b', '#8360ae', '#e0b7f3', '#e8a8ff'], // Amethyst
+    ['#172e58', '#3673b6', '#9bcfff', '#79d4ff'], // Sapphire
+    ['#101016', '#272730', '#92919f', '#ff5474'], // Obsidian
+    ['#253d52', '#7ab0c6', '#e6fcff', '#c2f6ff'], // Diamond
+    ['#47213e', '#ad4e7d', '#ffc1dc', '#ffe5ed'], // Master
+    ['#471c28', '#a4243c', '#ffb0a6', '#ffe3c6'], // Grandmaster
+    ['#695032', '#b58a41', '#ffebae', '#fff8dc'], // Legend
   ];
   function badge(rank, size = 96) {
-    const c = document.createElement('canvas'); c.width = c.height = size; const g = c.getContext('2d'), s = size / 100, [dk, base, lt] = LOOK[Math.max(0, Math.min(11, rank))];
-    g.scale(s, s);
-    const poly = (pts, fill, stroke) => { g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.closePath(); if (fill) { g.fillStyle = fill; g.fill(); } if (stroke) { g.strokeStyle = stroke; g.lineWidth = 2; g.stroke(); } };
-    const grad = (x0, y0, x1, y1) => { const q = g.createLinearGradient(x0, y0, x1, y1); q.addColorStop(0, lt); q.addColorStop(0.5, base); q.addColorStop(1, dk); return q; };
-    const wings = rank >= 3 ? Math.min(4, 1 + Math.floor((rank - 3) / 2)) : 0;               // 1 pair at Gold, up to 4 at Legend
-    for (let i = 0; i < wings; i++) for (const sx of [-1, 1]) {
-      const y = 34 + i * 11, w = 22 - i * 3, x = 50 + sx * 30;
-      poly([[x - sx * 6, y], [x + sx * w, y - 10 - i * 3], [x + sx * (w - 6), y + 16], [x - sx * 4, y + 14]], grad(x, y - 12, x, y + 16), dk);
+    rank = Math.max(0, Math.min(LOOK.length - 1, Math.trunc(rank) || 0));
+    const c = document.createElement('canvas'); c.width = c.height = size;
+    c.setAttribute('aria-hidden', 'true');
+    const g = c.getContext('2d'), [dark, metal, edge, jewel] = LOOK[rank];
+    const obsidian = rank === 7, legend = rank === LOOK.length - 1;
+    g.scale(size / 100, size / 100); g.lineJoin = 'round'; g.lineCap = 'round';
+    const path = (pts, fill, stroke, width = 1, close = true) => {
+      g.beginPath(); pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); if (close) g.closePath();
+      if (fill) { g.fillStyle = fill; g.fill(); }
+      if (stroke) { g.strokeStyle = stroke; g.lineWidth = width; g.stroke(); }
+    };
+    const alloy = (top, bottom) => {
+      const q = g.createLinearGradient(24, top, 76, bottom);
+      q.addColorStop(0, edge); q.addColorStop(.46, metal); q.addColorStop(1, dark); return q;
+    };
+    const shield = (w, y, bottom) => [[50,y],[50+w,y+11],[50+w,y+35],[50+w*.72,bottom-12],[50,bottom],[50-w*.72,bottom-12],[50-w,y+35],[50-w,y+11]];
+    const diamond = (x, y, w, h = w) => [[x,y-h],[x+w,y],[x,y+h],[x-w,y]];
+
+    if (legend) {
+      g.strokeStyle = '#e9c674'; g.lineWidth = 1.2;
+      g.beginPath(); g.arc(50, 49, 38, 3.67, 5.75); g.moveTo(79, 72); g.arc(50, 49, 37, .67, 2.47); g.stroke();
+      path(diamond(20,25,1.6),edge); path(diamond(80,25,1.6),edge);
     }
-    poly([[50, 90], [24, 66], [24, 30], [50, 16], [76, 30], [76, 66]], grad(30, 18, 70, 90), dk);                // the shield
-    poly([[50, 82], [31, 63], [31, 34], [50, 24], [69, 34], [69, 63]], dk, null);                                  // its inner field
-    poly([[50, 34], [62, 52], [50, 70], [38, 52]], grad(40, 34, 60, 70), lt);                                       // the gem
-    poly([[50, 34], [56, 52], [50, 70], [44, 52]], lt, null); g.globalAlpha = 0.55; poly([[50, 34], [62, 52], [50, 52]], '#fff', null); g.globalAlpha = 1;
-    if (rank >= 9) { poly([[36, 18], [41, 6], [46, 14], [50, 2], [54, 14], [59, 6], [64, 18]], grad(36, 2, 64, 18), dk); }   // the crown
+    if (rank >= 3) for (const side of [-1, 1]) {
+      const plate = (pts, fill, stroke, width, close) => path(pts.map(([x,y]) => [50 + side*x,y]),fill,stroke,width,close);
+      const span = [25, 29, 32, 36, 43, 36, 39, 42, 46][rank - 3];
+      const tip = obsidian ? 21 : legend ? 17 : rank >= 8 ? 24 : 43 - (rank - 3) * 3;
+      const feathers = rank < 5 ? 1 : rank < 8 ? 2 : legend ? 4 : 3;
+      for (let i = feathers - 1; i >= 0; i--) {
+        const x = span-i*3.9, y = tip+i*12;
+        plate([[19,44+i*5],[x,y],[x-4,y+13],[x-8,y+22],[18,61+i*6]],alloy(y,y+27),obsidian ? '#676575' : dark,1.4);
+        plate([[23,47+i*5],[x-1,y+3]],null,obsidian ? '#92919f' : edge,1,false);
+      }
+    }
+
+    const w = rank < 2 ? 19 + rank*2 : 22, top = legend ? 31 : rank >= 8 ? 24 : rank < 3 ? 22 : 23, bottom = rank < 3 ? 79 + rank*2 : 86;
+    path(shield(w,top,bottom), rank === 0 ? metal : alloy(top,bottom), rank === 0 ? dark : '#090d15', 2.5);
+    path(shield(w-4,top+4,bottom-5),rank === 0 ? '#85513e' : obsidian ? '#14121a' : dark, rank === 0 ? edge : metal,1.1);
+    if (rank >= 2) path([[50-w+2,top+13],[50,top+2],[50+w-2,top+13]],null,edge,1.4,false);
+    const y = top + 27, gem = Math.min(13,7 + Math.floor(rank*.65));
+    if (rank === 0) {
+      path(diamond(50,y,gem,gem+2),dark,edge,1.4);
+    } else {
+      path(diamond(50,y,gem+2,gem+5),jewel,rank >= 5 ? edge : dark,1.1);
+      path([[50,y-gem-5],[50+gem+2,y],[50,y+gem+5],[52,y-1]],obsidian ? '#922c4a' : metal);
+      path([[50,y-gem-4],[52,y-1],[50-gem-1,y]],'#ffffff40');
+    }
+    if (rank >= 4) {
+      path([[39,bottom-16],[50,bottom-10],[61,bottom-16]],null,obsidian ? '#975065' : edge,1.5,false);
+      if (rank >= 6) path([[43,bottom-8],[50,bottom-4],[57,bottom-8]],null,metal,1.4,false);
+    }
+    if (obsidian) for (const side of [-1,1]) {
+      path([[50+side*22,38],[50+side*14,45],[50+side*17,51],[50+side*13,62]],null,'#d45470',1.15,false);
+    }
+    if (rank === 9 || rank === 10) {
+      path([[32,24],[40,17],[50,21-rank+9],[60,17],[68,24],[62,28],[50,24],[38,28]],alloy(16,30),edge,1.15);
+      if (rank === 10) path(diamond(50,13,3,5),edge,dark,1);
+    }
+    if (legend) {
+      path([[31,13],[42,20],[50,6],[58,20],[69,13],[64,30],[50,34],[36,30]],alloy(9,35),'#fff1be',1.5);
+      path(diamond(50,22,4,6),'#fff8dc','#80562e',1.2);
+      path([[40,26],[50,29],[60,26]],null,'#fff8dc',1.35,false);
+      path(diamond(50,88,3.4,6),edge,dark,1.1);
+    }
     return c;
   }
 
@@ -46,7 +105,8 @@
     '#rk-panel h2{margin:0 0 4px;letter-spacing:3px;font-size:18px}#rk-panel .rk-sub{color:#8fa0c8;font-size:12px;margin-bottom:12px;line-height:1.5}' +
     '#rk-panel .rk-me{display:flex;gap:16px;align-items:center;flex-wrap:wrap}#rk-panel .rk-big{font-size:22px;font-weight:bold;letter-spacing:1px}' +
     '#rk-panel .rk-bar{height:10px;background:#1d2538;border-radius:5px;overflow:hidden;margin:8px 0 4px;width:260px}#rk-panel .rk-fill{height:100%;background:linear-gradient(90deg,#4d7cff,#9ec0ff)}' +
-    '#rk-panel .rk-ladder{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0}#rk-panel .rk-step{width:56px;text-align:center;font-size:9px;color:#8fa0c8;opacity:.55}#rk-panel .rk-step.on{opacity:1;color:#fff}' +
+    '#rk-panel .rk-ladder{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;margin:14px 0}#rk-panel .rk-step{min-width:0;display:grid;justify-items:center;align-content:start;gap:1px;padding:4px 0;text-align:center;font-size:11px;overflow-wrap:anywhere;color:#bac6d8;border:1px solid transparent;border-radius:4px}#rk-panel .rk-step.on{color:#fff;border-color:#8a7650;background:#26241f}' +
+    '@media(max-width:560px){#rk-panel .rk-ladder{grid-template-columns:repeat(4,minmax(0,1fr))}}@media(max-width:380px){#rk-panel .rk-ladder{grid-template-columns:repeat(3,minmax(0,1fr))}}' +
     '#rk-panel table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}#rk-panel td,#rk-panel th{padding:4px 6px;text-align:left;border-bottom:1px solid #1d2538}' +
     '#rk-panel button.rk-x{float:right;background:#1d2538;color:#fff;border:1px solid #3a4666;border-radius:5px;padding:6px 12px;cursor:pointer}' +
     '#rk-open{position:absolute;top:12px;right:12px;z-index:5;background:#171c2b;color:#ffd86a;border:1px solid #4a5680;border-radius:6px;padding:7px 12px;font-size:12px;letter-spacing:1px;cursor:pointer}' +

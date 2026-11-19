@@ -173,7 +173,7 @@
     var dmg = kv([
       ['Damage per hit', n(g.damage, 1) + (g.pellets > 1 ? ' × ' + g.pellets + ' pellets' : '')],
       ['Damage per shot (all pellets)', n(g.damagePerShot, 1)],
-      ['Head damage', n(g.headDamage, 0) + ' (×' + n(g.headshotMult, 2) + ')'],
+      ['Head damage', n(g.headDamage, 0) + (g.lethalHeadshot ? ' (lethal)' : ' (×' + n(g.headshotMult, 2) + ')')],
       ['Shots to kill, body / head (' + D.hp + ' HP)', g.shotsToKill.body == null ? '—' : g.shotsToKill.body + ' / ' + g.shotsToKill.head],
       ['Time to kill on the body (up close)', g.ttkBodySec == null ? '—' : n(g.ttkBodySec, 2) + ' s'],
       ['Damage per second (if all hit)', n(g.dps, 0)]
@@ -184,11 +184,16 @@
       ['Magazine / reserve', g.noReload ? 'no reload' : g.magazine + ' / ' + g.reserve],
       ['Reload', g.noReload ? '—' : n(g.reloadSec, 2) + ' s (' + esc(g.reloadStyle) + ')'],
       ['Time to empty a magazine', g.noReload || g.timeToEmptySec == null ? '—' : n(g.timeToEmptySec, 2) + ' s'],
-      ['Bullet speed', n(g.bulletSpeed, 0) + ' m/s'],
+      ['Body damage per magazine (before falloff)', g.noReload ? '—' : n(g.magazine * g.damagePerShot, 0)],
+      [g.projectileSpeed ? 'Base bullet speed' : 'Bullet speed', n(g.bulletSpeed, 0) + ' m/s'],
+      ...(g.projectileSpeed ? [['In-game projectile speed', n(g.projectileSpeed, 0) + ' studs/s']] : []),
       ['Aim-down-sights zoom', n(g.adsZoom, 0) + '°']
     ]);
     var acc = kv([
       ['Scatter (each bullet)', '±' + n(g.scatterDeg, 2) + '°'],
+      ...(g.movementSpreadDeg ? Object.keys(g.movementSpreadDeg).map(function (state) {
+        return [state.charAt(0).toUpperCase() + state.slice(1) + ' spread', n(g.movementSpreadDeg[state], 0) + '°'];
+      }) : []),
       ['Bloom per shot / max', g.bloom ? '+' + n(g.bloom.perShotDeg, 2) + '° / ' + n(g.bloom.maxDeg, 2) + '°' : 'none'],
       ['Falloff', g.falloff && g.falloff.minPct < 100 ? 'full to ' + g.falloff.nearM + ' m, ' + g.falloff.minPct + '% by ' + g.falloff.farM + ' m' : 'none']
     ]);

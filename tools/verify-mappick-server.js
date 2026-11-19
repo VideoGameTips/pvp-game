@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // The map vote, end to end against a real server: two people with different votes (a coin flip), a person against
 // a bot (the bot's pick travels with the vote), an opponent leaving the vote, nobody voting (random after 15 s), and
-// the other lobby modes: a free-for-all over the whole pool (a lone voter's pick is final, the most votes of three
+// the other lobby modes: a free-for-all over its grid pool (a lone voter's pick is final, the most votes of three
 // wins) and King of the Hill, which has its own arena and skips it.
-// Starts its own server on a spare port with an empty data directory. Takes about 25 s. Needs socket.io-client
+// Starts its own server on a spare port with an empty data directory. Needs socket.io-client
 // (a dev dependency of the server's own socket.io install).
 const { spawn } = require('child_process');
 const fs = require('fs'), os = require('os'), path = require('path');
@@ -12,6 +12,9 @@ const PORT = 3900 + Math.floor(Math.random() * 90);
 const DATA = fs.mkdtempSync(path.join(os.tmpdir(), 'pvp-mappick-'));
 const server = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], { env: { ...process.env, PORT: String(PORT), DATA_DIR: DATA }, stdio: 'ignore' });
 const URL = 'http://localhost:' + PORT;
+const oneOnOne = ['corner_yard','split_plaza','warehouse_box','overlook','shift_maze','launch_pad','rotator','low_grav',
+  'bridgeworks','courtyard','double_ramp','atrium','multi_level_yard','reactor_core','grid_trenches','skybridge'];
+const ffaMaps = ['iron_harbor','siegebreaker','dead_city','fracture_canyon','megaforge','titan_carrier'];
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const log = [];
 const fail = m => { log.push('FAIL: ' + m); };
@@ -36,15 +39,15 @@ const until = async (f, ms = 20000) => { const t = Date.now(); while (Date.now()
     else {
       if (!a.ev.mapPickStart.vs || !b.ev.mapPickStart.vs) fail('A: vs should be a person');
       if (a.ev.lobbyStart) fail('A: lobbyStart arrived before the vote');
-      a.emit('mapPickVote', { mapId: 'duel_grid' });
+      a.emit('mapPickVote', { mapId: 'shift_maze' });
       await sleep(150);
       if (!b.ev.mapPickLocked) fail('A: b was not told a locked in');
-      b.emit('mapPickVote', { mapId: 'duel_platform' });
+      b.emit('mapPickVote', { mapId: 'courtyard' });
       if (!await until(() => a.ev.mapPickResult && b.ev.mapPickResult, 3000)) fail('A: no result');
       else {
         const r = a.ev.mapPickResult;
         if (!r.coin) fail('A: different votes should be a coin flip');
-        if (!['duel_grid', 'duel_platform'].includes(r.mapId)) fail('A: winner not one of the votes: ' + r.mapId);
+        if (!['shift_maze', 'courtyard'].includes(r.mapId)) fail('A: winner not one of the votes: ' + r.mapId);
         if (a.ev.mapPickResult.mapId !== b.ev.mapPickResult.mapId) fail('A: players got different results');
       }
       if (!await until(() => a.ev.lobbyStart && b.ev.lobbyStart, 5000)) fail('A: no lobbyStart after the result');
@@ -61,21 +64,22 @@ const until = async (f, ms = 20000) => { const t = Date.now(); while (Date.now()
   {
     const a = client('A');
     await until(() => a.connected);
-    a.emit('joinStagingLobby', { mode: '1v1', map: 'duel_grid' });   // a pre-pick must be ignored now
+    a.emit('joinStagingLobby', { mode: '1v1', map: 'gb_duel_yard' });
     await sleep(100);
     a.emit('setLobbyReady', { ready: true, fillBots: true });
     if (!await until(() => a.ev.mapPickStart, 3000)) fail('B: no mapPickStart vs bot');
     else {
       if (a.ev.mapPickStart.vs !== null) fail('B: vs should be null for a bot');
-      if (JSON.stringify(a.ev.mapPickStart.options.slice().sort()) !== JSON.stringify(['duel_crossroads', 'duel_grid', 'duel_pillars', 'duel_platform'])) fail('B: options ' + a.ev.mapPickStart.options);
+      if (JSON.stringify(a.ev.mapPickStart.options.slice().sort()) !== JSON.stringify(oneOnOne.slice().sort())) fail('B: options ' + a.ev.mapPickStart.options);
       const t0 = Date.now();
-      a.emit('mapPickVote', { mapId: 'duel_pillars', botMapId: 'duel_crossroads' });
-      a.emit('mapPickVote', { mapId: 'duel_grid', botMapId: 'duel_grid' });   // a second vote must be ignored
+      a.emit('mapPickVote', { mapId: 'gb_duel_yard' }); // archived and must not lock the vote
+      a.emit('mapPickVote', { mapId: 'bridgeworks', botMapId: 'split_plaza' });
+      a.emit('mapPickVote', { mapId: 'atrium', botMapId: 'atrium' });   // a second vote must be ignored
       if (!await until(() => a.ev.mapPickResult, 5000)) fail('B: no result');
       else {
         const r = a.ev.mapPickResult;
         if (Date.now() - t0 < 1500) fail('B: the bot was not given time to be seen deciding');
-        if (!r.coin || !r.picks.some(p => p.bot && p.mapId === 'duel_crossroads') || !r.picks.some(p => !p.bot && p.mapId === 'duel_pillars')) fail('B: picks wrong ' + JSON.stringify(r));
+        if (!r.coin || !r.picks.some(p => p.bot && p.mapId === 'split_plaza') || !r.picks.some(p => !p.bot && p.mapId === 'bridgeworks')) fail('B: picks wrong ' + JSON.stringify(r));
       }
       if (!await until(() => a.ev.lobbyStart, 5000)) fail('B: no lobbyStart');
       else {
@@ -95,11 +99,11 @@ const until = async (f, ms = 20000) => { const t = Date.now(); while (Date.now()
     await sleep(300);
     a.emit('setLobbyReady', { ready: true, fillBots: true }); b.emit('setLobbyReady', { ready: true, fillBots: true });
     await until(() => a.ev.mapPickStart && b.ev.mapPickStart, 3000);
-    a.emit('mapPickVote', { mapId: 'duel_pillars' });
+    a.emit('mapPickVote', { mapId: 'overlook' });
     await sleep(200);
     b.emit('leaveMapPick');
     if (!await until(() => a.ev.lobbyStart, 7000)) fail('C: nobody started after the opponent left');
-    else if (a.ev.lobbyStart.mapId !== 'duel_pillars') fail('C: the remaining vote should stand, got ' + a.ev.lobbyStart.mapId);
+    else if (a.ev.lobbyStart.mapId !== 'overlook') fail('C: the remaining vote should stand, got ' + a.ev.lobbyStart.mapId);
     else if (a.ev.lobbyStart.enemyBots + a.ev.lobbyStart.allyBots !== 1) fail('C: a bot should take the place');
     if (b.ev.lobbyStart) fail('C: the leaver was started anyway');
     a.close(); b.close();
@@ -113,11 +117,12 @@ const until = async (f, ms = 20000) => { const t = Date.now(); while (Date.now()
     a.emit('setLobbyReady', { ready: true, fillBots: true });
     await until(() => a.ev.mapPickStart, 3000);
     const t0 = Date.now();
-    if (!await until(() => a.ev.lobbyStart, 25000)) fail('D: never started');
+    const ms = a.ev.mapPickStart?.ms || 25000;
+    if (!await until(() => a.ev.lobbyStart, ms + 6500)) fail('D: never started');
     else {
       const dt = Date.now() - t0;
-      if (dt < 14000 || dt > 21000) fail('D: started after ' + dt + ' ms, want about 15 s + reveal');
-      if (!a.ev.lobbyStart.mapId.startsWith('duel_')) fail('D: map ' + a.ev.lobbyStart.mapId);
+      if (dt < ms - 1000 || dt > ms + 6000) fail('D: started after ' + dt + ' ms, want vote time + reveal');
+      if (!oneOnOne.includes(a.ev.lobbyStart.mapId)) fail('D: map ' + a.ev.lobbyStart.mapId);
     }
     a.close();
   }
@@ -131,13 +136,13 @@ const until = async (f, ms = 20000) => { const t = Date.now(); while (Date.now()
     if (!await until(() => a.ev.mapPickStart, 3000)) fail('E: no map vote in a free-for-all');
     else {
       const o = a.ev.mapPickStart.options;
-      if (o.length < 40) fail('E: the vote should be over the whole pool, got ' + o.length + ' maps');
+      if (JSON.stringify(o.slice().sort()) !== JSON.stringify(ffaMaps.slice().sort())) fail('E: FFA map pool changed: ' + o);
       if (o.some(id => id.startsWith('duel_'))) fail('E: duel maps are 1v1 only');
       if (a.ev.mapPickStart.vsBot) fail('E: bots do not vote outside 1v1');
-      a.emit('mapPickVote', { mapId: 'urban' });
+      a.emit('mapPickVote', { mapId: 'dead_city' });
       if (!await until(() => a.ev.lobbyStart, 6000)) fail('E: never started');
       else {
-        if (a.ev.lobbyStart.mapId !== 'urban') fail('E: a lone voter\'s pick is final, got ' + a.ev.lobbyStart.mapId);
+        if (a.ev.lobbyStart.mapId !== 'dead_city') fail('E: a lone voter\'s pick is final, got ' + a.ev.lobbyStart.mapId);
         if (a.ev.lobbyStart.enemyBots < 1) fail('E: bots should still fill the match');
         if (a.ev.mapPickResult.coin) fail('E: one vote is not a coin flip');
       }
@@ -155,11 +160,11 @@ const until = async (f, ms = 20000) => { const t = Date.now(); while (Date.now()
     if (!await until(() => a.ev.mapPickStart && b.ev.mapPickStart && c.ev.mapPickStart, 3000)) fail('F: not every human was asked');
     else {
       if ((a.ev.mapPickStart.others || []).length !== 2) fail('F: a should be told about 2 others');
-      a.emit('mapPickVote', { mapId: 'volcano' }); b.emit('mapPickVote', { mapId: 'volcano' }); c.emit('mapPickVote', { mapId: 'urban' });
+      a.emit('mapPickVote', { mapId: 'iron_harbor' }); b.emit('mapPickVote', { mapId: 'iron_harbor' }); c.emit('mapPickVote', { mapId: 'dead_city' });
       if (!await until(() => a.ev.lobbyStart && b.ev.lobbyStart && c.ev.lobbyStart, 6000)) fail('F: never started');
       else {
         const r = a.ev.mapPickResult;
-        if (r.mapId !== 'volcano' || r.coin) fail('F: two votes beat one, got ' + JSON.stringify({ m: r.mapId, coin: r.coin }));
+        if (r.mapId !== 'iron_harbor' || r.coin) fail('F: two votes beat one, got ' + JSON.stringify({ m: r.mapId, coin: r.coin }));
         if (new Set([a, b, c].map(x => x.ev.lobbyStart.mapId)).size !== 1) fail('F: players got different maps');
       }
     }

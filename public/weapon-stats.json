@@ -85,21 +85,21 @@
    "type": "Shotgun",
    "slot": "primary",
    "archived": false,
-   "damage": 18,
-   "pellets": 6,
+   "damage": 24,
+   "pellets": 8,
    "headshotMult": 2,
-   "headDamage": 36,
-   "damagePerShot": 108,
-   "fireRateMs": 450,
-   "shotsPerSec": 2.222,
+   "headDamage": 48,
+   "damagePerShot": 192,
+   "fireRateMs": 400,
+   "shotsPerSec": 2.5,
    "auto": false,
-   "dps": 240,
+   "dps": 480,
    "magazine": 8,
    "reserve": 32,
-   "reloadSec": 3.125,
+   "reloadSec": 2.5,
    "reloadStyle": "shell",
    "noReload": false,
-   "timeToEmptySec": 3.15,
+   "timeToEmptySec": 2.8,
    "bulletSpeed": 110,
    "adsZoom": 55,
    "falloff": {
@@ -108,8 +108,8 @@
     "minPct": 2
    },
    "damageByRange": [
+    24,
     18,
-    13,
     0,
     0,
     0,
@@ -121,11 +121,11 @@
     0
    ],
    "shotsToKill": {
-    "body": 3,
-    "head": 2
+    "body": 2,
+    "head": 1
    },
-   "ttkBodySec": 0.9,
-   "scatterDeg": 4.574,
+   "ttkBodySec": 0.4,
+   "scatterDeg": 3.434,
    "bloom": null,
    "recoil": {
     "kickPerShotDeg": 0.628,
@@ -152,46 +152,48 @@
    "type": "Sniper",
    "slot": "primary",
    "archived": false,
-   "damage": 95,
+   "damage": 120,
    "pellets": 1,
    "headshotMult": 2,
-   "headDamage": 190,
-   "damagePerShot": 95,
-   "fireRateMs": 1200,
-   "shotsPerSec": 0.833,
+   "headDamage": 999,
+   "damagePerShot": 120,
+   "lethalHeadshot": true,
+   "fireRateMs": 800,
+   "shotsPerSec": 1.25,
    "auto": false,
-   "dps": 79.167,
-   "magazine": 5,
+   "dps": 150,
+   "magazine": 7,
    "reserve": 20,
-   "reloadSec": 3,
+   "reloadSec": 2.5,
    "reloadStyle": "magazine",
    "noReload": false,
    "timeToEmptySec": 4.8,
-   "bulletSpeed": 200,
+   "bulletSpeed": 260,
    "adsZoom": 15,
+   "projectileSpeed": 5980,
    "falloff": {
     "nearM": 60,
     "farM": 135,
     "minPct": 92
    },
    "damageByRange": [
-    95,
-    95,
-    95,
-    95,
-    95,
-    95,
-    95,
-    93,
-    91,
-    88,
-    87
+    120,
+    120,
+    120,
+    120,
+    120,
+    120,
+    120,
+    117,
+    115,
+    112,
+    110
    ],
    "shotsToKill": {
-    "body": 4,
-    "head": 2
+    "body": 3,
+    "head": 1
    },
-   "ttkBodySec": 3.6,
+   "ttkBodySec": 1.6,
    "scatterDeg": 0,
    "bloom": null,
    "recoil": null,
@@ -364,20 +366,20 @@
    "falloff": {
     "nearM": 11,
     "farM": 36,
-    "minPct": 24
+    "minPct": 50
    },
    "damageByRange": [
     10,
     10,
-    7,
-    4,
-    2,
-    2,
-    2,
-    2,
-    2,
-    2,
-    2
+    8,
+    6,
+    5,
+    5,
+    5,
+    5,
+    5,
+    5,
+    5
    ],
    "shotsToKill": {
     "body": 30,
@@ -613,8 +615,9 @@
    "damage": 105,
    "pellets": 1,
    "headshotMult": 2,
-   "headDamage": 210,
+   "headDamage": 999,
    "damagePerShot": 105,
+   "lethalHeadshot": true,
    "fireRateMs": 460,
    "shotsPerSec": 2.174,
    "auto": false,
@@ -647,7 +650,7 @@
    ],
    "shotsToKill": {
     "body": 3,
-    "head": 2
+    "head": 1
    },
    "ttkBodySec": 0.92,
    "scatterDeg": 0.143,
@@ -947,8 +950,9 @@
    "damage": 100,
    "pellets": 1,
    "headshotMult": 2,
-   "headDamage": 200,
+   "headDamage": 999,
    "damagePerShot": 100,
+   "lethalHeadshot": true,
    "fireRateMs": 1400,
    "shotsPerSec": 0.714,
    "auto": false,
@@ -981,7 +985,7 @@
    ],
    "shotsToKill": {
     "body": 3,
-    "head": 2
+    "head": 1
    },
    "ttkBodySec": 2.8,
    "scatterDeg": 0,
@@ -1158,6 +1162,7 @@
    "timeToEmptySec": 0,
    "bulletSpeed": 34,
    "adsZoom": 42,
+   "projectileSpeed": 188.66,
    "falloff": {
     "nearM": 9999,
     "farM": 9999,
@@ -2750,6 +2755,7 @@
    "timeToEmptySec": 3.2,
    "bulletSpeed": 260,
    "adsZoom": 14,
+   "projectileSpeed": 5980,
    "falloff": {
     "nearM": 60,
     "farM": 135,
@@ -3994,7 +4000,7 @@
    "name": "Machine Revolver",
    "type": "Secondary",
    "slot": "secondary",
-   "archived": false,
+   "archived": true,
    "damage": 36,
    "pellets": 1,
    "headshotMult": 2,
@@ -4651,6 +4657,71 @@
     "desc": "Throw 3 axes in a spread"
    },
    "traits": []
+  },
+  {
+   "id": "fission_disc",
+   "name": "Fission Disc",
+   "type": "Thrown",
+   "slot": "secondary",
+   "archived": false,
+   "damage": 65,
+   "pellets": 1,
+   "headshotMult": 1,
+   "headDamage": 65,
+   "damagePerShot": 65,
+   "fireRateMs": 300,
+   "shotsPerSec": 3.333,
+   "auto": false,
+   "dps": 216.667,
+   "magazine": 1,
+   "reserve": 0,
+   "reloadSec": 0,
+   "reloadStyle": "magazine",
+   "noReload": true,
+   "timeToEmptySec": 0,
+   "bulletSpeed": 90,
+   "adsZoom": 60,
+   "falloff": {
+    "nearM": 9999,
+    "farM": 9999,
+    "minPct": 100
+   },
+   "damageByRange": [
+    65,
+    65,
+    65,
+    65,
+    65,
+    65,
+    65,
+    65,
+    65,
+    65,
+    65
+   ],
+   "shotsToKill": {
+    "body": 5,
+    "head": 5
+   },
+   "ttkBodySec": 1.2,
+   "scatterDeg": 0,
+   "bloom": null,
+   "recoil": {
+    "kickPerShotDeg": 0.425,
+    "sideKickDeg": 0.246,
+    "climbPerShotPct": 9,
+    "climbMaxX": 1.544,
+    "steadyKickDeg": 0.657,
+    "shotsToMaxClimb": 7,
+    "recoverPerSec": 9.5,
+    "adsKickPct": 13
+   },
+   "screenKick": 1.387,
+   "ability": null,
+   "traits": [
+    "Short range: stops at 35 m",
+    "One reusable disc; 35 studs outbound at 90 studs/sec; 65 damage once per target on each leg; 0.3s recovery after catching (travel time is additional)"
+   ]
   },
   {
    "id": "boomerang",
@@ -5968,15 +6039,15 @@
    "type": "Lightning Shotgun",
    "slot": "primary",
    "archived": false,
-   "damage": 5,
+   "damage": 12,
    "pellets": 10,
    "headshotMult": 1,
-   "headDamage": 5,
-   "damagePerShot": 50,
+   "headDamage": 12,
+   "damagePerShot": 120,
    "fireRateMs": 500,
    "shotsPerSec": 2,
    "auto": false,
-   "dps": 100,
+   "dps": 240,
    "magazine": 33,
    "reserve": 99,
    "reloadSec": 2.4,
@@ -5991,8 +6062,8 @@
     "minPct": 2
    },
    "damageByRange": [
-    5,
-    4,
+    12,
+    9,
     0,
     0,
     0,
@@ -6004,23 +6075,23 @@
     0
    ],
    "shotsToKill": {
-    "body": 6,
-    "head": 6
+    "body": 3,
+    "head": 3
    },
-   "ttkBodySec": 2.5,
+   "ttkBodySec": 1,
    "scatterDeg": 2.977,
    "bloom": null,
    "recoil": {
-    "kickPerShotDeg": 0.475,
-    "sideKickDeg": 0.273,
-    "climbPerShotPct": 9,
-    "climbMaxX": 1.579,
-    "steadyKickDeg": 0.75,
+    "kickPerShotDeg": 0.628,
+    "sideKickDeg": 0.356,
+    "climbPerShotPct": 11,
+    "climbMaxX": 1.686,
+    "steadyKickDeg": 1.059,
     "shotsToMaxClimb": 7,
     "recoverPerSec": 9.5,
     "adsKickPct": 13
    },
-   "screenKick": 1.636,
+   "screenKick": 2.4,
    "ability": {
     "name": "Ball Lightning",
     "desc": "Slow orb · aura roots 1s · direct roots 3s"
@@ -6159,15 +6230,15 @@
    "type": "Guided Launcher",
    "slot": "primary",
    "archived": false,
-   "damage": 30,
+   "damage": 90,
    "pellets": 1,
-   "headshotMult": 2,
-   "headDamage": 60,
-   "damagePerShot": 30,
+   "headshotMult": 1,
+   "headDamage": 90,
+   "damagePerShot": 90,
    "fireRateMs": 1400,
    "shotsPerSec": 0.714,
    "auto": false,
-   "dps": 21.429,
+   "dps": 64.286,
    "magazine": 6,
    "reserve": 36,
    "reloadSec": 3.2,
@@ -6182,42 +6253,43 @@
     "minPct": 100
    },
    "damageByRange": [
-    30,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30,
-    30
+    90,
+    90,
+    90,
+    90,
+    90,
+    90,
+    90,
+    90,
+    90,
+    90,
+    90
    ],
    "shotsToKill": {
-    "body": 10,
-    "head": 5
+    "body": 4,
+    "head": 4
    },
-   "ttkBodySec": 12.6,
+   "ttkBodySec": 4.2,
    "scatterDeg": 0,
    "bloom": null,
    "recoil": {
-    "kickPerShotDeg": 0.273,
-    "sideKickDeg": 0.164,
-    "climbPerShotPct": 7,
-    "climbMaxX": 1.437,
-    "steadyKickDeg": 0.392,
-    "shotsToMaxClimb": 6,
+    "kickPerShotDeg": 0.523,
+    "sideKickDeg": 0.299,
+    "climbPerShotPct": 10,
+    "climbMaxX": 1.612,
+    "steadyKickDeg": 0.842,
+    "shotsToMaxClimb": 7,
     "recoverPerSec": 9.5,
     "adsKickPct": 13
    },
-   "screenKick": 0.624,
+   "screenKick": 1.872,
    "ability": {
     "name": "Skystrike",
-    "desc": "E: vertical volley · climbs 12 studs, then YOU steer all six with your crosshair — no lock-on"
+    "desc": "Launch one missile. It climbs, then locks onto enemies it can see."
    },
    "traits": [
-    "Lobbed: the shot arcs and drops"
+    "Explodes: 5 m blast, 70 damage",
+    "Homes in on targets"
    ]
   },
   {
@@ -6501,7 +6573,7 @@
    "reloadSec": 2.8,
    "reloadStyle": "magazine",
    "noReload": false,
-   "timeToEmptySec": 6,
+   "timeToEmptySec": 34,
    "bulletSpeed": 65,
    "adsZoom": 46,
    "projectileSpeed": 65.003,
@@ -6544,10 +6616,7 @@
    "ability": null,
    "traits": [
     "Short range: stops at 55 m",
-    "Pierces: the round goes through up to 99 more enemies; each one after takes 100% of what the one before did",
-    "5 spheres a pull (5 rounds)",
-    "Pulls enemies within 5",
-    "Explodes for 20 (radius 4)"
+    "Pierces: the round goes through up to 99 more enemies; each one after takes 100% of what the one before did"
    ]
   },
   {
@@ -6673,6 +6742,205 @@
    "screenKick": 2.4,
    "ability": null,
    "traits": []
+  },
+  {
+   "id": "mmg",
+   "name": "MMG",
+   "type": "Compact SMG",
+   "slot": "primary",
+   "archived": false,
+   "damage": 19,
+   "pellets": 1,
+   "headshotMult": 2,
+   "headDamage": 38,
+   "damagePerShot": 19,
+   "fireRateMs": 50,
+   "shotsPerSec": 20,
+   "auto": true,
+   "dps": 380,
+   "magazine": 25,
+   "reserve": 100,
+   "reloadSec": 2.2,
+   "reloadStyle": "magazine",
+   "noReload": false,
+   "timeToEmptySec": 1.2,
+   "bulletSpeed": 130,
+   "adsZoom": 51,
+   "falloff": {
+    "nearM": 11,
+    "farM": 36,
+    "minPct": 24
+   },
+   "damageByRange": [
+    19,
+    19,
+    14,
+    8,
+    5,
+    5,
+    5,
+    5,
+    5,
+    5,
+    5
+   ],
+   "shotsToKill": {
+    "body": 16,
+    "head": 8
+   },
+   "ttkBodySec": 0.75,
+   "scatterDeg": 0.63,
+   "bloom": null,
+   "recoil": {
+    "kickPerShotDeg": 0.43,
+    "sideKickDeg": 0.301,
+    "climbPerShotPct": 6,
+    "climbMaxX": 1.85,
+    "steadyKickDeg": 0.795,
+    "shotsToMaxClimb": 15,
+    "recoverPerSec": 9,
+    "adsKickPct": 12
+   },
+   "screenKick": 0.45,
+   "ability": null,
+   "traits": [
+    "Base movement while equipped: 95%"
+   ]
+  },
+  {
+   "id": "rad_pulse",
+   "name": "Rad Pulse",
+   "type": "Energy Rifle",
+   "slot": "primary",
+   "archived": false,
+   "damage": 18,
+   "pellets": 1,
+   "headshotMult": 1,
+   "headDamage": 18,
+   "damagePerShot": 18,
+   "fireRateMs": 166.66666666666666,
+   "shotsPerSec": 6,
+   "auto": true,
+   "dps": 108,
+   "magazine": 36,
+   "reserve": 144,
+   "reloadSec": 2.4,
+   "reloadStyle": "magazine",
+   "noReload": false,
+   "timeToEmptySec": 5.833,
+   "bulletSpeed": 140,
+   "adsZoom": 48,
+   "projectileSpeed": 140,
+   "falloff": {
+    "nearM": 9999,
+    "farM": 9999,
+    "minPct": 100
+   },
+   "damageByRange": [
+    18,
+    18,
+    18,
+    18,
+    18,
+    18,
+    18,
+    18,
+    18,
+    18,
+    18
+   ],
+   "shotsToKill": {
+    "body": 17,
+    "head": 17
+   },
+   "ttkBodySec": 2.667,
+   "scatterDeg": 0.229,
+   "bloom": null,
+   "recoil": {
+    "kickPerShotDeg": 0.264,
+    "sideKickDeg": 0.12,
+    "climbPerShotPct": 6,
+    "climbMaxX": 1.4,
+    "steadyKickDeg": 0.369,
+    "shotsToMaxClimb": 7,
+    "recoverPerSec": 9,
+    "adsKickPct": 12
+   },
+   "screenKick": 0.45,
+   "ability": null,
+   "traits": [
+    "Radiation: 2 HP/s per stack, up to 3 stacks, lasts until death or match reset"
+   ]
+  },
+  {
+   "id": "asmg9",
+   "name": "ASMG-9",
+   "type": "Secondary SMG",
+   "slot": "secondary",
+   "archived": false,
+   "damage": 16,
+   "pellets": 1,
+   "headshotMult": 2,
+   "headDamage": 32,
+   "damagePerShot": 16,
+   "fireRateMs": 41.666666666666664,
+   "shotsPerSec": 24,
+   "auto": true,
+   "dps": 384,
+   "magazine": 40,
+   "reserve": 120,
+   "reloadSec": 2,
+   "reloadStyle": "magazine",
+   "noReload": false,
+   "timeToEmptySec": 1.625,
+   "bulletSpeed": 130,
+   "adsZoom": 52,
+   "falloff": {
+    "nearM": 8,
+    "farM": 28,
+    "minPct": 18
+   },
+   "damageByRange": [
+    16,
+    15,
+    8,
+    3,
+    3,
+    3,
+    3,
+    3,
+    3,
+    3,
+    3
+   ],
+   "shotsToKill": {
+    "body": 19,
+    "head": 10
+   },
+   "ttkBodySec": 0.75,
+   "scatterDeg": 1,
+   "movementSpreadDeg": {
+    "standing": 1,
+    "walking": 5,
+    "sprinting": 9,
+    "jumping": 12
+   },
+   "bloom": null,
+   "recoil": {
+    "kickPerShotDeg": 0.316,
+    "sideKickDeg": 0.18,
+    "climbPerShotPct": 5,
+    "climbMaxX": 1.5,
+    "steadyKickDeg": 0.474,
+    "shotsToMaxClimb": 11,
+    "recoverPerSec": 10,
+    "adsKickPct": 12
+   },
+   "screenKick": 0.45,
+   "ability": null,
+   "traits": [
+    "Movement-dependent accuracy; sprint spread applies to slides and speed boosts"
+   ]
   }
  ],
  "melees": [
@@ -6841,7 +7109,7 @@
    "speedMult": 1,
    "ability": {
     "name": "Rev Up",
-    "desc": "HOLD E · the saw revs: it swings by itself, 2.5× as fast, and burns fuel · let go and it stops",
+    "desc": "HOLD E · +200% movement speed · 2.5× auto-swings · burns fuel",
     "cooldownSec": 0,
     "steps": null
    },

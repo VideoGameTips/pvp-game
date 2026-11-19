@@ -25,6 +25,7 @@
   function release(entry,restore=false){
     const list=entry.settled?resting:active,i=list.indexOf(entry);if(i<0)return;list.splice(i,1);
     scene.remove(entry.visual);if(!entry.settled){for(const joint of entry.joints)physics?.removeConstraint(joint);for(const part of entry.parts)physics?.removeBody(part.body);}
+    entry.visual.traverse(node=>{if(node.isSkinnedMesh)node.skeleton.dispose();});
     if(entry.source._ragdoll===entry){entry.source._ragdoll=null;if(restore&&!entry.dead)entry.source.visible=true;}
     if(entry.owned)disposeBody(entry.source);
   }
@@ -47,6 +48,10 @@
     while(active.length>=limit){const oldest=active[0];if(oldest.persistent)settle(oldest);else recover(oldest);}
     source.updateWorldMatrix(true,true);
     const visual=source.clone(true),sourceNodes=[],cloneNodes=[],mapping=new Map();source.traverse(n=>sourceNodes.push(n));visual.traverse(n=>cloneNodes.push(n));sourceNodes.forEach((n,i)=>mapping.set(n,cloneNodes[i]));
+    // Three's clone keeps the original skeleton. A ragdoll must follow its own joints.
+    for(const n of sourceNodes)if(n.isSkinnedMesh){
+      mapping.get(n).bind(new THREE.Skeleton(n.skeleton.bones.map(b=>mapping.get(b)),n.skeleton.boneInverses),n.bindMatrix);
+    }
     const rig=source._rig,parts=[],byName={},joints=[];visual.visible=true;visual._ragdollVisual=true;scene.add(visual);visual.updateWorldMatrix(true,true);
     for(const n of [...cloneNodes])if(n.isSprite)n.removeFromParent();
     // Gear follows its existing head/chest instead of being left at the old standing position.

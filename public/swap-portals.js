@@ -110,6 +110,7 @@
       p = open(myId, pt.x, y, pt.z, nx, 0, nz);
     }
     if (p && socket.connected) socket.emit('swapPortal', { x: p.pos.x, y: p.pos.y, z: p.pos.z, nx: p.n.x, ny: p.n.y, nz: p.n.z });
+    return p;
   }
 
   function partner(p) {

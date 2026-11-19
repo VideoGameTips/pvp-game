@@ -74,7 +74,14 @@
       <button data-pan="-1,0" aria-label="Pan left">&#8592;</button><button id="bs-home" aria-label="Frame map">&#8962;</button><button data-pan="1,0" aria-label="Pan right">&#8594;</button>
       <button data-pan="0,1" aria-label="Pan back" style="grid-column:2">&#8595;</button><button id="bs-out" aria-label="Zoom out">&#8722;</button><button id="bs-in" aria-label="Zoom in">+</button></nav>`;
     document.body.appendChild(host);
-    for(const id of maps())$('bs-map').add(new Option(mapCardLabel(id),id));
+    const mapPicker=$('bs-map'), testMaps=document.createElement('optgroup');
+    testMaps.label='Original test maps (archived)';
+    for(const id of maps()){
+      const option=new Option(mapCardLabel(id),id);
+      if(GB_MAP_IDS.includes(id))testMaps.appendChild(option);
+      else mapPicker.add(option);
+    }
+    if(testMaps.children.length)mapPicker.appendChild(testMaps);
     for(const slot of ['primary','secondary','melee','admin']){
       const group=document.createElement('optgroup');group.label={primary:'Primary',secondary:'Secondary',melee:'Melee',admin:'Admin weapons (sandbox)'}[slot];
       for(const w of weapons().filter(w=>(w.adminItem?'admin':melee(w.id)?'melee':w.slot==='secondary'?'secondary':'primary')===slot))group.appendChild(new Option(w.name,w.id));
@@ -282,6 +289,11 @@
     if(clock<(victim._simGuardUntil||0))amount*=.15;
     victim._simHeal=null;
     victim.hp=Math.max(0,victim.hp-amount);
+    if(id==='rad_pulse'&&victim.hp>0&&clock>=(victim._simGuardUntil||0)){
+      victim._simRadiation=window.PVP_RADIATION.expose(victim._simRadiation,now());
+      victim._simRadSource=attacker;
+      showRadiation(victim.id,victim._simRadiation.stacks);
+    }
     if(players[victim.id])players[victim.id].hp=victim.hp;
     if(victim.hp<=0){victim.dead=true;victim._simKillingWeapon=id;_killInfo[victim.id]={weapon:id,killer:attacker.id};}
   }
@@ -366,6 +378,11 @@
   }
   function combat(dt){
     clock+=dt*1000;
+    for(const bot of gameBots)if(!bot.dead&&bot._simRadiation){
+      const amount=window.PVP_RADIATION.tick(bot._simRadiation,now());
+      if(amount)damage(bot,bot._simRadSource,amount,'rad_pulse_dot');
+      if(now()>=bot._simRadiation.until)bot._simRadiation=null;
+    }
     for(let i=effects.length-1;i>=0;i--){
       const fx=effects[i],u=fx.u;
       if(clock>=fx.end){scene.remove(fx.mesh);fx.mesh.geometry.dispose();fx.mesh.material.dispose();effects.splice(i,1);continue;}
