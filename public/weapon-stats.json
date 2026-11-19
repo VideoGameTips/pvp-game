@@ -6611,6 +6611,68 @@
    "screenKick": 0.632,
    "ability": null,
    "traits": []
+  },
+  {
+   "id": "m12",
+   "name": "M12 Machine Shotgun",
+   "type": "Shotgun",
+   "slot": "primary",
+   "archived": false,
+   "damage": 15,
+   "pellets": 10,
+   "headshotMult": 1,
+   "headDamage": 15,
+   "damagePerShot": 150,
+   "fireRateMs": 200,
+   "shotsPerSec": 5,
+   "auto": true,
+   "dps": 750,
+   "magazine": 12,
+   "reserve": 48,
+   "reloadSec": 3.2,
+   "reloadStyle": "magazine",
+   "noReload": false,
+   "timeToEmptySec": 2.2,
+   "bulletSpeed": 110,
+   "adsZoom": 55,
+   "falloff": {
+    "nearM": 5,
+    "farM": 15,
+    "minPct": 2
+   },
+   "damageByRange": [
+    15,
+    8,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "shotsToKill": {
+    "body": 2,
+    "head": 2
+   },
+   "ttkBodySec": 0.2,
+   "scatterDeg": 4.858,
+   "bloom": null,
+   "recoil": {
+    "kickPerShotDeg": 0.395,
+    "sideKickDeg": 0.372,
+    "climbPerShotPct": 5,
+    "climbMaxX": 1.85,
+    "steadyKickDeg": 0.731,
+    "shotsToMaxClimb": 18,
+    "recoverPerSec": 6.8,
+    "adsKickPct": 12
+   },
+   "screenKick": 2.4,
+   "ability": null,
+   "traits": []
   }
  ],
  "melees": [

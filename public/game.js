@@ -958,6 +958,13 @@ const WEAPONS = [
     // and you carry it 5% faster (moveMult: only while it is in your hands). Bullets fly dead straight, like the AK20's.
     mag: 24, reserve: 72, damage: 28, fireRate: 100, reloadTime: 1900, headshotMult: 2,
     auto: true, pellets: 1, spread: 0, adsZoom: 48, bulletSpeed: 130, noReload: false, moveMult: 1.05 },
+  { id: 'm12', name: 'M12 Machine Shotgun', type: 'Shotgun', slot: 'primary',
+    // 🔫 A magazine-fed, fully automatic shotgun: ten 15-damage pellets a shot (150 up close), five shots a second, twelve shells, and it empties
+    // them in under three seconds. Brutal inside ~15 m and useless past it (falloff 5-15 m), a very wide spread, the hardest recoil there is, and
+    // no headshot bonus (a pellet is a pellet). Reload is a 3.2 s magazine change, not shell by shell.
+    mag: 12, reserve: 48, damage: 15, fireRate: 200, reloadTime: 3200, headshotMult: 1,
+    auto: true, pellets: 10, spread: 0.085, adsZoom: 55, bulletSpeed: 110, noReload: false,
+    recoil: { up: 0.0075, side: 0.0065, climb: 0.058, max: 1.85, recover: 6.8, adsMult: 0.52 } },
 ];
 
 // ── Damage drop-off by range ────────────────────────────────────────────────
@@ -1016,7 +1023,7 @@ Object.assign(WEAPON_FALLOFF, {
   minigun: FALLOFF_MINIGUN, m134: FALLOFF_MINIGUN,
   ak20: FALLOFF_AR, burst: { near: 31, far: 76, min: 0.68 }, cyroclasm: FALLOFF_AR,
   freeze_gun: FALLOFF_AR, plasma_carbine: FALLOFF_AR, arc_rifle: FALLOFF_AR, flechette: FALLOFF_AR,
-  burst_cannon: FALLOFF_AR, twin_ar: FALLOFF_AR, m4_commando: FALLOFF_AR, energy_rifle: FALLOFF_NONE, gravity_cannon: FALLOFF_NONE, glassmaker: FALLOFF_AR, auto_revolver: FALLOFF_AR,
+  burst_cannon: FALLOFF_AR, twin_ar: FALLOFF_AR, m4_commando: FALLOFF_AR, m12: { near: 5, far: 15, min: 0.02 }, energy_rifle: FALLOFF_NONE, gravity_cannon: FALLOFF_NONE, glassmaker: FALLOFF_AR, auto_revolver: FALLOFF_AR,
   xm7: { near: 38, far: 96, min: 0.72 }, hkmp7: FALLOFF_SMG, m4a1_arena: FALLOFF_ARENA_AR,
   paintball: FALLOFF_PAINT, nail_gun: FALLOFF_PAINT, sticker_blaster: FALLOFF_PAINT,
   srx: FALLOFF_SNIPER, railgun: FALLOFF_SNIPER, coilgun: FALLOFF_SNIPER, amr: FALLOFF_SNIPER, barrett: FALLOFF_SNIPER,
@@ -1618,7 +1625,7 @@ const BOT_MOVE_INTERVAL = 0.033; // send position updates every 33ms (30 Hz, lik
 // Admin items are NOT priced — they're claimed via promo codes only.
 const WEAPON_COSTS = {
   // Primaries — ARs / SMGs
-  ak20: 250, m4_commando: 400, energy_rifle: 440, gravity_cannon: 520,  mp40: 200, p90: 350, vector: 300, burst: 280,
+  ak20: 250, m4_commando: 400, m12: 500, energy_rifle: 440, gravity_cannon: 520,  mp40: 200, p90: 350, vector: 300, burst: 280,
   // Primaries — Shotguns
   sg8: 220,
   // Primaries — Snipers / Marksman
@@ -41482,6 +41489,7 @@ const weaponModels = [
   buildEnergyRifle(),  // energy_rifle
   buildGravityCannon(),  // gravity_cannon
   buildM4Commando(),  // m4_commando
+  buildM12(),  // m12
 ];
 function buildEnergyRifle() {
   // ⚡ ENERGY RIFLE: a pale armoured receiver with a violet charge you can see in a glass tube along the top, three focusing rings down a dark barrel, and a lens at the
@@ -41578,6 +41586,37 @@ function buildGravityCannon() {
     orb.visible = !reloading || Math.sin(now * 38) > 0;                              // the core flickers while the cells are out
   };
   g._calm = () => { glass.opacity = 0.38; orb.visible = true; ringA.rotation.set(0, 0, 0); ringB.rotation.set(0, Math.PI / 2, 0); };
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+function buildM12() {
+  // 🔫 M12 Machine Shotgun: a squat auto-shotgun. Slab receiver, a fat barrel inside a ventilated shroud with a muzzle brake, a 12-shell box
+  // magazine (red hulls, brass heads) under the receiver, pistol grip, a short stock.
+  const g = new THREE.Group();
+  const poly = GUN_MATS.polymer(), steel = GUN_MATS.steel(), blued = GUN_MATS.blued(), inner = GUN_MATS.inner(), bright = GUN_MATS.bright();
+  const brass = new THREE.MeshPhongMaterial({ color: 0xc9a24a, shininess: 120, specular: 0xfff0b0 }), red = new THREE.MeshPhongMaterial({ color: 0xb23a2a, shininess: 60, specular: 0xffb0a0 });
+  gpBox(g, poly, 0.048, 0.062, 0.220, 0, 0.010, 0.020);                // receiver
+  gpBox(g, steel, 0.044, 0.008, 0.200, 0, 0.046, 0.020);               // top rail
+  for (let i = 0; i < 7; i++) gpBox(g, inner, 0.046, 0.005, 0.008, 0, 0.052, -0.060 + i * 0.026);
+  gpBox(g, inner, 0.005, 0.020, 0.060, 0.025, 0.014, 0.000);           // ejection port
+  gpCyl(g, blued, 0.0155, 0.0155, 0.290, 18, 0, 0.018, -0.235);        // the fat barrel
+  gpCyl(g, steel, 0.0270, 0.0270, 0.200, 14, 0, 0.018, -0.200);        // ventilated shroud
+  for (let i = 0; i < 5; i++) for (const s of [-1, 1]) gpBox(g, inner, 0.004, 0.012, 0.020, s * 0.0272, 0.018, -0.130 - i * 0.034);
+  gpCyl(g, steel, 0.0185, 0.0185, 0.026, 16, 0, 0.018, -0.378);        // muzzle brake
+  gpBox(g, steel, 0.054, 0.020, 0.040, 0, 0.018, -0.092);              // front block
+  gpPart(g, 'magazine', () => {                                         // twelve shells in a box
+    gpBox(g, poly, 0.042, 0.104, 0.086, 0, -0.060, -0.030);
+    for (let i = 0; i < 4; i++) gpBox(g, red, 0.036, 0.014, 0.078, 0, -0.028 - i * 0.022, -0.030);
+    gpBox(g, brass, 0.036, 0.005, 0.078, 0, -0.114, -0.030);
+  }, { x: 0, y: -0.060, z: -0.030 });
+  gpBox(g, poly, 0.032, 0.090, 0.040, 0, -0.078, 0.084, 0.25);        // grip
+  gpBox(g, poly, 0.040, 0.054, 0.140, 0, 0.004, 0.205);                // stock
+  gpBox(g, steel, 0.044, 0.060, 0.010, 0, 0.004, 0.278);               // butt plate
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.0034, 6, 12, Math.PI * 1.05), steel);
+  guard.rotation.set(0, Math.PI / 2, -0.4); guard.position.set(0, -0.038, 0.040); g.add(guard);
+  gpBox(g, bright, 0.005, 0.015, 0.005, 0, -0.030, 0.040, 0.2);
+  gpReflexSight(g, 0, 0.062, -0.040, 0.046);
+  const flash = makeMuzzleFlash(); flash.position.set(0, 0.018, -0.410); g.add(flash);
+  g._flash = flash; g._kickZ = 0.030; g._greebled = true; g._handDetailed = true;
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 function buildM4Commando() {
