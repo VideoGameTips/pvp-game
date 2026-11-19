@@ -36308,6 +36308,115 @@ function buildOriEmperor() {
   g._calm();
   g.position.set(0.12, -0.10, -0.25); return g;
 }
+
+// ═══ 🟣 GLITCHED REALITY: a Legendary AK20 skin. A matte-black rifle that is breaking reality: glowing purple cracks, cyan circuitry that flickers, pixel fragments drifting round it, and a tiny screen ═══
+// The stock AK-20 is underneath (same damage, recoil and accuracy: purely cosmetic). Firing leaves purple glitch trails behind the rounds; a reload makes the magazine come apart into pixels and rebuild itself;
+// the inspect breaks the whole rifle into floating pieces and snaps it back; an elimination glitches the body into holographic cubes. The screen reads  ERROR 404: REALITY NOT FOUND.
+function buildGlitchedRealityAK() {
+  const g = buildAK20(true), rnd = (() => { let s = 7707; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
+  const inFlash = o => { for (let p = o; p; p = p.parent) if (p === g._flash) return true; return false; };
+  g.traverse(o => {                                              // matte black the whole stock rifle (clone first: the finishes are shared)
+    if (!o.isMesh || !o.material || inFlash(o)) return;
+    const dk = m => { if (!m || m.isMeshBasicMaterial || !m.color) return m; const c = m.clone(); c.color.multiplyScalar(0.34); if ('shininess' in c) c.shininess = 8; if (c.specular) c.specular.multiplyScalar(0.12); return c; };
+    o.material = Array.isArray(o.material) ? o.material.map(dk) : dk(o.material);
+  });
+  const purple = new THREE.MeshBasicMaterial({ color: 0xa04bff }), cyan = new THREE.MeshBasicMaterial({ color: 0x2bf0ff }), white = new THREE.MeshBasicMaterial({ color: 0xf4eaff });
+  const add = c => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.95, depthWrite: false, blending: THREE.AdditiveBlending });
+  const seg = (mat, x, y0, z0, y1, z1, th = 0.0016) => {         // a thin line in a flank's plane (x fixed), from (z0,y0) to (z1,y1)
+    const dz = z1 - z0, dy = y1 - y0, L = Math.hypot(dz, dy); return gpBox(g, mat, th, th, L, x, (y0 + y1) / 2, (z0 + z1) / 2, Math.atan2(-dy, dz), 0, 0);
+  };
+  // ── the cracks: jagged purple fractures running over both flanks, with branches ──
+  const cracks = [];
+  for (const sd of [-1, 1]) {
+    const x = sd * 0.0264;
+    for (const [z0, y0, n] of [[-0.12, 0.034, 9], [0.02, -0.004, 8], [0.17, 0.024, 6], [-0.34, 0.012, 7]]) {
+      let z = z0, y = y0;
+      for (let i = 0; i < n; i++) {
+        const nz = z + 0.014 + rnd() * 0.022, ny = Math.max(-0.016, Math.min(0.040, y + (rnd() - 0.5) * 0.030));
+        cracks.push(seg(purple, x, y, z, ny, nz, 0.0018));
+        if (rnd() < 0.4) cracks.push(seg(purple, x, ny, nz, ny + (rnd() - 0.5) * 0.026, nz + 0.008 + rnd() * 0.012, 0.0012));
+        z = nz; y = ny;
+      }
+    }
+  }
+  // ── the cyan circuitry: right-angled traces that flicker at random ──
+  const circ = [];
+  for (const sd of [-1, 1]) {
+    const x = sd * 0.0265;
+    for (const [z0, y0] of [[-0.05, 0.046], [0.08, 0.040], [-0.26, 0.026], [0.20, 0.004]]) {
+      let z = z0, y = y0;
+      for (let i = 0; i < 4; i++) { const horizontal = i % 2 === 0, nz = horizontal ? z + 0.016 + rnd() * 0.020 : z, ny = horizontal ? y : y + (rnd() < 0.5 ? -1 : 1) * (0.006 + rnd() * 0.008);
+        circ.push(seg(cyan, x, y, z, ny, nz, 0.0012)); const node = gpBox(g, cyan, 0.0026, 0.0026, 0.0026, x, ny, nz); circ.push(node); z = nz; y = ny; }
+    }
+  }
+  // ── the pixels floating round it ──
+  const frags = new THREE.Group(); frags.userData.eqFx = true; g.add(frags);
+  const bits = [];
+  for (let i = 0; i < 26; i++) {
+    const s = 0.005 + rnd() * 0.007, m = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), add([0xa04bff, 0x2bf0ff, 0xf4eaff, 0xff2bd6][i % 4]));
+    const base = new THREE.Vector3((rnd() - 0.5) * 0.17, (rnd() - 0.35) * 0.15, (rnd() - 0.5) * 0.62 - 0.08); frags.add(m); bits.push({ m, base, ph: rnd() * 6.28, sp: 0.6 + rnd() * 1.4, amp: 0.006 + rnd() * 0.012 });
+  }
+  // ── the tiny screen: ERROR 404: REALITY NOT FOUND (on the left flank, the side you see) ──
+  let screenTex = null, screenCtx = null;
+  const drawScreen = (glitch) => {
+    if (!screenCtx) return; const x = screenCtx, W = 256, H = 64;
+    x.fillStyle = '#04050a'; x.fillRect(0, 0, W, H); x.strokeStyle = '#2bf0ff'; x.lineWidth = 2; x.strokeRect(1, 1, W - 2, H - 2);
+    x.textAlign = 'center'; x.textBaseline = 'middle'; x.font = 'bold 22px "Courier New", monospace'; x.fillStyle = '#ff3a5c'; x.fillText('ERROR 404:', W / 2, 20);
+    x.font = 'bold 17px "Courier New", monospace'; x.fillStyle = '#2bf0ff'; x.fillText('REALITY NOT FOUND', W / 2, 45);
+    if (glitch) for (let i = 0; i < 4; i++) { const y = Math.floor(Math.random() * (H - 8)), h = 3 + Math.floor(Math.random() * 7), dx = Math.floor((Math.random() - 0.5) * 36); x.drawImage(screenCtx.canvas, 0, y, W, h, dx, y, W, h); if (Math.random() < 0.4) { x.fillStyle = Math.random() < 0.5 ? '#a04bff' : '#2bf0ff'; x.fillRect(Math.random() * W, y, 8 + Math.random() * 40, 2); } }
+    screenTex.needsUpdate = true;
+  };
+  try { const c = document.createElement('canvas'); c.width = 256; c.height = 64; screenCtx = c.getContext('2d'); screenTex = new THREE.CanvasTexture(c); } catch (e) { screenTex = null; }
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.062, 0.0155), new THREE.MeshBasicMaterial({ map: screenTex, color: screenTex ? 0xffffff : 0xff3a5c, side: THREE.DoubleSide }));
+  screen.position.set(-0.0268, 0.0165, 0.062); screen.rotation.y = -Math.PI / 2; g.add(screen);
+  gpBox(g, _skM(0x0a0a10, 40, 0x303040), 0.0020, 0.0185, 0.066, -0.0252, 0.0165, 0.062);       // its bezel
+  drawScreen(false);
+  // ── the reload: the magazine comes apart into pixels and rebuilds ──
+  const mag = () => g._parts && g._parts.magazine;
+  const magC = new THREE.Vector3(0, -0.07, -0.05);
+  try { g.updateMatrixWorld(true); const m = mag(); if (m) { const bb = new THREE.Box3().setFromObject(m); if (isFinite(bb.min.x)) g.worldToLocal(bb.getCenter(magC)); } } catch (e) {}
+  const NC = 56, cgeo = new THREE.BoxGeometry(0.0085, 0.0085, 0.0085), cloud = new THREE.InstancedMesh(cgeo, add(0xa04bff), NC); cloud.frustumCulled = false; cloud.visible = false; cloud.userData.eqFx = true; g.add(cloud);
+  const home = [], away = [], tmp = new THREE.Object3D(); for (let i = 0; i < NC; i++) { home.push(new THREE.Vector3(magC.x + (rnd() - 0.5) * 0.030, magC.y + (rnd() - 0.5) * 0.095, magC.z + (rnd() - 0.5) * 0.050)); const d = new THREE.Vector3(rnd() - 0.5, rnd() * 0.3 - 0.4, rnd() - 0.5).normalize().multiplyScalar(0.05 + rnd() * 0.09); away.push(home[i].clone().add(d)); }
+  // ── the inspect: every piece floats off, turning, and snaps back ──
+  let pieces = null, inspecting = false, snapFlash = 0;
+  const gatherPieces = () => {
+    pieces = [];
+    for (const c of g.children) {
+      if (c === g._flash || c === frags || c === cloud || c.userData.eqFx || inFlash(c)) continue;
+      let hand = !!c.userData.vmHand; c.traverse(o => { if (o.userData && o.userData.vmHand) hand = true; }); if (hand) continue;
+      const p = c.position.clone(), centre = new THREE.Vector3(0, 0.0, -0.10), dir = p.clone().sub(centre); if (dir.lengthSq() < 1e-6) dir.set(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5); dir.normalize();
+      pieces.push({ c, p, r: c.rotation.clone(), off: dir.multiplyScalar(0.05 + rnd() * 0.12).add(new THREE.Vector3((rnd() - 0.5) * 0.05, (rnd() - 0.2) * 0.07, (rnd() - 0.5) * 0.05)), spin: new THREE.Vector3((rnd() - 0.5) * 2.4, (rnd() - 0.5) * 2.4, (rnd() - 0.5) * 2.4), ph: rnd() * 6.28 });
+    }
+  };
+  const restore = () => { if (pieces) for (const q of pieces) { q.c.position.copy(q.p); q.c.rotation.copy(q.r); } };
+  let acc = 0, scrAcc = 0, glitchHold = 0;
+  g._calm = () => { restore(); inspecting = false; cloud.visible = false; const m = mag(); if (m) m.visible = true; for (const c of cracks) c.visible = true; for (const c of circ) c.visible = true; };
+  g._tick = (dt, now, assembling) => {
+    if (assembling) { frags.visible = false; return; } frags.visible = true;
+    const R = _fsReload(g);
+    // flicker: the cracks pulse, the circuitry blinks in and out at random
+    acc += dt; if (acc > 0.07) { acc = 0; for (const c of circ) if (rnd() < 0.10) c.visible = rnd() > 0.40; const pu = 0.65 + 0.35 * Math.sin(now * 7) * Math.sin(now * 3.1); purple.color.setRGB(0.63 * pu + 0.1, 0.29 * pu, 1.0 * pu); }
+    scrAcc += dt; glitchHold = Math.max(0, glitchHold - dt); if (scrAcc > (glitchHold > 0 ? 0.05 : 0.45)) { scrAcc = 0; if (glitchHold <= 0 && rnd() < 0.3) glitchHold = 0.35; drawScreen(glitchHold > 0 || rnd() < 0.2); }
+    for (const b of bits) { b.m.position.set(b.base.x + Math.sin(now * b.sp + b.ph) * b.amp, b.base.y + Math.sin(now * b.sp * 1.3 + b.ph * 2) * b.amp, b.base.z + Math.cos(now * b.sp * 0.8 + b.ph) * b.amp); b.m.rotation.set(now * b.sp, now * b.sp * 0.7, 0); b.m.visible = rnd() > 0.04; }
+    // reload: the magazine comes apart into pixels, hangs in the air, and rebuilds
+    const m = mag();
+    if (R.rel) {
+      const t = R.t, out = Math.max(0, Math.min(1, (t - 0.10) / 0.28)), back = Math.max(0, Math.min(1, (t - 0.52) / 0.30)), k = out * (1 - back);
+      if (m) m.visible = t < 0.12 || t > 0.86;
+      cloud.visible = t > 0.10 && t < 0.88;
+      if (cloud.visible) for (let i = 0; i < NC; i++) { const a = home[i], b = away[i], kk = Math.max(0, Math.min(1, k * 1.25 - (i % 7) * 0.03)); tmp.position.set(a.x + (b.x - a.x) * kk + Math.sin(now * 9 + i) * 0.002 * kk, a.y + (b.y - a.y) * kk, a.z + (b.z - a.z) * kk); tmp.rotation.set(now * 3 + i, now * 2, i); tmp.scale.setScalar(0.5 + 0.7 * kk); tmp.updateMatrix(); cloud.setMatrixAt(i, tmp.matrix); }
+      cloud.instanceMatrix.needsUpdate = true;
+    } else { cloud.visible = false; if (m && !m.visible) m.visible = true; }
+    // inspect: the rifle breaks into floating pieces, then snaps back together
+    if (R.insp) {
+      if (!inspecting) { inspecting = true; if (!pieces) gatherPieces(); }
+      const t = R.t, k = Math.sin(Math.PI * Math.max(0, Math.min(1, (t - 0.08) / 0.78))) ** 1.3, snap = t > 0.82 && t < 0.9;
+      for (const q of pieces) { q.c.position.set(q.p.x + q.off.x * k + Math.sin(now * 2 + q.ph) * 0.004 * k, q.p.y + q.off.y * k + Math.cos(now * 1.7 + q.ph) * 0.004 * k, q.p.z + q.off.z * k); q.c.rotation.set(q.r.x + q.spin.x * k * 0.5, q.r.y + q.spin.y * k * 0.5, q.r.z + q.spin.z * k * 0.5); }
+      if (snap && !snapFlash) { snapFlash = 1; try { playSoundEvent('snapin', { volume: 0.5, minGap: 100 }); } catch (e) {} } if (!snap) snapFlash = 0;
+    } else if (inspecting) { inspecting = false; restore(); }
+  };
+  return g;
+}
 function buildFractureCrossbow() {
   const g = new THREE.Group();
   const obsidian = new THREE.MeshPhongMaterial({ color: 0x151222, shininess: 150, specular: 0xb4a2f0 });
@@ -53815,6 +53924,7 @@ const SKIN_SHOT = {};
   G({ shape: 'bolt', c: [0x4aa8ff, 0xffffff] }, 'cyber', ['ak20_blueprint']);
   G({ shape: 'hackbullet', c: [0x0a0a0a, 0x2dff6a], k: 1.5 }, null, ['pistol_hacker', 'ak20_hacker']);
   G({ shape: 'pixeltrail', c: [0xff2bd6, 0x2bf0ff], min: 0.06 }, 'cyber', ['vector_glitch_exe']);
+  G({ shape: 'pixeltrail', c: [0xa04bff, 0x2bf0ff], min: 0.06 }, 'cyber', ['ak20_glitched_reality']);   // GLITCHED REALITY: purple glitch trails
   G({ shape: 'bolt', c: [0xff1030, 0xff2bd6] }, 'cyber', ['vector_neon_anarchy']);
   G({ shape: 'bolt', c: [0x40f0ff, 0xffffff], k: 1.0 }, null, ['mauser_phantom_circuit']);                                  // PHANTOM CIRCUIT: a cyan bolt
   G({ shape: 'bolt', c: [0xffc531, 0xc4182a], k: 1.2 }, null, ['ak20_phoenix_reign']);                                       // PHOENIX REIGN: a gold bolt edged in crimson
@@ -66451,6 +66561,9 @@ const MODEL_SKINS = [
   { id: 'javelin_origami_emperor', weapon: 'javelin_launcher', name: 'THE ORIGAMI EMPEROR', rarity: 'mythic', look: { hit: 'origami' }, raw: true, noMech: true,
     sw: ['#f4f1ea', '#c7cfdb', '#2a5fd0', '#e0b040'], build: buildOriEmperor,
     blurb: 'A Javelin launcher folded entirely from metallic paper: pearl-white and silver sheets creased in gold, with almost no machinery. A hexagonal tube of six folded panels that open like petals on a shot, a paper wing at the shoulder that spreads when you aim, a silver origami crane for a missile. A reload folds a cloud of paper fragments into a new missile; inspect unfolds the whole launcher into a giant crane that flaps once and folds back. Whoever it kills is circled by a flock of silver cranes that scatter and take them with them. Same damage, lock-on and flight as the Javelin.' },
+  { id: 'ak20_glitched_reality', weapon: 'ak20', name: 'GLITCHED REALITY', rarity: 'legendary', look: { hit: 'glitchcube' },
+    sw: ['#0b0b10', '#a04bff', '#2bf0ff'], build: buildGlitchedRealityAK,
+    blurb: 'A rifle that is literally breaking reality: a matte-black body, glowing purple cracks, cyan circuitry that flickers at random and pixel fragments drifting round it. A tiny screen on the side reads ERROR 404: REALITY NOT FOUND. Shots leave purple glitch trails; a reload makes the magazine come apart into pixels and rebuild itself; inspect breaks the whole rifle into floating pieces and snaps it back. Whoever it kills glitches into holographic cubes. Purely cosmetic: still an AK-20, same damage, recoil and accuracy.' },
   { id: 'crossbow_widowmaker', weapon: 'crossbow', name: 'WIDOWMAKER', rarity: 'legendary', look: { hit: 'web' },
     sw: ['#0e0e12', '#ff2a2a'], build: buildWidowmaker,
     blurb: 'A mechanical spider that is also a crossbow. Eight legs fold along its sides; aim and they unfold into the bow arms. A shot snaps the front legs in, a reload sends a little spider crawling along the rail with the next bolt, and inspect stands it up and walks it across your view. Whoever it kills hangs in a giant red web that then shatters.' },
@@ -66749,7 +66862,7 @@ const TOWER_MODEL_SKIN_IDS = new Set(['ak20_field_radio']);
 // 🏆 Earned at the end of a ranked season by finishing it at Legend rank: never bought, pulled or won any other way (server.js SEASON_SKIN_IDS grants it when the season is closed).
 const SEASON_MODEL_SKIN_IDS = new Set(['ak20_phoenix_reign']);
 // 🐉 Gen 3: the newest skins have their own case. Mirrors GEN3_SKIN_IDS in server.js (no skin is free).
-const GEN3_MODEL_SKIN_IDS = new Set(['javelin_origami_emperor', 'sg8_abyssal_sovereign', 'm1_garand_clockwork_requiem', 'minigun_hungry_garden','srx_point_of_no_return', 'crossbow_seraphim', 'revolver_clockbreaker', 'minigun_puppetmaster', 'revolver_relic_six', 'flamethrower_dragons_maw','revolver_deadeye','crossbow_permafrost','m1_garand_thunderclap','amr_event_horizon','minigun_iron_behemoth', 'crossbow_chronos_engine', 'crossbow_fracture', 'railgun_penteract', 'chain_gun_clockwork_dragon', 'ak20_breach_protocol', 'lever_remembrance', 'mauser_phantom_circuit',
+const GEN3_MODEL_SKIN_IDS = new Set(['ak20_glitched_reality', 'javelin_origami_emperor', 'sg8_abyssal_sovereign', 'm1_garand_clockwork_requiem', 'minigun_hungry_garden','srx_point_of_no_return', 'crossbow_seraphim', 'revolver_clockbreaker', 'minigun_puppetmaster', 'revolver_relic_six', 'flamethrower_dragons_maw','revolver_deadeye','crossbow_permafrost','m1_garand_thunderclap','amr_event_horizon','minigun_iron_behemoth', 'crossbow_chronos_engine', 'crossbow_fracture', 'railgun_penteract', 'chain_gun_clockwork_dragon', 'ak20_breach_protocol', 'lever_remembrance', 'mauser_phantom_circuit',
   'm1_garand_paradox','revolver_sixth_dimension','revolver_broken_promise','sg8_twin_paradox','crossbow_axiom', ...ROUND4_GUN_SKINS.map(s => s.id),
   ...MILITECH_GUN_SKINS.map(s => s.id),
   'srx_dead_frequency','hand_cannon_hourglass','ak20_paper_kingdom','rpg_false_sun',
@@ -73080,6 +73193,8 @@ const SKIN_FX = {
   javelin_origami_emperor: { equip: 'unfold', equipMs: 1100, equipSfx: ['fold', 'click'],
     inspectMs: 4800,
     inspect: [K(.10, { py: .02 }), K(.24, { py: .05, pz: -.10, rx: .08 }), K(.68, { py: .05, pz: -.10, rx: .08 }), K(.88, { py: .02 }), K(1, {})] },
+  ak20_glitched_reality: { equip: 'glitch', equipMs: 950, equipSfx: ['glitchsfx', 'snapin'], inspectMs: 5200,
+    inspect: [K(.10, { py: .02 }), K(.24, { py: .05, pz: -.06, rx: .08 }), K(.60, { py: .05, pz: -.06, rx: .08, rz: .14 }), K(.82, { py: .04, pz: -.05 }), K(.92, { py: .02 }), K(1, {})] },
   crossbow_fracture: { equip: 'build', equipMs: 900, equipSfx: ['whoosh', 'snapin'],
     inspect: [K(.14, { py: .03 }), K(.30, { py: .045, rz: .40 }), K(.50, { py: .045, rz: -.40 }), K(.70, { py: .045, rz: .35 }), K(.88, { py: .02, rz: -.15 }), K(1, {})] },
   crossbow_widowmaker: { equip: 'unfold', equipMs: 1000, equipSfx: ['fold', 'click'],
@@ -75088,6 +75203,48 @@ function playOrigamiFinisher(targetId, killerId) {
   pushFeedLine('FOLDED', players[targetId]?.name || 'Enemy', '#bcd8ff');
   return true;
 }
+
+// The kill: the body glitches into holographic cubes, which jitter, break apart and wink out
+HIT_STYLES.glitchcube = { chars: '▓▒░█■', glow: '#a04bff', fill: '#2bf0ff', hit: 0xe0d0ff, miss: 0x2bf0ff, screen: 'rgba(160,75,255,0.16)', num: '#c7a0ff', numShadow: '0 0 8px #a04bff, 0 0 2px #1a0040, -1px -1px 0 #0a0020, 1px 1px 0 #0a0020', scramble: '▓▒░█■0123' };
+FINISHER_MOVES.glitchcube = function (mesh, id, c) {
+  const holo = new THREE.MeshBasicMaterial({ color: 0x8a5cff, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending });
+  _finisherSwap(mesh, holo);
+  playSoundEvent('emp_zap', { position: mesh.position, volume: 0.8, minGap: 80 });
+  const root = new THREE.Group(); root.position.copy(mesh.position); scene.add(root);
+  const geo = new THREE.BoxGeometry(1, 1, 1), mats = [0xa04bff, 0x2bf0ff, 0xf4eaff].map(col => new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending }));
+  const cubes = [];
+  for (let i = 0; i < 46; i++) {
+    const m = new THREE.Mesh(geo, mats[i % 3]), s = 0.07 + Math.random() * 0.11; m.scale.setScalar(s);
+    const home = new THREE.Vector3((Math.random() - 0.5) * 0.7, 0.1 + Math.random() * 1.7, (Math.random() - 0.5) * 0.5); m.position.copy(home); m.visible = false; root.add(m);
+    cubes.push({ m, home, v: new THREE.Vector3((Math.random() - 0.5) * 3.2, 0.6 + Math.random() * 2.6, (Math.random() - 0.5) * 3.2), s, spin: new THREE.Vector3(Math.random() * 6, Math.random() * 6, Math.random() * 6) });
+  }
+  const cleanup = () => { scene.remove(root); geo.dispose(); mats.forEach(m => m.dispose()); holo.dispose(); };
+  setTimeout(cleanup, 2400);
+  let tickAt = 0;
+  _finisherDrive(mesh, id, 1700, (t, dt, st) => {
+    const now = performance.now(); mesh.position.copy(st.p); mesh.rotation.y = st.r.y; mesh.scale.copy(st.s);
+    if (now > tickAt) { tickAt = now + 55; holo.color.setHex(Math.random() < 0.5 ? 0x8a5cff : 0x2bf0ff); holo.opacity = 0.25 + Math.random() * 0.5; }
+    mesh.visible = t < 0.38 ? (Math.random() > 0.18) : t < 0.55 ? (Math.random() > 0.55) : false;                    // it flickers, then is gone: the cubes are what is left
+    const form = Math.max(0, Math.min(1, (t - 0.20) / 0.20)), blow = Math.max(0, (t - 0.55) / 0.45);
+    for (const c of cubes) {
+      c.m.visible = form > 0 && blow < 1;
+      c.m.position.set(c.home.x + (Math.random() - 0.5) * 0.02 * (1 - blow), c.home.y + (Math.random() - 0.5) * 0.02 * (1 - blow), c.home.z) .addScaledVector(c.v, blow * blow * 1.2);
+      c.m.position.y -= blow * blow * 0.4; c.m.rotation.set(c.spin.x * blow, c.spin.y * blow, c.spin.z * blow);
+      c.m.scale.setScalar(Math.max(0.001, c.s * form * (1 - blow * blow)));
+      c.m.material.opacity = 0.85 * (1 - blow);
+    }
+    root.position.set(st.p.x, st.p.y, st.p.z);
+  }, st => { cleanup(); });
+};
+function playGlitchCubeFinisher(targetId) {
+  const mesh = remoteMeshes[targetId];
+  if (!mesh || !mesh.visible) return false;
+  if (mesh._finisher && performance.now() < mesh._finisher.until) return true;
+  mesh._finisher = { id: 'glitchcube', until: performance.now() + 4200 };
+  FINISHER_MOVES.glitchcube(mesh, targetId, 0xa04bff);
+  pushFeedLine('REALITY NOT FOUND', players[targetId]?.name || 'Enemy', '#a04bff');
+  return true;
+}
 function _playSkinFinisher(kind, targetId, killerId = null) {
   if (kind === 'hack') return playGlitchFinisher(targetId);
   if (kind === 'error') return playGlitchFinisher(targetId, 'error');
@@ -75097,6 +75254,7 @@ function _playSkinFinisher(kind, targetId, killerId = null) {
   if (kind === 'shatter') return playShatterFinisher(targetId);
   if (kind === 'pixel') return playHologramFinisher(targetId);
   if (kind === 'web') return playWebFinisher(targetId, killerId);
+  if (kind === 'glitchcube') return playGlitchCubeFinisher(targetId);
   if (kind === 'origami') return playOrigamiFinisher(targetId, killerId);
   if (kind === 'thorn') return playThornFinisher(targetId, killerId);
   if (kind === 'angler') return playAnglerFinisher(targetId, killerId);

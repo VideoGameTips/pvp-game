@@ -521,7 +521,7 @@ for (const id of GEN2_EPIC_SKIN_IDS) GEN2_SKIN_WEIGHTS[id] = 1.5;          // a 
 for (const id of GEN2_NEW_MYTHIC_SKIN_IDS) GEN2_SKIN_WEIGHTS[id] = 0.5;    // half as likely as any one donut gun
 // 🐉 Gen 3: the newest skins in a case of their own (mirrors GEN3_MODEL_SKIN_IDS in public/game.js). No skin is free:
 // each one is dealt by this case and nowhere else.
-const GEN3_LEGENDARY_SKIN_IDS = ['srx_point_of_no_return', 'crossbow_seraphim', 'revolver_clockbreaker', 'minigun_puppetmaster', 'katana_fractured_reality', 'crossbow_chronos_engine', 'crossbow_fracture','railgun_penteract', 'chain_gun_clockwork_dragon', 'ak20_breach_protocol', 'scythe_deaths_head', 'mauser_phantom_circuit',
+const GEN3_LEGENDARY_SKIN_IDS = ['ak20_glitched_reality', 'srx_point_of_no_return', 'crossbow_seraphim', 'revolver_clockbreaker', 'minigun_puppetmaster', 'katana_fractured_reality', 'crossbow_chronos_engine', 'crossbow_fracture','railgun_penteract', 'chain_gun_clockwork_dragon', 'ak20_breach_protocol', 'scythe_deaths_head', 'mauser_phantom_circuit',
   'flamethrower_dragons_maw','crossbow_permafrost','chain_hammer_bonebreaker','minigun_iron_behemoth',
   'ak20_crimson_eclipse', 'srx_frostfall_sovereign', 'revolver_relic_six', 'scythe_bloodstorm', 'ak20_paper_kingdom',
   'revolver_sixth_dimension', 'sg8_twin_paradox', 'crossbow_axiom', 'ak20_phantom_protocol', 'minigun_iron_tempest', 'revolver_blackbox', 'javelin_ghost_lance', 'p90_zero_recoil',
