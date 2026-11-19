@@ -4783,7 +4783,7 @@ const WEAPON_SAMPLES = {
   xm7:              { file: 'dry1',      gain: 0.27, from: 0.01, len: 0.70, fade: 0.35, rate: [1.02, 1.02] },
   m4a1_arena:       { file: 'dry4',      gain: 0.25, from: 0.02, len: 0.70, fade: 0.35, rate: [1.0, 1.0] },
   glock18:          { file: 'dry4',      gain: 0.25, from: 0.02, len: 0.50, fade: 0.25, rate: [1.1, 1.1] },
-  ak20:             { file: 'ak2',       gain: 0.817, from: 0.085, len: 0.36, fade: 0.15, rate: [1.0, 1.0] },    // ("A crisp, loud AK-47 ...": cut before its second bang at 0.45 s)
+  ak20:             { file: 'ak2',       gain: 0.50, from: 0.085, len: 0.36, fade: 0.15, rate: [1.0, 1.0] },    // ("A crisp, loud AK-47 ...": cut before its second bang at 0.45 s; gain was 0.817, which was too loud: 4 dB down)
   twin_ar:          { file: 'ak4',       gain: 1.105, from: 0.05, len: 0.33, fade: 0.12, rate: [1.0, 1.0] },
   swarm_rifle:      { file: 'single',    gain: 0.338, from: 0.00, len: 0.70, fade: 0.35, rate: [1.0, 1.0] },    // (the clip the AK20 had before the AK-47 ones)
   // pistols, then revolvers (the clips start with the shot itself: nothing at the start can be moved without cutting into it, so these differ in pitch only)
@@ -4816,7 +4816,7 @@ const WEAPON_SAMPLES = {
 // more apart in pitch: the rapid-fire ones the short laser, the pistols the bright one, the sniper and the shotgun the low one (the Railgun itself plays that one at pitch 1). The Neon SMG is the skin of
 // a gun that is out of the shop: it keeps its made-up laser.
 const SKIN_SAMPLES = {
-  ak20_ak47_wood: { file: 'ak1', gain: 0.776, from: 0.005, len: 0.34, fade: 0.14, rate: [1.0, 1.0] },
+  ak20_ak47_wood: { file: 'ak1', gain: 0.475, from: 0.005, len: 0.34, fade: 0.14, rate: [1.0, 1.0] },
   burst_m4a1:     { file: 'ak1', gain: 1.182, from: 0.005, len: 0.34, fade: 0.14, rate: [1.14, 1.14] },
   p90_neon_sign:      { file: 'laser4', gain: 0.388, from: 0.00, len: 0.30, fade: 0.14, rate: [1.19, 1.19] },
   vector_cyberpunk:   { file: 'laser4', gain: 0.412, from: 0.00, len: 0.30, fade: 0.14, rate: [1.05, 1.05] },
