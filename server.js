@@ -306,7 +306,7 @@ function isWeakPassword(pw, username) { return passwordProblem(pw, username) !==
 // Admin items are NOT in this table (they're not purchasable; promo-only).
 const WEAPON_COSTS = {
   // Primaries — ARs / SMGs
-  ak20: 250, m4_commando: 400, energy_rifle: 440,  mp40: 200, p90: 350, vector: 300, burst: 280,
+  ak20: 250, m4_commando: 400, energy_rifle: 440, gravity_cannon: 520,  mp40: 200, p90: 350, vector: 300, burst: 280,
   // Primaries — Shotguns
   sg8: 220,
   // Primaries — Snipers / Marksman
@@ -2321,7 +2321,7 @@ function tryPairPvpQueue(mode) {
 // Weapon damage table (must match client WEAPONS array)
 // Headshot multipliers, mirroring headshotMult in WEAPONS[] (CLAUDE.md gotcha
 // #4). Anything not listed is the x2 every weapon has always had.
-const WEAPON_HS_MULT = { ak20: 2.333, flechette: 4, storm_bloom: 1 };
+const WEAPON_HS_MULT = { ak20: 2.333, flechette: 4, storm_bloom: 1, energy_rifle: 1, gravity_cannon: 1 };
 const WEAPON_DAMAGE = {
   // Damage-over-time ticks arrive as their own weapon ids, one tick a second.
   flame_burn: 7,
@@ -2354,7 +2354,7 @@ event_horizon: 75,
   cream_pie: 34,
   slingshot: 9,   // mirrors WEAPONS[] in public/game.js — see CLAUDE.md gotcha #4
   // Primaries
-  ak20: 25, m4_commando: 28, energy_rifle: 45,  sg8: 18,
+  ak20: 25, m4_commando: 28, energy_rifle: 45, gravity_cannon: 13, gravity_cannon_splash: 20, gravity_cannon_c1: 7,  sg8: 18,
   srx: 95, rpd: 10, mp40: 20, p90: 10,
   paintball: 60, burst: 47, lever: 105,
   vector: 18, crossbow: 100, flamethrower: 3,
@@ -2554,7 +2554,7 @@ const WEAPON_FALLOFF = {
   machine_pistol: FALLOFF_MACHINEPISTOL, glock18: FALLOFF_MACHINEPISTOL, machine_revolver: FALLOFF_MACHINEPISTOL,
   rpd: FALLOFF_LMG, mg42: FALLOFF_LMG, chain_gun: FALLOFF_LMG, gau19: FALLOFF_LMG, mk44: FALLOFF_LMG, cycler: FALLOFF_LMG,
   minigun: FALLOFF_MINIGUN, m134: FALLOFF_MINIGUN,
-  ak20: FALLOFF_AR, m4_commando: FALLOFF_AR, energy_rifle: FALLOFF_NONE, burst: { near: 31, far: 76, min: 0.68 }, cyroclasm: FALLOFF_AR, freeze_gun: FALLOFF_AR, plasma_carbine: FALLOFF_AR, arc_rifle: FALLOFF_AR, flechette: FALLOFF_AR, burst_cannon: FALLOFF_AR, twin_ar: FALLOFF_AR, glassmaker: FALLOFF_AR, auto_revolver: FALLOFF_AR, xm7: { near: 38, far: 96, min: 0.72 }, hkmp7: FALLOFF_SMG, m4a1_arena: FALLOFF_ARENA_AR,
+  ak20: FALLOFF_AR, m4_commando: FALLOFF_AR, energy_rifle: FALLOFF_NONE, gravity_cannon: FALLOFF_NONE, burst: { near: 31, far: 76, min: 0.68 }, cyroclasm: FALLOFF_AR, freeze_gun: FALLOFF_AR, plasma_carbine: FALLOFF_AR, arc_rifle: FALLOFF_AR, flechette: FALLOFF_AR, burst_cannon: FALLOFF_AR, twin_ar: FALLOFF_AR, glassmaker: FALLOFF_AR, auto_revolver: FALLOFF_AR, xm7: { near: 38, far: 96, min: 0.72 }, hkmp7: FALLOFF_SMG, m4a1_arena: FALLOFF_ARENA_AR,
   paintball: FALLOFF_PAINT, nail_gun: FALLOFF_PAINT, sticker_blaster: FALLOFF_PAINT,
   srx: FALLOFF_SNIPER, railgun: FALLOFF_SNIPER, coilgun: FALLOFF_SNIPER, amr: FALLOFF_SNIPER, barrett: FALLOFF_SNIPER,
   lever: FALLOFF_MARKSMAN, m1_garand: FALLOFF_MARKSMAN, air_rifle: FALLOFF_MARKSMAN, harpoon_gun: FALLOFF_SNIPER,
@@ -3060,7 +3060,10 @@ io.on('connection', (socket) => {
       && data.projectileId === `${batch.id}_${batch.index}`;
     const continuingBatch = validBatch && p._coneBatch?.id === batch.id && p._coneBatch.count === batch.count
       && now - p._coneBatch.at < 100 && !p._coneBatch.indices.has(batch.index);
-    if (now - p.lastShot < minInterval && !continuingBatch) return;
+    // a Gravity Cannon volley is five shots in one tick: the rest of it is let through (five at most, in a tenth of a second)
+    const gcVolley = w === 'gravity_cannon' && typeof data.volley === 'string' && data.volley.length < 80;
+    const gcContinue = gcVolley && p._gcVolley && p._gcVolley.id === data.volley && now - p._gcVolley.at < 120 && p._gcVolley.n < 5;
+    if (now - p.lastShot < minInterval && !continuingBatch && !gcContinue) return;
     if (batch) {
       if (!validBatch || batch.index !== 0 && !continuingBatch) return;
       if (batch.index === 0) p._coneBatch = { id: batch.id, count: batch.count, at: now, indices: new Set() };
@@ -3068,6 +3071,7 @@ io.on('connection', (socket) => {
     }
     if(w==='omega_pistol'){p._omegaSpent=true;p._omegaPermit=now+1200;}
     if (w === 'spear_throw' && data.spear === true) { const left = p._spearsLeft ?? 5; if (left <= 0) return; p._spearsLeft = left - 1; }   // five spears a life; the client keeps the same count (the Hatchet and Tomahawk throw the same projectile and are not counted)
+    if (gcVolley) { if (gcContinue) p._gcVolley.n++; else p._gcVolley = { id: data.volley, at: now, n: 1 }; }
     p.lastShot = now;
     let projectileId = `${socket.id}_${now}_${Math.random()}`;
     if ((w === 'rpg' || w === 'traffic_cone' || tetherShot) && typeof data.projectileId === 'string'

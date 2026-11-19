@@ -7147,4 +7147,129 @@ if (ok && process.argv.includes('--energytrail')) {
   if (issues.length) { ok = false; console.log(issues.join('\n')); }
 }
 
+// GRAVITY CANNON: five slow spheres a pull (five rounds), a drag that is never a hold, 13 on contact (they go through), 20 where they go off (7 to whoever the same sphere hit), tables client+server.
+if (ok && process.argv.includes('--gravitycannon')) {
+  const serverSrc = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  const shopSrc = fs.readFileSync(path.join(__dirname, '..', 'public', 'shop-catalog.js'), 'utf8');
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const w = WEAPONS.find(x => x.id === 'gravity_cannon'), idx = WEAPONS.findIndex(x => x.id === 'gravity_cannon');
+    if (!w) return ['the Gravity Cannon is missing'];
+    if (w.slot !== 'primary' || w.damage !== 13 || w.mag !== 35 || w.pellets !== 5 || w.ammoPerShot !== 5 || w.reloadTime !== 2800 || w.gravSphere.pullR !== 5 || w.gravSphere.boomR !== 4 || w.gravSphere.boom !== 20 || w.bulletSpeed !== 100 / 100 * 65)
+      issues.push('stats: ' + JSON.stringify({ s: w.slot, d: w.damage, m: w.mag, p: w.pellets, a: w.ammoPerShot, r: w.reloadTime, g: w.gravSphere, v: w.bulletSpeed }));
+    if (weaponModels.length !== WEAPONS.length) issues.push('WEAPONS and weaponModels must stay parallel');
+    const mod = weaponModels[idx];
+    if (!mod || !mod._flash || !mod._tick || !mod._calm) issues.push('model needs flash, tick, calm'); else { mod._tick(0.016, 1, false); mod._calm(); }
+    if (projectileKind('gravity_cannon') !== 'gravity_sphere') issues.push('kind: ' + projectileKind('gravity_cannon'));
+    const mesh = makeBulletMesh(w.bulletColor, w.bulletSize, 'gravity_cannon', true);
+    if (!(mesh.children.length >= 4 && mesh._spin)) issues.push('the sphere needs a core, halo and two tumbling rings');
+    if (!(RELOAD_KEYS.gravity_cannon && RELOAD_PROPS.gravity_cannon)) issues.push('reload missing');
+    if (getClientWeaponDamage('gravity_cannon_splash') !== 20 || getClientWeaponDamage('gravity_cannon_c1') !== 7) issues.push('client damage table for the explosion and the top-up');
+    return issues;
+  })()`);
+  const more = vm.runInThisContext(`(() => {
+    const issues = [];
+    const w = WEAPONS.find(x => x.id === 'gravity_cannon');
+    const keep = { rm: Object.assign({}, remoteMeshes), pl: Object.assign({}, players), los: hasLineOfSight, hit: emitHit, lb: localBullets.slice(), wc: wallColliders.slice(), gb: gameBots.slice(), ev: { x: _extVel.x, z: _extVel.z }, dead: isDead, lobby: inLobby, ff: friendlyFireBlocked, cam: camera.position.clone(), snd: playSoundEvent };
+    const hits = [];
+    try {
+      const mk = (id, x, z, dead) => { remoteMeshes[id] = { visible: true, position: new THREE.Vector3(x, 0, z), rotation: { y: 0 } }; players[id] = { dead: !!dead }; };
+      for (const k of Object.keys(remoteMeshes)) delete remoteMeshes[k];
+      emitHit = (pid, bid, wid) => { hits.push({ pid, bid, wid }); }; playSoundEvent = () => {};
+      hasLineOfSight = () => true; friendlyFireBlocked = () => false; isDead = false; inLobby = false; gameBots.length = 0;
+      localBullets.length = 0; wallColliders.length = 0;
+      wallColliders.push(new THREE.Box3(new THREE.Vector3(-30, 0, -41), new THREE.Vector3(30, 8, -40)));        // a wall across z = -40
+      camera.position.set(200, 1.65, 200);
+      // ── one sphere: slow, goes THROUGH a man for 13, goes off on the wall for 20 to the people near it, and only tops up the man it hit
+      mk('mid', 0, -15); mk('nearwall', 2, -37); mk('farwall', 9, -37); mk('behind', 0, -45);
+      spawnLocalBullet(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, -1), 's1', true, w.bulletSpeed, w.bulletColor, w.bulletSize, 'gravity_cannon');
+      const b = localBullets.find(x => x.id === 's1');
+      if (Math.abs(b.speed - 65) > 0.5) issues.push('a sphere flies at 65: ' + b.speed);
+      let went = false;
+      for (let i = 0; i < 200 && localBullets.includes(b); i++) { updateBullets(0.016); if (b.mesh.position.z < -20) went = true; }
+      if (!went) issues.push('it should have gone on past the man it hit');
+      const direct = hits.filter(h => h.wid === 'gravity_cannon'), boom = hits.filter(h => /boom/.test(h.bid));
+      if (!(direct.length === 1 && direct[0].pid === 'mid')) issues.push('13 on contact, once, to the man on its line: ' + JSON.stringify(direct));
+      if (localBullets.includes(b)) issues.push('it should have gone off on the wall');
+      const bp = boom.map(h => h.pid + ':' + h.wid).sort().join();
+      if (bp !== 'nearwall:gravity_cannon_splash') issues.push('20 to who is within 4 of where it went off, and only them (not 9 away, not behind the wall): ' + bp);
+      // the top-up: a man the same sphere hit AND the explosion catches takes 7, not 20
+      hits.length = 0; localBullets.length = 0;
+      for (const k of Object.keys(remoteMeshes)) delete remoteMeshes[k];
+      mk('both', 0, -36);
+      spawnLocalBullet(new THREE.Vector3(0, 1, -30), new THREE.Vector3(0, 0, -1), 's2', true, w.bulletSpeed, w.bulletColor, w.bulletSize, 'gravity_cannon');
+      for (let i = 0; i < 100 && localBullets.length; i++) updateBullets(0.016);
+      const both = hits.map(h => h.wid).join();
+      if (both !== 'gravity_cannon,gravity_cannon_c1') issues.push('hit by the sphere and then its explosion: 13, then the 7 that tops up to 20: ' + both);
+      // range: a sphere into open air goes off at 55
+      hits.length = 0; localBullets.length = 0; for (const k of Object.keys(remoteMeshes)) delete remoteMeshes[k]; wallColliders.length = 0;
+      spawnLocalBullet(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, -1), 's3', true, w.bulletSpeed, w.bulletColor, w.bulletSize, 'gravity_cannon');
+      const s3 = localBullets.find(x => x.id === 's3'); const fxBefore = _GRAV_FX.length; let endZ = null;
+      for (let i = 0; i < 200 && localBullets.includes(s3); i++) { endZ = s3.mesh.position.z; updateBullets(0.016); }
+      if (!(endZ < -50 && endZ > -62)) issues.push('it goes off at the end of its range (55): ' + endZ);
+      if (_GRAV_FX.length <= fxBefore) issues.push('and you see it');
+      // ── the drag: somebody else's sphere pulls YOU, a little, and never holds you
+      localBullets.length = 0; _extVel.x = 0; _extVel.z = 0; camera.position.set(0, 1.65, 0);
+      const other = { mesh: new THREE.Group(), dir: new THREE.Vector3(0, 0, -1), speed: 0, isOwn: false, ownerId: 'foe', weaponId: 'gravity_cannon', id: 'o1', createdAt: Date.now(), size: 0.22, _grav: w.gravSphere };
+      other.mesh.position.set(3, 1.65, 0);
+      _gravPull(other, 0.016);
+      if (!(_extVel.x > 0.1 && Math.abs(_extVel.z) < 1e-6)) issues.push('you are drawn toward it: ' + _extVel.x.toFixed(3));
+      for (let i = 0; i < 300; i++) _gravPull(other, 0.016);
+      if (Math.hypot(_extVel.x, _extVel.z) > GRAV_PULL_CAP + 1e-6) issues.push('the drag is capped under a run: ' + Math.hypot(_extVel.x, _extVel.z).toFixed(2));
+      // ...it adds to what you have, it does not take it: moving the other way you are still faster than it
+      _extVel.x = 0; other.mesh.position.set(6.5, 1.65, 0); _gravPull(other, 0.016);
+      if (_extVel.x !== 0) issues.push('outside 5 there is no pull: ' + _extVel.x);
+      // not your own, not a teammate's, not when dead
+      _extVel.x = 0; other.mesh.position.set(3, 1.65, 0); other.isOwn = true; _gravPull(other, 0.016); other.isOwn = false;
+      if (_extVel.x !== 0) issues.push('your own sphere does not pull you');
+      friendlyFireBlocked = () => true; _gravPull(other, 0.016); friendlyFireBlocked = () => false;
+      if (_extVel.x !== 0) issues.push('a teammate\\'s sphere does not pull you');
+      isDead = true; _gravPull(other, 0.016); isDead = false;
+      if (_extVel.x !== 0) issues.push('nor when you are dead');
+      // your bots (your own sphere only), pulled toward it
+      gameBots.push({ id: 'bot1', x: 1, z: 0, dead: false });
+      const mine = Object.assign({}, other, { isOwn: true, ownerId: myId });
+      _gravPull(mine, 0.016);
+      if (!(gameBots[0].kbVX > 0)) issues.push('a bot near your sphere is dragged toward it: ' + gameBots[0].kbVX);
+      // another gun has no pull
+      if (projectileWeaponSpec('ak20').gravSphere) issues.push('only the Gravity Cannon has one');
+      // a volley: five rounds a pull, from a full magazine
+      const gi = WEAPONS.findIndex(x => x.id === 'gravity_cannon'); const pool = weaponAmmo[gi]; const kc = currentWeaponIdx, kw = currentWeapon;
+      if (pool.ammo !== 35) issues.push('a full magazine is 35: ' + pool.ammo);
+      const sv = { gac: getAudioCtx, pws: playWeaponSound, as: activeSlot, gs: gameStarted, ra: equipReadyAt, em: socket.emit, rl: reloading, sh: shooting, ls: lastShot, el: equipReady };
+      const sent = [];
+      try {
+        getAudioCtx = () => null; playWeaponSound = () => {};
+        activeSlot = 'primary'; gameStarted = true; isDead = false; reloading = false; equipReadyAt = 0; lastShot = 0; currentWeaponIdx = gi; currentWeapon = WEAPONS[gi];
+        selectedPrimaryIdx = gi; countdownActive = false; localBullets.length = 0; wallColliders.length = 0;
+        socket.emit = (ev, d) => { sent.push([ev, d]); };
+        pool.ammo = 35; ammo = 35;
+        tryShoot();
+      } catch (e) { issues.push('shooting threw: ' + (e && e.stack || e)); }
+      const shots = sent.filter(x => x[0] === 'shoot');
+      if (pool.ammo !== 30) issues.push('a volley costs five rounds: ' + pool.ammo + ' left of 35');
+      if (shots.length !== 5) issues.push('a pull sends five spheres: ' + shots.length);
+      else if (new Set(shots.map(x => x[1].volley)).size !== 1 || !shots[0][1].volley) issues.push('one volley id on all five');
+      if (localBullets.filter(x => x.weaponId === 'gravity_cannon').length !== 5) issues.push('five spheres in the air: ' + localBullets.length);
+      socket.emit = sv.em; getAudioCtx = sv.gac; playWeaponSound = sv.pws; activeSlot = sv.as; gameStarted = sv.gs; equipReadyAt = sv.ra; reloading = sv.rl; shooting = sv.sh; lastShot = sv.ls; currentWeaponIdx = kc; currentWeapon = kw; pool.ammo = 35;
+    } catch (e) { issues.push('threw: ' + (e && e.stack || e)); }
+    finally {
+      for (const k of Object.keys(remoteMeshes)) delete remoteMeshes[k]; Object.assign(remoteMeshes, keep.rm);
+      for (const k of Object.keys(players)) delete players[k]; Object.assign(players, keep.pl);
+      hasLineOfSight = keep.los; emitHit = keep.hit; playSoundEvent = keep.snd; friendlyFireBlocked = keep.ff; isDead = keep.dead; inLobby = keep.lobby; camera.position.copy(keep.cam);
+      _extVel.x = keep.ev.x; _extVel.z = keep.ev.z; gameBots.length = 0; keep.gb.forEach(x => gameBots.push(x));
+      localBullets.length = 0; keep.lb.forEach(x => localBullets.push(x)); wallColliders.length = 0; keep.wc.forEach(x => wallColliders.push(x));
+      for (const f of _GRAV_FX.slice()) { scene.remove(f.m); } _GRAV_FX.length = 0;
+    }
+    return issues;
+  })()`);
+  const outside = [];
+  if (!/wStats\.ammoPerShot \|\| 1/.test(src) || !/gcContinue/.test(serverSrc)) outside.push('ammoPerShot or the server volley gate is missing');
+  if (!/gravity_cannon: 520/.test(serverSrc) || !/gravity_cannon: 13, gravity_cannon_splash: 20, gravity_cannon_c1: 7/.test(serverSrc) || !/gravity_cannon: FALLOFF_NONE/.test(serverSrc)) outside.push('server.js is missing the Gravity Cannon cost, damage or falloff');
+  if (!/gravity_cannon:5600/.test(shopSrc)) outside.push('the shop price is missing');
+  const all = issues.concat(more, outside);
+  console.log('GRAVITY CANNON checks: stats, tables, the sphere, 13 through a man / 20 where it goes off / 7 top-up, range, a capped drag that is never a hold');
+  if (all.length) { ok = false; console.log(all.join('\n')); }
+}
+
 process.exit(ok ? 0 : 1);

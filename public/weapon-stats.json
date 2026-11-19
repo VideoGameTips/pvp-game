@@ -6482,6 +6482,75 @@
    ]
   },
   {
+   "id": "gravity_cannon",
+   "name": "Gravity Cannon",
+   "type": "Experimental",
+   "slot": "primary",
+   "archived": false,
+   "damage": 13,
+   "pellets": 5,
+   "headshotMult": 1,
+   "headDamage": 13,
+   "damagePerShot": 65,
+   "fireRateMs": 1000,
+   "shotsPerSec": 1,
+   "auto": true,
+   "dps": 65,
+   "magazine": 35,
+   "reserve": 105,
+   "reloadSec": 2.8,
+   "reloadStyle": "magazine",
+   "noReload": false,
+   "timeToEmptySec": 6,
+   "bulletSpeed": 65,
+   "adsZoom": 46,
+   "projectileSpeed": 65.003,
+   "falloff": {
+    "nearM": 9999,
+    "farM": 9999,
+    "minPct": 100
+   },
+   "damageByRange": [
+    13,
+    13,
+    13,
+    13,
+    13,
+    13,
+    13,
+    13,
+    13,
+    13,
+    13
+   ],
+   "shotsToKill": {
+    "body": 5,
+    "head": 5
+   },
+   "ttkBodySec": 4,
+   "scatterDeg": 2.862,
+   "bloom": null,
+   "recoil": {
+    "kickPerShotDeg": 0.43,
+    "sideKickDeg": 0.372,
+    "climbPerShotPct": 6,
+    "climbMaxX": 1.85,
+    "steadyKickDeg": 0.795,
+    "shotsToMaxClimb": 15,
+    "recoverPerSec": 7,
+    "adsKickPct": 12
+   },
+   "screenKick": 0.99,
+   "ability": null,
+   "traits": [
+    "Short range: stops at 55 m",
+    "Pierces: the round goes through up to 99 more enemies; each one after takes 100% of what the one before did",
+    "5 spheres a pull (5 rounds)",
+    "Pulls enemies within 5",
+    "Explodes for 20 (radius 4)"
+   ]
+  },
+  {
    "id": "m4_commando",
    "name": "M4 Commando",
    "type": "AR",

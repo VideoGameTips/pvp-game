@@ -944,6 +944,15 @@ const WEAPONS = [
     headshotMult: 1, auto: true, pellets: 1, spread: 0.004, adsZoom: 46, bulletSpeed: 100, bulletSpeedMult: 0.4348, noReload: false,   // (every round flies 2.3x its listed speed, so this one is slowed to fly its own 100)
     bulletColor: 0x8f6bff, bulletSize: 0.30, beamRadius: 3, afterTrailMs: 800, bounce: { maxBounces: 4, speedMult: 1.0 }, flightMs: 3400,
     recoil: { up: 0.012, side: 0.006, climb: 0.20, max: 2.0, recover: 8, adsMult: 0.55 } },
+  // 🌀 Gravity Cannon: one pull sends five slow spheres out together (and costs five rounds: 7 volleys a magazine). Each pulls everyone within 5 toward it as it flies -- a pull, never
+  // a hold: you can still move, aim and shoot -- and goes through whoever it touches for 13. It goes off on a solid surface or at the end of its range, 20 to everyone within 4;
+  // whoever the same sphere already hit takes only the 7 that tops them up to the higher of the two (it never stacks).
+  { id: 'gravity_cannon', name: 'Gravity Cannon', type: 'Experimental', slot: 'primary',
+    mag: 35, reserve: 105, damage: 13, fireRate: 1000, reloadTime: 2800, headshotMult: 1,
+    auto: true, pellets: 5, ammoPerShot: 5, spread: 0.05, adsSpreadMult: 0.4, adsZoom: 46, bulletSpeed: 65, bulletSpeedMult: 0.4348, noReload: false,   // (every round flies 2.3x its listed speed, so these are slowed to fly their own 65)
+    bulletColor: 0xa77bff, bulletSize: 0.22, maxRange: 55, pierce: { extra: 99, keep: 1 },
+    gravSphere: { pullR: 5, boomR: 4, boom: 20, topup: 7 },
+    recoil: { up: 0.016, side: 0.008, climb: 0.22, max: 2.0, recover: 7, adsMult: 0.55 } },
   { id: 'm4_commando', name: 'M4 Commando', type: 'AR', slot: 'primary',
     // 🎖️ Mobile precision: the AK20's lighter, quicker-handling cousin. 28 a shot at 10 a second is 280 DPS (the AK20's 300), a 24-round magazine,
     // and you carry it 5% faster (moveMult: only while it is in your hands). Bullets fly dead straight, like the AK20's.
@@ -1007,7 +1016,7 @@ Object.assign(WEAPON_FALLOFF, {
   minigun: FALLOFF_MINIGUN, m134: FALLOFF_MINIGUN,
   ak20: FALLOFF_AR, burst: { near: 31, far: 76, min: 0.68 }, cyroclasm: FALLOFF_AR,
   freeze_gun: FALLOFF_AR, plasma_carbine: FALLOFF_AR, arc_rifle: FALLOFF_AR, flechette: FALLOFF_AR,
-  burst_cannon: FALLOFF_AR, twin_ar: FALLOFF_AR, m4_commando: FALLOFF_AR, energy_rifle: FALLOFF_NONE, glassmaker: FALLOFF_AR, auto_revolver: FALLOFF_AR,
+  burst_cannon: FALLOFF_AR, twin_ar: FALLOFF_AR, m4_commando: FALLOFF_AR, energy_rifle: FALLOFF_NONE, gravity_cannon: FALLOFF_NONE, glassmaker: FALLOFF_AR, auto_revolver: FALLOFF_AR,
   xm7: { near: 38, far: 96, min: 0.72 }, hkmp7: FALLOFF_SMG, m4a1_arena: FALLOFF_ARENA_AR,
   paintball: FALLOFF_PAINT, nail_gun: FALLOFF_PAINT, sticker_blaster: FALLOFF_PAINT,
   srx: FALLOFF_SNIPER, railgun: FALLOFF_SNIPER, coilgun: FALLOFF_SNIPER, amr: FALLOFF_SNIPER, barrett: FALLOFF_SNIPER,
@@ -1609,7 +1618,7 @@ const BOT_MOVE_INTERVAL = 0.033; // send position updates every 33ms (30 Hz, lik
 // Admin items are NOT priced — they're claimed via promo codes only.
 const WEAPON_COSTS = {
   // Primaries — ARs / SMGs
-  ak20: 250, m4_commando: 400, energy_rifle: 440,  mp40: 200, p90: 350, vector: 300, burst: 280,
+  ak20: 250, m4_commando: 400, energy_rifle: 440, gravity_cannon: 520,  mp40: 200, p90: 350, vector: 300, burst: 280,
   // Primaries — Shotguns
   sg8: 220,
   // Primaries — Snipers / Marksman
@@ -4164,6 +4173,7 @@ function weaponAudioProfile(id, baseWeapon) {
   if (lowerId === 'flamethrower') return { kind:'flamethrower', vol:0.24, dur:0.18, f1:95, f2:58 };
   if (lowerId === 'plasma_carbine') return { kind:'energy', vol:0.30, dur:0.14, f1:880, f2:540 };
   if (lowerId === 'energy_rifle')   return { kind:'energy', vol:0.34, dur:0.22, f1:760, f2:260 };
+  if (lowerId === 'gravity_cannon') return { kind:'energy', vol:0.40, dur:0.30, f1:420, f2:130 };
   if (lowerId === 'railgun')        return { kind:'energy', vol:0.42, dur:0.32, f1:1620, f2:120 };
   if (lowerId === 'coilgun')        return { kind:'energy', vol:0.36, dur:0.24, f1:1320, f2:160 };
   if (lowerId === 'arc_rifle')      return { kind:'arc',    vol:0.30, dur:0.13, f1:1240, f2:380 };
@@ -22965,7 +22975,7 @@ function muzzleStyleFor(w) {
   if (id === 'flamethrower') return MUZZLE_STYLES.rapid;                                                              // (a stream, not a bang)
   if (/shotgun/.test(type) || (w.pellets || 1) >= 4) return MUZZLE_STYLES.shotgun;
   if (/^(railgun|coilgun|barrett|amr|srx)/.test(id)) return MUZZLE_STYLES.heavy;        // (a railgun sounds like energy, and fires like artillery)
-  if (kind === 'energy' || kind === 'energy_beam' || kind === 'arc' || kind === 'freeze' || kind === 'pop') return MUZZLE_STYLES.energy;
+  if (kind === 'energy' || kind === 'energy_beam' || kind === 'gravity_sphere' || kind === 'arc' || kind === 'freeze' || kind === 'pop') return MUZZLE_STYLES.energy;
   if (/sniper|marksman|anti-material|anti material|cannon|railgun/.test(type) || kind === 'crack' || kind === 'boom' || (w.damage || 0) >= 90) return MUZZLE_STYLES.heavy;
   if (w.auto && (w.fireRate || 999) <= 75) return MUZZLE_STYLES.rapid;                    // 13+ rounds a second: an SMG, a minigun
   if (/pistol|revolver|secondary/.test(type) || w.slot === 'secondary' || kind === 'pistol') return MUZZLE_STYLES.pistol;
@@ -41470,6 +41480,7 @@ const weaponModels = [
   buildChronoPistol(),  // chrono_pistol
   buildTwinBurst(),  // twin_burst
   buildEnergyRifle(),  // energy_rifle
+  buildGravityCannon(),  // gravity_cannon
   buildM4Commando(),  // m4_commando
 ];
 function buildEnergyRifle() {
@@ -41516,6 +41527,57 @@ function buildEnergyRifle() {
     lens.visible = !(g._reloadStart && g._reloadDur && !g._inspectMode) || Math.sin(now * 40) > 0;   // and flickers while the cell is out
   };
   g._calm = () => { glass.opacity = 0.45; lens.visible = true; };
+  g.position.set(0.12, -0.1, -0.25); return g;
+}
+function buildGravityCannon() {
+  // 🌀 GRAVITY CANNON: a heavy dark cannon with five small muzzles in a ring (the five spheres go out together) round a glowing violet gravity core in a glass dome on top, its two
+  // rings turning. Violet strips down the flanks, a five-cell power magazine. The core spins faster as you fire and flickers while the cells are changed.
+  const g = new THREE.Group();
+  const steel = GUN_MATS.steel(), bright = GUN_MATS.bright(), inner = GUN_MATS.inner(), grip = GUN_MATS.grip(), poly = GUN_MATS.polymer();
+  const shell = new THREE.MeshPhongMaterial({ color: 0x2a2733, shininess: 90, specular: 0x8a7fb0 });
+  const trim  = new THREE.MeshPhongMaterial({ color: 0x5b5470, shininess: 110, specular: 0xd8cff5 });
+  const glow  = new THREE.MeshBasicMaterial({ color: 0xa77bff });
+  const hot   = new THREE.MeshBasicMaterial({ color: 0xf1eaff });
+  const glass = new THREE.MeshPhongMaterial({ color: 0x9a78ff, shininess: 160, specular: 0xffffff, transparent: true, opacity: 0.38, depthWrite: false });
+  gpBox(g, shell, 0.052, 0.060, 0.200, 0, 0.010, 0.030);                         // the receiver
+  gpBox(g, trim, 0.054, 0.010, 0.180, 0, -0.022, 0.030);
+  [-1, 1].forEach(sd => gpBox(g, glow, 0.0026, 0.006, 0.150, sd * 0.0272, 0.012, 0.020));   // a lit strip down each flank
+  gpCyl(g, shell, 0.036, 0.036, 0.070, 18, 0, 0.010, -0.110);                    // the muzzle housing
+  gpCyl(g, trim, 0.040, 0.040, 0.010, 18, 0, 0.010, -0.150);
+  const tubes = [];
+  for (let i = 0; i < 5; i++) {                                                  // five muzzles in a ring, a lit mouth in each
+    const a = i * Math.PI * 2 / 5 + Math.PI / 2, x = Math.cos(a) * 0.020, y = 0.010 + Math.sin(a) * 0.020;
+    gpCyl(g, bright, 0.0085, 0.0085, 0.040, 10, x, y, -0.168);
+    tubes.push(gpCyl(g, hot, 0.0055, 0.0055, 0.004, 10, x, y, -0.190));
+  }
+  gpCyl(g, glow, 0.007, 0.007, 0.052, 8, 0, 0.010, -0.128);                      // the lit core between the muzzles
+  gpCyl(g, glass, 0.030, 0.030, 0.100, 16, 0, 0.056, -0.020);                    // the dome
+  const orb = new THREE.Mesh(new THREE.SphereGeometry(0.0165, 12, 9), glow); orb.position.set(0, 0.056, -0.020); g.add(orb);
+  const ringA = new THREE.Mesh(new THREE.TorusGeometry(0.026, 0.0022, 6, 22), hot), ringB = new THREE.Mesh(new THREE.TorusGeometry(0.026, 0.0022, 6, 22), hot);
+  ringA.position.copy(orb.position); ringB.position.copy(orb.position); ringB.rotation.y = Math.PI / 2; g.add(ringA); g.add(ringB);
+  [-0.074, 0.034].forEach(z => gpCyl(g, trim, 0.032, 0.032, 0.008, 16, 0, 0.056, z));
+  gpBox(g, poly, 0.034, 0.022, 0.054, 0, -0.026, 0.000);                         // the power magazine and its five cells
+  gpBox(g, shell, 0.030, 0.082, 0.050, 0, -0.080, 0.000);
+  for (let i = 0; i < 5; i++) gpBox(g, glow, 0.032, 0.0055, 0.016, 0, -0.050 - i * 0.0155, 0.000);
+  gpPlate(g, grip, [[0.070, -0.024], [0.098, -0.038], [0.102, -0.110], [0.072, -0.124], [0.050, -0.064], [0.048, -0.030]], 0.036, 0);
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.0036, 6, 12, Math.PI * 1.05), poly);
+  guard.rotation.set(0, Math.PI / 2, -0.4); guard.position.set(0, -0.036, 0.038); g.add(guard);
+  gpBox(g, bright, 0.005, 0.016, 0.005, 0, -0.026, 0.038, 0.2);
+  gpBox(g, shell, 0.040, 0.050, 0.120, 0, 0.010, 0.176);                         // the stock starts inside the body
+  gpBox(g, trim, 0.042, 0.052, 0.012, 0, 0.010, 0.242, 0.08);
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(0.040, 8, 7), new THREE.MeshBasicMaterial({ color: 0xc9b4ff }));
+  flash.visible = false; flash.position.set(0, 0.010, -0.215); g.add(flash);
+  g._flash = flash; g._kickZ = 0.014; g._greebled = true; g._handDetailed = true;
+  let spin = 0;
+  g._tick = (dt, now, assembling) => {
+    if (assembling) return;
+    const reloading = g._reloadStart && g._reloadDur && !g._inspectMode;
+    spin += dt * (reloading ? 1.2 : (g._flash && g._flash.visible ? 14 : 3.2));
+    ringA.rotation.set(spin, 0, 0); ringB.rotation.set(0, spin * 0.8, spin * 0.5);
+    glass.opacity = 0.30 + 0.12 * (0.5 + 0.5 * Math.sin(now * 2.7));
+    orb.visible = !reloading || Math.sin(now * 38) > 0;                              // the core flickers while the cells are out
+  };
+  g._calm = () => { glass.opacity = 0.38; orb.visible = true; ringA.rotation.set(0, 0, 0); ringB.rotation.set(0, Math.PI / 2, 0); };
   g.position.set(0.12, -0.1, -0.25); return g;
 }
 function buildM4Commando() {
@@ -48733,7 +48795,7 @@ const PROJECTILE_KIND_BY_ID = {
   grenade_launcher:'grenade', firework_launcher:'grenade', mortar_rifle:'grenade',
   nebula_mortar:'grenade', pinball_launcher:'grenade', shockwave_launcher:'grenade',
   storm_cannon:'grenade', gravity_launcher:'grenade', potato_cannon:'grenade',
-  energy_rifle:'energy_beam',
+  energy_rifle:'energy_beam', gravity_cannon:'gravity_sphere',
   crossbow:'bolt', boombow:'bolt', boombow_ab:'bolt', boombow_c1:'bolt', dart_gun:'bolt', harpoon_gun:'bolt',
   slingshot:'stone', air_rifle:'bullet',
   // These five used to share the generic 'solid' ball, so a thrown knife flew
@@ -48917,6 +48979,21 @@ function _buildEnergy(tint, r) {
   const halo = new THREE.Mesh(P.halo, P.haloM); halo.scale.y = 1.7; g.add(halo);
   const tail = new THREE.Mesh(P.tail, P.tailM); tail.rotation.x = Math.PI; tail.position.y = -r*3.2; g.add(tail);
   g._alignToDir = true;
+  return g;
+}
+function _buildGravitySphere(tint, r) {
+  // The Gravity Cannon's round: a dead-black core, a violet halo, and two bright rings that tumble round it.
+  const c = tint || 0xa77bff; r = Math.max(0.2, r);
+  const P = _projCache('gsphere|' + c + '|' + r, () => ({
+    core: new THREE.SphereGeometry(r * 0.9, 14, 10), halo: new THREE.SphereGeometry(r * 1.7, 12, 9), ring: new THREE.TorusGeometry(r * 1.55, r * 0.07, 6, 28),
+    coreM: new THREE.MeshBasicMaterial({ color: 0x07040f }), haloM: _glow(c),
+    ringM: new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }),
+  }));
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(P.core, P.coreM)); g.add(new THREE.Mesh(P.halo, P.haloM));
+  const r1 = new THREE.Mesh(P.ring, P.ringM), r2 = new THREE.Mesh(P.ring, P.ringM);
+  r1.rotation.x = Math.PI / 2; r2.rotation.set(0.9, 0, 0.6); g.add(r1); g.add(r2);
+  g._alignToDir = false; g._spin = { x: 2.6, y: 3.4, z: 1.1 };
   return g;
 }
 function _buildEnergyBeam(tint, r) {
@@ -50263,6 +50340,7 @@ function makeBulletMesh(color, size, weaponId, own, lookArg) {
     case 'bolt':    return _buildBolt(color, r);
     case 'energy':  return _buildEnergy(color, r);
     case 'energy_beam': return _buildEnergyBeam(color, r);
+    case 'gravity_sphere': return _buildGravitySphere(color, r);
     case 'beam':    return _buildBeamShot(color, r);
     case 'icebeam': return _buildBeamShot(color || 0xbdf3ff, Math.max(r, 0.075));
     case 'ball_lightning': return _buildBallLightning(color, r);
@@ -58574,7 +58652,7 @@ function tryShoot() {
     heat.lastFireAt = now;
   }
   addRecoil(currentWeapon);
-  if (!adminInfAmmo) pool.ammo--; // ⚡ admin infinite ammo: don't decrement
+  if (!adminInfAmmo) pool.ammo = Math.max(0, pool.ammo - (wStats.ammoPerShot || 1)); // ⚡ admin infinite ammo: don't decrement   (a volley of spheres costs one round each: ammoPerShot)
   ammo = pool.ammo;
   syncHeldAmmoModelForIndex(currentWeaponIdx);
   updateAmmoHUD();
@@ -58710,6 +58788,7 @@ function tryShoot() {
         x: muzzleWorld.x, y: muzzleWorld.y, z: muzzleWorld.z,
         dx: spreadDir.x, dy: spreadDir.y, dz: spreadDir.z,
         weapon: shotWeaponId, projectileId: `local_${myId}_${now}_${p}`,
+        ...(wStats.ammoPerShot ? { volley: `${myId}_${now}` } : {}),                  // (a volley: the server lets all of it through)
       });
       if (wStats.hitscan) {
         fireHitscanShot(muzzleWorld, spreadDir, shotWeaponId, wStats);
@@ -65156,6 +65235,11 @@ energy_rifle:[K(.09,{py:.03,rx:.20,rz:-.12,hy:-.04}), K(.22,{py:.05,rx:.28,rz:-.
                 K(.57,{py:.06,rx:.30,rz:-.16,hy:-.11,hz:.05}), K(.68,{py:.05,rx:.32,rz:-.16,hy:-.02,hz:.06}),
                 K(.76,{py:.08,rx:.28,rz:-.14,hy:0,hz:.03}), K(.84,{py:.03,rx:.10,rz:-.06,hy:.05,hz:-.05,hr:-.5}),
                 K(.90,{py:.05,rx:.16,rz:-.08}), K(.96,{py:.02,rx:.06,rz:-.02})],
+gravity_cannon:[K(.09,{py:.03,rx:.20,rz:-.12,hy:-.04}), K(.22,{py:.05,rx:.28,rz:-.16,hy:-.14,hz:.02}),
+                K(.32,{py:.05,rx:.30,rz:-.16,hx:.08,hy:-.19,hr:-.7}), K(.45,{py:.06,rx:.30,rz:-.16,hx:-.03,hy:-.23,hz:.02}),
+                K(.57,{py:.06,rx:.30,rz:-.16,hy:-.11,hz:.05}), K(.68,{py:.05,rx:.32,rz:-.16,hy:-.02,hz:.06}),
+                K(.76,{py:.08,rx:.28,rz:-.14,hy:0,hz:.03}), K(.84,{py:.03,rx:.10,rz:-.06,hy:.05,hz:-.05,hr:-.5}),
+                K(.90,{py:.05,rx:.16,rz:-.08}), K(.96,{py:.02,rx:.06,rz:-.02})],
 plasma_carbine:[K(.09,{py:.03,rx:.20,rz:-.12,hy:-.04}), K(.22,{py:.05,rx:.28,rz:-.16,hy:-.14,hz:.02}),
                 K(.32,{py:.05,rx:.30,rz:-.16,hx:.08,hy:-.19,hr:-.7}), K(.45,{py:.06,rx:.30,rz:-.16,hx:-.03,hy:-.23,hz:.02}),
                 K(.57,{py:.06,rx:.30,rz:-.16,hy:-.11,hz:.05}), K(.68,{py:.05,rx:.32,rz:-.16,hy:-.02,hz:.06}),
@@ -65477,6 +65561,7 @@ const INSPECT_EXACT = {
   taser: INSPECT_LIBRARY.energy_tune,
   plasma_carbine: INSPECT_LIBRARY.energy_tune,
   energy_rifle: INSPECT_LIBRARY.energy_tune,
+  gravity_cannon: INSPECT_LIBRARY.energy_tune,
   arc_rifle: INSPECT_LIBRARY.energy_tune,
   arc_torrent: INSPECT_LIBRARY.energy_tune,
 };
@@ -66387,6 +66472,7 @@ const RELOAD_PROPS = {
   coilgun:[RP(.32,'mag'),RP(.57,'mag','arrive')],
   plasma_carbine:[RP(.32,'cell'),RP(.57,'cell','arrive')],
   energy_rifle:[RP(.32,'cell'),RP(.57,'cell','arrive')],
+  gravity_cannon:[RP(.34,'cell'),RP(.58,'cell','arrive')],
   airburst_projector:[RP(.31,'mag'),RP(.56,'mag','arrive'),RP(.85,'grenade','arrive',1,'breech')],
   pulse_needle:[RP(.37,'mag'),RP(.62,'mag','arrive')],
   nail_gun:[RP(.37,'mag'),RP(.62,'mag','arrive'),RP(.83,'nail',null,2,'breech')],
@@ -66722,7 +66808,7 @@ function _bakeReloadPostures(T) {
   const GROUPS = {
     pistol: 'pistol twin_burst five_seven glock18 m1911 desert_eagle hand_cannon switchblade_gun duelist_pistol signal_pistol taser flare nail_gun gatecrasher',
     smg: 'vector mp40 hkmp7 machine_pistol smart_smg p90 p90_spec cycler',
-    rifle: 'ak20 xm7 burst swarm_rifle twin_ar lancer flechette burst_cannon m4a1_arena coilgun plasma_carbine energy_rifle pulse_needle',
+    rifle: 'ak20 xm7 burst swarm_rifle twin_ar lancer flechette burst_cannon m4a1_arena coilgun plasma_carbine energy_rifle gravity_cannon pulse_needle',
     lmg: 'rpd mg42 minigun chain_gun gau19 m134 mk44',
     sniper: 'srx barrett amr lever m1_garand mauser air_rifle railgun crossbow',
     shotgun: 'sg8 shorty sawed_off boomstick dart_gun',
@@ -69835,7 +69921,7 @@ function getClientWeaponDamage(weaponId) {
   if (m) return m.damage;
   const s = SUPPORT_ITEMS.find(x => x.id === weaponId && x.damage);
   if (s) return s.damage;
-  const ab = { sg8_wave:20, crossbow_ab:220, crossbow_c1:140, sg100_ab:140, lever_ab:150,
+  const ab = { gravity_cannon_splash:20, gravity_cannon_c1:7, sg8_wave:20, crossbow_ab:220, crossbow_c1:140, sg100_ab:140, lever_ab:150,
                railgun_ab:330, boombow_ab:83, boombow_c1:53, cycler_ab:32, hand_cannon_ab:175, phase_rifle_ph:22 };
   if (ab[weaponId] != null) return ab[weaponId];
   // Fall through to the big table the bot->player path uses, so synthetic ids
@@ -70143,6 +70229,60 @@ function interceptConeRockets(dt) {
     }
   }
 }
+// 🌀 The Gravity Cannon's spheres. A sphere in flight drags what is near it toward itself -- you, if it is somebody else's (each player moves only themselves), and the bots of whoever
+// fired it -- but only a drag: it adds a little speed toward the sphere, capped well under a run, and you steer, aim and shoot throughout. It goes off on a surface or at the end of its range.
+const GRAV_PULL_CAP = 9;
+function _gravPull(b, dt) {
+  const G = b._grav, p = b.mesh.position;
+  if (!b.isOwn && !isDead && !pilotedVehicle && !pilotedMortar && !inLobby && !(b.ownerId && friendlyFireBlocked(myId, b.ownerId))) {
+    const dx = p.x - camera.position.x, dy = p.y - camera.position.y, dz = p.z - camera.position.z, d3 = Math.sqrt(dx * dx + dy * dy + dz * dz), hd = Math.hypot(dx, dz);
+    if (d3 < G.pullR && hd > 0.2) {
+      const acc = 46 * (1 - d3 / G.pullR), before = Math.hypot(_extVel.x, _extVel.z);
+      _extVel.x += dx / hd * acc * dt; _extVel.z += dz / hd * acc * dt;
+      const sp = Math.hypot(_extVel.x, _extVel.z), cap = Math.max(before, GRAV_PULL_CAP);
+      if (sp > cap) { _extVel.x *= cap / sp; _extVel.z *= cap / sp; }
+      window._blastCarry = false;
+    }
+  }
+  if (b.isOwn) for (const bot of gameBots) {
+    if (bot.dead || friendlyFireBlocked(bot.id, myId)) continue;
+    const dx = p.x - bot.x, dz = p.z - bot.z, d = Math.hypot(dx, dz);
+    if (d > G.pullR || d < 0.3 || Math.abs(p.y - 1.0) > G.pullR) continue;
+    const acc = 138 * (1 - d / G.pullR);
+    bot.kbVX = Math.max(-16, Math.min(16, (bot.kbVX || 0) + dx / d * acc * dt));
+    bot.kbVZ = Math.max(-16, Math.min(16, (bot.kbVZ || 0) + dz / d * acc * dt));
+  }
+}
+const _GRAV_FX = [], _GRAV_POP_GEO = new THREE.SphereGeometry(1, 14, 10);
+function _gravPop(pos, r, color, ms) {
+  const m = new THREE.Mesh(_GRAV_POP_GEO, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }));
+  m.position.copy(pos); m.scale.setScalar(0.2); scene.add(m);
+  _GRAV_FX.push({ m, born: Date.now(), ms, r });
+}
+function _updateGravFx(now) {
+  for (let i = _GRAV_FX.length - 1; i >= 0; i--) {
+    const f = _GRAV_FX[i], u = (now - f.born) / f.ms;
+    if (u >= 1) { scene.remove(f.m); f.m.material.dispose(); _GRAV_FX.splice(i, 1); continue; }
+    f.m.scale.setScalar(Math.max(0.05, f.r * (1 - Math.pow(1 - u, 2)))); f.m.material.opacity = 0.55 * (1 - u);
+  }
+}
+function _gravBoom(b, pos) {                                                       // a sphere goes off: everybody sees it, only the one who fired it hurts anyone
+  const G = projectileWeaponSpec(b.weaponId)?.gravSphere; if (!G) return;
+  _gravPop(pos, G.boomR, 0xa77bff, 420); _gravPop(pos, G.boomR * 0.45, 0xf1eaff, 240);
+  spawnAbilityAOEFX(pos.clone().setY(0.2), G.boomR, 0xa77bff);
+  playSoundEvent('explosion', { position: pos, volume: 0.6, minGap: 40 });
+  if (!b.isOwn) return;
+  for (const [pid, mesh] of Object.entries(remoteMeshes)) {
+    if (!mesh.visible || players[pid]?.dead || (mesh._ragdoll && !players[pid]?.dead)) continue;
+    const at = mesh.position.clone(); at.y += 1.0 * (mesh._bodyScale || 1);
+    if (pos.distanceTo(at) > G.boomR || !hasLineOfSight(pos.x, pos.z, at.x, at.z, pos.y, at.y)) continue;
+    const had = !!(b._pierced && b._pierced.has(pid));                             // already hit by this sphere: only what tops it up to the explosion's 20
+    const dummy = TRAINING_DUMMIES.find(d => d.id === pid);
+    if (dummy) handleDummyHit(dummy, mesh, { damage: had ? G.topup : G.boom, headshot: false, falloff: 1, headMiss: null, weaponId: b.weaponId }, at.clone());
+    else emitHit(pid, `${b.id}_boom_${pid}`, had ? 'gravity_cannon_c1' : 'gravity_cannon_splash', at, false, {});
+    spawnHitParticle(at);
+  }
+}
 // ⚡ The Energy Rifle's afterglow: behind the bolt a thick ribbon of light is laid down and stays for afterTrailMs (0.8 s), shrinking and fading as it goes. It is cut in
 // short capsules, one per frame, from where the bolt was to where it is; a rebound ends one run and starts another at the wall.
 const _TRAIL = { segs: [], levels: null, glowGeo: null, coreGeo: null };
@@ -70224,7 +70364,7 @@ function _beamBounce(b, normal, pt, spec) {
 const _BEAM_Y = new THREE.Vector3(0, 1, 0);
 function updateBullets(dt) {
   const now = Date.now();
-  _updateTrails(now);
+  _updateTrails(now); _updateGravFx(now);
   _updateDonutPuffs(dt);
   _updateLegendEmbers(dt);
   interceptConeRockets(dt);
@@ -70271,6 +70411,8 @@ function updateBullets(dt) {
     }
     _bpos.copy(b.mesh.position);
     if (b.visualOnly) continue;
+    if (b._grav === undefined) b._grav = projectileWeaponSpec(b.weaponId)?.gravSphere || null;
+    if (b._grav) _gravPull(b, dt);                                                      // (the Gravity Cannon: it drags what is near it)
 
     if (b.ballLightning) {
       const pulseDue = !b._nextAuraAt || now >= b._nextAuraAt;
@@ -70413,6 +70555,8 @@ function updateBullets(dt) {
           }
         }
         if (wallHit && !b.isOwn) {
+          if (b._grav === undefined) b._grav = projectileWeaponSpec(b.weaponId)?.gravSphere || null;
+          if (b._grav && !b.botId) { _gravBoom(b, wallHitPt.clone().addScaledVector(wallHitNormal, 0.3)); removeBullet(); continue; }   // somebody else's sphere: you see it go off
           if (b._beamR === undefined) b._beamR = projectileWeaponSpec(b.weaponId)?.beamRadius || 0;
           if (b._beamR && !b.botId) {                                              // somebody else's Energy Rifle: it rebounds on your screen too
             const spec = projectileWeaponSpec(b.weaponId);
@@ -70533,6 +70677,7 @@ function updateBullets(dt) {
       if (wallHitPt && (!bestHit || wallHitT <= bestHit.t)) {
         if (b.weaponId==='harpoon_gun') window.PVP_TETHER_WEAPONS?.latch(b,wallHitPt);
         spawnHitParticle(wallHitPt);
+        if (b._grav) { _gravBoom(b, wallHitPt.clone().addScaledVector(wallHitNormal, 0.3)); removeBullet(); continue; }   // (a Gravity Cannon sphere goes off on a surface)
         if(b.weaponId==='swap_gun'){if(b.isOwn)window.PVP_SWAP_PORTALS?.place(wallHitPt,wallHitNormal,b.dir);removeBullet();continue;}   // a wall: it opens a portal there
         if (!EXPLOSIVE_KINDS.has(projectileKind(b.weaponId, WEAPONS.find(w => w.id === b.weaponId))))
           spawnImpactMark(wallHitPt, wallHitNormal, b.weaponId);
@@ -70678,6 +70823,7 @@ function updateBullets(dt) {
     if (b.maxRange) {
       const dx = _bpos.x - b.spawnX, dy = _bpos.y - b.spawnY, dz = _bpos.z - b.spawnZ;
       if (dx*dx + dy*dy + dz*dz > b.maxRange * b.maxRange) {
+        if (b._grav) _gravBoom(b, b.mesh.position.clone());                           // a sphere at the end of its range goes off
         removeBullet(); continue;
       }
     }
@@ -73057,7 +73203,7 @@ const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
   ['arc_torrent', 5], ['firework_launcher', 50], ['switchblade_gun', 50], ['switchblade_charged', 100],
   ['lancer_blade', 50],   // ⚔️ Lancer bayonet-charge hit (main shot uses the WEAPONS 'lancer' damage)
   ['molotov_burn', 10], ['molotov_fire', 5],  // 🔥 inside-the-flames tick / lingering on-fire DOT
-  ['rpg_splash', 70], ['bazooka_splash', 85],  // 🚀 rocket area splash (direct hit uses the WEAPONS damage)
+  ['rpg_splash', 70], ['bazooka_splash', 85], ['gravity_cannon_splash', 20], ['gravity_cannon_c1', 7],  // 🚀 rocket area splash (direct hit uses the WEAPONS damage)
   ['grenade_launcher_splash', 54], ['gravity_launcher_splash', 45], ['potato_cannon_splash', 36], ['mortar_rifle_splash', 51], ['firework_launcher_splash', 30], ['shockwave_launcher_splash', 29], ['storm_cannon_splash', 42], ['pinball_launcher_splash', 36], ['nebula_mortar_splash', 66],  // 💣 launcher area splash (60% of the direct hit)
   // 3rd-batch primaries + abilities
   ['flechette', 16], ['rpd'], ['burst_cannon', 40], ['sg8'],
@@ -76615,7 +76761,7 @@ const DICE_POOL = {
   SS: ['gunslinger', 'ak20', 'event_horizon', 'omega_pistol', 'm:lightsabre', 'u:orbital_strike'],
   S:  ['air_rifle', 'vector', 'minigun', 'revolver', 'lever', 'p90', 'storm_core', 'quantum_repeater', 'abs_zero', 'prism_engine',
        'solar_lance', 'm:titan_hammer', 'u:specter_drone', 'u:hunter_drone'],
-  A:  ['burst', 'energy_rifle', 'rpd', 'slingshot', 'mauser', 'chain_gun', 'hand_cannon', 'nail_gun', 'grenade_launcher', 'mp40', 'akimbo',
+  A:  ['burst', 'energy_rifle', 'gravity_cannon', 'rpd', 'slingshot', 'mauser', 'chain_gun', 'hand_cannon', 'nail_gun', 'grenade_launcher', 'mp40', 'akimbo',
        'flechette', 'magnetar', 'void_harvester', 'boomstick', 'pinball_launcher', 'seismic_hammer',
        'm:chainsaw', 'm:katana', 'm:gravity_hammer',
        'u:black_hole_seed', 'u:satchel', 'u:mini_turret', 'u:drone_strike', 'u:guardian_drone', 'u:tesla_coil'],
