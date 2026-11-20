@@ -193,7 +193,8 @@ const WEAPONS = [
     mag: 180, reserve: 360, damage: 27, fireRate: 32, reloadTime: 4200,
     auto: true, pellets: 1, spread: 0.026, adsZoom: 55, bulletSpeed: 144, noReload: false,
     weight: 0.30, adsWeight: 0.50, heatWindow: 10000, heatCooldown: 2000, heatSkipADS: true,
-    ability: { name: 'Spin-Up', cd: 16000, desc: '4s · fire rate ×2 · barrels spin faster', type: 'buff', duration: 4000, rateMult: 0.5, spinBoost: true },
+    // (E is the brace, handled in the key handler: hold it for a 0.75 s warm-up instead of 2 s, moving at 50% speed. It never doubled the fire rate.)
+    ability: { name: 'Brace', cd: 0, desc: 'Hold E · warm-up 0.75 s instead of 2 s · move at 50% speed', type: 'buff', duration: 0 },
   },
   {
     id: 'freeze_gun', name: 'Freeze Gun', type: 'Control', slot: 'primary',
@@ -1534,7 +1535,9 @@ let currentWeapon = WEAPONS[0];
 let ammo = currentWeapon.mag;
 let reserve = currentWeapon.reserve;
 let reloading = false, lastShot = 0, shooting = false;
-let minigunTriggerStartedAt = 0, minigunBraceHeld = false, minigunLastSpoolNotice = 0;
+let minigunTriggerStartedAt = 0, minigunBraceHeld = false, minigunLastSpoolNotice = 0, minigunBraceStartedAt = 0;
+// 🔫 Minigun: 27 damage at 31 a second = 837 DPS once warm, and warm takes 2 s from the trigger. Hold E to brace: warm-up drops to 0.75 s (from the moment you press E), at the price of moving at half speed.
+const MINIGUN_WARMUP_MS = 2000, MINIGUN_BRACE_WARMUP_MS = 750, MINIGUN_BRACE_MOVE = 0.5;
 let chainGunSpin = 0, chainGunLastShotAt = 0;   // 0 = cold (1/s), 1 = fully spun (10/s, unstable)
 const weaponHeatState = {}; // per-weapon-id { shotCount, cooldownUntil } for heatShots, or { windowStart, lastFireAt, cooldownUntil } for heatWindow weapons
 const spreadBloomState = {}; // per-weapon-id { amount, lastShotAt } for spreadBloom weapons
@@ -32645,7 +32648,7 @@ function buildRedlineMinigun() {
     const reloading = !g._inspectMode && t0 >= 0 && t0 < 1;
     const goalOpen = (!reloading && (sh || braced || isADS)) ? 1 : 0;
     open += (goalOpen - open) * Math.min(1, dt * (goalOpen ? 7 : 4)); const o = ease(clamp01(open));
-    const warm = (sh || braced) ? (braced ? 1 : Math.min(1, Math.max(0, (Date.now() - (typeof minigunTriggerStartedAt !== 'undefined' && minigunTriggerStartedAt ? minigunTriggerStartedAt : Date.now())) / 2000))) : 0;
+    const warm = (sh || braced) ? (typeof minigunWarmth === 'function' ? minigunWarmth() : 1) : 0;
     spin += (warm - spin) * Math.min(1, dt * (warm > spin ? 1.6 : 2.4));
     const fired = !!(g._flash && g._flash.visible); if (fired && !was) kick = 1; was = fired; kick *= Math.exp(-dt * 10);
     if (now - lastShot > 1.2 && shots > 0 && performance.now() / 1000 - lastShot > 1.2) shots = 0;
@@ -55772,7 +55775,7 @@ document.addEventListener('keydown', e => {
   if (e.code==='KeyE') {
     if (isMinigunHeld() && !isDead) {
       e.preventDefault();
-      minigunBraceHeld = true;
+      if (!minigunBraceHeld) { minigunBraceHeld = true; minigunBraceStartedAt = Date.now(); }      // (not on key repeat: the warm-up counts from the first press)
       resetMinigunSpool();
       return;
     }
@@ -59511,7 +59514,7 @@ function updateMovement(dt, socialBlocked = false) {
                      && (activeSlot === 'primary' || activeSlot === 'secondary'))
                     ? currentWeapon.moveBoost : 1;
   const rootMult = Date.now() < playerRootedUntil ? 0 : 1;
-  const minigunBraceMult = minigunBraced() ? 0.04 : 1;
+  const minigunBraceMult = minigunBraced() ? MINIGUN_BRACE_MOVE : 1;                   // braced: half speed (it used to be rooted)
   const speedMult = baseSpeedMult * (adrenalineActive ? 1.6 : 1) * frostMult * rootMult * minigunBraceMult * adminSpeedMult * crouchMult * slideMult * fireBoost * _gimSlowNow() * (window.PVP_SWAP_PORTALS?.speedMult?.() ?? 1);
   // Drop the camera when crouching / sliding (eased)
   if (!window._crouchEye) window._crouchEye = PLAYER_EYE_HEIGHT;
@@ -59872,12 +59875,21 @@ function resetMinigunSpool() {
   minigunTriggerStartedAt = 0;
   minigunLastSpoolNotice = 0;
 }
+// 0..1: how far the barrels have spun up. Braced (hold E) it runs from the moment you pressed E over 0.75 s; unbraced from the trigger over 2 s.
+function minigunWarmth(now = Date.now()) {
+  if (minigunBraced()) return Math.min(1, Math.max(0, (now - (minigunBraceStartedAt || now)) / MINIGUN_BRACE_WARMUP_MS));
+  return Math.min(1, Math.max(0, (now - (minigunTriggerStartedAt || now)) / MINIGUN_WARMUP_MS));
+}
 function minigunReadyToFire(now = Date.now()) {
   if (!isMinigunHeld()) return true;
-  if (minigunBraced()) return true;
+  if (minigunBraced()) {
+    const warm = now - (minigunBraceStartedAt || now) >= MINIGUN_BRACE_WARMUP_MS;
+    if (!warm && shooting && now - minigunLastSpoolNotice > 650) { minigunLastSpoolNotice = now; flashAbilityName('SPINNING UP'); }
+    return warm;
+  }
   if (!shooting) return false;
   if (!minigunTriggerStartedAt) minigunTriggerStartedAt = now;
-  const ready = now - minigunTriggerStartedAt >= 2000;
+  const ready = now - minigunTriggerStartedAt >= MINIGUN_WARMUP_MS;
   if (!ready && now - minigunLastSpoolNotice > 650) {
     minigunLastSpoolNotice = now;
     flashAbilityName('SPINNING UP');
@@ -90525,7 +90537,7 @@ function loop() {
     if (currentWeapon?.id === 'minigun') {
       const spooling = shooting || minigunBraced();
       if (spooling) {
-        const warm = minigunBraced() ? 1 : Math.min(1, Math.max(0, (Date.now() - (minigunTriggerStartedAt || Date.now())) / 2000));
+        const warm = minigunWarmth();
         model._barrelCluster.rotation.z += (4 + (model._spinRate || 10) * 1.8 * warm) * dt;
       }
     } else if (currentWeapon?.id === 'chain_gun') {

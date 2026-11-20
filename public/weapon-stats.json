@@ -1067,8 +1067,8 @@
    },
    "screenKick": 0.675,
    "ability": {
-    "name": "Spin-Up",
-    "desc": "4s · fire rate ×2 · barrels spin faster"
+    "name": "Brace",
+    "desc": "Hold E · warm-up 0.75 s instead of 2 s · move at 50% speed"
    },
    "traits": [
     "Base movement while equipped: 70%"
