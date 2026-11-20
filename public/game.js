@@ -57656,7 +57656,50 @@ function faceToward(x, z) {
   camera.quaternion.setFromEuler(euler);
 }
 
+// 🎯 FREE FOR ALL SPAWNS. Nobody in a free-for-all has a "side": everyone, you included, used to be dropped on the same two team lines, so all the bots (which all count as the enemy team) landed in one
+// cluster, fought each other there and never came out. Now every spawn (the first and every respawn, yours and the bots') goes to the open spot FARTHEST from everybody who is alive: candidate spots are a
+// grid over the floor, kept only if nothing solid stands on them and they are not an enclosed space (at least 5 of 8 directions open for 6 m).
+let _ffaCands = null, _ffaCandsKey = '', _ffaTaken = [];
+function ffaMode() { return (selectedModeConfig && selectedModeConfig.type) === 'ffa' || (!selectedModeConfig && match && match.type === 'ffa'); }
+function ffaCandidates() {
+  const key = activeMapName + ':' + wallColliders.length;
+  if (_ffaCands && _ffaCandsKey === key) return _ffaCands;
+  const out = [], b = getMapBoundsRect(), mx = Math.max(10, b.halfX - 5), mz = Math.max(10, b.halfZ - 5), R = 0.75;
+  for (let x = -mx; x <= mx; x += 5) for (let z = -mz; z <= mz; z += 5) {
+    if (!floorExistsAt(x, z)) continue;
+    let blocked = false;
+    for (const c of wallColliders) {
+      if (c.max.y < 0.3 || c.min.y > 2.2) continue;
+      if (x > c.min.x - R && x < c.max.x + R && z > c.min.z - R && z < c.max.z + R) { blocked = true; break; }
+    }
+    if (blocked) continue;
+    let open = 0;
+    for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4; if (hasLineOfSight(x, z, x + Math.cos(a) * 6, z + Math.sin(a) * 6, 1.0, 1.0)) open++; }
+    if (open >= 5) out.push({ x, z });
+  }
+  _ffaCands = out; _ffaCandsKey = key;
+  return out;
+}
+function ffaPickSpawn() {
+  const cands = ffaCandidates();
+  if (cands.length < 6) return null;                                   // a map too tight to scatter on: the old way
+  const now = Date.now(); _ffaTaken = _ffaTaken.filter(t => now - t.at < 4000);
+  const occ = _ffaTaken.slice();
+  if (!isDead && gameStarted) occ.push({ x: camera.position.x, z: camera.position.z });
+  for (const b of gameBots) if (!b.dead) occ.push({ x: b.x, z: b.z });
+  for (const [id, m] of Object.entries(remoteMeshes)) if (id !== myId && m.visible && !players[id]?.dead && !players[id]?.isBot) occ.push({ x: m.position.x, z: m.position.z });
+  let pick;
+  if (!occ.length) pick = cands[Math.floor(Math.random() * cands.length)];
+  else {
+    const scored = cands.map(c => { let md = Infinity; for (const o of occ) md = Math.min(md, Math.hypot(c.x - o.x, c.z - o.z)); return { c, md }; }).sort((a, b) => b.md - a.md);
+    pick = scored[Math.floor(Math.random() * Math.min(3, scored.length))].c;         // one of the three emptiest places: not always the same one
+  }
+  const sp = { x: pick.x + (Math.random() - 0.5) * 1.5, z: pick.z + (Math.random() - 0.5) * 1.5 };
+  _ffaTaken.push({ x: sp.x, z: sp.z, at: now });
+  return sp;
+}
 function teamSideSpawn(team = 'ally', spread = 36, depth = 38) {
+  if (ffaMode()) { const s = ffaPickSpawn(); if (s) return { x: s.x, z: s.z, yaw: Math.atan2(s.x, s.z) }; }
   { const S = MAP_SPAWNS[activeMapName]; if (S) { const r = team === 'enemy' ? S.enemy : S.ally; const x = r.x0 + Math.random() * (r.x1 - r.x0), z = r.z0 + Math.random() * (r.z1 - r.z0); return { x, z, yaw: Math.atan2(x, z) }; } }
   if (selectedModeConfig && selectedModeConfig.type === 'race' && selectedModeConfig.forcedMap === 'base_raid') {
     const x = (Math.random() - 0.5) * 16;
@@ -86300,6 +86343,7 @@ function endMatch(winner, reason, hostMvp) {
 // ── Bot AI ─────────────────────────────────────────────────────────────────
 function botSideSpawn(idx, count, team) {
   if(selectedModeConfig?.type==='lobby')return lobbySpawnPoint(idx);
+  if (ffaMode()) { const s = ffaPickSpawn(); if (s) return s; }                      // free for all: everybody scatters (see ffaPickSpawn)
   // Last Stand: the teammates stand in the farmhouse with you
   if (selectedModeConfig && selectedModeConfig.type === 'laststand' && team === 'ally') {
     const sp = LS_ALLIES[idx % LS_ALLIES.length];
@@ -86597,6 +86641,7 @@ function spawnGameBots() {
   }
   const now = Date.now();
   const botList = [];
+  _ffaTaken = [];                                                                   // a fresh free-for-all: nobody is placed yet
 
   // Move the player to their team side before the round begins
   if (selectedModeConfig && selectedModeConfig.type === 'boss') {
