@@ -841,6 +841,21 @@ function rollWheel() {
   return { kind: 'credits' };                       // 60-180 donuts
 }
 
+// 🛒 Shop wraps: bought once with donuts, then the account's for every weapon (stored in skinInventory like the other wraps). Mirrored in public/game.js (WEAPON_SKINS: shopWrap).
+const SHOP_WRAPS = { crimson_fracture: 7500 };
+app.post('/shop/wrap', (req, res) => {
+  const u = authedUser(req);
+  if (!u) return res.status(401).json({ error: 'auth failed' });
+  const id = String(req.body?.itemId || ''), price = SHOP_WRAPS[id];
+  if (!Object.prototype.hasOwnProperty.call(SHOP_WRAPS, id)) return res.status(400).json({ error: 'unknown wrap' });
+  if (!Array.isArray(u.skinInventory)) u.skinInventory = [];
+  if (u.skinInventory.includes(id)) return res.json({ ok: true, cost: 0, skinInventory: u.skinInventory, credits: u.credits });
+  const cost = u.isAdmin ? 0 : price;
+  if ((u.credits || 0) < cost) return res.status(402).json({ error: 'not enough donuts', cost, credits: u.credits });
+  u.credits = (u.credits || 0) - cost; u.skinInventory.push(id); saveUsers();
+  res.json({ ok: true, cost, skinInventory: u.skinInventory, credits: u.credits });
+});
+
 app.post('/shop/buy-chest', (req, res) => {
   const { type } = req.body || {};
   const u = authedUser(req);
@@ -2923,6 +2938,7 @@ io.on('connection', (socket) => {
     let id = String((data && data.wrap) || 'default').slice(0, 40);
     if (!/^[a-z0-9_]{1,40}$/.test(id)) id = 'default';
     if (PRESTIGE_WRAP.isPrestigeWrap(id) && !PRESTIGE_WRAP.ownsPrestigeWrap(users[p.account], id)) id = 'default';
+    if (Object.prototype.hasOwnProperty.call(SHOP_WRAPS, id) && !users[p.account]?.isAdmin && !users[p.account]?.skinInventory?.includes(id)) id = 'default';      // a shop wrap you have not bought
     if (/^ap_/.test(id)) {
       const w = submissions.wraps.find(x => x.id === id && x.status === 'approved');
       if (!w || (w.owner !== p.account && !users[p.account]?.isAdmin)) id = 'default';

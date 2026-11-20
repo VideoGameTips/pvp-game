@@ -45428,6 +45428,7 @@ const WEAPON_SKINS = [
   { id: 'packet_loss', name: 'Packet Loss', rarity: 'epic', body: 0x151623, accent: 0x22dfee, sw: ['#22dfee', '#ed36ac'] },
   { id: 'celestial_atlas', name: 'Celestial Atlas', rarity: 'legendary', body: 0x101b38, accent: 0xe3ba64, sw: ['#101b38', '#e3ba64'] },
   { id: 'cathedral', name: 'Cathedral', rarity: 'legendary', body: 0x691a37, accent: 0x286fa0, sw: ['#691a37', '#286fa0'] },
+    { id: 'crimson_fracture', name: 'CRIMSON FRACTURE', rarity: 'legendary', body: 0x090909, accent: 0xff1a2e, shopWrap: 7500, sw: ['#090909', '#ff1a2e'] },
   ...(window.PVP_COLLECTION_WRAPS?.catalog || []),
   // ── 🎖 Contract wraps: not in the shop, each earned by a contract (CONTRACTS, below) ──
   { id: 'darkmatter',   name: 'Dark Matter',   body: 0x05030f, accent: 0xb36bff, flag: null, contract: true, sw: ['#05030f', '#b36bff'] },
@@ -46509,9 +46510,34 @@ Object.assign(WS_PATTERNS, {
   },
 });
 Object.assign(WS_PATTERNS, window.PVP_COLLECTION_WRAPS?.patterns);
+// 🩸 CRIMSON FRACTURE (a shop wrap): deep matte black with sharp, irregular crimson cracks running diagonally, like shattered glass. The pattern is drawn with its cracks in colour 1 and a dark-red metallic edge in
+// colour 2, so the glow layer (colour 1 only, on black) lights just the cracks. Drawn nine times over (the tile's neighbours too) so the cracks run across the texture's seams.
+WS_PATTERNS.crimsonFracture = (g, n, c, rnd) => {
+  g.fillStyle = c[0]; g.fillRect(0, 0, n, n);
+  const cracks = [];
+  const grow = (x, y, ang, len, depth) => {
+    const pts = [[x, y]]; let a = ang, px = x, py = y;
+    for (let d = 0; d < len; d += 11) {
+      a += (rnd() - 0.5) * 0.95; const l = 7 + rnd() * 15; px += Math.cos(a) * l; py += Math.sin(a) * l; pts.push([px, py]);
+      if (depth < 1 && rnd() < 0.16) grow(px, py, a + (rnd() < 0.5 ? -1 : 1) * (0.5 + rnd() * 0.8), len * 0.42, depth + 1);
+    }
+    cracks.push([pts, depth]);
+  };
+  for (let i = 0; i < 3; i++) grow(rnd() * n, rnd() * n, -0.62 + (rnd() - 0.5) * 0.5, 110 + rnd() * 90, 0);       // diagonal: up and to the right
+  for (const ox of [-n, 0, n]) for (const oy of [-n, 0, n]) {
+    g.save(); g.translate(ox, oy); g.lineCap = 'round'; g.lineJoin = 'round';
+    for (const [pts, depth] of cracks) {
+      g.beginPath(); pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.strokeStyle = c[2]; g.lineWidth = 3.0 - depth * 0.8; g.stroke();       // the dark metallic-red edge
+      g.beginPath(); pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.strokeStyle = c[1]; g.lineWidth = 1.15 - depth * 0.3; g.stroke();       // the crack itself
+    }
+    g.restore();
+  }
+};
+
 // id -> how it is painted and finished. `glow`: which of the pattern's colours also lights up (an emissive layer).
 const WS_LOOKS = {
   ...window.PVP_COLLECTION_WRAPS?.looks,
+  crimson_fracture: { pat: 'crimsonFracture', c: [0x090909, 0xff1a2e, 0x5c0a12], metal: 0.08, rough: 0.92, noSwap: true, glow: 1, pulse: [0.25, 0.32, 1.35, 3, 1] },   // matte, so only the cracks shine: one slow beat every 4 s
   oil_spill: { pat: 'oilFilm', c: [0x6a459e,0x30aca2,0x285eaf,0xc29943,0x171126], metal: .56, rough: .24, noSwap: true, foil: 'oil' },
   porcelain: { pat: 'porcelainInk', c: [0xf8f7ef,0x1b4289,0xc39949,0x5984b6], metal: .06, rough: .19, noSwap: true },
   contour: { pat: 'terrainInk', c: [0x303a2c,0x9a9d74,0xc18657], metal: .08, rough: .69, noSwap: true },
@@ -46629,11 +46655,21 @@ function contractsRevalidate() {
 }
 function contractFor(wrapId) { return CONTRACTS.find(c => c.wrap === wrapId) || null; }
 // A wrap that is not behind a contract is always open; one that is, is open once its contract is done (admins see all).
+// 🛒 A shop wrap (look.shopWrap = its price in donuts): bought once, then it is the account's, for every weapon. Admins have them all.
+async function buyShopWrap(skin) {
+  if (!currentUser || currentUser.guest) { alert('Log in first.'); return false; }
+  if (!await uiConfirm('Unlock ' + skin.name + ' for ' + skin.shopWrap.toLocaleString() + ' donuts? It can be worn on every weapon.')) return false;
+  const r = await authRequest('/shop/wrap', { username: currentUser.username, password: currentUser.password, itemId: skin.id });
+  if (!r || r.error) { alert((r && r.error) || 'Purchase failed.'); return false; }
+  currentUser.skinInventory = r.skinInventory; currentUser.credits = r.credits; try { updateUserInfoBar(); } catch (e) {}
+  return true;
+}
 function wrapUnlocked(id) {
   let me = null; try { me = currentUser; } catch (e) { me = null; }       // declared further down the file: not there yet at load
   const admin = !!(me && me.isAdmin);
   const sk = WEAPON_SKINS_BY_ID[id];
   if (sk?.prestige) return !sk.unavailable && !!me?.skinInventory?.includes(id);
+  if (sk?.shopWrap) return admin || !!me?.skinInventory?.includes(id);
   if (sk && sk.approvedBy) return admin || !!(me && me.username === sk.approvedBy);   // an approved wrap is its author's
   if (sk && sk.custom) return admin;                                            // one you painted: a draft until an admin says yes
   const c = contractFor(id);
@@ -46829,6 +46865,15 @@ function _wsTextures(id, variant) {
 }
 // The wraps that move: every frame their textures slide along by their own speed. A texture is shared by every gun
 // wearing that wrap, so one nudge moves them all; the offset wraps at 1 so it never grows.
+// 🩸 A wrap whose light brightens on a reload (look.pulse's fifth number): up over a quarter of a second as the reload starts, then back to its normal glow over about a second.
+let _wsWasReloading = false, _wsReloadAt = -9;
+function _wsReloadGlow(T) {
+  const now = typeof reloading !== 'undefined' && reloading;
+  if (now && !_wsWasReloading) _wsReloadAt = T;
+  _wsWasReloading = now;
+  const s = T - _wsReloadAt;
+  return s < 0 || s > 2.6 ? 0 : s < 0.25 ? s / 0.25 : Math.exp(-(s - 0.25) / 0.7);
+}
 function updateWrapScroll(dt) {
   for (const sc of _wsScrollers) for (const m of sc.maps) {
     m.offset.x = (m.offset.x + sc.du * dt) % 1; m.offset.y = (m.offset.y + sc.dv * dt) % 1;
@@ -46844,7 +46889,8 @@ function updateWrapScroll(dt) {
   for (const m of _wsPulseMats) {
     const q = m.userData && m.userData.wsPulse;
     if (!q) { _wsPulseMats.delete(m); continue; }
-    m.emissiveIntensity = q[1] + (q[2] - q[1]) * (0.5 + 0.5 * Math.sin(T * 6.2832 * q[0]));
+    let w = 0.5 + 0.5 * Math.sin(T * 6.2832 * q[0]); if (q[3]) w = Math.pow(w, q[3]);                  // (a fourth number sharpens the swell into a beat)
+    m.emissiveIntensity = (q[1] + (q[2] - q[1]) * w) * (q[4] ? 1 + 1.6 * _wsReloadGlow(T) : 1);
   }
   // The ones that repaint: only while somebody is wearing it, since the texture is redrawn from scratch each time.
   for (const f of _wsFlickers) {
@@ -94839,7 +94885,7 @@ function openItemSkins(kind, id, onClose, alwaysOnClose = false) {
       : _wsSwatchURL(s.id) ? `url('${_wsSwatchURL(s.id)}') center / 64px 64px` : bg(s.sw);
     const wraps = [cell({ name: 'DEFAULT WRAP', sub: 'Whatever the wraps screen has: ' + dflt.name, bg: swatchBg(dflt), on: !own, run: () => setItemWrap(kind, id, '') })];
     for (const s of WEAPON_SKINS) {
-      if (s.contract || s.prestige || (s.custom && !wrapUnlocked(s.id)) || (s.approvedBy && !wrapUnlocked(s.id))) continue;
+      if (s.shopWrap || s.contract || s.prestige || (s.custom && !wrapUnlocked(s.id)) || (s.approvedBy && !wrapUnlocked(s.id))) continue;
       wraps.push(cell({ name: s.name, rarity: s.rarity, sub: s.rarity && s.rarity.toUpperCase(), bg: swatchBg(s), on: own === s.id, run: () => setItemWrap(kind, id, s.id) }));
     }
     for (const ct of CONTRACTS) {
@@ -94852,6 +94898,12 @@ function openItemSkins(kind, id, onClose, alwaysOnClose = false) {
     const ownPaint = kind === 'gun' && (() => { const sk = gunStatSkinFor(id); return sk && sk.body != null; })();
     sections.push(section('WRAP', 'This weapon\'s own wrap: every weapon can wear a different one at the same time.'
       + (ownPaint ? ' <span style="color:#ffb347;">This gun\'s skin has its own paint, so the wrap will not show until you pick STOCK above.</span>' : ''), wraps));
+    sections.push(section('SHOP WRAPS', 'Bought with donuts once; every weapon can wear them.', WEAPON_SKINS.filter(s => s.shopWrap).map(s => {
+      const open = wrapUnlocked(s.id);
+      return cell({ name: s.name, rarity: s.rarity, note: open ? 'OWNED' : s.shopWrap.toLocaleString() + ' donuts', bg: swatchBg(s),
+        on: own === s.id, locked: !open,
+        run: open ? () => setItemWrap(kind, id, s.id) : () => { buyShopWrap(s).then(ok => { if (ok) { setItemWrap(kind, id, s.id); changed = true; render(); } }); return false; } });
+    })));
     sections.push(section('PRESTIGE WRAPS', '', WEAPON_SKINS.filter(s => s.prestige).map(s => {
       const open = wrapUnlocked(s.id);
       return cell({ name: s.name, rarity: s.rarity, note: open ? 'EARNED' : s.prestige, bg: swatchBg(s),
@@ -95119,7 +95171,7 @@ function openWeaponSkinsPanel() {
     </div>
     <div style="font-size:12px;letter-spacing:2px;color:#ffdd88;margin:20px 0 6px;border-top:1px solid #6a5520;padding-top:14px;">🎨 WEAPON WRAPS <button id="ws-pixelizer" style="margin-left:10px;padding:4px 8px;background:#2a1030;color:#ff99dd;border:1px solid #ff66cc;border-radius:4px;cursor:pointer;font-family:inherit;font-size:10px;letter-spacing:1px;">🎨 PAINT YOUR OWN</button></div>
     <div style="font-size:10px;color:#aa9966;margin-bottom:12px;line-height:1.4;">One pick here applies to every gun, melee and utility (to give ONE weapon its own, pick it in the loadout and press SKINS). Country themes use real national flags; the German theme is the Iron Cross military mark (no Nazi imagery).</div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">${WEAPON_SKINS.filter(s => !s.contract && !s.prestige && (!s.approvedBy || wrapUnlocked(s.id))).map(swatch).join('')}</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">${WEAPON_SKINS.filter(s => !s.shopWrap && !s.contract && !s.prestige && (!s.approvedBy || wrapUnlocked(s.id))).map(swatch).join('')}</div>
     <div style="font-size:12px;color:#ffdd88;margin:20px 0 6px;">PRESTIGE WRAPS</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;">${WEAPON_SKINS.filter(s => s.prestige).map(swatch).join('')}</div>
     <div style="font-size:10px;color:#9a8aa8;margin:8px 0 2px;line-height:1.45;">🔒 A wrap you paint yourself is a draft: send it for approval in the pixelizer, and once an admin has said yes it is yours to use and everyone sees it on your gun.
