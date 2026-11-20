@@ -6703,4 +6703,41 @@ if (ok && process.argv.includes('--thorncaster')) {
   if (all.length) { ok = false; console.log(all.join('\n')); }
 }
 
+// UTILITY PRUNE: the Confetti Cannon and the Rubber Duck are retired (archived: off the shop, the loadout, the dice, the presets); the Satchel Charge is three charges.
+if (ok && process.argv.includes('--supportprune')) {
+  const serverSrc = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  const shopSrc = fs.readFileSync(path.join(__dirname, '..', 'public', 'shop-catalog.js'), 'utf8');
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    for (const id of ['confetti_cannon', 'rubber_duck']) {
+      const it = SUPPORT_ITEMS.find(x => x.id === id);
+      if (!it || !it.archived) issues.push(id + ' should be archived');
+      if (!ARCHIVED_ITEM_IDS.has(id)) issues.push(id + ' should be in the archived set');
+    }
+    const sat = SUPPORT_ITEMS.find(x => x.id === 'satchel');
+    if (!sat || sat.uses !== 3) issues.push('the satchel is three charges: ' + (sat && sat.uses));
+    // a loadout that still holds a retired utility is moved to one you own
+    const keep = selectedSupportIdx;
+    for (const id of ['rubber_duck', 'confetti_cannon']) {
+      selectedSupportIdx = SUPPORT_ITEMS.findIndex(x => x.id === id);
+      sanitizeLoadoutSlots();
+      const now = SUPPORT_ITEMS[selectedSupportIdx];
+      if (!now || now.archived) issues.push('a saved ' + id + ' should be swapped out: now ' + (now && now.id));
+    }
+    selectedSupportIdx = SUPPORT_ITEMS.findIndex(x => x.id === 'satchel'); sanitizeLoadoutSlots();
+    if (SUPPORT_ITEMS[selectedSupportIdx]?.id !== 'satchel') issues.push('a live utility is left alone');
+    selectedSupportIdx = keep;
+    const d = defaultLoadoutIdx(); if (SUPPORT_ITEMS[d.u]?.archived) issues.push('nobody starts with a retired utility');
+    return issues;
+  })()`);
+  const outside = [];
+  if (!/'confetti_cannon', 'rubber_duck',/.test(serverSrc)) outside.push('server.js ARCHIVED_ITEM_IDS is missing the two');
+  if (!/p\._satchelIds\.size >= 3/.test(serverSrc)) outside.push('server.js should let three satchels out at a time');
+  if (/confetti_cannon:\d|rubber_duck:\d/.test(shopSrc)) outside.push('the shop still prices a retired utility');
+  if (/u:'rubber_duck'|u:'confetti_cannon'|'u:rubber_duck'|'u:confetti_cannon'/.test(src)) outside.push('a preset or the dice still lists a retired utility');
+  const all = issues.concat(outside);
+  console.log('UTILITY PRUNE checks: confetti cannon and rubber duck retired everywhere, a saved loadout swapped off them, satchel x3 on the client and the server');
+  if (all.length) { ok = false; console.log(all.join('\n')); }
+}
+
 process.exit(ok ? 0 : 1);

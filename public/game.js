@@ -1442,9 +1442,9 @@ const SUPPORT_ITEMS = [
   { id: 'smoke', name: 'Smoke Bomb', type: 'Utility', uses: 2, damage: 0, cooldown: 700, bulletSpeed: 48, bulletColor: 0xcccccc, bulletSize: 0.18 },
   { id: 'blink_pearl', name: 'Blink Pearl', type: 'Teleport', uses: 2, blink: 10, cooldown: 900 },
   { id: 'ammo_fountain', name: 'Ammo Fountain', type: 'Resupply', uses: 1, refill: 0.65, cooldown: 1000 },
-  { id: 'confetti_cannon', name: 'Confetti Cannon', type: 'Chaos', uses: 3, damage: 8, burst: 14, spread: 0.85, cooldown: 520, bulletSpeed: 76, randomBulletColor: true, bulletSize: 0.055 },
+  { id: 'confetti_cannon', archived: true, name: 'Confetti Cannon', type: 'Chaos', uses: 3, damage: 8, burst: 14, spread: 0.85, cooldown: 520, bulletSpeed: 76, randomBulletColor: true, bulletSize: 0.055 },
   { id: 'moon_mine', name: 'Moon Mine', type: 'Floaty Bomb', uses: 2, damage: 65, cooldown: 800, bulletSpeed: 32, bulletColor: 0xbca7ff, bulletSize: 0.16, proximityRadius: 4 },
-  { id: 'rubber_duck', name: 'Rubber Duck', type: 'Bouncer', uses: 4, damage: 18, cooldown: 360, bulletSpeed: 68, bulletColor: 0xffe55c, bulletSize: 0.12 },
+  { id: 'rubber_duck', archived: true, name: 'Rubber Duck', type: 'Bouncer', uses: 4, damage: 18, cooldown: 360, bulletSpeed: 68, bulletColor: 0xffe55c, bulletSize: 0.12 },
   { id: 'black_hole_seed', name: 'Black Hole Seed', type: 'Void', uses: 1, damage: 52, blackHole: true, cooldown: 1300, bulletSpeed: 36, bulletColor: 0x4b0082, bulletSize: 0.20 },
   { id: 'glitch_cube', archived: true, name: 'Glitch Cube', type: 'Wild Card', uses: 2, damage: 42, burst: 5, spread: 0.55, cooldown: 780, bulletSpeed: 92, randomBulletColor: true, bulletSize: 0.10 },
   { id: 'vampire_syringe', archived: true, name: 'Vampire Syringe', type: 'Risk Heal', uses: 2, heal: 35, selfDamage: 10, cooldown: 700 },
@@ -1514,7 +1514,7 @@ const SUPPORT_ITEMS = [
   { id: 'predator_uav', name: 'Predator UAV', type: 'Admin · Recon', uses: 1, cooldown: 2000, uavDur: 10000, adminItem: true },
   { id: 'care_package', name: 'Care Package', type: 'Admin · Random Drop', uses: 1, cooldown: 1500, adminItem: true },
   { id: 'tac_nuke', name: 'Tactical Nuke', type: 'Admin · End the Match', uses: 1, damage: 500, cooldown: 3000, nukeRadius: 25, nukeDelay: 5000, adminItem: true },
-  { id: 'satchel', name: 'Satchel Charge', type: 'Remote Explosive', uses: 2, damage: 140, radius: 6, cooldown: 900, playerOnly: true,   // two out at a time (it was five; server.js holds the same cap)
+  { id: 'satchel', name: 'Satchel Charge', type: 'Remote Explosive', uses: 3, damage: 140, radius: 6, cooldown: 900, playerOnly: true,   // three charges, three out at a time (it was five, then two; server.js holds the same cap)
     ability: { name: 'Detonate', type: 'satchel_detonate', cd: 0 } },
   // The Freeze Ray used to be a secondary. It is a utility now: one shot (32 m), a hit freezes them for 3 s (server: freezeRayHit),
   // and it comes back 5 s later. It fires through the old weapon's hitscan, so the hit still goes out as 'frost_blaster'.
@@ -57371,7 +57371,7 @@ function defaultLoadoutIdx() {
   const p = WEAPONS.findIndex(w => w.slot !== 'secondary' && usable(w));
   const s = WEAPONS.findIndex(w => w.slot === 'secondary' && usable(w));
   const m = MELEE_ITEMS.findIndex(x => !x.skinOnly && !x.archived && isOwned(x.id));
-  const u = SUPPORT_ITEMS.findIndex(x => isOwned(x.id));
+  const u = SUPPORT_ITEMS.findIndex(x => !x.archived && isOwned(x.id));
   return {
     p: p < 0 ? WEAPONS.findIndex(w => w.slot !== 'secondary') : p,
     s: s < 0 ? WEAPONS.findIndex(w => w.slot === 'secondary') : s,
@@ -57389,6 +57389,8 @@ function sanitizeLoadoutSlots() {
   if (selectedPrimaryIdx != null && selectedPrimaryIdx >= 0 && (!p || p.archived || p.slot === 'secondary')) selectedPrimaryIdx = d.p;
   if (selectedSecondaryIdx != null && selectedSecondaryIdx >= 0 && (!s || s.archived || s.slot !== 'secondary')) selectedSecondaryIdx = d.s;
   if (selectedPrimaryIdx != null && selectedPrimaryIdx >= 0 && selectedPrimaryIdx === selectedSecondaryIdx) selectedSecondaryIdx = d.s;
+  const su = SUPPORT_ITEMS[selectedSupportIdx];                                       // (a utility that has been archived is swapped for the first one you own, as a gun is)
+  if (selectedSupportIdx != null && selectedSupportIdx >= 0 && (!su || su.archived)) selectedSupportIdx = d.u;
 }
 function loadoutReady() {
   return selectedPrimaryIdx !== null && selectedSecondaryIdx !== null &&
@@ -76272,7 +76274,7 @@ function _updateTrails(now) {
   for (let i = segs.length - 1; i >= 0; i--) {
     const s = segs[i], u = (now - s.born) / s.ms;
     if (u >= 1) { scene.remove(s.group); segs.splice(i, 1); continue; }
-    const lv = _TRAIL.levels[Math.min(9, Math.floor(u * 10))];
+    const lv = _TRAIL.levels[Math.max(0, Math.min(9, Math.floor(u * 10)))];
     s.glow.material = lv.glow; s.core.material = lv.core;
     const r = 1 - 0.7 * u;                                                         // it thins as it fades
     s.glow.scale.set(0.34 * r, 1, 0.34 * r); s.core.scale.set(0.10 * r, 1, 0.10 * r);
@@ -83064,7 +83066,7 @@ const DICE_POOL = {
   D:  ['storm_bloom', 'flamethrower', 'javelin_launcher', 'sawed_off', 'gatecrasher',
        'potato_cannon', 'sticker_blaster', 'arc_torrent', 'foam_cannon', 'portal_launcher', 'signal_pistol', 'boomerang',
        'm:frying_pan', 'm:baguette', 'm:screwdriver', 'm:yoyo', 'm:crowbar',
-       'u:caltrops', 'u:air_grenade', 'u:rubber_duck', 'u:confetti_cannon', 'u:air_blaster', 'u:flashbang_basic', 'u:ink_bomb',
+       'u:caltrops', 'u:air_grenade', 'u:air_blaster', 'u:flashbang_basic', 'u:ink_bomb',
        'u:bounce_pad', 'u:medkit'],
   F:  ['laser_pointer', 'taser', 'painter_beam', 'gravity_paint', 'traffic_controller',
        'm:fists', 'm:umbrella',
@@ -91032,7 +91034,7 @@ const BEST_LOADOUTS = [
   { icon:'🤖', name:'404: You Lose',           desc:'Nothing works for them',        p:'smart_smg',          s:'pistol',       m:'shock_baton',    u:'emp_grenade' },
   { icon:'🥷', name:'Lights Out',              desc:'Heard, never seen',             p:'air_rifle',          s:'boomerang',          m:'knife',          u:'smoke' },
   { icon:'🛡️', name:'Immovable Object',        desc:'You will not pass',             p:'sg8',              s:'taser',            m:'riot_shield',    u:'nano_shield' },
-  { icon:'🏏', name:'Recess Bully',            desc:'Playground chaos',              p:'paintball',          s:'slingshot',        m:'cricket_bat',    u:'rubber_duck' },
+  { icon:'🏏', name:'Recess Bully',            desc:'Playground chaos',              p:'paintball',          s:'slingshot',        m:'cricket_bat',    u:'molotov' },
   { icon:'🌪️', name:'Yeet Squad',              desc:'Send them flying',              p:'shockwave_launcher', s:'sawed_off',        m:'sledge',         u:'air_grenade' },
   { icon:'⚔️', name:'For The Realm',           desc:"Knight's loadout",              p:'sg8',                s:'flare',            m:'katana',         u:'smoke' },
   { icon:'🩸', name:'Bloodletter',             desc:'Heal off their pain',           p:'sg8',       s:'hand_cannon',      m:'vampire_blade',  u:'adrenaline' },
@@ -91041,11 +91043,11 @@ const BEST_LOADOUTS = [
   { icon:'🧊', name:'Permafrost',              desc:'Slow them, finish them',        p:'freeze_gun',         s:'auto_revolver',    m:'knife',          u:'freeze_ray' },
   { icon:'⚡', name:"Thor's Allowance",        desc:'Shock therapy',                 p:'arc_rifle',          s:'taser',            m:'shock_baton',    u:'emp_grenade' },
   { icon:'🎯', name:'Steady Hand',             desc:'Mid-range scalpel',             p:'lever',              s:'duelist_pistol',   m:'bat',            u:'ammo_fountain' },
-  { icon:'🍳', name:'Recipe for Disaster',     desc:'Loaded with kitchen tools',     p:'paintball',          s:'laser_pointer',    m:'frying_pan',     u:'rubber_duck' },
+  { icon:'🍳', name:'Recipe for Disaster',     desc:'Loaded with kitchen tools',     p:'paintball',          s:'laser_pointer',    m:'frying_pan',     u:'frag' },
   { icon:'💎', name:'Credit Card Maxed',       desc:'Pure P2W energy',               p:'minigun',      s:'auto_revolver',    m:'lightsabre',     u:'orbital_strike' },
   { icon:'🐢', name:'The Hedge',               desc:'Camp + punish',                 p:'srx',                s:'pistol',           m:'bat',            u:'tripwire' },
   { icon:'🌌', name:'Spacefarer',              desc:'Built in orbit',                p:'plasma_carbine',     s:'revolver',     m:'phase_blade',    u:'warp_beacon' },
-  { icon:'🎪', name:'Clown Convention',        desc:'Slapstick warfare',             p:'paintball',          s:'slingshot',        m:'baguette',       u:'confetti_cannon' },
+  { icon:'🎪', name:'Clown Convention',        desc:'Slapstick warfare',             p:'paintball',          s:'slingshot',        m:'baguette',       u:'smoke' },
   { icon:'🔮', name:'Light Show',              desc:'Refractive chaos',              p:'prism_engine',       s:'dart_gun',         m:'cane',           u:'ink_bomb' },
   { icon:'🦅', name:'Bread & Butter',          desc:'Reliable in any mode',          p:'ak20',               s:'revolver',         m:'bat',            u:'frag' },
   { icon:'🥊', name:'Closing Time',            desc:'Bar-fight ready',               p:'sg8',              s:'machine_pistol',   m:'brass_knuckles', u:'adrenaline' },

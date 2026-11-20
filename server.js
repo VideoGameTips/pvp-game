@@ -573,6 +573,7 @@ for (const id of Object.keys(WEAPON_COSTS)) {
 // (gotcha #4) -- pulled from the shop, and from chest/wheel reward pools
 // below, but still a valid purchase for anyone who already owns one.
 const ARCHIVED_ITEM_IDS = new Set([
+  'confetti_cannon', 'rubber_duck',   // retired: nobody used them
   'm1_garand',   // merged into the Lever Rifle
   'machine_revolver',
   'bazooka',
@@ -3473,7 +3474,7 @@ io.on('connection', (socket) => {
       if (!coords.every(Number.isFinite) || Math.hypot(data.x-p.x,data.y-p.y,data.z-p.z) > 3) return;
       const len = Math.hypot(data.dx,data.dy,data.dz), id = String(data.id || '');
       const unlimited = !!(users[p.account]?.isAdmin && p._adminInfiniteAmmo);
-      if (len < .01 || id.length > 100 || !id.startsWith(`satchel_${socket.id}_`) || (!unlimited && p._satchelIds.size >= 2)) return;   // two out at a time (the client's `uses`)
+      if (len < .01 || id.length > 100 || !id.startsWith(`satchel_${socket.id}_`) || (!unlimited && p._satchelIds.size >= 3)) return;   // three out at a time (the client's `uses`)
       const now = Date.now();
       if (now - (p._satchelThrownAt || 0) < 800) return;
       p._satchelThrownAt = now; p._satchelIds.add(id);
