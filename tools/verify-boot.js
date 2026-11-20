@@ -6740,4 +6740,62 @@ if (ok && process.argv.includes('--supportprune')) {
   if (all.length) { ok = false; console.log(all.join('\n')); }
 }
 
+// WALL RUNNING AUTOMATICALLY: in the air with enough speed, run into a tall wall (any angle but head-on) and you are on it -- no jump off a wall first, no armed state, no pushing along it.
+if (ok && process.argv.includes('--wallrun')) {
+  const issues = vm.runInThisContext(`(() => {
+    const issues = [];
+    const keep = { wc: wallColliders.slice(), cam: camera.position.clone(), dead: isDead, pv: { x: playerVelocity.x, z: playerVelocity.z }, ca: window._climbArmed, snd: playSoundEvent, hp: spawnHitParticle };
+    try {
+      playSoundEvent = () => {}; spawnHitParticle = () => {};
+      wallColliders.length = 0; wallColliders.push(new THREE.Box3(new THREE.Vector3(5, 0, -60), new THREE.Vector3(6, 12, 60)));      // a tall wall, its face at x = 5
+      isDead = false;
+      const feet = () => playerFeetY();
+      const setup = (vx, vz, dirx, dirz, armed) => {
+        wallRunLand(); window._climbArmed = !!armed; camera.position.set(4.55, 6, 0);             // against the face (the wall is on the right)
+        playerVelocity.x = vx; playerVelocity.z = vz; return new THREE.Vector3(dirx, 0, dirz);
+      };
+      // 1. never jumped off anything (not armed), 12 m/s along the wall, pushing along it: you are on the wall at once
+      let d = setup(0, -12, 0, -1, false);
+      if (!wallRunStep(0.016, d) || !window._wallRun) issues.push('in the air at 12 m/s beside a wall, not armed: it should start');
+      // 2. at an angle: pushing mostly INTO the wall, travelling along it
+      d = setup(3, -11.5, 0.9, -0.43, false);
+      if (!wallRunStep(0.016, d)) issues.push('running into the wall at an angle, pushing at it: it should start');
+      // 3. you hit it hard at 45 degrees: the collision has cut your speed to 8, but you were doing 13 a moment ago
+      d = setup(0, -13, 0.7, -0.7, false); wallRunStep(0.016, d); wallRunLand(); window._wrSpd = 0;
+      d = setup(0, -13.5, 0.7, -0.7, false); window._wrSpd = 13.5; playerVelocity.z = -8; playerVelocity.x = 0;
+      if (!wallRunStep(0.016, d)) issues.push('it remembers how fast you were just before the wall: it should start');
+      if (window._wallRun && window._wallRun.speed < 8) issues.push('and you keep that speed along the wall: ' + window._wallRun.speed);
+      // 4. a normal run is not enough
+      d = setup(0, -7.3, 0, -1, false);
+      if (wallRunStep(0.016, d) || window._wallRun) issues.push('7 m/s is a normal run: no wall run');
+      // 5. head-on is a crash
+      d = setup(11, 0, 1, 0, false); window._wrSpd = 11; playerVelocity.x = 0.5;
+      if (wallRunStep(0.016, d)) issues.push('straight into the wall is not a run');
+      // 6. on the ground it does not apply (the caller only asks in the air) and one run per jump
+      d = setup(0, -12, 0, -1, false); window._wallRunSpent = true;
+      if (wallRunStep(0.016, d)) issues.push('one run per jump');
+      window._wallRunSpent = false;
+      // 7. no keys held: nothing
+      d = setup(0, -12, 0, 0, false);
+      if (wallRunStep(0.016, new THREE.Vector3(0, 0, 0))) issues.push('with no key held it does not start');
+      // 8. a wall that is short does not count
+      wallColliders.length = 0; wallColliders.push(new THREE.Box3(new THREE.Vector3(5, 0, -60), new THREE.Vector3(6, 2, 60)));
+      d = setup(0, -12, 0, -1, false); camera.position.y = 6;
+      if (wallRunStep(0.016, d)) issues.push('a low wall is not a wall to run on');
+      wallColliders.length = 0; wallColliders.push(new THREE.Box3(new THREE.Vector3(5, 0, -60), new THREE.Vector3(6, 12, 60)));
+      // 9. once on it, it carries on and ends by itself: run it for 5 seconds
+      d = setup(0, -12, 0, -1, false); let on = 0, ended = false;
+      for (let i = 0; i < 400; i++) { const r = wallRunStep(0.016, d); if (r) on++; else if (on) { ended = true; break; } }
+      if (!(on > 60 && ended)) issues.push('a run lasts a while and ends on its own: ' + on + ' frames, ended ' + ended);
+    } catch (e) { issues.push('threw: ' + (e && e.stack || e)); }
+    finally {
+      wallColliders.length = 0; keep.wc.forEach(x => wallColliders.push(x)); camera.position.copy(keep.cam); isDead = keep.dead; playerVelocity.x = keep.pv.x; playerVelocity.z = keep.pv.z;
+      window._climbArmed = keep.ca; wallRunLand(); playSoundEvent = keep.snd; spawnHitParticle = keep.hp;
+    }
+    return issues;
+  })()`);
+  console.log('WALL RUN checks: starts in the air with no jump-off-a-wall first, at any angle but head-on, remembers the speed before the hit, needs real speed and a tall wall, one run a jump');
+  if (issues.length) { ok = false; console.log(issues.join('\n')); }
+}
+
 process.exit(ok ? 0 : 1);

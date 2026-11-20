@@ -6429,12 +6429,13 @@ function playerHeadroomEye(px = camera.position.x, pz = camera.position.z) {
 }
 
 
-// 🏃‍♂️ WALL RUNNING (replaces the wall climb). Jump with real momentum (a slide jump, a blast, a ramp: at least 10 m/s, well past a normal run's 7) alongside a tall wall and keep pushing
-// forward along it: you run on the wall. Gravity all but lets go of you (a slow sink), the camera rolls hard AWAY from the wall, and you keep your speed -- which bleeds off a little
+// 🏃‍♂️ WALL RUNNING (replaces the wall climb). Be in the air (any way: a jump, a slide jump, off a ledge, a blast, a ramp, a pad) with real momentum (at least 10 m/s, well past a normal run's 7)
+// and run into a tall wall: you run on it, by itself, with no jump off the wall and no extra key. Any angle but head-on will do, and it remembers how fast you were just before you hit it.
+// Keep pushing forward along it: you run on the wall. Gravity all but lets go of you (a slow sink), the camera rolls hard AWAY from the wall, and you keep your speed -- which bleeds off a little
 // every second -- for at most 4 seconds. It ends when the time is up, your speed falls under 6.5 m/s, the wall ends, you let go of forward, or you jump: a wall jump kicks you off the
 // wall with your speed. One run per jump (a wall jump gives you another, on a different wall). Run on the left wall and the view rolls right and the other way round (flip WALLRUN_TILT_AWAY).
 const WALLRUN_MIN_SPEED = 10, WALLRUN_KEEP_SPEED = 6.5, WALLRUN_MAX_S = 4, WALLRUN_ROLL = 0.30, WALLRUN_SINK = -0.35, WALLRUN_DECAY = 0.5, WALLRUN_TILT_AWAY = true;
-window._wallRun = null; window._wallRunSpent = false; window._wallRunLast = null;
+window._wallRun = null; window._wallRunSpent = false; window._wallRunLast = null; window._wrSpd = 0;
 function wallRunSurface() {                                   // the tall wall beside the body: { nx, nz, gap } (the normal points from the wall to you), or null
   const x = camera.position.x, z = camera.position.z, feet = playerFeetY();
   let best = null, bd = PLAYER_RADIUS + 0.34;
@@ -6455,7 +6456,7 @@ function wallRunEnd(spent) {                                   // you keep the s
   window._wallRunLast = { nx: w.nx, nz: w.nz, at: Date.now() };
   if (spent) window._wallRunSpent = true;
 }
-function wallRunLand() { window._wallRun = null; window._wallRunSpent = false; window._wallRunLast = null; }
+function wallRunLand() { window._wallRun = null; window._wallRunSpent = false; window._wallRunLast = null; window._wrSpd = 0; }
 function wallRunJump() {                                       // Space while running: off the wall, with your speed
   const w = window._wallRun; if (!w) return false;
   window._wallRun = null; window._wallRunSpent = false;
@@ -6469,17 +6470,19 @@ function wallRunStep(dt, dir) {                                // called every a
   if (isDead || adminFlyActive() || pilotedVehicle || pilotedMortar || window._mapLadder || thornRooted()) { window._wallRun = null; return false; }
   const hasDir = !!dir && dir.lengthSq() > 0.01;
   let w = window._wallRun;
+  const sp = Math.hypot(playerVelocity.x, playerVelocity.z);
+  window._wrSpd = Math.max(sp, (window._wrSpd || 0) - 22 * dt);                              // how fast you were a moment ago: hitting the wall costs speed, and that must not cost you the run
   if (!w) {
-    if (!window._climbArmed || window._wallRunSpent || !hasDir) return false;
-    const sp = Math.hypot(playerVelocity.x, playerVelocity.z);
-    if (sp < WALLRUN_MIN_SPEED) return false;                  // it takes real momentum
+    if (window._wallRunSpent || !hasDir) return false;                                      // (in the air is all it takes: no jump needed first)
+    if (window._wrSpd < WALLRUN_MIN_SPEED) return false;                                    // it takes real momentum
     const s = wallRunSurface(); if (!s) return false;
     const L = window._wallRunLast; if (L && Date.now() - L.at < 1500 && L.nx === s.nx && L.nz === s.nz) return false;      // not the wall you just kicked off
-    if ((playerVelocity.x * s.nx + playerVelocity.z * s.nz) / sp < -0.55) return false;                                  // head-on is a crash, not a run
-    let tx = -s.nz, tz = s.nx; if (playerVelocity.x * tx + playerVelocity.z * tz < 0) { tx = -tx; tz = -tz; }
-    if (tx * dir.x + tz * dir.z < 0.2) return false;           // and you have to be pushing along it
+    let tx = -s.nz, tz = s.nx;
+    const along = playerVelocity.x * tx + playerVelocity.z * tz + 3 * (dir.x * tx + dir.z * tz);   // which way along the wall: where you are going, or where you are pushing
+    if (along < 0) { tx = -tx; tz = -tz; }
+    if (Math.abs(playerVelocity.x * tx + playerVelocity.z * tz) < 3) return false;           // head-on is a crash, not a run: some of you has to be going along it
     const rx = Math.cos(euler.y), rz = -Math.sin(euler.y), side = (-s.nx * rx - s.nz * rz) >= 0 ? 1 : -1;                  // +1: the wall is on your right
-    w = window._wallRun = { nx: s.nx, nz: s.nz, tx, tz, speed: Math.min(26, Math.abs(playerVelocity.x * tx + playerVelocity.z * tz)), t: 0, side, fx: 0 };
+    w = window._wallRun = { nx: s.nx, nz: s.nz, tx, tz, speed: Math.min(26, Math.max(Math.abs(playerVelocity.x * tx + playerVelocity.z * tz), window._wrSpd * 0.85)), t: 0, side, fx: 0 };
     _extVel.x = _extVel.z = 0; window._blastCarry = false;
     playSoundEvent('footstep', { volume: 0.7, pitch: 1.2, minGap: 60 });
   }
