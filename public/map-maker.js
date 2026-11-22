@@ -21,14 +21,43 @@
   scene.add(markerGroup);
   const key = (x, y, z) => x + ',' + y + ',' + z;
 
+  // ── FREE CAM (the default): WASD flies, the arrow keys move the block. ORBIT (Tab) is the older mouse view. ──
+  let free = true, fcSpeed = 12;
+  const fc = { x: 0, y: 10, z: 20, yaw: 0, pitch: -0.5 }, cur = { x: 0, z: 0 };
+  const locked = () => document.pointerLockElement === canvas;
+  let cursorGuide = null;
+  function resetFree() {
+    const span = Math.max(doc.nx, doc.nz) * doc.cs;
+    fc.x = 0; fc.z = span * 0.7; fc.y = Math.max(6, span * 0.45); fc.yaw = 0; fc.pitch = -Math.atan2(fc.y - 1, fc.z);
+    cur.x = doc.nx >> 1; cur.z = doc.nz >> 1; sel.layer = Math.min(sel.layer, doc.ny - 1);
+  }
+  function cursorWorld() { const o = V.origin(doc); return { x: o.x + (cur.x + 0.5) * doc.cs, z: o.z + (cur.z + 0.5) * doc.cs }; }
+  function moveCursor(code) {                                                   // arrows: relative to where the camera faces, snapped to the grid
+    const fx = -Math.sin(fc.yaw), fz = -Math.cos(fc.yaw);
+    let dx, dz; if (Math.abs(fx) > Math.abs(fz)) { dx = Math.sign(fx); dz = 0; } else { dx = 0; dz = Math.sign(fz); }
+    let mx = 0, mz = 0;
+    if (code === 'ArrowUp') { mx = dx; mz = dz; } else if (code === 'ArrowDown') { mx = -dx; mz = -dz; }
+    else if (code === 'ArrowRight') { mx = -dz; mz = dx; } else if (code === 'ArrowLeft') { mx = dz; mz = -dx; }
+    cur.x = Math.max(0, Math.min(doc.nx - 1, cur.x + mx)); cur.z = Math.max(0, Math.min(doc.nz - 1, cur.z + mz));
+    hover = { x: cur.x, y: sel.layer, z: cur.z }; updateStatus();
+    if (keysDown.has('Space')) act({ x: cur.x, y: sel.layer, z: cur.z }); else if (keysDown.has('Backspace')) act({ x: cur.x, y: sel.layer, z: cur.z }, true);   // (hold + arrows = paint a line)
+  }
+  function setFree(on) {
+    free = on; if (!on && locked()) document.exitPointerLock();
+    $('mode').textContent = on ? '🎥 FREE CAM  (Tab: orbit view)' : '🧭 ORBIT VIEW  (Tab: free cam)';
+    if (ghost) ghost.visible = false; if (cursorGuide) cursorGuide.visible = on; updateHint();
+  }
+  function updateHint() { $('hint').textContent = free && !locked() ? '🎥 Click the view to lock the camera  ·  Esc to let go' : ''; }
+  document.addEventListener('pointerlockchange', updateHint);
+
   // ── the view: orbit round a target ──
-  const cam = { yaw: 0.8, pitch: 0.7, dist: 34, tx: 0, ty: 0, tz: 0 };
+  const cam = { yaw: 0, pitch: 0.75, dist: 34, tx: 0, ty: 0, tz: 0 };
   function placeCamera() {
     const cp = Math.cos(cam.pitch);
     camera.position.set(cam.tx + Math.sin(cam.yaw) * cp * cam.dist, cam.ty + Math.sin(cam.pitch) * cam.dist, cam.tz + Math.cos(cam.yaw) * cp * cam.dist);
     camera.lookAt(cam.tx, cam.ty, cam.tz);
   }
-  function resize() { renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
+  function resize() { const w = canvas.clientWidth || innerWidth, h = canvas.clientHeight || innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
   addEventListener('resize', resize); resize();
 
   // ── the UI ──
@@ -80,6 +109,8 @@
     scene.background = new T.Color(doc.sky);
     if (boundsBox) { scene.remove(boundsBox); boundsBox.geometry.dispose(); }
     boundsBox = new T.LineSegments(new T.EdgesGeometry(new T.BoxGeometry(W, H, D)), new T.LineBasicMaterial({ color: 0x5d7a99, transparent: true, opacity: 0.55 })); boundsBox.position.y = H / 2; scene.add(boundsBox);
+    if (cursorGuide) { scene.remove(cursorGuide); cursorGuide.geometry.dispose(); }
+    cursorGuide = new T.LineSegments(new T.EdgesGeometry(new T.BoxGeometry(doc.cs, H, doc.cs)), new T.LineBasicMaterial({ color: 0xffd34d, transparent: true, opacity: 0.55 })); cursorGuide.position.y = H / 2; cursorGuide.visible = free; scene.add(cursorGuide);
     rebuildGrid(); rebuildMarkers();
     updateStatus();
   }
@@ -119,7 +150,7 @@
   const ray = new T.Raycaster(), mouse = new T.Vector2();
   const plane = new T.Plane(new T.Vector3(0, 1, 0), 0);
   function pick(ev) {
-    mouse.set((ev.clientX / innerWidth) * 2 - 1, -(ev.clientY / innerHeight) * 2 + 1);
+    const rc = canvas.getBoundingClientRect(); mouse.set(((ev.clientX - rc.left) / rc.width) * 2 - 1, -((ev.clientY - rc.top) / rc.height) * 2 + 1);
     ray.setFromCamera(mouse, camera);
     const o = V.origin(doc), cs = doc.cs;
     const inGrid = (x, y, z) => x >= 0 && y >= 0 && z >= 0 && x < doc.nx && y < doc.ny && z < doc.nz;
@@ -198,12 +229,19 @@
   let down = null, lastKey = '';
   canvas.addEventListener('contextmenu', e => e.preventDefault());
   canvas.addEventListener('mousedown', e => {
+    if (free) {                                                                 // free cam: the first click locks the camera; then left = place, right = erase, at the block
+      e.preventDefault();
+      if (!locked()) { try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); canvas.requestPointerLock(); } catch (er) {} return; }
+      if (e.button === 0 || e.button === 2) { beginStroke(); act({ x: cur.x, y: sel.layer, z: cur.z }, e.button === 2); endStroke(); }
+      return;
+    }
     down = { b: e.button, x: e.clientX, y: e.clientY, moved: false, shift: e.shiftKey };
     if (e.button === 0) {
       beginStroke(); const t = pick(e); if (t) { lastKey = key(t.x, t.y, t.z); act(t); }
     }
   });
   addEventListener('mousemove', e => {
+    if (free) { if (locked()) { fc.yaw -= e.movementX * 0.0025; fc.pitch = Math.max(-1.55, Math.min(1.55, fc.pitch - e.movementY * 0.0025)); } return; }
     if (down && (down.b === 2 || down.b === 1)) {
       const dx = e.clientX - down.x, dy = e.clientY - down.y;
       if (Math.abs(dx) + Math.abs(dy) > 4) down.moved = true;
@@ -226,11 +264,17 @@
     if (down.b === 0) endStroke();
     down = null;
   });
-  canvas.addEventListener('wheel', e => { e.preventDefault(); cam.dist = Math.max(3, Math.min(260, cam.dist * Math.exp(e.deltaY * 0.0011))); }, { passive: false });
+  canvas.addEventListener('wheel', e => { e.preventDefault(); if (free) { fcSpeed = Math.max(2, Math.min(150, fcSpeed * Math.exp(-e.deltaY * 0.0011))); updateStatus('fly speed ' + Math.round(fcSpeed)); return; } cam.dist = Math.max(3, Math.min(260, cam.dist * Math.exp(e.deltaY * 0.0011))); }, { passive: false });
   const keysDown = new Set();
   addEventListener('keydown', e => {
     if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
     keysDown.add(e.code);
+    if (e.code === 'Tab') { e.preventDefault(); setFree(!free); return; }
+    if (free && !e.ctrlKey && !e.metaKey) {
+      if (e.code.startsWith('Arrow')) { e.preventDefault(); moveCursor(e.code); return; }
+      if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); if (!e.repeat) { beginStroke(); act({ x: cur.x, y: sel.layer, z: cur.z }); if (e.code === 'Enter') endStroke(); } return; }
+      if (e.code === 'Backspace' || e.code === 'Delete') { e.preventDefault(); if (!e.repeat) { beginStroke(); act({ x: cur.x, y: sel.layer, z: cur.z }, true); if (e.code === 'Delete') endStroke(); } return; }
+    }
     if (e.ctrlKey || e.metaKey) { if (e.code === 'KeyZ') { e.preventDefault(); e.shiftKey ? redo() : undo(); } else if (e.code === 'KeyY') { e.preventDefault(); redo(); } else if (e.code === 'KeyS') { e.preventDefault(); saveNow(); } return; }
     if (/^Digit[1-6]$/.test(e.code)) { sel.shape = +e.code.slice(5) - 1; if (sel.tool !== 'erase') sel.tool = 'place'; refreshUI(); }
     else if (e.code === 'KeyR') { sel.rot = (sel.rot + (e.shiftKey ? 3 : 1)) & 3; refreshUI(); }
@@ -241,7 +285,8 @@
     else if (e.code === 'BracketLeft' || e.code === 'PageDown') { sel.layer = Math.max(0, sel.layer - 1); rebuildGrid(); refreshUI(); }
     else if (e.code === 'KeyG') { gridOn = !gridOn; rebuildGrid(); }
   });
-  addEventListener('keyup', e => keysDown.delete(e.code));
+  addEventListener('keyup', e => { keysDown.delete(e.code); if (free && (e.code === 'Space' || e.code === 'Backspace')) endStroke(); });
+  $('mode').onclick = () => setFree(!free);
   $('rot').onclick = () => { sel.rot = (sel.rot + 1) & 3; refreshUI(); };
   $('flip').onclick = () => { sel.flip ^= 1; refreshUI(); };
   $('tPlace').onclick = () => setTool('place'); $('tErase').onclick = () => setTool('erase'); $('tA').onclick = () => setTool('spawnA'); $('tB').onclick = () => setTool('spawnB');
@@ -250,7 +295,7 @@
 
   // ── the document: new / load / save / size / share / play ──
   function openDoc(d) { doc = V.cleanDoc(d); sel.layer = Math.min(sel.layer, doc.ny - 1); undoStack = []; redoStack = []; reindex(); fillDocUI(); dirty = true; resetView(); rebuildGhost(); refreshUI(); updateInfo(); }
-  function resetView() { cam.tx = 0; cam.tz = 0; cam.ty = 0; cam.dist = Math.max(14, Math.max(doc.nx, doc.nz) * doc.cs * 0.95); }
+  function resetView() { cam.tx = 0; cam.tz = 0; cam.ty = 0; cam.dist = Math.max(14, Math.max(doc.nx, doc.nz) * doc.cs * 0.95); resetFree(); }
   $('new').onclick = () => { if (!doc.cells.length || confirm('Start a new map? (the current one stays saved)')) { saveNow(true); openDoc(V.defaultDoc($('name').value ? 'New Map' : 'My Map')); saveNow(true); } };
   $('save').onclick = () => saveNow();
   $('load').onclick = () => { const m = V.loadAll().find(x => x.id === $('maps').value); if (m) { saveNow(true); openDoc(m); } };
@@ -265,7 +310,7 @@
   };
   $('export').onclick = async () => { const s = JSON.stringify(V.cleanDoc(doc)); $('io').value = s; try { await navigator.clipboard.writeText(s); updateStatus('copied'); } catch (e) { $('io').select(); } };
   $('import').onclick = () => { try { const d = JSON.parse($('io').value); const c = V.cleanDoc(d); c.id = 'vx_' + Date.now().toString(36); saveNow(true); openDoc(c); saveNow(true); updateStatus('imported'); } catch (e) { updateStatus('that is not map data'); } };
-  $('play').onclick = () => { if (saveNow(true)) location.href = 'index.html?vxplay=' + encodeURIComponent(doc.id); };
+  $('play').onclick = () => { if (!saveNow(true)) return; if (window.parent !== window) window.parent.postMessage({ vxplay: doc.id }, '*'); else location.href = 'index.html?vxplay=' + encodeURIComponent(doc.id); };   // (inside the game it starts right there)
 
   // ── the loop ──
   let last = performance.now();
@@ -277,9 +322,22 @@
       const sp = cam.dist * 0.9 * dt, f = (keysDown.has('KeyW') || keysDown.has('ArrowUp') ? 1 : 0) - (keysDown.has('KeyS') || keysDown.has('ArrowDown') ? 1 : 0), r = (keysDown.has('KeyD') || keysDown.has('ArrowRight') ? 1 : 0) - (keysDown.has('KeyA') || keysDown.has('ArrowLeft') ? 1 : 0);
       if (f || r) { cam.tx += (-Math.sin(cam.yaw) * f + Math.cos(cam.yaw) * r) * sp; cam.tz += (-Math.cos(cam.yaw) * f - Math.sin(cam.yaw) * r) * sp; }
     }
-    placeCamera(); renderer.render(scene, camera);
+    if (free) {
+      if (!/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) {
+        const sp = fcSpeed * (keysDown.has('ShiftLeft') || keysDown.has('ShiftRight') ? 3 : 1) * dt;
+        const f = (keysDown.has('KeyW') ? 1 : 0) - (keysDown.has('KeyS') ? 1 : 0), r = (keysDown.has('KeyD') ? 1 : 0) - (keysDown.has('KeyA') ? 1 : 0), u = (keysDown.has('KeyE') ? 1 : 0) - (keysDown.has('KeyQ') ? 1 : 0);
+        const cp = Math.cos(fc.pitch), sy = Math.sin(fc.yaw), cy = Math.cos(fc.yaw);
+        fc.x += (-sy * cp * f + cy * r) * sp; fc.y += (Math.sin(fc.pitch) * f + u) * sp; fc.z += (-cy * cp * f - sy * r) * sp;
+        fc.y = Math.max(0.3, fc.y);
+      }
+      camera.position.set(fc.x, fc.y, fc.z); camera.rotation.order = 'YXZ'; camera.rotation.set(fc.pitch, fc.yaw, 0);
+      const cw = cursorWorld();
+      if (ghost) { ghost.visible = true; ghost.position.set(cw.x, sel.layer * doc.cs, cw.z); }
+      if (cursorGuide) cursorGuide.position.set(cw.x, cursorGuide.position.y, cw.z);
+    } else placeCamera();
+    renderer.render(scene, camera);
   }
-  fillDocUI(); reindex(); resetView(); refreshUI(); updateInfo();
-  window.PVP_MAPMAKER = { get doc() { return doc; }, sel, cam, setCell, rebuild, undo, redo };   // (for poking at it from the console)
+  fillDocUI(); reindex(); resetView(); refreshUI(); updateInfo(); setFree(true);
+  window.PVP_MAPMAKER = { get doc() { return doc; }, sel, cam, fc, cur, setCell, rebuild, undo, redo };   // (for poking at it from the console)
   requestAnimationFrame(frame);
 })();

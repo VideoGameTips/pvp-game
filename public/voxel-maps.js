@@ -60,15 +60,31 @@
     if (!gameStarted) { gameStarted = true; spawnGameBots(); requestPointerLockSafe(); startLoop(); }
   }
 
-  // MORE -> MAP MAKER
+  // MORE -> MAP MAKER: the editor opens over the game (a full-screen frame), PLAY / TEST there starts the match right here
+  let makerWrap = null;
+  function closeMaker() { if (!makerWrap) return; makerWrap.remove(); makerWrap = null; loadAll(); }
+  function openMaker() {
+    if (makerWrap) return;
+    const menu = document.getElementById('more-menu'); if (menu) menu.style.display = 'none';
+    makerWrap = document.createElement('div');
+    makerWrap.style.cssText = 'position:fixed;inset:0;z-index:99990;background:#14181d;';
+    const fr = document.createElement('iframe'); fr.src = 'map-maker.html'; fr.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:0;'; fr.allow = 'clipboard-write';
+    const x = document.createElement('button'); x.textContent = '✕ BACK TO GAME'; x.style.cssText = 'position:absolute;top:8px;right:10px;z-index:2;background:#2a1717;color:#ffb3b3;border:1px solid #8a3a3a;border-radius:4px;padding:6px 12px;font:12px "Courier New",monospace;letter-spacing:1px;cursor:pointer;';
+    x.onclick = closeMaker; makerWrap.append(fr, x); document.body.appendChild(makerWrap);
+    makerWrap._frame = fr;
+  }
+  window.addEventListener('message', ev => {
+    if (!makerWrap || ev.source !== makerWrap._frame.contentWindow || !ev.data || !ev.data.vxplay) return;
+    const id = String(ev.data.vxplay); closeMaker(); try { playMap(id); } catch (e) { console.error(e); alert('Could not start the test: ' + e.message); }
+  });
   function addLink() {
     const wiki = document.querySelector('#more-menu a[href="wiki.html"]');
     if (!wiki || document.getElementById('map-maker-link')) return;
-    const a = document.createElement('a'); a.id = 'map-maker-link'; a.href = 'map-maker.html'; a.target = '_blank'; a.textContent = '🧱 MAP MAKER'; wiki.after(a);
+    const a = document.createElement('a'); a.id = 'map-maker-link'; a.href = 'map-maker.html'; a.textContent = '🧱 MAP MAKER'; a.addEventListener('click', e => { e.preventDefault(); openMaker(); }); wiki.after(a);
   }
 
   loadAll(); addLink();
-  window.PVP_VOXEL_GAME = { loadAll, buildInto, playMap };
+  window.PVP_VOXEL_GAME = { loadAll, buildInto, playMap, openMaker };
 
   // ?vxplay=<id>: the editor's PLAY button. The game wants a click before it can capture the mouse, so: one click anywhere, then you are on your map.
   const want = new URLSearchParams(location.search).get('vxplay');

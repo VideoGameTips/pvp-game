@@ -6,7 +6,9 @@
 <title>PVP Arena — Map Maker</title>
 <style>
   html, body { margin: 0; height: 100%; background: #14181d; color: #dfe6ee; font-family: "Courier New", monospace; overflow: hidden; }
-  #view { position: fixed; inset: 0; display: block; }
+  :root { --pw: 252px; }
+  #view { position: fixed; left: var(--pw); top: 0; right: 0; bottom: 0; width: calc(100% - var(--pw)); height: 100%; display: block; }   /* (beside the panel, so the grid is centred in what you can see) */
+  #hint { position: fixed; left: var(--pw); right: 0; top: 46%; z-index: 4; text-align: center; font-size: 15px; letter-spacing: 2px; color: #cfe8ff; text-shadow: 0 1px 4px #000; pointer-events: none; }
   #panel { position: fixed; left: 0; top: 0; bottom: 0; width: 252px; overflow-y: auto; box-sizing: border-box; padding: 10px; background: rgba(10, 13, 17, .94); border-right: 1px solid #2c3640; z-index: 5; }
   h1 { font-size: 14px; letter-spacing: 3px; margin: 0 0 8px; color: #ff9d57; }
   h2 { font-size: 10px; letter-spacing: 2px; margin: 12px 0 5px; color: #7f8f9f; font-weight: normal; }
@@ -23,11 +25,11 @@
   #colors button { height: 24px; padding: 0; }
   #colors button.on { outline: 2px solid #ffb84d; }
   label { font-size: 11px; color: #9fb0c0; }
-  #status { position: fixed; left: 262px; top: 8px; z-index: 5; font-size: 12px; color: #b8c7d6; background: rgba(10, 13, 17, .8); padding: 5px 9px; border-radius: 3px; pointer-events: none; }
+  #status { position: fixed; left: calc(var(--pw) + 10px); top: 8px; z-index: 5; font-size: 12px; color: #b8c7d6; background: rgba(10, 13, 17, .8); padding: 5px 9px; border-radius: 3px; pointer-events: none; }
   #help { position: fixed; right: 10px; bottom: 8px; z-index: 5; max-width: 520px; font-size: 11px; line-height: 1.5; color: #8d9cac; text-align: right; pointer-events: none; text-shadow: 0 1px 2px #000; }
   #io { width: 100%; height: 70px; resize: vertical; }
   .small { font-size: 10px; color: #7f8f9f; line-height: 1.4; }
-  @media (max-width: 700px) { #panel { width: 200px; } #status { left: 210px; } #help { display: none; } }
+  @media (max-width: 700px) { #panel { width: 200px; } #status { left: 210px; } :root { --pw: 200px; } #help { display: none; } }
 </style>
 </head>
 <body>
@@ -38,6 +40,7 @@
   <div class="row"><select id="maps"></select><button id="load" style="flex:0 0 auto;">LOAD</button></div>
   <div class="row"><button id="new">NEW</button><button id="save">SAVE</button><button id="del">DELETE</button></div>
   <button id="play" style="width:100%;background:#1f3a22;border-color:#4fa35a;margin-bottom:4px;">▶ PLAY / TEST IN GAME</button>
+  <button id="mode" style="width:100%;margin-bottom:4px;"></button>
 
   <h2>SHAPE  (keys 1-6)</h2>
   <div id="shapes"></div>
@@ -65,7 +68,8 @@
   <div class="small" style="margin-top:8px;">Maps are saved in this browser. In the game: PLAY / TEST starts a free-for-all on your map, and it is in the map picker too.</div>
 </div>
 <div id="status"></div>
-<div id="help">LMB place (drag to paint) · RMB click erase · RMB drag orbit · Shift+RMB / middle drag pan · wheel zoom · WASD move view<br>1-6 shape · R turn · F flip · C colour · X erase · [ ] layer · Ctrl+Z / Ctrl+Y undo / redo · G grid</div>
+<div id="hint"></div>
+<div id="help">FREE CAM: click to lock · mouse look · WASD fly · Q/E down/up · Shift fast · wheel = speed<br>ARROWS move the block · PgUp/PgDn (or [ ]) block height · Space / click place · hold Space + arrows to paint · Backspace / right-click erase<br>1-6 shape · R turn · F flip · C colour · X erase tool · Ctrl+Z / Ctrl+Y undo / redo · G grid · Tab free cam / orbit view · Esc unlock</div>
 <script src="three.min.js"></script>
 <script src="voxel-core.js"></script>
 <script src="map-maker.js"></script>
