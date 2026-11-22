@@ -52,6 +52,7 @@ FILES+=(rank-core.js ranked.js)   # Ranked 1v1 / 2v2 (index.html loads both)
 FILES+=(rank-core.js ranked.js)
 FILES+=(raven-textures.js pixel-textures.js arena-character-textures.js)
 FILES+=(match-mvp.js match-mvp.css)
+FILES+=(voxel-core.js voxel-maps.js map-maker.html map-maker.js)   # the map maker (voxel maps)
 FILES+=(damage-symbols.js damage-symbols.css)
 FILES+=(chronos-engine.js clockwork-requiem.js arsenal-remodels.js combat-visuals.js nightmare-ai.js collection-wraps.js impossible-skins.js impossible-round4.js impossible-round5.js hungry-garden.js)
 
