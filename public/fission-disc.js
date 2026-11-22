@@ -36,7 +36,8 @@
   }
   function receive(b) {
     if(b.ownerId===myId||flights.has(b.id))return;
-    spawn(b.id,b.ownerId,new THREE.Vector3(b.x,b.y,b.z),new THREE.Vector3(b.dx,b.dy,b.dz),false);
+    const f=spawn(b.id,b.ownerId,new THREE.Vector3(b.x,b.y,b.z),new THREE.Vector3(b.dx,b.dy,b.dz),false);
+    if(window.PVP_BLACKOUT?.valid.has(b.skin))applyWeaponSkin(f.mesh,WEAPON_SKINS_BY_ID[b.skin]);
   }
   function init() {
     if(initialized)return;initialized=true;
@@ -49,6 +50,7 @@
   }
   function spawn(id,owner,origin,dir,own) {
     const mesh=model();mesh.position.copy(origin);scene.add(mesh);
+    if(own&&WEAPON_SKINS_BY_ID[wrapIdFor('fission_disc')]?.blackout)applyWeaponSkin(mesh,WEAPON_SKINS_BY_ID[wrapIdFor('fission_disc')]);
     const f={id,owner,own,mesh,dir:dir.clone().normalize(),distance:0,returning:false,
       hits:new Set(),born:performance.now(),epoch:matchEpoch,lastWire:0};
     flights.set(id,f);return f;

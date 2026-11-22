@@ -286,9 +286,15 @@
   }
   function damage(victim,attacker,amount,id){
     if(!victim||victim.dead||victim.team===attacker.team||!(amount>0))return;
+    if(id==='flamethrower'){
+      const state=window.PVP_FLAME_RULES.touch(victim._simFlame,now());if(!state)return;
+      victim._simFlame=state;victim._simFlameSource=attacker;amount=10;
+      window.PVP_FLAMES?.show(victim.id,8000);
+    }
     if(clock<(victim._simGuardUntil||0))amount*=.15;
     victim._simHeal=null;
     victim.hp=Math.max(0,victim.hp-amount);
+    flashDamagedCharacter(remoteMeshes[victim.id]);
     if(id==='rad_pulse'&&victim.hp>0&&clock>=(victim._simGuardUntil||0)){
       victim._simRadiation=window.PVP_RADIATION.expose(victim._simRadiation,now());
       victim._simRadSource=attacker;
@@ -305,7 +311,7 @@
   }
   function gunShot(bot,enemy,item,id,amount){
     const origin=new THREE.Vector3(bot.x,(bot.y||0)+1.4,bot.z),end=new THREE.Vector3(enemy.x,(enemy.y||0)+1.2,enemy.z);
-    spawnLocalBullet(origin,end.sub(origin).normalize(),'sim_'+bot.id+'_'+clock,false,item.bulletSpeed||120,item.bulletColor||0xffbb66,item.bulletSize||.05,id);
+    spawnLocalBullet(origin,end.sub(origin).normalize(),'sim_'+bot.id+'_'+clock,false,item.bulletSpeed||120,item.bulletColor||0xffbb66,item.bulletSize||.05,id,id==='flamethrower'?{botId:bot.id,visualOnly:true}:{});
     playWeaponSound(item.id,{baseWeapon:item,remote:true,position:origin});damage(enemy,bot,amount,id);
   }
   function area(bot,point,radius,amount,id,knock=0,launch=0,hitSet=null){
@@ -356,7 +362,9 @@
   }
   function useUtility(bot,enemy){
     const u=utility(bot.utilityId);if(!u||clock<bot._simUtilityAt||(!u.recharge&&bot._simUtilityUses<=0))return;
-    if(u.heal){
+    if(u.id==='bounce_pad'||u.id==='bear_trap'){
+      window.PVP_FIELD_UTILITIES?.deployForBot(bot,u);
+    }else if(u.heal){
       if(bot.hp>bot.maxHp-u.heal*.5||bot._simHeal)return;
       bot._simHeal={end:clock+(u.healTime||0),amount:u.heal};
     }else if(u.refill||u.id==='care_package'){
@@ -378,6 +386,12 @@
   }
   function combat(dt){
     clock+=dt*1000;
+    for(const bot of gameBots)if(!bot.dead&&bot._simFlame){
+      const amount=window.PVP_FLAME_RULES.tick(bot._simFlame,now());
+      if(amount)damage(bot,bot._simFlameSource,amount,'flamethrower_burn');
+      if(now()>bot._simFlame.until)bot._simFlame=null;
+      else window.PVP_FLAMES?.show(bot.id,bot._simFlame.until-now());
+    }
     for(const bot of gameBots)if(!bot.dead&&bot._simRadiation){
       const amount=window.PVP_RADIATION.tick(bot._simRadiation,now());
       if(amount)damage(bot,bot._simRadSource,amount,'rad_pulse_dot');
@@ -412,7 +426,8 @@
       const delta=next.clone().sub(shot.mesh.position),length=delta.length();
       if(length>0){ray.set(shot.mesh.position,delta.normalize());ray.far=length;const hit=ray.intersectObject(MAP_GROUPS[state.map],true)[0];if(hit)next.copy(hit.point);if(hit||t>=1){
         const u=shot.u,r=u.nukeRadius||u.radius||u.stunRadius||u.slowRadius||u.mineRadius||4;
-        if(u.burnDur||u.turretDur||u.swarmDur||u.mineRadius||u.claymoreRadius||u.blackHole||u.id==='smoke')zone(shot.bot,u,next);
+        if(u.id==='flashbang_basic')detonateFlashbang(next);
+        else if(u.burnDur||u.turretDur||u.swarmDur||u.mineRadius||u.claymoreRadius||u.blackHole||u.id==='smoke')zone(shot.bot,u,next);
         else{spawnAbilityAOEFX(next,r,u.bulletColor||0xffaa55);area(shot.bot,next,r,u.damage||0,u.id,u.launchVel?5:0,u.launchVel||0);}
         for(const other of gameBots)if(!other.dead&&other.team!==shot.bot.team&&Math.hypot(other.x-next.x,other.z-next.z)<r){
           if(u.lightning)other._rootUntil=now()+3000;
@@ -430,7 +445,7 @@
       if(clock<(bot._simBuff?.until||0))bot.lastShot-=dt*1000*(1/(bot._simBuff.rate||1)-1);
       if(bot._simHeal&&clock>=bot._simHeal.end){bot.hp=Math.min(bot.maxHp,bot.hp+bot._simHeal.amount);bot._simHeal=null;}
       const enemy=target(bot)?.botRef,item=weapon(bot.weaponId);if(!enemy||!item)continue;
-      if(bot._stunUntil>now())continue;
+      if(bot._stunUntil>now()||bot._flashBlindUntil>now())continue;
       const d=Math.hypot(enemy.x-bot.x,enemy.z-bot.z),isMelee=!!melee(item.id);
       useUtility(bot,enemy);
       if(bot._simHeal)continue;
@@ -528,7 +543,7 @@
       // FIFO queues give every fighter a planning turn, not only the first squad.
       planTurn=new Set([...planTurn,...planQueue.splice(0,12)]);navTurn=new Set([...navTurn,...navQueue.splice(0,24)]);
       if(state.phase==='running'){
-      updateBotAI(STEP,{now:now()+STEP*1000});combat(STEP);updateBullets(STEP);deaths();animateCharacters(STEP);poseActions();window.PVP_RAGDOLL?.tick(STEP);
+      updateBotAI(STEP,{now:now()+STEP*1000});combat(STEP);window.PVP_FIELD_UTILITIES?.step(STEP);updateBullets(STEP);deaths();animateCharacters(STEP);poseActions();window.PVP_RAGDOLL?.tick(STEP);
       stats();const blue=gameBots.some(b=>b.team==='ally'&&!b.dead),red=gameBots.some(b=>b.team==='enemy'&&!b.dead);
       if(!blue||!red){state.phase='finished';match.roundActive=false;match.over=true;refresh();status(blue?'Blue victory':red?'Red victory':'Draw');}
       }else if(state.phase==='finished'){clock+=STEP*1000;deaths();window.PVP_RAGDOLL?.tick(STEP);}

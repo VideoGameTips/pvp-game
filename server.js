@@ -4,6 +4,9 @@ const fs = require('fs');
 const path = require('path');
 const { Server } = require('socket.io');
 const createRadiation = require('./radiation-authority');
+const createFlames = require('./flame-authority');
+const createFieldUtilities = require('./field-utilities-server');
+const BLACKOUT = require('./public/blackout-collection');
 
 const app = express();
 const server = http.createServer(app);
@@ -307,6 +310,7 @@ function isWeakPassword(pw, username) { return passwordProblem(pw, username) !==
 // Mirrors the client-side WEAPON_COSTS table in game.js — keep them in sync.
 // Admin items are NOT in this table (they're not purchasable; promo-only).
 const WEAPON_COSTS = {
+  bear_trap:320,
   asmg9:320,
   rad_pulse:600,
   // Primaries — ARs / SMGs
@@ -634,7 +638,6 @@ const ARCHIVED_ITEM_IDS = new Set([
   'tripwire',
   'hologram',
   'magnet_mine',
-  'bounce_pad',
   'hunter_drone',
   'emp_grenade',
   'sticky_charge',
@@ -642,7 +645,6 @@ const ARCHIVED_ITEM_IDS = new Set([
   'guardian_drone',
   'nano_shield',
   'air_grenade',
-  'flashbang_basic',
   'proximity_mine',
   'dynamite',
   'drone_strike',
@@ -840,6 +842,19 @@ function rollWheel() {
   if (r < 55.0) return { kind: 'fragments' };       // 12-30 fragments
   return { kind: 'credits' };                       // 60-180 donuts
 }
+
+app.post('/shop/blackout', (req,res) => {
+  const u=authedUser(req);
+  if(!u)return res.status(401).json({error:'auth failed'});
+  const itemId=req.body?.itemId;
+  if(itemId!=='all'&&!BLACKOUT.ids.includes(itemId))return res.status(400).json({error:'unknown Blackout item'});
+  const requested=(itemId==='all'?BLACKOUT.ids:[itemId]).map(BLACKOUT.skinId);
+  const inventory=new Set(u.skinInventory||[]),missing=requested.filter(id=>!inventory.has(id));
+  const cost=u.isAdmin?0:missing.length*(itemId==='all'?BLACKOUT.BUNDLE_UNIT:BLACKOUT.ITEM_PRICE);
+  if((u.credits||0)<cost)return res.status(402).json({error:'not enough donuts',cost,credits:u.credits});
+  u.credits=(u.credits||0)-cost;u.skinInventory=[...inventory,...missing];saveUsers();
+  res.json({ok:true,cost,skinInventory:u.skinInventory,credits:u.credits});
+});
 
 // 🛒 Shop wraps: bought once with donuts, then the account's for every weapon (stored in skinInventory like the other wraps). Mirrored in public/game.js (WEAPON_SKINS: shopWrap).
 const SHOP_WRAPS = { crimson_fracture: 7500 };
@@ -2118,8 +2133,10 @@ const CONCEPT_MAP_IDS = CONCEPT_SMALL_IDS.concat(CONCEPT_MEDIUM_IDS, CONCEPT_LAR
 MAP_IDS.push(...CONCEPT_MAP_IDS);
 const TEN_MAP_IDS = ['iron_harbor','siegebreaker','dead_city','fracture_canyon','megaforge','titan_carrier'];   // the six 10v10 block maps (mirrors public/game.js)
 MAP_IDS.push(...TEN_MAP_IDS);
-const GRID_MAP_IDS = CONCEPT_MAP_IDS.concat(TEN_MAP_IDS, GB_MAP_IDS);
-const ARCHIVED_MAP_IDS = new Set(MAP_IDS.filter(m => !CONCEPT_MAP_IDS.includes(m) && !TEN_MAP_IDS.includes(m)));
+const V1_MAP_IDS = ['zen_garden', 'shipbreak', 'reactor'];
+MAP_IDS.push(...V1_MAP_IDS);
+const GRID_MAP_IDS = CONCEPT_MAP_IDS.concat(TEN_MAP_IDS, GB_MAP_IDS, V1_MAP_IDS);
+const ARCHIVED_MAP_IDS = new Set(MAP_IDS.filter(m => !CONCEPT_MAP_IDS.includes(m) && !TEN_MAP_IDS.includes(m) && !V1_MAP_IDS.includes(m)));
 const LOBBY_MAP_POOL = MAP_IDS.filter(m => !THIN_MAPS.has(m) && !DUEL_ONLY_MAPS.has(m) && !GRID_MAP_IDS.includes(m));   // the OLD maps (only 5v5 and 10v10 still deal them)
 // A map for the mode: 1v1 draws from the small duel maps, everything else from the main pool.
 // 2v2 draws from the main pool AND the big duel arenas (144 x 224 m: room for four), so they are on its vote
@@ -2128,7 +2145,7 @@ const DUEL_SHARE_2V2 = 0.3;
 function mapPoolFor(mode) {
   // Mirrors public/game.js mapPoolForMode.
   if (mode === '10v10') return TEN_MAP_IDS.slice();
-  if (mode === '5v5') return CONCEPT_LARGE_IDS.slice();
+  if (mode === '5v5') return CONCEPT_LARGE_IDS.concat(V1_MAP_IDS);
   if (mode === '1v1' || mode === '2v2') return CONCEPT_SMALL_IDS.concat(CONCEPT_MEDIUM_IDS);
   if (mode === '3v3') return CONCEPT_MEDIUM_IDS.concat(CONCEPT_LARGE_IDS);
   return TEN_MAP_IDS.slice();                                          // FFA and every other big-lobby mode: the six block maps built for twenty or more
@@ -2413,9 +2430,11 @@ function tryPairPvpQueue(mode) {
 // #4). Anything not listed is the x2 every weapon has always had.
 const WEAPON_HS_MULT = { thorncaster: 1, m12: 1, energy_rifle: 1, gravity_cannon: 1, rad_pulse:1, ak20: 2.333, flechette: 4, storm_bloom: 1, javelin_launcher: 1 };
 const WEAPON_DAMAGE = {
+  flashbang_basic:0,
+  bear_trap:35,
   rad_pulse:18, rad_pulse_dot:6,
   // Damage-over-time ticks arrive as their own weapon ids, one tick a second.
-  flame_burn: 7,
+  flame_burn: 7,flamethrower_burn:3,
   caustic_burn: 12,
   // The sci-fi block. These were absent because they had been deleted from
   // WEAPONS entirely when the earlier mirror sweep ran, so the sweep could not
@@ -2448,7 +2467,7 @@ event_horizon: 75,
   ak20: 25, m4_commando: 28, m12: 15, energy_rifle: 45, thorncaster: 32, thorncaster_ab: 40, gravity_cannon: 13, gravity_cannon_splash: 20, gravity_cannon_c1: 7,  sg8: 24,
   srx: 120, rpd: 10, mp40: 20, p90: 10,
   paintball: 60, burst: 47, lever: 105,
-  vector: 18, mmg: 19, asmg9: 16, crossbow: 100, flamethrower: 3,
+  vector: 18, mmg: 19, asmg9: 16, crossbow: 100, flamethrower: 10,
   grenade_launcher: 90, railgun: 200, minigun: 27, chain_gun: 22, javelin_launcher: 90,
   freeze_gun: 13, boombow: 50,
   // Secondaries
@@ -2596,6 +2615,7 @@ function tryDeflectPlayerHit(data, shooter, target, damage) {
   return true;
 }
 function serverHitDamage(data, shooter, target) {
+  if(data?.weapon==='flamethrower')return 10;
   const dmg = serverHitDamageBase(data, shooter, target);
   if (data?.weapon !== 'frost_blaster' && dmg > 0 && isFrozen(target)) { data._shattered = true; return Math.round(dmg * FREEZE.shatter); }
   return dmg;
@@ -2607,6 +2627,7 @@ function serverHitDamageBase(data, shooter, target) {
   }
   if(hellfireWeapon(data?.weapon)&&!canUseHellfire(shooter))return 0;
   const weapon = data?.weapon;
+  if(weapon==='flamethrower')return 10;
   if (weapon === 'fission_disc') return 65;
   if (weapon === 'javelin_launcher' || weapon === 'javelin_launcher_splash') return WEAPON_DAMAGE[weapon];
   const base = WEAPON_DAMAGE[weapon] || 25;
@@ -2642,7 +2663,7 @@ const FALLOFF_PAINT      = { near: 14, far: 34,  min: 0.25 };
 const FALLOFF_NONE       = { near: 9999, far: 9999, min: 1 };
 const WEAPON_FALLOFF = {
   sg8: FALLOFF_POINTBLANK, shorty: FALLOFF_POINTBLANK, sawed_off: FALLOFF_POINTBLANK, boomstick: FALLOFF_POINTBLANK, storm_bloom: FALLOFF_POINTBLANK,
-  flamethrower: FALLOFF_FLAME,
+  flamethrower: FALLOFF_NONE,
   mp40: FALLOFF_SMG, p90: { ...FALLOFF_SMG, min: 0.50 }, mmg: FALLOFF_SMG, vector: { near: 14, far: 44, min: 0.32 }, smart_smg: FALLOFF_SMG, swarm_rifle: FALLOFF_SMG, painter_beam: FALLOFF_SMG, prism_engine: FALLOFF_SMG, p90_spec: FALLOFF_SMG,
   machine_pistol: FALLOFF_MACHINEPISTOL, asmg9: FALLOFF_MACHINEPISTOL, glock18: FALLOFF_MACHINEPISTOL, machine_revolver: FALLOFF_MACHINEPISTOL,
   rpd: FALLOFF_LMG, mg42: FALLOFF_LMG, chain_gun: FALLOFF_LMG, gau19: FALLOFF_LMG, mk44: FALLOFF_LMG, cycler: FALLOFF_LMG,
@@ -2852,6 +2873,8 @@ setInterval(() => {
 
 function respawnBot(bot) {
   radiation.clear(bot);
+  flames.clear(bot);
+  fieldUtilities.reset(bot);
   const s = nextSpawn();
   Object.assign(bot, { x: s.x, y: s.y, z: s.z, hp: maxHpForMode(bot.matchMode), dead: false });
 }
@@ -2867,6 +2890,28 @@ const radiation=createRadiation({players,emit:emitToMatch,credit:creditFfaDamage
     },3000);
   }});
 setInterval(()=>radiation.update(),100);
+const flames=createFlames({players,emit:emitToMatch,blocked:blocksFriendlyFire,credit:creditFfaDamage,hub:HUB_MATCH,
+  onDeath:target=>{if(target.isBot)setTimeout(()=>{if(players[target.id]===target&&target.dead){respawnBot(target);emitToMatch(target.matchId,'playerRespawned',{...target,autoRespawn:true});}},3000);}});
+setInterval(()=>flames.update(),50);
+const fieldUtilities=createFieldUtilities({io,players,emit:emitToMatch,blocked:blocksFriendlyFire,hub:HUB_MATCH,
+  weaponDamage:WEAPON_DAMAGE,
+  canUse:(p,id)=>p.isBot||users[p.account]?.isAdmin||users[p.account]?.purchased?.includes(id)||FREE_WEAPONS.has(id),
+  damage:(target,owner,amount,weapon)=>{
+    const before=target.hp;target.hp=Math.max(0,before-amount);creditFfaDamage(owner,before-target.hp);
+    emitToMatch(target.matchId,'playerHit',{targetId:target.id,hp:target.hp,dealt:before-target.hp,
+      shooterId:owner.id,weapon,periodic:true,environmentSeq:target.environmentSeq||0,bulletId:'trap_'+target.id+'_'+Date.now()});
+    if(target.hp>0)return;
+    target.dead=true;target.deaths=(target.deaths||0)+1;
+    owner.kills=(owner.kills||0)+1;owner.matchKills=(owner.matchKills||0)+1;
+    emitToMatch(target.matchId,'playerDied',{targetId:target.id,killerId:owner.id,weapon});
+    if(target.isBot){
+      const match=target.matchId;
+      setTimeout(()=>{
+        if(players[target.id]!==target||!target.dead||target.matchId!==match||target.matchMode==='underworld')return;
+        respawnBot(target);emitToMatch(match,'playerRespawned',{...target,autoRespawn:true});
+      },3000);
+    }
+  }});
 io.on('connection', (socket) => {
   console.log('Player connected:', socket.id);
   players[socket.id] = createPlayer(socket.id);
@@ -2938,6 +2983,7 @@ io.on('connection', (socket) => {
     let id = String((data && data.wrap) || 'default').slice(0, 40);
     if (!/^[a-z0-9_]{1,40}$/.test(id)) id = 'default';
     if (PRESTIGE_WRAP.isPrestigeWrap(id) && !PRESTIGE_WRAP.ownsPrestigeWrap(users[p.account], id)) id = 'default';
+    if(BLACKOUT.valid.has(id)&&!users[p.account]?.isAdmin&&!users[p.account]?.skinInventory?.includes(id))id='default';
     if (Object.prototype.hasOwnProperty.call(SHOP_WRAPS, id) && !users[p.account]?.isAdmin && !users[p.account]?.skinInventory?.includes(id)) id = 'default';      // a shop wrap you have not bought
     if (/^ap_/.test(id)) {
       const w = submissions.wraps.find(x => x.id === id && x.status === 'approved');
@@ -3145,6 +3191,7 @@ io.on('connection', (socket) => {
     const p = players[socket.id];
     if (!p || p.dead) return;
     if(Date.now()<(p._swapIgnoreMoveUntil||0))return;
+    if(Date.now()<(p._fieldRootUntil||0))return;
     p.x = data.x; p.y = data.y; p.z = data.z;
     p.rotY = data.rotY; p.rotX = data.rotX;
     p.at = Date.now();   // when this position was true — clients interpolate on this, not on when the broadcast happened to fire
@@ -3535,6 +3582,7 @@ io.on('connection', (socket) => {
 
   socket.on('hit', (data) => {
     if (!data || typeof data !== 'object') return;
+    if(data.weapon==='flamethrower_burn')return;
     if(data.weapon==='rad_pulse_dot')return;
     if(data.weapon==='swap_gun')return;
     const target  = players[data.targetId];
@@ -3550,6 +3598,7 @@ io.on('connection', (socket) => {
     if (blocksFriendlyFire(shooter, target)) return;
     if (!validJavelinHit(data, shooter, target)) return;
     if (!validFissionHit(data, shooter, target)) return;
+    if(data.weapon==='flamethrower'){data.headshot=false;data.instakill=false;}
     const dmg = serverHitDamage(data, shooter, target);
     if (tryDeflectPlayerHit(data, shooter, target, dmg)) return;
     if (shielded(target)) {
@@ -3557,6 +3606,7 @@ io.on('connection', (socket) => {
       return;
     }
     if (data.weapon === 'frost_blaster' && !target.dead) freezeRayHit(shooter, target);
+    if(data.weapon==='flamethrower'&&!flames.contact(target,shooter))return;
     const hpBefore = target.hp;
     target.hp = Math.max(0, target.hp - dmg);
     if(data.weapon==='rad_pulse'&&dmg>0)radiation.apply(target,shooter);
@@ -3584,6 +3634,7 @@ io.on('connection', (socket) => {
   // Allow hitting bots (client detected)
   socket.on('hitBot', (data) => {
     if (!data || typeof data !== 'object') return;
+    if(data.weapon==='flamethrower_burn')return;
     if(data.weapon==='rad_pulse_dot')return;
     if(data.weapon==='swap_gun')return;
     const bot     = players[data.botId];
@@ -3598,6 +3649,7 @@ io.on('connection', (socket) => {
     if (blocksFriendlyFire(shooter, bot)) return;
     if (!validJavelinHit(data, shooter, bot)) return;
     if (!validFissionHit(data, shooter, bot)) return;
+    if(data.weapon==='flamethrower'){data.headshot=false;data.instakill=false;data.fatal=false;}
     let dmg = serverHitDamage(data, shooter, bot);
     if (data.weapon === 'frost_blaster' && !bot.dead) freezeRayHit(shooter, bot);
     // The shooter's client already saw this bot die (#48). Client and server work damage out
@@ -3613,6 +3665,7 @@ io.on('connection', (socket) => {
       if (Date.now() < (bot.bossShieldUntil || 0)) dmg *= BOSS_SHIELD_MULT;
       dmg = dmg > 0 ? Math.max(1, Math.round(dmg)) : 0;
     }
+    if(data.weapon==='flamethrower'&&!flames.contact(bot,shooter))return;
     const botHpBefore = bot.hp;
     bot.hp = Math.max(0, bot.hp - dmg);
     if(data.weapon==='rad_pulse'&&dmg>0)radiation.apply(bot,shooter);
@@ -3725,6 +3778,8 @@ io.on('connection', (socket) => {
     const p = players[socket.id];
     if (!p || !p.dead) return;
     radiation.clear(p);
+    flames.clear(p);
+    fieldUtilities.reset(p);
     p._harpoons?.clear();
     delete p._javelinFlight;
     delete p._fissionFlight;
@@ -3741,6 +3796,8 @@ io.on('connection', (socket) => {
   socket.on('resetSelf', (data = {}) => {
     const p = players[socket.id];
     if (!p) return;
+    flames.clear(p);
+    fieldUtilities.reset(p);
     p._harpoons?.clear();
     delete p._javelinFlight;
     delete p._fissionFlight;
@@ -3979,23 +4036,30 @@ io.on('connection', (socket) => {
     for (const m of moves) {
       if (!m || typeof m !== 'object') continue;
       const bot = players[m.id];
-      if (bot && bot.isBot && bot.ownerId === socket.id && !(Date.now()<bot._swapIgnoreMoveUntil)) {
+      if (bot && bot.isBot && bot.ownerId === socket.id && !(Date.now()<bot._swapIgnoreMoveUntil) && !(Date.now()<bot._fieldRootUntil)) {
         bot.x = m.x; bot.y = Number.isFinite(m.y) ? m.y-.65 : 1; bot.z = m.z;
         bot.rotY = m.rotY; bot.rotX = 0; bot.at = Date.now();
       }
     }
   });
 
+  socket.on('flameDouse', data=>{
+    const p=players[socket.id],target=players[data?.targetId];
+    if(p&&target&&(target.id===p.id||target.isBot&&target.ownerId===p.id))flames.clear(target);
+  });
   socket.on('botHitMe', (data) => {
     if(!data||data.weapon==='swap_gun')return;
+    if(data.weapon==='flamethrower_burn')return;
     if(data.weapon==='rad_pulse_dot')return;
     const player = players[socket.id];
     const bot    = players[data.botId];
     const reflected = Number.isFinite(data.reflectedDamage) && bot?.ownerId===socket.id;
     if (!player || player.dead || !bot || !bot.isBot || (!reflected && shielded(player))) return;
     if (blocksFriendlyFire(bot, player)) return;
+    if(data.weapon==='flamethrower'&&!reflected&&!flames.contact(player,bot))return;
     let dmg = Math.round((WEAPON_DAMAGE[data.weapon] || 25) * (data.headshot ? (WEAPON_HS_MULT[data.weapon] || 2) : 1) * falloffMultiplier(data.weapon, dist3(bot, player)));
     if (reflected) dmg=Math.max(0,Math.min(9999,Math.round(data.reflectedDamage)));
+    if(data.weapon==='flamethrower'&&!reflected)dmg=10;
     if (data.wallPenetrated && ['gatecrasher', 'gatecrasher_slug', 'gatecrasher_beam', 'phase_rifle_ph'].includes(data.weapon)) dmg = Math.round(dmg * .5);
     player.hp = Math.max(0, player.hp - dmg);
     if(data.weapon==='rad_pulse'&&dmg>0&&!reflected&&bot.matchId===player.matchId)radiation.apply(player,bot);
@@ -4011,6 +4075,8 @@ io.on('connection', (socket) => {
     const bot = players[data.id || data.botId];
     if (!bot || !bot.isBot || bot.ownerId !== socket.id) return;
     radiation.clear(bot);
+    flames.clear(bot);
+    fieldUtilities.reset(bot);
       const hp = M4_TOWER_MODES.has(bot.matchMode) ? 100 : (data.hp || PLAYER_MAX_HP);
     if (data.x != null && data.z != null) {
       Object.assign(bot, { x: data.x, y: 1, z: data.z, hp, dead: false });

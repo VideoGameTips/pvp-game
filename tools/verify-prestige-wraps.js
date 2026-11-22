@@ -63,7 +63,7 @@ assert.ok(start > 0 && end > start);
 const carrier = { account: 'second', matchId: 'test' };
 let setWrap, now = 1000;
 vm.runInNewContext(source.slice(start, end), {
-  PRESTIGE_WRAP, users: { second, winner }, players: { sid: carrier }, Date: { now: () => now },
+  PRESTIGE_WRAP, BLACKOUT:require('../public/blackout-collection'), SHOP_WRAPS:{}, users: { second, winner }, players: { sid: carrier }, Date: { now: () => now },
   socket: { id: 'sid', on(ev, fn) { setWrap = fn; } }, emitToMatch() {},
 });
 setWrap({ wrap: IDS.worldbreaker });

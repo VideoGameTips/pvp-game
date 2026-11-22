@@ -76,7 +76,7 @@
     bat:200,sabre:600,baguette:150,knife:1400,crowbar:300,screwdriver:100,
     umbrella:450,yoyo:900,shock_baton:1400,tennis_racket:350,golf_club:600,
     stim:250,smoke:200,molotov:500,air_grenade:400,air_blaster:1200,ammo_fountain:800,
-    bounce_pad:700,tripwire:700,hamburger:350,acid_grenade:900,bee_jar:1000,
+    bounce_pad:1400,bear_trap:1600,flashbang_basic:900,tripwire:700,hamburger:350,acid_grenade:900,bee_jar:1000,
     p90:4200,energy_rifle:4800,gravity_cannon:5600,vector:5000,mmg:4500,burst:3500,srx:6500,lever:3900,rpd:6000,rpg:8500,bazooka:10000,
     crossbow:3000,flamethrower:5500,grenade_launcher:7500,freeze_gun:6000,boombow:4500,
     mortar_rifle:7000,air_rifle:3200,hand_cannon:4000,gatecrasher:9000,

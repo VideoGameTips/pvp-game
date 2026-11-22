@@ -157,20 +157,14 @@ const WEAPONS = [
     ability: { name: 'Power Charge', cd: 0, type: 'charge', desc: 'Hold fire · release to shoot · longer = more dmg' },
   },
   {
-    id: 'flamethrower', name: 'Flamethrower', type: 'Area', slot: 'primary',
-    mag: 80, reserve: 160, damage: 3, fireRate: 35, reloadTime: 3200,
-    auto: true, pellets: 4, spread: 0.16, adsZoom: 60, bulletSpeed: 48, noReload: false,
+    id: 'flamethrower', name: 'Flamethrower', type: 'Area', slot: 'primary', archived:false,
+    mag: 80, reserve: 160, damage: 10, headshotMult:1, fireRate: 50, reloadTime: 3200,
+    auto: true, pellets: 1, spread: 0.012, adsZoom: 60, bulletSpeed: 14, noReload: false,flightMs:2200,
     bulletColor: 0xff6600, bulletSize: 0.11,
-    // Halved per-tick damage, but anything it touches CATCHES. 7 a second for
-    // ten seconds is 70 off a 100 HP bar from a single pellet, and it does not
-    // stack -- contact refreshes the ten seconds rather than adding a second burn.
-    burnOnHit: { dps: 7, dur: 10000 },
-    // And the flames now stop. They used to carry 86 m (48 m/s for the 1.8 s a
-    // bullet lives), which with a 70-damage burn attached would have let you tag
-    // a whole lobby from across the map. 12 m is about what a real one throws.
-    maxRange: 12,
-    moveBoost: 1.10,   // you close ground while you are pouring it on
-    ability: { name: 'Propane Burst', cd: 12000, desc: 'Blast 22 concentrated flames directly forward', type: 'multishot', count: 22, spread: 0.025, noADS: true },
+    // Contact: at most 20 x 10/sec. After contact: 5 x 3/sec for eight seconds.
+    flameStream:true,burnOnHit: { dps:15, dur:8000, tickMs:200,damage:3 },
+    maxRange: 24,heldMoveBoost:1.35,
+    ability: { name: 'Air Blast', cd: 4000, desc: 'Momentum boost with lift; works in midair without a surface', type:'flame_airblast', impulse:24, lift:6, maxSpeed:42, noADS:true },
   },
   {
     id: 'grenade_launcher', name: 'Grenade Launcher', type: 'Explosive', slot: 'primary',
@@ -1042,7 +1036,7 @@ const WEAPON_FALLOFF = Object.fromEntries(WEAPONS.map(w => [w.id, computeWeaponF
 Object.assign(WEAPON_FALLOFF, {
   sg8: FALLOFF_POINTBLANK, shorty: FALLOFF_POINTBLANK, sawed_off: FALLOFF_POINTBLANK,
   boomstick: FALLOFF_POINTBLANK, storm_bloom: FALLOFF_POINTBLANK,
-  flamethrower: FALLOFF_FLAME,
+  flamethrower: FALLOFF_NONE,
   mp40: FALLOFF_SMG, p90: { ...FALLOFF_SMG, min: 0.50 }, vector: { near: 14, far: 44, min: 0.32 }, smart_smg: FALLOFF_SMG,
   swarm_rifle: FALLOFF_SMG, painter_beam: FALLOFF_SMG, prism_engine: FALLOFF_SMG, p90_spec: FALLOFF_SMG,
   machine_pistol: FALLOFF_MACHINEPISTOL, asmg9: FALLOFF_MACHINEPISTOL, glock18: FALLOFF_MACHINEPISTOL, machine_revolver: FALLOFF_MACHINEPISTOL,
@@ -1454,7 +1448,8 @@ const SUPPORT_ITEMS = [
   { id: 'tripwire', archived: true, name: 'Tripwire', type: 'Trap', uses: 2, damage: 60, cooldown: 1100, bulletSpeed: 30, bulletColor: 0xff3344, bulletSize: 0.05, isTripwire: true },
   { id: 'hologram', archived: true, name: 'Hologram Decoy', type: 'Decoy', uses: 1, cooldown: 2000, decoyDur: 8000 },
   { id: 'magnet_mine', archived: true, name: 'Magnet Mine', type: 'Magnet', uses: 2, damage: 40, cooldown: 900, bulletSpeed: 36, bulletColor: 0xff8844, bulletSize: 0.12, magnetRadius: 5 },
-  { id: 'bounce_pad', archived: true, name: 'Bounce Pad', type: 'Mobility', uses: 2, cooldown: 900, bounceVel: 14 },
+  { id:'bounce_pad',name:'Jump Pad',type:'Mobility',uses:2,cooldown:900,damage:0,
+    launchHeight:18,launchForward:12,lifetime:15000,maxLaunches:3 },
   // ── 3rd-batch supports ───────────────────────────────────────────────────
   { id: 'hunter_drone', archived: true, name: 'Hunter Drone', type: 'Drone', uses: 1, damage: 100, cooldown: 1200, droneDur: 10000, droneRange: 25 },
   { id: 'emp_grenade', archived: true, name: 'EMP Grenade', type: 'Disable', uses: 2, damage: 25, cooldown: 950, bulletSpeed: 50, bulletColor: 0x66ccff, bulletSize: 0.12, empRadius: 6, empDur: 4000 },
@@ -1470,7 +1465,8 @@ const SUPPORT_ITEMS = [
   { id: 'grapple_hook', name: 'Grapple Hook', type: 'Movement · Pull', uses: 1, recharge: true, damage: 0, cooldown: 3500, grapple: true, range: 36, pullVel: 34, liftVel: 7, enemyPull: 16 },
   // ── 🪖 ADMIN UTILITIES (locked behind unlock codes) ──────────────────────
   // ── 🆕 More utilities — batch 4 ──────────────────────────────────────────
-  { id: 'flashbang_basic', archived: true, name: 'Flashbang',    type: 'Stun',       uses: 2, damage: 5,  cooldown: 900, bulletSpeed: 50, bulletColor: 0xffffff, bulletSize: 0.10, stunDur: 2500, stunRadius: 6 },
+  { id:'flashbang_basic',name:'Flashbang',type:'Flash',uses:2,damage:0,cooldown:900,
+    bulletSpeed:22,bulletColor:0xffffff,bulletSize:.10,blindDur:2500,stunRadius:12,fuseMs:1500 },
   { id: 'proximity_mine', archived: true,  name: 'Proximity Mine', type: 'Trap',     uses: 2, damage: 70, cooldown: 1100, bulletSpeed: 30, bulletColor: 0xff5555, bulletSize: 0.06, isTripwire: true },
   { id: 'dynamite', archived: true,        name: 'Dynamite Bundle', type: 'Explosive', uses: 2, damage: 120, cooldown: 1200, bulletSpeed: 48, bulletColor: 0xdd4422, bulletSize: 0.13 },
   { id: 'drone_strike', archived: true,    name: 'Mini Drone Strike', type: 'Doom',  uses: 1, damage: 140, radius: 5, cooldown: 1800, delay: 1500 },
@@ -1520,6 +1516,8 @@ const SUPPORT_ITEMS = [
   // The Freeze Ray used to be a secondary. It is a utility now: one shot (32 m), a hit freezes them for 3 s (server: freezeRayHit),
   // and it comes back 5 s later. It fires through the old weapon's hitscan, so the hit still goes out as 'frost_blaster'.
   { id: 'freeze_ray', name: 'Freeze Ray', type: 'Cryo Ray', uses: 1, recharge: true, damage: 5, cooldown: 5000, range: 32, playerOnly: true },
+  { id:'bear_trap',name:'Bear Trap',type:'Trap',uses:2,damage:35,cooldown:1000,
+    triggerRadius:2,rootMs:800,durability:30 },
 ];
 const ARCHIVED_ITEM_IDS = new Set([...WEAPONS, ...MELEE_ITEMS, ...SUPPORT_ITEMS].filter(x => x.archived).map(x => x.id));
 
@@ -1654,6 +1652,7 @@ const BOT_MOVE_INTERVAL = 0.033; // send position updates every 33ms (30 Hz, lik
 // ── 🛒 Shop: weapon cost table (mirrors server.js WEAPON_COSTS) ────────────
 // Admin items are NOT priced — they're claimed via promo codes only.
 const WEAPON_COSTS = {
+  bear_trap:320,
   asmg9:320,
   rad_pulse:600,
   // Primaries — ARs / SMGs
@@ -2057,7 +2056,7 @@ function clearPlayerStatusEffects() {
 }
 function clearBotStatusEffects(bot) {
   if (!bot) return;
-  bot.frostSlow = 100; bot._chillUntil = 0; bot._fireUntil = 0; bot._stunUntil = 0; bot._rootUntil = 0;
+  bot.frostSlow = 100; bot._chillUntil = 0; bot._fireUntil = 0; bot._stunUntil = 0; bot._rootUntil = 0; bot._flashBlindUntil=0;
   bot.kbVX = 0; bot.kbVZ = 0;
   try { delete _dotTargets[bot.id]; } catch (e) {}
 }
@@ -2712,7 +2711,7 @@ const DOUBLE_JUMP_IDS = new Set(['fists','air_rifle','dart_gun']);
 //   • guns that genuinely can't aim, or are one of a kind: the paintball marker
 //     (that hopper sits right where the sights should be) and the revolver
 // Ordinary guns lost theirs. They can aim; that IS their thing.
-const ABILITY_GUNS = new Set(['paintball', 'revolver', 'cyroclasm', 'storm_bloom', 'javelin_launcher', 'railgun', 'hellfire', 'phase_rifle', 'chrono_pistol']);
+const ABILITY_GUNS = new Set(['flamethrower','paintball', 'revolver', 'cyroclasm', 'storm_bloom', 'javelin_launcher', 'railgun', 'hellfire', 'phase_rifle', 'chrono_pistol']);
 function hasAbility(w) {
   if (!w) return false;
   // A marketplace ability counts even on a gun that has none of its own — that
@@ -6432,13 +6431,12 @@ function playerHeadroomEye(px = camera.position.x, pz = camera.position.z) {
 }
 
 
-// 🏃‍♂️ WALL RUNNING (replaces the wall climb). Be in the air (any way: a jump, a slide jump, off a ledge, a blast, a ramp, a pad) with real momentum (at least 10 m/s, well past a normal run's 7)
-// and run into a tall wall: you run on it, by itself, with no jump off the wall and no extra key. Any angle but head-on will do, and it remembers how fast you were just before you hit it.
-// Keep pushing forward along it: you run on the wall. Gravity all but lets go of you (a slow sink), the camera rolls hard AWAY from the wall, and you keep your speed -- which bleeds off a little
+// 🏃‍♂️ WALL RUNNING (replaces the wall climb). Jump with real momentum (a slide jump, a blast, a ramp: at least 10 m/s, well past a normal run's 7) alongside a tall wall and keep pushing
+// forward along it: you run on the wall. Gravity all but lets go of you (a slow sink), the camera rolls hard AWAY from the wall, and you keep your speed -- which bleeds off a little
 // every second -- for at most 4 seconds. It ends when the time is up, your speed falls under 6.5 m/s, the wall ends, you let go of forward, or you jump: a wall jump kicks you off the
 // wall with your speed. One run per jump (a wall jump gives you another, on a different wall). Run on the left wall and the view rolls right and the other way round (flip WALLRUN_TILT_AWAY).
 const WALLRUN_MIN_SPEED = 10, WALLRUN_KEEP_SPEED = 6.5, WALLRUN_MAX_S = 4, WALLRUN_ROLL = 0.30, WALLRUN_SINK = -0.35, WALLRUN_DECAY = 0.5, WALLRUN_TILT_AWAY = true;
-window._wallRun = null; window._wallRunSpent = false; window._wallRunLast = null; window._wrSpd = 0;
+window._wallRun = null; window._wallRunSpent = false; window._wallRunLast = null;
 function wallRunSurface() {                                   // the tall wall beside the body: { nx, nz, gap } (the normal points from the wall to you), or null
   const x = camera.position.x, z = camera.position.z, feet = playerFeetY();
   let best = null, bd = PLAYER_RADIUS + 0.34;
@@ -6459,7 +6457,7 @@ function wallRunEnd(spent) {                                   // you keep the s
   window._wallRunLast = { nx: w.nx, nz: w.nz, at: Date.now() };
   if (spent) window._wallRunSpent = true;
 }
-function wallRunLand() { window._wallRun = null; window._wallRunSpent = false; window._wallRunLast = null; window._wrSpd = 0; }
+function wallRunLand() { window._wallRun = null; window._wallRunSpent = false; window._wallRunLast = null; }
 function wallRunJump() {                                       // Space while running: off the wall, with your speed
   const w = window._wallRun; if (!w) return false;
   window._wallRun = null; window._wallRunSpent = false;
@@ -6473,19 +6471,17 @@ function wallRunStep(dt, dir) {                                // called every a
   if (isDead || adminFlyActive() || pilotedVehicle || pilotedMortar || window._mapLadder || thornRooted()) { window._wallRun = null; return false; }
   const hasDir = !!dir && dir.lengthSq() > 0.01;
   let w = window._wallRun;
-  const sp = Math.hypot(playerVelocity.x, playerVelocity.z);
-  window._wrSpd = Math.max(sp, (window._wrSpd || 0) - 22 * dt);                              // how fast you were a moment ago: hitting the wall costs speed, and that must not cost you the run
   if (!w) {
-    if (window._wallRunSpent || !hasDir) return false;                                      // (in the air is all it takes: no jump needed first)
-    if (window._wrSpd < WALLRUN_MIN_SPEED) return false;                                    // it takes real momentum
+    if (!window._climbArmed || window._wallRunSpent || !hasDir) return false;
+    const sp = Math.hypot(playerVelocity.x, playerVelocity.z);
+    if (sp < WALLRUN_MIN_SPEED) return false;                  // it takes real momentum
     const s = wallRunSurface(); if (!s) return false;
     const L = window._wallRunLast; if (L && Date.now() - L.at < 1500 && L.nx === s.nx && L.nz === s.nz) return false;      // not the wall you just kicked off
-    let tx = -s.nz, tz = s.nx;
-    const along = playerVelocity.x * tx + playerVelocity.z * tz + 3 * (dir.x * tx + dir.z * tz);   // which way along the wall: where you are going, or where you are pushing
-    if (along < 0) { tx = -tx; tz = -tz; }
-    if (Math.abs(playerVelocity.x * tx + playerVelocity.z * tz) < 3) return false;           // head-on is a crash, not a run: some of you has to be going along it
+    if ((playerVelocity.x * s.nx + playerVelocity.z * s.nz) / sp < -0.55) return false;                                  // head-on is a crash, not a run
+    let tx = -s.nz, tz = s.nx; if (playerVelocity.x * tx + playerVelocity.z * tz < 0) { tx = -tx; tz = -tz; }
+    if (tx * dir.x + tz * dir.z < 0.2) return false;           // and you have to be pushing along it
     const rx = Math.cos(euler.y), rz = -Math.sin(euler.y), side = (-s.nx * rx - s.nz * rz) >= 0 ? 1 : -1;                  // +1: the wall is on your right
-    w = window._wallRun = { nx: s.nx, nz: s.nz, tx, tz, speed: Math.min(26, Math.max(Math.abs(playerVelocity.x * tx + playerVelocity.z * tz), window._wrSpd * 0.85)), t: 0, side, fx: 0 };
+    w = window._wallRun = { nx: s.nx, nz: s.nz, tx, tz, speed: Math.min(26, Math.abs(playerVelocity.x * tx + playerVelocity.z * tz)), t: 0, side, fx: 0 };
     _extVel.x = _extVel.z = 0; window._blastCarry = false;
     playSoundEvent('footstep', { volume: 0.7, pitch: 1.2, minGap: 60 });
   }
@@ -6706,8 +6702,10 @@ const CONCEPT_MAP_IDS = CONCEPT_SMALL_IDS.concat(CONCEPT_MEDIUM_IDS, CONCEPT_LAR
 MAP_IDS.push(...CONCEPT_MAP_IDS);
 const TEN_MAP_IDS = ['iron_harbor', 'siegebreaker', 'dead_city', 'fracture_canyon', 'megaforge', 'titan_carrier'];   // the six 10v10 block maps (buildTenMap)
 MAP_IDS.push(...TEN_MAP_IDS);
-const GRID_MAP_IDS = CONCEPT_MAP_IDS.concat(TEN_MAP_IDS, GB_MAP_IDS);
-const ARCHIVED_MAP_IDS = new Set(MAP_IDS.filter(m => !CONCEPT_MAP_IDS.includes(m) && !TEN_MAP_IDS.includes(m)));
+const V1_MAP_IDS = ['zen_garden', 'shipbreak', 'reactor'];
+MAP_IDS.push(...V1_MAP_IDS);
+const GRID_MAP_IDS = CONCEPT_MAP_IDS.concat(TEN_MAP_IDS, GB_MAP_IDS, V1_MAP_IDS);
+const ARCHIVED_MAP_IDS = new Set(MAP_IDS.filter(m => !CONCEPT_MAP_IDS.includes(m) && !TEN_MAP_IDS.includes(m) && !V1_MAP_IDS.includes(m)));
 // A picked map only counts in the mode it was made for: a duel map left over from a 1v1 is 'auto' anywhere else.
 // Which map a pick means in a mode: a duel map is 1v1's (anywhere else the pick counts as random). It is what
 // spawnGameBots resolves the map from, so it has to keep the duel map the VOTE chose (lobbyStart puts it in
@@ -6715,7 +6713,7 @@ const ARCHIVED_MAP_IDS = new Set(MAP_IDS.filter(m => !CONCEPT_MAP_IDS.includes(m
 function effectivePickedMap(modeId, map) {
   if (DUEL_ONLY_MAPS.has(map) && modeId !== '1v1' && modeId !== '2v2') return 'auto';
   if (ARCHIVED_MAP_IDS.has(map)) return 'auto';
-  if ((CONCEPT_MAP_IDS.includes(map) || TEN_MAP_IDS.includes(map)) && !mapPoolForMode(modeId).includes(map)) return 'auto';
+  if ((CONCEPT_MAP_IDS.includes(map) || TEN_MAP_IDS.includes(map) || V1_MAP_IDS.includes(map)) && !mapPoolForMode(modeId).includes(map)) return 'auto';
   return map;
 }
 // 2v2 plays the main pool and, every so often, one of the big duel arenas (room for four). Mirrors server.js DUEL_SHARE_2V2.
@@ -6723,7 +6721,7 @@ const DUEL_SHARE_2V2 = 0.3;
 function mapPoolForMode(modeId) {
   // Keep normal rotation on the production concept and large-team maps. Mirrors server.js mapPoolFor.
   if (modeId === '10v10') return TEN_MAP_IDS.slice();                    // the six block maps built for twenty players
-  if (modeId === '5v5') return CONCEPT_LARGE_IDS.slice();
+  if (modeId === '5v5') return CONCEPT_LARGE_IDS.concat(V1_MAP_IDS);
   if (modeId === '1v1' || modeId === '2v2') return CONCEPT_SMALL_IDS.concat(CONCEPT_MEDIUM_IDS);
   if (modeId === '3v3') return CONCEPT_MEDIUM_IDS.concat(CONCEPT_LARGE_IDS);
   return TEN_MAP_IDS.slice();                                          // FFA and every other big-lobby mode: the six block maps built for twenty or more
@@ -18613,7 +18611,7 @@ const CONCEPT_ENEMY_ENTRY_OFFSETS = {
   fracture_canyon: [12],
   megaforge: [.25],
 };
-function buildWhiteConcept(name, w, d, cut, layout, screenInset) {
+function buildWhiteConcept(name, w, d, cut, layout, screenInset, options = {}) {
   registerMap(name);
   setMapBounds(name, w, d);
   const group = MAP_GROUPS[name], hx = w / 2, hz = d / 2;
@@ -18655,7 +18653,7 @@ function buildWhiteConcept(name, w, d, cut, layout, screenInset) {
   const layoutBox = (x,z,width,depth,top,bottom=0,surface=null) => {
     // Some blueprints already have a full-width wall here. Cut that wall instead
     // of adding a separate screen in front of it.
-    if (!bottom && depth<=2.16 && top>=3 &&
+    if (options.spawnScreens!==false && !bottom && depth<=2.16 && top>=3 &&
         Math.abs(Math.abs(z)-screenZ)<=2.2 && width/2-Math.abs(x)>=screenHalf) {
       entryWall(x,z,width,depth,top);
     } else box(x,z,width,depth,top,bottom,0,surface);
@@ -18674,7 +18672,7 @@ function buildWhiteConcept(name, w, d, cut, layout, screenInset) {
     mesh.material.dispose();mesh.material=CONCEPT_WHITE;
   };
   layout({box:layoutBox,ramp});
-  for (const side of [-1,1]) {
+  for (const side of options.spawnScreens===false ? [] : [-1,1]) {
     if (!entries.some(e=>Math.sign(e.z)===side)) entryWall(0,side*screenZ,2*screenHalf,1.2,5.8);
   }
   // The carrier's open lower deck has no central cover to stop a shot through both doors.
@@ -19194,6 +19192,109 @@ buildBlueprintMap('titan_carrier', 144, 80, {
   for (const [x1, x2, z1, z2] of [[24, 30, 17, 23], [39, 45, 55, 61], [82, 88, 17, 23], [115, 121, 55, 61]]) C(x1, x2, 13, 15, z1, z2);   // aircraft crates on the deck
   // the island: a hollow tower on the deck with a door on its south face
   shell(61, 86, 8, 27, 13, 33, [['S', 72, 75, 13, 16]]); slab(61, 86, 34, 8, 27);
+});
+
+// V1 concept pack: the sheet's long axis runs along game Z. Only white-grid
+// collision geometry is authored here; the pond and reactor are layout markers.
+function buildV1Concept(name, width, length, cut, levels, draw) {
+  const doors = [], routes = [];
+  buildWhiteConcept(name, width, length, cut, ({box, ramp}) => {
+    const deck = (x,z,w,d,y) => box(x,z,w,d,y,y-.5);
+    const post = (x,z,y) => box(x,z,1,1,y-.5);
+    const doorWall = (x,z,span,axis,top=4) => {
+      const gap=4, lintel=3.25, wing=(span-gap)/2;
+      for(const side of [-1,1]) {
+        const offset=side*(gap+wing)/2;
+        box(x+(axis==='x'?offset:0),z+(axis==='z'?offset:0),axis==='x'?wing:1,axis==='z'?wing:1,top);
+      }
+      box(x,z,axis==='x'?gap:1,axis==='z'?gap:1,top,lintel);
+      doors.push({x,z,axis,width:gap,height:lintel});
+    };
+    const room = (x,z,w,d) => {
+      for(const side of [-1,1]) {
+        doorWall(x,z+side*d/2,w,'x');
+        doorWall(x+side*w/2,z,d,'z');
+      }
+      deck(x,z,w+1,d+1,4.5);
+    };
+    const poi = (label,x,z,y=0) => {
+      (MAP_POIS[name] ||= []).push([label,x,z,y]);
+      routes.push({label,x,z,y});
+    };
+    draw({box,ramp,deck,post,room,doorWall,poi});
+  }, 0, {spawnScreens:false});
+  const z=length/2-4.5;
+  MAP_SPAWNS[name]={ally:{x0:-5,x1:5,z0:z-1,z1:z+1},enemy:{x0:-5,x1:5,z0:-z-1,z1:-z+1}};
+  MAP_GROUPS[name].userData.v1Concept={width,length,levels,doors,routes};
+}
+
+buildV1Concept('zen_garden',56,104,6,2,({box,ramp,deck,post,room,poi})=>{
+  // Four walk-through buildings flank a shallow, non-hazardous pond footprint.
+  box(0,0,22,32,.06);
+  box(0,0,12,4,3);
+  box(-5,8,4,4,2);box(5,-8,4,4,2);
+  for(const side of [-1,1]) {
+    for(const end of [-1,1]) {
+      room(side*19,end*24,12,20);
+      ramp(side*3.5,end*20,side,0,9,4.5,5);
+    }
+    deck(side*19,0,5,28,4.5);
+    for(const z of [-7,7])post(side*19,z,4.5);
+    // Staggered half-cover protects approaches without fencing off the spawn.
+    box(side*7,side*36,4,5,1.5);
+    box(side*8,-side*11,4,5,1.5);
+    poi(side>0?'East balcony':'West balcony',side*19,0,4.5);
+    poi(side>0?'East pond path':'West pond path',side*9,0,.06);
+  }
+  poi('Center crossing',0,8,.06);
+});
+
+buildV1Concept('shipbreak',48,120,10,3,({box,ramp,deck,post,room,poi})=>{
+  for(const side of [-1,1]) {
+    for(const end of [-1,1]) {
+      room(side*15,end*22,10,16);
+      ramp(side*1.5,end*27,side,0,8,4.5,4);
+      box(side*15,end*41,7,8,3);
+    }
+    deck(side*15,0,7,28,4.5);
+    for(const z of [-8,8])post(side*15,z,4.5);
+    box(side*5,side*39,4,6,2);
+    // The high bridge climbs stay inside the middle lanes, not through the
+    // cargo platforms, so all three heights have usable standing clearance.
+    ramp(side*5.5,side*23,0,-side,18,9,4.5);
+    poi(side>0?'Starboard cargo route':'Port cargo route',side*15,0,4.5);
+    poi(side>0?'Starboard deck lane':'Port deck lane',side*21,0);
+  }
+  box(0,0,10,6,8.5);
+  deck(0,0,36,10,9);
+  for(const side of [-1,1])post(side*17,0,9);
+  poi('Bridge',0,0,9);
+  poi('Deck crossover',0,34);
+});
+
+buildV1Concept('reactor',52,96,6,3,({box,ramp,deck,post,room,poi})=>{
+  box(0,0,12,12,13);
+  for(const side of [-1,1]) {
+    room(0,side*28,16,12);
+    room(side*20,0,6,16);
+    // Mid-level ring, with open passages underneath and four short climbs.
+    deck(side*12.5,0,5,30,4.5);
+    deck(0,side*12.5,20,5,4.5);
+    deck(0,side*21,5,12,4.5);
+    deck(side*16,0,4,4,4.5);
+    for(const z of [-7,7])post(side*12.5,z,4.5);
+    for(const end of [-1,1]) {
+      ramp(side*12.5,end*24,0,-end,9,4.5,5);
+      ramp(side*22,end*37.5,0,-end,18,9,4.5);
+    }
+    // Upper loop: narrow side galleries linked by two overhead crossings.
+    deck(side*22,0,5,39,9);
+    deck(0,side*17,44,5,9);
+    for(const z of [-12,12])post(side*22,z,9);
+    poi(side>0?'East lower bypass':'West lower bypass',side*8,0);
+    poi(side>0?'East mid catwalk':'West mid catwalk',side*12.5,0,4.5);
+    poi(side>0?'East upper gallery':'West upper gallery',side*22,0,9);
+  }
 });
 
 for (const id of GRID_MAP_IDS) _ap(id, { fog: [260, 1400], zen: 0x2a78dc, gusty: 0.04, snd: {} });   // a clear blue sky: no clouds, no weather, no sun disc
@@ -45430,6 +45531,7 @@ const WEAPON_SKINS = [
   { id: 'cathedral', name: 'Cathedral', rarity: 'legendary', body: 0x691a37, accent: 0x286fa0, sw: ['#691a37', '#286fa0'] },
     { id: 'crimson_fracture', name: 'CRIMSON FRACTURE', rarity: 'legendary', body: 0x090909, accent: 0xff1a2e, shopWrap: 7500, sw: ['#090909', '#ff1a2e'] },
   ...(window.PVP_COLLECTION_WRAPS?.catalog || []),
+  ...(window.PVP_BLACKOUT?.catalog([['gun',WEAPONS],['melee',MELEE_ITEMS],['support',SUPPORT_ITEMS]]) || []),
   // ── 🎖 Contract wraps: not in the shop, each earned by a contract (CONTRACTS, below) ──
   { id: 'darkmatter',   name: 'Dark Matter',   body: 0x05030f, accent: 0xb36bff, flag: null, contract: true, sw: ['#05030f', '#b36bff'] },
   { id: 'singularity',  name: 'Singularity',   body: 0x000000, accent: 0xffd9a0, flag: null, contract: true, sw: ['#000000', '#ff8a2a'] },
@@ -45451,10 +45553,11 @@ try { equippedWraps = JSON.parse(localStorage.getItem('pvp_item_wraps') || '{}')
 function saveItemWraps() { try { localStorage.setItem('pvp_item_wraps', JSON.stringify(equippedWraps)); } catch (e) {} }
 function wrapIdFor(itemId) {
   const own = itemId && equippedWraps[itemId];
-  if (own && WEAPON_SKINS_BY_ID[own]) {
+  if (own && WEAPON_SKINS_BY_ID[own] && (!WEAPON_SKINS_BY_ID[own].targetItem || WEAPON_SKINS_BY_ID[own].targetItem===itemId)) {
     let ok = false; try { ok = wrapUnlocked(own); } catch (e) { ok = false; }   // (also runs at load, before the account is known)
     if (ok) return own;
   }
+  if (WEAPON_SKINS_BY_ID[selectedWeaponSkin]?.blackout) return 'default';
   if (WEAPON_SKINS_BY_ID[selectedWeaponSkin]?.prestige) {
     try { if (wrapUnlocked(selectedWeaponSkin)) return selectedWeaponSkin; } catch (e) {}
     return 'default';
@@ -46534,9 +46637,11 @@ WS_PATTERNS.crimsonFracture = (g, n, c, rnd) => {
   }
 };
 
+Object.assign(WS_PATTERNS, window.PVP_BLACKOUT?.patterns);
 // id -> how it is painted and finished. `glow`: which of the pattern's colours also lights up (an emissive layer).
 const WS_LOOKS = {
   ...window.PVP_COLLECTION_WRAPS?.looks,
+  ...window.PVP_BLACKOUT?.looks,
   crimson_fracture: { pat: 'crimsonFracture', c: [0x090909, 0xff1a2e, 0x5c0a12], metal: 0.08, rough: 0.92, noSwap: true, glow: 1, pulse: [0.25, 0.32, 1.35, 3, 1] },   // matte, so only the cracks shine: one slow beat every 4 s
   oil_spill: { pat: 'oilFilm', c: [0x6a459e,0x30aca2,0x285eaf,0xc29943,0x171126], metal: .56, rough: .24, noSwap: true, foil: 'oil' },
   porcelain: { pat: 'porcelainInk', c: [0xf8f7ef,0x1b4289,0xc39949,0x5984b6], metal: .06, rough: .19, noSwap: true },
@@ -46668,6 +46773,7 @@ function wrapUnlocked(id) {
   let me = null; try { me = currentUser; } catch (e) { me = null; }       // declared further down the file: not there yet at load
   const admin = !!(me && me.isAdmin);
   const sk = WEAPON_SKINS_BY_ID[id];
+  if(sk?.blackout)return admin||!!me?.skinInventory?.includes(id);
   if (sk?.prestige) return !sk.unavailable && !!me?.skinInventory?.includes(id);
   if (sk?.shopWrap) return admin || !!me?.skinInventory?.includes(id);
   if (sk && sk.approvedBy) return admin || !!(me && me.username === sk.approvedBy);   // an approved wrap is its author's
@@ -47043,10 +47149,11 @@ function applyWeaponSkin(model, skin) {
     const clones = model._skinClones, body = model._bodyMat, accent = model._accentMat;
     model.traverse(o => {
       if (!o.isMesh || !o.material) return;
-      for (let p = o; p; p = p.parent) if (p.userData?.vmHand) return;
+      const blackoutFist=skin?.blackout&&skin.targetItem==='fists'&&o.userData?.vmFist;
+      for (let p = o; p; p = p.parent) if (p.userData?.vmHand&&!blackoutFist) return;
       if (o.userData?.wrapLock) return;
       const dress = original => {
-        if (!original?.color || original.isMeshBasicMaterial || original.userData?.skinLock || original.userData?.wrapLock || original.userData?.skinTone
+        if (!original?.color || original.isMeshBasicMaterial || original.userData?.skinLock || original.userData?.wrapLock || (original.userData?.skinTone && !(skin?.blackout && skin.targetItem==='fists'))
             || (original.transparent && original.opacity < .95) || original.transmission > 0) return original;
         model._skinMeshes.add(o);
         if (clones.has(original)) return clones.get(original);
@@ -47063,7 +47170,10 @@ function applyWeaponSkin(model, skin) {
   }
   const activeEntries = [];
   for (const e of model._skinMats) {
-    const eligible = skin?.wrap || e.paintable || e.tone;
+    if(e.mesh.userData?.vmFist&&!skin?.blackout){
+      e.mat.color.copy(_vmArmM.hand.color);_wsApplyLook(null,[e.mat]);continue;
+    }
+    const eligible = skin?.blackout || skin?.wrap || e.paintable || e.tone;
     const tint = e.tone === 'accent' ? skin?.accent : skin?.body;
     e.mat.color.setHex(eligible && tint != null ? tint : e.orig);
     if (eligible) activeEntries.push(e);
@@ -47082,6 +47192,7 @@ function applyWeaponSkin(model, skin) {
   else if (model._fx === 'data') { _buildSkinExtra(model, 'data'); }
 
   if (model._skinDecal) { model.remove(model._skinDecal); if (model._skinDecal.material.map) model._skinDecal.material.map.dispose(); model._skinDecal.geometry.dispose(); model._skinDecal = null; }
+  window.PVP_BLACKOUT?.finish(model,skin);
   if (skin && skin.flag && FLAG_DRAW[skin.flag]) {
     const tex = _flagCanvas((ctx, w, h) => FLAG_DRAW[skin.flag](ctx, w, h));
     const decal = new THREE.Mesh(new THREE.PlaneGeometry(0.05, 0.033),
@@ -47095,6 +47206,8 @@ function applyWeaponSkin(model, skin) {
 // Without this a per-weapon skin was invisible — the only ones that changed
 // anything you could see were the handful that swapped the whole model.
 function gunSkinLookFor(weaponId) {
+  const own=WEAPON_SKINS_BY_ID[wrapIdFor(weaponId)];
+  if(own?.blackout)return own;
   // This runs during module evaluation (applySelectedWeaponSkinToAll is called
   // at load), and gunStatSkinFor -> ownsSkin reads `currentUser`, which is a
   // `let` declared FIFTEEN THOUSAND LINES further down. Touching it that early
@@ -48215,16 +48328,52 @@ function buildMagnetMine() {
   const tip2 = tip1.clone(); tip2.position.set(0.04, -0.025, 0); g.add(tip2);
   g.position.set(0.10, -0.12, -0.18); return g;
 }
-function buildBouncePad() {
-  const g = new THREE.Group();
-  const padMat = new THREE.MeshLambertMaterial({ color: 0xffcc22 });
-  const ringMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
-  const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.02, 12), padMat);
-  pad.rotation.x = Math.PI/2; g.add(pad);
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.054, 0.006, 4, 16), ringMat);
-  g.add(ring);
-  g.position.set(0.10, -0.12, -0.18); return g;
+function buildFieldUtilityWorld(kind) {
+  const g=new THREE.Group();
+  const iron=new THREE.MeshStandardMaterial({color:0x47535b,roughness:.44,metalness:.63});
+  const dark=new THREE.MeshStandardMaterial({color:0x1f282d,roughness:.75,metalness:.15});
+  const accent=new THREE.MeshStandardMaterial({color:kind==='bear_trap'?0xa78b56:0x35d2b6,roughness:.35,metalness:.4});
+  if(kind==='bounce_pad'){
+    const base=new THREE.Mesh(new THREE.CylinderGeometry(.72,.82,.15,8),iron);base.position.y=.075;g.add(base);
+    const top=new THREE.Mesh(new THREE.CylinderGeometry(.59,.65,.04,8),dark);top.position.y=.17;g.add(top);
+    const rim=new THREE.Mesh(new THREE.TorusGeometry(.64,.027,4,32),accent);
+    rim.rotation.x=Math.PI/2;rim.position.y=.20;g.add(rim);
+    for(let i=0;i<3;i++){
+      const chevron=new THREE.Group();chevron.position.set(0,.205,-.26+i*.25);
+      for(const side of [-1,1]){
+        const m=new THREE.Mesh(new THREE.BoxGeometry(.23,.014,.05),accent);
+        m.position.x=side*.08;m.rotation.y=side*-.65;chevron.add(m);
+      }
+      g.add(chevron);
+    }
+    for(let i=0;i<3;i++){
+      const diode=new THREE.Mesh(new THREE.BoxGeometry(.07,.02,.07),new THREE.MeshBasicMaterial({color:0x7cefc8}));
+      diode.position.set(-.15+i*.15,.16,.67);g.add(diode);
+    }
+  }else{
+    const frame=new THREE.Mesh(new THREE.TorusGeometry(.43,.045,5,24),iron);frame.rotation.x=Math.PI/2;frame.position.y=.08;g.add(frame);
+    const plate=new THREE.Mesh(new THREE.CylinderGeometry(.18,.20,.035,10),accent);plate.position.y=.07;g.add(plate);
+    for(const side of [-1,1]){
+      const jaw=new THREE.Group();jaw.position.set(side*.43,.10,0);g.add(jaw);
+      const rail=new THREE.Mesh(new THREE.BoxGeometry(.08,.075,.72),iron);jaw.add(rail);
+      for(let i=0;i<7;i++){
+        const tooth=new THREE.Mesh(new THREE.ConeGeometry(.048,.17,3),accent);
+        tooth.position.set(0,.095,-.30+i*.10);jaw.add(tooth);
+      }
+      const spring=new THREE.Mesh(new THREE.TorusGeometry(.075,.024,5,16),iron);
+      spring.rotation.y=Math.PI/2;spring.position.set(side*.53,.06,.23);g.add(spring);
+      jaw.userData.trapSide=side;
+    }
+  }
+  return g;
 }
+function buildHeldFieldUtility(kind){
+  const g=new THREE.Group(),tool=buildFieldUtilityWorld(kind);
+  tool.scale.setScalar(.085);tool.rotation.x=Math.PI/2;g.add(tool);
+  g.position.set(.10,-.12,-.18);return g;
+}
+function buildBouncePad(){return buildHeldFieldUtility('bounce_pad');}
+function buildBearTrap(){return buildHeldFieldUtility('bear_trap');}
 function buildHunterDrone() {
   const g = new THREE.Group();
   const matMetal = new THREE.MeshLambertMaterial({ color: 0x444466 });
@@ -48416,7 +48565,7 @@ const supportModels = [buildDonutFragGrenade(), buildMedkit(), buildStimShot(), 
   // 🪖 ADMIN supports
   buildC4(), buildClaymore(), buildStunGrenade(), buildThermite(),
   buildPredatorUAV(), buildCarePackage(), buildTacNuke(), buildSatchel(),
-  buildFrostBlaster()];   // freeze_ray (the old secondary's model)
+  buildFrostBlaster(),buildBearTrap()];   // freeze_ray, bear_trap
 supportModels.forEach(m => { m.visible = false; camera.add(m); });
 
 // ── Roblox-style player mesh factory ──────────────────────────────────────
@@ -54047,6 +54196,7 @@ function skinLookFor(skin) {                                                // t
 let _skinById = null;
 function skinLookById(id) {                                                 // for somebody else's shot: the skin id they sent
   if (typeof id !== 'string') return null;
+  if(window.PVP_BLACKOUT?.valid.has(id))return {blackout:true,bulletColor:0xcb2140,skinId:id};
   if (id === 'scythe_bloodstorm') return { finisher: 'bloodstorm' };
   try { if (!_skinById) _skinById = new Map([...MODEL_SKINS, ...SUPPORT_MODEL_SKINS].map(m => [m.id, m])); return skinLookFor(_skinById.get(id)); } catch (e) { return null; }
 }
@@ -54055,7 +54205,7 @@ function skinLookById(id) {                                                 // f
   const _emit = socket.emit.bind(socket);
   socket.emit = function (ev, d, ...rest) {
     if (ev === 'shoot' && d && typeof d === 'object' && d.weapon && d.skin === undefined) {
-      try { const sk = _activeModelSkin[d.weapon]; if (sk) d.skin = sk.id; else { const ss = SUPPORT_MODEL_SKINS.find(m => m.id === equippedSupportModelSkins[d.weapon]); if (ss && ss.look) d.skin = ss.id; } } catch (e) {}     // (_activeModelSkin is declared far below); a grenade skin with a look of its own (the Hacker Grenade) rides along too
+      try { const wrap=wrapIdFor(d.weapon);const sk = _activeModelSkin[d.weapon]; if(WEAPON_SKINS_BY_ID[wrap]?.blackout)d.skin=wrap;else if (sk) d.skin = sk.id; else { const ss = SUPPORT_MODEL_SKINS.find(m => m.id === equippedSupportModelSkins[d.weapon]); if (ss && ss.look) d.skin = ss.id; } } catch (e) {}     // (_activeModelSkin is declared far below); a grenade skin with a look of its own (the Hacker Grenade) rides along too
     }
     if (ev === 'shoot' && d && typeof d === 'object' && d.weapon === 'spear_throw' && d.skin === undefined) { try { if (equippedMeleeModelSkins.spear === 'spear_trident') d.skin = 'spear_trident'; } catch (e) {} }   // everybody sees a trident, not a spear
     return _emit(ev, d, ...rest);
@@ -54239,7 +54389,7 @@ const _LOOK_OF = { axe_upper: 'combat_axe', axe_airwhirl: 'combat_axe', axe_chop
 function _hackerHit(weaponId) { try { const L = weaponId && (_modelSkinLook[weaponId] || _modelSkinLook[_LOOK_OF[weaponId]]); return !!(L && L.hit === 'hack'); } catch (e) { return false; } }
 // The style (a HIT_STYLES key) of the hit look the thing in your hand wears, or null; the skin id behind it; and the style of a skin id somebody else sent.
 function _hitKind(weaponId) { try { const L = weaponId && (_modelSkinLook[weaponId] || _modelSkinLook[_LOOK_OF[weaponId]]); return (L && HIT_STYLES[L.hit] && L.hit) || null; } catch (e) { return null; } }
-function _skinHitId(weaponId) { try { const L = weaponId && (_modelSkinLook[weaponId] || _modelSkinLook[_LOOK_OF[weaponId]]); return (L && (HIT_STYLES[L.hit] || L.finisher) && L.skinId) || null; } catch (e) { return null; } }
+function _skinHitId(weaponId) { try { const wrap=wrapIdFor(weaponId);if(WEAPON_SKINS_BY_ID[wrap]?.blackout)return wrap;const L = weaponId && (_modelSkinLook[weaponId] || _modelSkinLook[_LOOK_OF[weaponId]]); return (L && (HIT_STYLES[L.hit] || L.finisher) && L.skinId) || null; } catch (e) { return null; } }
 function _hasSkinFinisher(id) { return !!(_hitKindOfSkin(id)||skinLookById(id)?.finisher); }
 let _hitKindById = null;
 function _hitKindOfSkin(id) {
@@ -57573,6 +57723,7 @@ function resetCombatResources() {
   if(match)match.liveKitUses=null;
   window.PVP_TETHER_WEAPONS?.clear(true);
   window.PVP_FISSION_DISC?.clear();
+  window.PVP_FLAMES?.clear();
   fistStrike = null;
   for (const id of Object.keys(supportRechargeUntil)) delete supportRechargeUntil[id];
   window.PVP_RAGDOLL?.resetLocal();
@@ -59599,7 +59750,7 @@ function updateMovement(dt, socialBlocked = false) {
   }
   // A weapon can make you quicker while you are actually firing it — the
   // flamethrower wants you closing the distance, not backing off.
-  const fireBoost = (shooting && currentWeapon && currentWeapon.moveBoost
+  const fireBoost = (activeSlot==='primary'||activeSlot==='secondary')&&currentWeapon?.heldMoveBoost ? currentWeapon.heldMoveBoost : (shooting && currentWeapon && currentWeapon.moveBoost
                      && (activeSlot === 'primary' || activeSlot === 'secondary'))
                     ? currentWeapon.moveBoost : 1;
   const rootMult = Date.now() < playerRootedUntil ? 0 : 1;
@@ -59747,12 +59898,12 @@ function updateMovement(dt, socialBlocked = false) {
     const gravMult = (typeof _playerInLowGrav !== 'undefined' && _playerInLowGrav) ? 0.33 : 1;
     const prevEyeY = camera.position.y;
     const _velBeforeGravity = slamState.vel;
-    slamState.vel -= GRAVITY * dt * gravMult * (slamState.type === 'slam' ? 1 : airPull(dt)); // a slam keeps its own pace
-    if (slamState.type !== 'slam' && wallRunStep(dt, dir)) {          // 🏃 running on a wall: a slow sink instead of gravity
+    slamState.vel -= GRAVITY * dt * (slamState.type==='pad'?1:gravMult) * (slamState.type === 'slam'||slamState.type==='pad' ? 1 : airPull(dt));
+    if (slamState.type !== 'slam' && slamState.type!=='pad' && wallRunStep(dt, dir)) {
       slamState.vel = _velBeforeGravity + (WALLRUN_SINK - _velBeforeGravity) * Math.min(1, dt * 6);        // (gravity is taken back: it only sinks)
       slamState.type = 'jump';
     }
-    camera.position.y += slamState.vel * dt;
+    camera.position.y += slamState.vel * dt + (slamState.type==='pad'?GRAVITY*dt*dt*.5:0);
     if (slamState.type === 'slam') slamState.peakY = Math.max(slamState.peakY ?? camera.position.y, camera.position.y);   // how far up it started from: the slam hits harder the further it falls
     resolvePlayerCeiling(prevEyeY);
     // Land at the eye height you are actually going to stand at. This branch
@@ -59924,6 +60075,7 @@ function abilityCooldownFor(item, ab = equippedAbility(item) || item?.ability) {
   if (isMelee) return 1500;
   if (item?.id === 'paintball') return ab.cd || 5000;
   if (item?.id === 'storm_bloom') return ab.cd || 15000;
+  if (item?.id === 'flamethrower') return ab.cd || 4000;
   return 0;
 }
 
@@ -61440,6 +61592,10 @@ function activateAbility() {
   else if (ab.type === 'hellfire_core') { fireHellfireCore(); }
   else if (ab.type === 'javelin_launch') {
     tryLaunchJavelin(w);
+  }
+  else if (ab.type === 'flame_airblast') {
+    flameAirBlast(ab);
+    flashAbilityName(ab.name);
   }
   else if (ab.type === 'dash') {
     const right = new THREE.Vector3(Math.cos(euler.y), 0, -Math.sin(euler.y));
@@ -63216,6 +63372,7 @@ function tryMelee() {
   const effectiveCooldown = !revving ? item.cooldown : isSaw ? (item.ability?.autoMs || 15) : (item.ability?.autoMs || 150);
   if (now - lastMelee < effectiveCooldown) return;
   lastMelee = now;
+  window.PVP_BLACKOUT?.slash(item.baseId||item.id);
   // A skin renames the item — equippedMeleeItem() hands back the SKIN's id, with
   // the base one under `baseId`. The sound follows the base, exactly as the swing
   // animation below already does (it indexes MELEE_SWING_TYPES by selectedMeleeIdx
@@ -63696,6 +63853,11 @@ function trySupport() {
   else _trySupportEffect(item, now);
 }
 function _trySupportEffect(item, now) {
+  if(item.id==='flashbang_basic'){throwFlashbang(item);return;}
+  if(item.id==='bounce_pad'||item.id==='bear_trap'){
+    window.PVP_FIELD_UTILITIES?.deploy(item.id);
+    return;
+  }
   const unlimited = adminInfiniteAmmoActive();
   // ── Instant-use consumables ────────────────────────────────────────────────
   if (item.id === 'medkit' && item.healTime) {
@@ -64189,6 +64351,7 @@ function clearBlinkPearls() {
 }
 
 function throwSupportItem(item) {
+  const blackout=WEAPON_SKINS_BY_ID[wrapIdFor(item.id)]?.blackout;
   const origin = new THREE.Vector3();
   camera.getWorldPosition(origin);
   origin.add(new THREE.Vector3(0.12, -0.18, -0.30).applyQuaternion(camera.quaternion));
@@ -64203,7 +64366,7 @@ function throwSupportItem(item) {
     ? PAINTBALL_COLORS[Math.floor(Math.random() * PAINTBALL_COLORS.length)]
     : (item.bulletColor || 0xffffff);
   const size = item.bulletSize || 0.12;
-  const mat  = new THREE.MeshBasicMaterial({ color });
+  const mat  = blackout ? new THREE.MeshLambertMaterial({color:0x0b0d10}) : new THREE.MeshBasicMaterial({ color });
   let mesh = new THREE.Mesh(new THREE.SphereGeometry(size, 7, 5), mat);
   if (item.id === 'black_hole_seed' && equippedSupportModelSkins.black_hole_seed === 'black_hole_sputnik' && ownsSkin('black_hole_sputnik')) {
     mesh = _buildSputnikFlight();                                                          // the Sputnik skin: a satellite in flight, antennas trailing
@@ -64211,6 +64374,7 @@ function throwSupportItem(item) {
   }
   if (item.id === 'moon_mine' && equippedSupportModelSkins.moon_mine === 'moon_mine_eclipse' && ownsSkin('moon_mine_eclipse')) { mesh = _eclipseWorld(); mesh.scale.setScalar(2.6); }   // the Eclipse Engine
   if(item.id==='moon_mine'&&equippedSupportModelSkins.moon_mine==='moon_mine_tactical_potato'&&ownsSkin('moon_mine_tactical_potato'))mesh=buildTacticalPotato(true);
+  if(blackout)applyWeaponSkin(mesh,WEAPON_SKINS_BY_ID[wrapIdFor(item.id)]);
   mesh.position.copy(origin);
   scene.add(mesh);
 
@@ -64224,7 +64388,7 @@ function throwSupportItem(item) {
   const maxBounces    = item.id === 'rubber_duck' ? 4 : 0;
 
   activeGrenades.push({
-    mesh, id, isOwn: true, isSupport: true, itemRef: item,
+    mesh, id, isOwn: true, isSupport: true, itemRef: item,blackout,
     velX: aimDir.x * speed,
     velY: aimDir.y * speed,
     velZ: aimDir.z * speed,
@@ -73740,8 +73904,11 @@ function updateReloadAnim() {
 function spawnLocalBullet(origin, dir, id, isOwn, speed, color, size, weaponId, opts = {}) {
   if(!isOwn&&window.PVP_BATTLE_SIM?.lowEffects)return;
   // The skin's look: yours from what you wear, somebody else's from the skin id their shot carried (opts.skinId, see the bulletFired handler).
-  const skinLook = isOwn ? ((typeof _modelSkinLook !== 'undefined' && _modelSkinLook[weaponId]) || null) : (opts.skinId ? skinLookById(opts.skinId) : null);
-  let mesh = makeBulletMesh(color, size, weaponId, isOwn, skinLook);
+  const blackout=isOwn&&WEAPON_SKINS_BY_ID[wrapIdFor(weaponId)]?.blackout;
+  const skinLook = blackout ? skinLookById(wrapIdFor(weaponId)) : isOwn ? ((typeof _modelSkinLook !== 'undefined' && _modelSkinLook[weaponId]) || null) : (opts.skinId ? skinLookById(opts.skinId) : null);
+  let mesh = weaponId==='flamethrower'?new THREE.Group():makeBulletMesh(color, size, weaponId, isOwn, skinLook);
+  if(weaponId==='flamethrower')window.PVP_FLAMES?.spray(origin,dir,isOwn?myId:opts.ownerId||opts.botId||id);
+  if(skinLook?.blackout)window.PVP_BLACKOUT?.projectile(mesh,weaponId);
   // A metal round's drawing can be switched off or thinned out (combat-visuals.js); the round itself still flies and hits exactly the same.
   if (window.PVP_COMBAT_FX && !skinLook?.shot && projectileKind(weaponId) === 'bullet' && !window.PVP_COMBAT_FX.tracerVisible(weaponId, isOwn, opts.botId || opts.ownerId)) mesh.visible = false;
   if (weaponId === 'spear_throw' && (opts.trident || opts.skinId === 'spear_trident')) { mesh = _buildTridentShot(); opts = Object.assign({}, opts, { trident: true }); }   // the Trident skin: a trident in flight, not a spear
@@ -73764,6 +73931,7 @@ function spawnLocalBullet(origin, dir, id, isOwn, speed, color, size, weaponId, 
     speed: projectileBaseSpeed(weaponId, wSpec, speed) * BULLET_SPEED_MULTIPLIER * (wSpec?.bulletSpeedMult || 1), weaponId, size,
     spawnX: origin.x, spawnY: origin.y, spawnZ: origin.z, maxRange, ...opts, shotTags });
   if (isOwn && weaponId==='harpoon_gun') window.PVP_TETHER_WEAPONS?.fired(localBullets.at(-1));
+  if(weaponId==='flamethrower')localBullets.at(-1).speed=14;
 }
 
 // ── Floating damage numbers ────────────────────────────────────────────────
@@ -74129,10 +74297,12 @@ function playHitConfirmSound(kind, tier, pitch = 1) {
   const base = kind === 'kill' ? 0.9 : kind === 'head' ? 0.85 : 0.7, duck = kind === 'kill' || kind === 'head' ? 1 : 1 / (1 + 0.08 * Math.min(crowd, 12));   // (a headshot ding is never ducked)
   playSoundEvent(kind === 'kill' ? 'hm_kill' : kind === 'head' ? 'hm_head' : 'hm_body',
     { volume: base * vol * duck, minGap: 0, tier, pitch });
+  if(kind==='head')playSoundEvent('hm_body',{volume:.7*vol/(1+.08*Math.min(crowd,12)),minGap:0,tier,pitch});
   return true;
 }
 // A confirmed hit that is not a kill: marker, click, number (the number is what was actually taken off).
 function hitConfirmed(kind, o = {}) {
+  if(o.damage>0&&o.fd?.mesh)flashDamagedCharacter(o.fd.mesh);
   showHitmarker(kind);
   playHitConfirmSound(kind, o.tier);
   if (o.damage > 0) addHitNumber(o.damage, kind === 'head');
@@ -75850,6 +76020,10 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
   if (players[pid]?.dead) return;   // a body going down is not a target (#34)
   const isBot    = players[pid] && players[pid].isBot;
   if (friendlyFireBlocked(pid, myId)) return;
+  if(weaponId==='flamethrower'){
+    if(!window.PVP_FLAMES?.contact(pid))return;
+    headshot=false;opts={...opts,damageOverride:10};
+  }
   const killTags = killfeedShotTags(weaponId, { ...opts, targetId: pid });
   noteKillInfo(pid, myId, weaponId, headshot, { tags: killTags });
   const instakill = weaponId==='omega_pistol' || headshot && INSTAKILL_HS_WEAPONS.has(weaponId);
@@ -75960,6 +76134,7 @@ function emitHit(pid, bulletId, weaponId, hitWorldPos, headshot = false, opts = 
       bot.hp = Math.max(0, bot.hp - effective);
       if (players[pid]) players[pid].hp = bot.hp;
       const dealtToBot = hpBeforeHit - bot.hp, firstCount = _hmFirstTime(pid, bulletId);   // what really came off, and whether this bullet has been counted
+      if(firstCount&&dealtToBot>0)flashDamagedCharacter(mesh);
       if(weaponId==='rad_pulse'&&firstCount&&dealtToBot>0&&!bot.dead&&!socket.connected)applyLocalRadiation(pid);
       if (firstCount) matchNoteHit(weaponId, dealtToBot, headshot);
       if (match?.type === 'range' && firstCount) rangeNoteHit(weaponId, dealtToBot, headshot, pid);   // the range's accuracy tracker and DPS test count every real hit
@@ -76140,7 +76315,12 @@ spawnTrainingDummies(); // safe here — TRAINING_DUMMIES const is already initi
 
 function handleDummyHit(dummy, mesh, opts, hitPos) {
   if (activeMapName !== 'lobby13' || !mesh?.visible) return;
+  if(opts.weaponId==='flamethrower'){
+    if(!window.PVP_FLAMES?.contact(dummy.id))return;
+    opts={...opts,damage:10,headshot:false,falloff:1};
+  }
   const dmg = opts.damage ?? getClientWeaponDamage(opts.weaponId);
+  if(!(dmg>0)||!dummy.infinite&&dummy.hp<=0)return;
   if(opts.weaponId==='rad_pulse'&&dmg>0&&(dummy.infinite||dummy.hp>dmg))applyLocalRadiation(dummy.id);
   const dummyTier = hitFeedback(dummy.id, mesh, hitPos, dmg, !!opts.headshot, opts.falloff, opts.headMiss, opts.weaponId, true);
   if (dummy.infinite || dummy.hp > 0) hitConfirmed(opts.headshot ? 'head' : 'hit', { tier: dummyTier, damage: dummy.infinite ? dmg : Math.min(dmg, dummy.hp), fd: { id: dummy.id, mesh, raw: dmg, meta: damageSymbolMeta(opts.weaponId, dummy.id, mesh, opts, dmg, opts.falloff ?? 1) } });   // (a dummy greyed out and waiting to come back takes nothing)
@@ -76172,12 +76352,48 @@ function handleDummyHit(dummy, mesh, opts, hitPos) {
   }
 }
 
-function flashDummyMesh(mesh) {
-  if (!mesh._bodyMat) return;
-  const orig = mesh._bodyMat.color.getHex();
-  mesh._bodyMat.color.setHex(0xffffff);
-  setTimeout(() => mesh._bodyMat?.color.setHex(orig), 90);
+const DAMAGE_FLASH_MS=50;
+const damagedCharacterFlashes=new Map();
+function restoreDamageFlash(mesh){
+  const state=damagedCharacterFlashes.get(mesh);if(!state)return;
+  clearTimeout(state.timer);
+  for(const part of state.parts)if(part.object.material===part.tint)part.object.material=part.original;
+  // A death can clone the body mid-flash; restore that clone's shared materials too.
+  mesh._ragdoll?.visual?.traverse(o=>{
+    if(!o.material)return;
+    if(Array.isArray(o.material))o.material=o.material.map(m=>state.originalByTint.get(m)||m);
+    else o.material=state.originalByTint.get(o.material)||o.material;
+  });
+  for(const material of state.materials)material.dispose();
+  damagedCharacterFlashes.delete(mesh);
 }
+function flashDamagedCharacter(mesh){
+  if(!mesh)return;
+  if(mesh._ragdoll?.visual){restoreDamageFlash(mesh);mesh=mesh._ragdoll.visual;}
+  let state=damagedCharacterFlashes.get(mesh);
+  if(!state){
+    state={parts:[],materials:new Set(),originalByTint:new Map(),timer:null};
+    const clones=new Map(),objects=new Set(),rig=mesh._rig;
+    const roots=rig?['head','torso','neck','pelvis','legL','legR','armL','armR','handL','handR'].map(k=>rig[k]).filter(Boolean):[mesh];
+    for(const root of roots)root.traverse(o=>{
+      if(!o.isMesh||!o.material||objects.has(o)||!rig&&!mesh._ragdollVisual&&o.material!==mesh._bodyMat)return;
+      objects.add(o);
+      const tint=material=>{
+        if(clones.has(material))return clones.get(material);
+        const m=material.clone();
+        m.color?.setHex(0xff3333);
+        if(m.emissive){m.emissive.setHex(0xff1515);m.emissiveIntensity=.8;}
+        clones.set(material,m);state.materials.add(m);state.originalByTint.set(m,material);return m;
+      };
+      const original=o.material,red=Array.isArray(original)?original.map(tint):tint(original);
+      state.parts.push({object:o,original,tint:red});o.material=red;
+    });
+    damagedCharacterFlashes.set(mesh,state);
+  }
+  clearTimeout(state.timer);
+  state.timer=setTimeout(()=>restoreDamageFlash(mesh),DAMAGE_FLASH_MS);
+}
+function flashDummyMesh(mesh){flashDamagedCharacter(mesh);}
 
 // ── Bullet update & hit detection ─────────────────────────────────────────
 const _bpos = new THREE.Vector3(), _ppos = new THREE.Vector3();
@@ -76714,6 +76930,7 @@ function updateBullets(dt) {
         // still took health off you. The bullet is the hit now. Tested as three
         // spheres down your middle, dropped as you crouch, the same way your own
         // shots are tested against everyone else.
+        if(!b.isOwn&&window.PVP_FIELD_UTILITIES?.hitBullet(b,px0,py0,pz0,tDx,tDy,tDz,wallHitT)){removeBullet();continue;}
         if (!b.isOwn && b.botId && !isDead && b.botTeam === 'enemy') {
           const curEye = window._crouchEye || 1.65;
           const feetY = camera.position.y - curEye;
@@ -76901,6 +77118,7 @@ function updateBullets(dt) {
         }
       }
 
+      if(window.PVP_FIELD_UTILITIES?.hitBullet(b,px0,py0,pz0,sx,sy,sz,Math.min(wallHitT,bestHit?.t??1))){removeBullet();continue;}
       if (wallHitPt && (!bestHit || wallHitT <= bestHit.t)) {
         if(b.mesh._apexTrail)_emitApexTrail(_bulletPrevTrail.set(px0,py0,pz0),wallHitPt);
         if (b.weaponId==='harpoon_gun') window.PVP_TETHER_WEAPONS?.latch(b,wallHitPt);
@@ -77178,6 +77396,7 @@ function deployMiniTurret(item) {
   const g = buildMiniTurret ? buildMiniTurret() : new THREE.Group();
   g.scale.set(2.2, 2.2, 2.2);
   g.position.set(px, 0.10, pz);
+  window.PVP_BLACKOUT?.deployed(g,item.id);
   scene.add(g);
   miniTurrets.push({ mesh: g, lens: g._lens || null, x: px, z: pz, until: Date.now() + (item.turretDur || 30000),
     lastShot: 0, fireRate: item.fireRate || 500, damage: item.damage || 15, range: item.turretRange || 7,
@@ -77337,6 +77556,7 @@ function placeLandMine(item) {
   disc.position.y = 0.03; g.add(disc);
   const stud = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 5), matStud);
   stud.position.y = 0.075; g.add(stud);
+  window.PVP_BLACKOUT?.deployed(g,item.id);
   g.position.set(pos.x, 0, pos.z);
   scene.add(g);
   traps.push({
@@ -77735,6 +77955,7 @@ function placeC4(item) {
   body.position.y = 0.06; g.add(body);
   const led = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 5), new THREE.MeshBasicMaterial({ color: 0xff2222 }));
   led.position.set(0.1, 0.14, 0); g.add(led);
+  window.PVP_BLACKOUT?.deployed(g,item.id);
   g.position.set(pos.x, 0, pos.z); scene.add(g);
   placedC4s.push({ mesh: g, led, x: pos.x, z: pos.z, damage: item.damage || 200, ownerId: myId });
   showAnnouncement('💣 C4 PLACED', 'Press E to detonate', '#ff4444', 1400);
@@ -77768,6 +77989,7 @@ function placeClaymore(item) {
   body.position.y = 0.10; g.add(body);
   const yaw = Math.atan2(-fwd.x, -fwd.z);
   g.rotation.y = yaw;
+  window.PVP_BLACKOUT?.deployed(g,item.id);
   g.position.set(pos.x, 0, pos.z); scene.add(g);
   traps.push({
     type: 'claymore', x: pos.x, z: pos.z, fx: fwd.x, fz: fwd.z,
@@ -77775,6 +77997,69 @@ function placeClaymore(item) {
     mesh: g, until: Date.now() + 120000, ownerId: myId,
   });
   showAnnouncement('💣 CLAYMORE ARMED', 'Front-facing trap', '#ff4444', 1200);
+}
+let flashBlindUntil=0,flashBlindStarted=0,flashBlindStrength=0,flashBlindElement=null;
+function clearFlashBlind(){
+  flashBlindUntil=flashBlindStarted=flashBlindStrength=0;
+  if(flashBlindElement)flashBlindElement.style.display='none';
+}
+function flashbangExposure(pos,eye,forward,radius=12){
+  const delta=pos.clone().sub(eye),distance=delta.length();
+  if(distance>=radius)return 0;
+  const start=pos.clone().add(new THREE.Vector3(0,.04,0)),direction=eye.clone().sub(start),length=direction.length();
+  if(length>.01){
+    const ray=new THREE.Ray(start,direction.divideScalar(length));
+    if(wallColliders.some(box=>{const hit=ray.intersectBox(box,new THREE.Vector3());return hit&&hit.distanceTo(start)<length-.02;}))return 0;
+  }
+  const facing=distance>.01?forward.dot(delta.divideScalar(distance)):1;
+  return Math.max(.15,1-distance/radius)*(facing>.2?1:facing>-.4?.55:.2);
+}
+function updateFlashBlind(){
+  const live=gameStarted&&!isDead&&!inLobby&&!KILLCAM.active&&!spectatorState&&!THEATER.active&&!window.PVP_BATTLE_SIM?.active;
+  const now=Date.now();
+  if(!live||now>=flashBlindUntil){clearFlashBlind();return;}
+  if(!flashBlindElement){
+    flashBlindElement=document.createElement('div');flashBlindElement.id='flashbang-blind';
+    flashBlindElement.style.cssText='position:fixed;inset:0;z-index:22;pointer-events:none;background:#f6f7f4;';
+    document.body.appendChild(flashBlindElement);
+  }
+  const duration=flashBlindUntil-flashBlindStarted,remaining=(flashBlindUntil-now)/duration;
+  flashBlindElement.style.display='block';
+  flashBlindElement.style.opacity=String(Math.min(1,remaining*1.5)*Math.min(1,.25+flashBlindStrength));
+}
+function detonateFlashbang(pos){
+  const item=SUPPORT_ITEMS.find(s=>s.id==='flashbang_basic'),sim=window.PVP_BATTLE_SIM;
+  spawnAbilityAOEFX(pos,.65,0xf5f4dd);
+  playSoundEvent('flashbang',{position:pos,volume:.8,minGap:0});
+  if(!sim?.active&&gameStarted&&!isDead&&!inLobby){
+    const strength=flashbangExposure(pos,camera.position,camera.getWorldDirection(new THREE.Vector3()),item.stunRadius);
+    if(strength>0){
+      const now=Date.now(),end=now+item.blindDur*strength;
+      if(end>flashBlindUntil){flashBlindStarted=now;flashBlindUntil=end;flashBlindStrength=strength;}
+      updateFlashBlind();
+    }
+  }
+  const now=sim?.active?sim.now:Date.now();
+  for(const bot of gameBots){
+    if(bot.dead)continue;
+    const eye=new THREE.Vector3(bot.x,(bot.y||0)+1.4,bot.z),yaw=bot.rotY||0;
+    const strength=flashbangExposure(pos,eye,new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw)),item.stunRadius);
+    if(strength>0)bot._flashBlindUntil=Math.max(bot._flashBlindUntil||0,now+item.blindDur*strength);
+  }
+}
+function spawnFlashbang(origin,direction,id,ownerId){
+  const item=SUPPORT_ITEMS.find(s=>s.id==='flashbang_basic'),mesh=handcraftedSupport(item.id);
+  mesh.scale.setScalar(2);mesh.rotation.set(0,0,0);mesh.position.copy(origin);scene.add(mesh);
+  activeGrenades.push({mesh,id,ownerId,isOwn:ownerId===myId,isSupport:true,itemRef:item,
+    velX:direction.x*item.bulletSpeed,velY:direction.y*item.bulletSpeed,velZ:direction.z*item.bulletSpeed,
+    gravMult:1,explodeOnImpact:false,maxBounces:0,bounceCount:0,explodeAt:Date.now()+item.fuseMs});
+}
+function throwFlashbang(item){
+  const origin=camera.position.clone().add(new THREE.Vector3(.12,-.18,-.30).applyQuaternion(camera.quaternion));
+  const dir=new THREE.Vector3(0,.20,-1).applyQuaternion(camera.quaternion).normalize();
+  spawnFlashbang(origin,dir,'flash_'+myId+'_'+Date.now(),myId);
+  socket.emit('shoot',{x:origin.x,y:origin.y,z:origin.z,dx:dir.x,dy:dir.y,dz:dir.z,weapon:item.id});
+  playSoundEvent('grenade_throw',{volume:.75,minGap:0});
 }
 function throwStunGrenade(item) {
   const origin = new THREE.Vector3();
@@ -78235,7 +78520,8 @@ function updateSwitchbladeHUD() {
 function spawnBurnZone(pos, radius, dps, durationMs, opts = {}) {
   const ringGeo = new THREE.RingGeometry(radius * 0.85, radius, 24);
   const ringMat = new THREE.MeshBasicMaterial({ color: opts.color || 0xff5522, side: THREE.DoubleSide, transparent: true, opacity: 0.55 });
-  const ring = new THREE.Mesh(ringGeo, ringMat);
+  const ring = opts.acid ? new THREE.Mesh(ringGeo, ringMat) : window.PVP_FLAMES.ground(radius,opts.color);
+  if(!opts.acid){ringGeo.dispose();ringMat.dispose();}
   ring.rotation.x = -Math.PI / 2;
   ring.position.set(pos.x, 0.04, pos.z);
   scene.add(ring);
@@ -78447,6 +78733,26 @@ function getBotTarget(bot) {
 // little, up to a cap, for as long as the fuel lasts (about two seconds of fire in the air; the ground refills it).
 // It has to be the flames reaching the floor, so the steeper you aim the higher you can hover.
 let playerWetUntil = 0;
+function flameAirBlast(ab=WEAPONS.find(w=>w.id==='flamethrower').ability) {
+  if(isDead||pilotedVehicle||pilotedMortar)return false;
+  const forward=new THREE.Vector3(-Math.sin(euler.y),0,-Math.cos(euler.y));
+  const right=new THREE.Vector3(Math.cos(euler.y),0,-Math.sin(euler.y));
+  const boost=new THREE.Vector3();
+  if(keys.KeyW||joyDir.y<-.15)boost.add(forward);
+  if(keys.KeyS||joyDir.y>.15)boost.sub(forward);
+  if(keys.KeyD||joyDir.x>.15)boost.add(right);
+  if(keys.KeyA||joyDir.x<-.15)boost.sub(right);
+  if(boost.lengthSq()<.01)boost.copy(forward);
+  boost.normalize();
+  _extVel.x+=boost.x*ab.impulse;_extVel.z+=boost.z*ab.impulse;
+  const horizontal=Math.hypot(_extVel.x,_extVel.z);
+  if(horizontal>ab.maxSpeed){_extVel.x*=ab.maxSpeed/horizontal;_extVel.z*=ab.maxSpeed/horizontal;}
+  const rise=Math.max(0,slamState?.vel??playerYVel??0);
+  slamState={vel:Math.min(16,rise+ab.lift),type:'jump'};playerYVel=0;airTime=0;
+  window._slideUntil=0;window._blastCarry=true;window._blastCarryGround=0;
+  _fovPunch=Math.max(_fovPunch,4);
+  return true;
+}
 const FLAME_JET = { pitch: -0.5, reach: 4.6, perShot: 1.5, cap: 5.6, fuelMs: 2200, refill: 2.5 };
 let _flameFuel = FLAME_JET.fuelMs, _flameFuelAt = 0;
 const _jetDir = new THREE.Vector3();
@@ -78476,6 +78782,7 @@ function isWaterWeapon(weaponId) {
   return !!(fx && fx.sound && (fx.sound.kind === 'squirt' || fx.sound.kind === 'sprinkle'));
 }
 function dousePlayer(ms) {
+  if(window.PVP_FLAMES?.douse(myId))socket.emit('flameDouse',{targetId:myId});
   const now = Date.now();
   const burning = playerFireUntil > now || (_playerDot && _playerDot.weaponId === 'flame_burn');
   playerFireUntil = 0;
@@ -78485,6 +78792,7 @@ function dousePlayer(ms) {
 }
 function douseBot(bot) {
   if (!bot) return;
+  if(window.PVP_FLAMES?.douse(bot.id))socket.emit('flameDouse',{targetId:bot.id});
   bot._fireUntil = 0;
   try { delete _dotTargets[bot.id]; } catch (e) {}
 }
@@ -78639,8 +78947,9 @@ function updateBurnZones(dt) {
   let playerInMolotov = false;
   for (let i = burnZones.length - 1; i >= 0; i--) {
     const z = burnZones[i];
-    if (now >= z.until) { scene.remove(z.mesh); if(z.hellfire)_disposeFinisherObject(z.mesh);else {z.mesh.geometry.dispose();z.mesh.material.dispose();} burnZones.splice(i, 1); continue; }
+    if (now >= z.until) { scene.remove(z.mesh); z.mesh.traverse(_disposeFinisherObject);burnZones.splice(i, 1); continue; }
     z.mesh.material.opacity = 0.35 + 0.2 * Math.sin(now * 0.008);
+    if(z.mesh.userData.firePatch){z.mesh.material.opacity=.36;window.PVP_FLAMES?.groundStep(z.mesh,now,Math.min(1,(z.until-now)/600));}
     if(z.hellfire){
       z.mesh.children.forEach((flame,i)=>{flame.scale.y=.75+Math.sin(now*.018+i*2.1)*.25;});
       if(z.ownerId===myId&&currentUser?.isAdmin&&now-z.lastTick>=200){
@@ -78717,6 +79026,7 @@ const _dotTargets = {};        // botId/pid -> { until, dps, weaponId }
 let _playerDot = null;         // the same, for you
 
 function applyDotOnHit(weaponId, targetPid) {
+  if(weaponId==='flamethrower')return;
   const w = WEAPONS.find(x => x.id === weaponId);
   const d = w && (w.burnOnHit || w.poisonOnHit);
   if (!d) return;
@@ -78727,6 +79037,7 @@ function applyDotOnHit(weaponId, targetPid) {
                              dps: d.dps, weaponId: weaponId==='hellfire'?'hellfire_burn':w.burnOnHit ? 'flame_burn' : 'caustic_burn' };
 }
 function applyDotToPlayer(weaponId) {
+  if(weaponId==='flamethrower')return;
   const w = WEAPONS.find(x => x.id === weaponId);
   const d = w && (w.burnOnHit || w.poisonOnHit);
   if (!d) return;
@@ -79097,6 +79408,9 @@ function flashHitIndicator(kind = 'damage') {
 // An arc around the crosshair, turned toward whoever hit you: up = in front, down = behind (#36).
 const damageDirectionEntries = [];
 function clearCombatFeedback() {
+  clearFlashBlind();
+  for(const mesh of damagedCharacterFlashes.keys())restoreDamageFlash(mesh);
+  window.PVP_FIELD_UTILITIES?.clear();
   _radLocal.clear();
   for(const exposure of _radVisual.values())exposure.until=0;
   resetKillChain();
@@ -79491,6 +79805,7 @@ function updateSpectatorHUD() {
 
 // Client-side bot damage to player (applies immediately; server also processes for auth)
 const CLIENT_WEAPON_DAMAGE = Object.fromEntries([
+  ['flamethrower_burn',3],
   ...WEAPONS.map(w => [w.id, w.damage]),
   ...MELEE_ITEMS.map(m => [m.id, m.damage]),
   ['ak20_skin_twin', 20], ['ak20_skin_tracking', 25], ['ak20_skin_swarm', 17],
@@ -79822,6 +80137,10 @@ function applyBotDamageToPlayer(weaponId, botId, damageOverride, reflectedDamage
   // 🛋️ Lobby 13 is a no-combat chill zone — nobody takes damage.
   if (inLobby) return;
   if (botId && friendlyFireBlocked(myId, botId)) return;
+  if(weaponId==='flamethrower'&&!reflectedDamage){
+    if(!window.PVP_FLAMES?.contact(myId))return false;
+    damageOverride=10;_botHitHead=false;
+  }
   if (!isDead && !reflectedDamage && holdingReflectKatana() && botId && projectileWeaponSpec(weaponId) && !EXPLOSIVE_KINDS.has(projectileKind(weaponId))) {
     const damage=damageOverride??Math.round(getClientWeaponDamage(weaponId)*(_botHitHead?headshotMultFor(weaponId):1));
     triggerDeflectImpact(_fallbackDeflectWorldPos());reflectDamageToShooter(botId,weaponId,null,damage);return;
@@ -80325,6 +80644,10 @@ socket.on('skinChanged', ({ id, skin, isAdmin, skinData, hair, finisher }) => {
   scene.add(mesh); remoteMeshes[id] = mesh;
 });
 socket.on('bulletFired', b => {
+  if(b.weapon==='flashbang_basic'){
+    if(b.ownerId!==myId)spawnFlashbang(new THREE.Vector3(b.x,b.y,b.z),new THREE.Vector3(b.dx,b.dy,b.dz),b.id,b.ownerId);
+    return;
+  }
   if(b.weapon==='fission_disc'){window.PVP_FISSION_DISC?.receive(b);return;}
   if (b.ownerId && b.ownerId !== myId) KILLREPLAY.firedAt[b.ownerId] = performance.now();   // (the replay shows their shots)
   if (b.ownerId===myId) return;
@@ -80454,6 +80777,8 @@ socket.on('damageGuarded', data => {
   floatDamage(data.targetId,remoteMeshes[data.targetId],0,0,false,false,{shield:true,blocked:true});
 });
 socket.on('playerHit', data => {
+  if(['flamethrower','flame_burn','molotov_burn','molotov_fire'].includes(data.weapon)&&!data.reflected)window.PVP_FLAMES?.show(data.targetId,data.weapon==='flamethrower'?8000:1000);
+  if(data.targetId!==myId&&data.healthEvent!=='heal'&&((data.dealt||0)>0||data.hp<(players[data.targetId]?.hp??data.hp)))flashDamagedCharacter(remoteMeshes[data.targetId]);
   const healthOnly = data.healthEvent === 'environment' || data.healthEvent === 'heal' || data.periodic === true;
   if (data.shooterId && data.weapon) noteKillInfo(data.targetId, data.shooterId, data.weapon, data.headshot, { tags: data.tags });   // for the kill feed
   _othersSkinHit(data);                                                // a hit look's flash on the victim (the Hacker, X!@&!@ and Midas skins), for everyone who is not the shooter
@@ -81148,12 +81473,14 @@ function spawnFrag(origin,dir,id,isOwn,skin,explodeAt,inHand=false) {
   } else if (g.spider) g.mesh=_spiderWorld();
   else if (skin==='frag_tactical_quack') g.mesh=buildTacticalDuck(true);
   else g.mesh=g.hack?makeHackerWorldGrenade():makeWorldGrenadeMesh();
+  if(window.PVP_BLACKOUT?.valid.has(skin))applyWeaponSkin(g.mesh,WEAPON_SKINS_BY_ID[skin]);
   g.mesh.position.copy(origin);scene.add(g.mesh);activeGrenades.push(g);
 }
 function primeFrag(now) {
-  const skin = equippedSupportModelSkins.frag;
+  const wrap=wrapIdFor('frag');
+  const skin = WEAPON_SKINS_BY_ID[wrap]?.blackout ? wrap : equippedSupportModelSkins.frag;
   const cook = fragCook = {
-    idx:selectedSupportIdx, id:`gren_${myId}_${now}`, skin:skin && ownsSkin(skin) ? skin : undefined,
+    idx:selectedSupportIdx, id:`gren_${myId}_${now}`, skin:skin && (WEAPON_SKINS_BY_ID[skin]?.blackout?wrapUnlocked(skin):ownsSkin(skin)) ? skin : undefined,
     explodeAt:now+GRENADE_FUSE, timer:null,
   };
   grenadeWindupModel = supportModels[selectedSupportIdx];
@@ -81370,6 +81697,7 @@ function explodeSupport(g) {
   const item = g.itemRef;
   if (!item) return;
   const pos = g.mesh.position.clone();
+  if(item.id==='flashbang_basic'){detonateFlashbang(pos);return;}
   if(item.id==='hellfire_core'){
     const ground=getGroundEyeY(pos.x,pos.z,pos.y+PLAYER_EYE_HEIGHT)-PLAYER_EYE_HEIGHT;
     if(ground < -1000)return;
@@ -81420,7 +81748,7 @@ function explodeSupport(g) {
 
   // Visual effect
   if (item.id === 'smoke') {
-    spawnSmokeCloud(pos);
+    spawnSmokeCloud(pos,g.blackout?0xad989e:undefined);
   } else {
     const color = item.randomBulletColor ? 0xffaa00 : (item.bulletColor || 0xff7700);
     spawnAbilityAOEFX(pos, getSupportRadius(item), color);
@@ -81711,7 +82039,7 @@ function getSupportRadius(item) {
   return radii[item.id] || 4;
 }
 
-function spawnSmokeCloud(pos) {
+function spawnSmokeCloud(pos,color=0xb0b0b0) {
   smokeClouds.push({ x: pos.x, z: pos.z, r: 4.5, until: Date.now() + 1400 + 7000 });   // fire cannot live in it (updateSmokeDouse)
   // Round 1 took 5 thin see-through puffs to 18 on a spiral (~15x volume).
   // Still read as small, so round 2 scales that same spiral up another 3x by
@@ -81738,7 +82066,7 @@ function spawnSmokeCloud(pos) {
   }
 
   const meshes = puffs.map(p => {
-    const mat  = new THREE.MeshBasicMaterial({ color: 0xb0b0b0, transparent: true, opacity: 0 });
+    const mat  = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0 });
     const mesh = new THREE.Mesh(new THREE.SphereGeometry(p.r, 8, 6), mat);
     mesh.position.set(pos.x + p.ox, pos.y + p.oy, pos.z + p.oz);
     scene.add(mesh);
@@ -82729,9 +83057,9 @@ const USE_TRACKS = {
 const SUPPORT_USE_KIND = {
   medkit: 'open', stim: 'inject', vampire_syringe: 'inject', adrenaline: 'injectX', berserker_serum: 'injectX',
   smoke: 'pin', molotov: 'pin', acid_grenade: 'pin', emp_grenade: 'pin', flashbang_basic: 'pin', stun_grenade: 'pin', taser_grenade: 'pin', ink_bomb: 'pin', thermite: 'pin', dynamite: 'pin', sticky_charge: 'pin', air_grenade: 'pin',
-  blink_pearl: 'toss', moon_mine: 'toss', black_hole_seed: 'toss', rubber_duck: 'toss', glitch_cube: 'toss', bee_jar: 'toss', satchel: 'toss', teleport_beacon: 'toss', warp_beacon: 'toss',
+  blink_pearl: 'toss', moon_mine: 'toss', black_hole_seed: 'toss', rubber_duck: 'toss', glitch_cube: 'toss', bee_jar: 'toss', satchel: 'toss', teleport_beacon: 'toss', warp_beacon: 'toss', bounce_pad:'toss',
   confetti_cannon: 'pop', air_blaster: 'pop', grapple_hook: 'pop',
-  ammo_fountain: 'plant', land_mine: 'plant', mini_turret: 'plant', tripwire: 'plant', magnet_mine: 'plant', bounce_pad: 'plant', proximity_mine: 'plant', stasis_mine: 'plant', caltrops: 'plant', c4: 'plant', claymore: 'plant', tesla_coil: 'plant',
+  ammo_fountain: 'plant', land_mine: 'plant', mini_turret: 'plant', tripwire: 'plant', magnet_mine: 'plant', bear_trap: 'plant', proximity_mine: 'plant', stasis_mine: 'plant', caltrops: 'plant', c4: 'plant', claymore: 'plant', tesla_coil: 'plant',
   hamburger: 'eat',
 };
 function supportUseKind(item) { return (item && SUPPORT_USE_KIND[item.baseId || item.id]) || 'device'; }
@@ -88966,15 +89294,18 @@ function botStrategy(bot, target, dt, now) {
 
 function botAbilityDecision(bot,w,target,dist,now,ready) {
   const ab=w?.ability;
+  if(now<(bot._flashBlindUntil||0))return null;
   if(!ready||!ab||bot.dead||bot.difficulty==='easy'||now<(bot.nextAbilityAt||0)||bot.reloadUntil>now||bot._regularMelee)return null;
   if(target.isPlayer&&(isShielded()||['parry','deflect'].includes(meleeAbilityBuff?.type)))return null;
   if(dist>Math.min(36,w.auto?34:42))return null;
+  if(ab.type==='flame_airblast'&&dist>24)return {kind:'airblast',ab};
   if(ab.type==='buff')return {kind:'buff',ab};
   if(ab.type==='powershot')return {kind:'power',ab};
   if(/^(fanfire|fanfire_all|multishot|bulletwave)$/.test(ab.type)&&bot.botAmmo>0)return {kind:'volley',ab};
   return null;
 }
 function tickBotMeleeAbility(bot,target,dt,now,live) {
+  if(now<(bot._flashBlindUntil||0))return false;
   if(window.PVP_BATTLE_SIM?.active||inLobby||!live||bot.dead)return false;
   let a=bot._regularMelee;
   if(a&&now-a.start>=a.duration){
@@ -89086,7 +89417,12 @@ function updateBotAI(dt,simulation=null) {
         if (d2 < 14 && d2 > 4) {
           // Use frag-like (explosive) utilities — others are silently consumed
           const util = SUPPORT_ITEMS.find(s => s.id === bot.utilityId);
-          if (util && (util.damage >= 60 || util.id === 'frag')) {
+          if(util?.id==='flashbang_basic'){
+            const direction=new THREE.Vector3(myMe2.x-bot.x,.2*d2,myMe2.z-bot.z).normalize();
+            spawnFlashbang(new THREE.Vector3(bot.x,(bot.y||0)+1.3,bot.z),direction,'botflash_'+bot.id+'_'+now,bot.id);
+          }else if(util&&(util.id==='bounce_pad'||util.id==='bear_trap')){
+            window.PVP_FIELD_UTILITIES?.deployForBot(bot,util);
+          }else if (util && (util.damage >= 60 || util.id === 'frag')) {
             // Apply damage directly (simplest; no projectile sim for bots)
             applyBotDamageToPlayer && applyBotDamageToPlayer(util.id, bot.id);
             // Show a brief AOE FX at the player's feet for visual feedback
@@ -89108,7 +89444,7 @@ function updateBotAI(dt,simulation=null) {
         bot.yVel = (bot.yVel || 0) - GRAVITY * dt;
         bot.y = curY + bot.yVel * dt;
         const landY = botGroundYAt(bot.x, bot.z, bot.y || 0, 1.2, 6.0);
-        if ((bot.y || 0) <= landY && bot.yVel <= 0) { bot.y = landY; bot.yVel = 0; bot._airCarryX = 0; bot._airCarryZ = 0; }
+        if ((bot.y || 0) <= landY && bot.yVel <= 0) { bot.y = landY; bot.yVel = 0; bot._airCarryX = 0; bot._airCarryZ = 0; bot._padFlight=false; }
       } else {
         bot.y = groundY; bot.yVel = 0;
       }
@@ -89124,7 +89460,7 @@ function updateBotAI(dt,simulation=null) {
         killBotOutOfBounds(bot, (bot._ringoutKillerUntil || 0) > Date.now() ? bot._ringoutKiller : null);
         continue;
       }
-      const kbFriction = Math.max(0, 1 - dt * 6);
+      const kbFriction = bot._padFlight?1:Math.max(0, 1 - dt * 6);
       bot.kbVX *= kbFriction; bot.kbVZ *= kbFriction;
       if (Math.abs(bot.kbVX) < 0.05) bot.kbVX = 0;
       if (Math.abs(bot.kbVZ) < 0.05) bot.kbVZ = 0;
@@ -89769,7 +90105,7 @@ function updateBotAI(dt,simulation=null) {
       }
 
       // ── Shooting (all states except melee_charge which uses swings) ─────
-      if (bot.state !== 'melee_charge' && !simMelee && (!window.PVP_BATTLE_SIM?.active || window.PVP_BATTLE_SIM.canFire(bot))) {
+      if (bot.state !== 'melee_charge' && !simMelee && !(now<(bot._flashBlindUntil||0)) && (!window.PVP_BATTLE_SIM?.active || window.PVP_BATTLE_SIM.canFire(bot))) {
         const w = WEAPONS.find(w => w.id === bot.weaponId) || WEAPONS[0];
         const tune = bot.tune || botTuning(bot.difficulty);
         const isDDayAttacker = bot.state === 'dday_attacker';
@@ -89829,6 +90165,11 @@ function updateBotAI(dt,simulation=null) {
             if(decision.kind==='buff')bot._gunAbilityBuff={weapon:w.id,until:now+(ab.duration||3000),rate:ab.rateMult||1,spread:ab.spreadMult??1,speed:ab.speedMult||1};
             if(decision.kind==='power')bot._gunAbilityPower={weapon:w.id,id:ab.weaponAbId||w.id,speed:ab.speedMult||1,spread:ab.spreadMult??1};
             if(decision.kind==='volley')bot._gunAbilityVolley={weapon:w.id,left:Math.min(bot.botAmmo,ab.count||w.mag||6),delay:Math.max(30,ab.delay||w.fireRate||80),id:ab.weaponAbId||w.id};
+            if(decision.kind==='airblast'){
+              const dx=target.x-bot.x,dz=target.z-bot.z,length=Math.hypot(dx,dz)||1;
+              bot.kbVX=(bot.kbVX||0)+dx/length*ab.impulse;bot.kbVZ=(bot.kbVZ||0)+dz/length*ab.impulse;
+              bot.yVel=Math.max(bot.yVel||0,ab.lift);
+            }
           }
         }
         const abilityBuff=bot._gunAbilityBuff?.weapon===w.id&&now<bot._gunAbilityBuff.until?bot._gunAbilityBuff:null;
@@ -90310,6 +90651,11 @@ function animateCharacters(dt) {
     let aimPitch = 0;
     let reloadT = -1;        // -1 = not reloading
     const b = gameBots.find(bb => bb.id === id);
+    const hp=b?.hp??players[id]?.hp;
+    if(Number.isFinite(hp)){
+      if(hp<mesh._damageFlashHp&&!damagedCharacterFlashes.has(mesh))flashDamagedCharacter(mesh);
+      mesh._damageFlashHp=hp;
+    }
     if (!b) {
       const p = players[id];
       // The wire has carried rotX since the first commit and nothing has ever
@@ -90423,6 +90769,7 @@ function loop() {
   updateFPSCounter(now);
   updatePerfOverlay(now);
   safeLoopStep('smoke-blind', () => updateSmokeBlind(Math.min((now - lastTime) / 1000, 0.05)));   // ahead of the early returns below, so entering a finale or dying clears it
+  safeLoopStep('flashbang-blind',updateFlashBlind);
   const dt = Math.min((now-lastTime)/1000, 0.05);
   lastTime = now;
   if (_feelFreezeUntil && now < _feelFreezeUntil) return;                    // the final-kill freeze-frame: the last picture simply stays
@@ -90466,6 +90813,7 @@ function loop() {
   safeLoopStep('bullets', () => updateBullets(dt));
   safeLoopStep('tether weapons', () => window.PVP_TETHER_WEAPONS?.step(dt));
   safeLoopStep('fission discs', () => window.PVP_FISSION_DISC?.step(dt));
+  safeLoopStep('flame effects', () => window.PVP_FLAMES?.update());
   safeLoopStep('swap portals', () => window.PVP_SWAP_PORTALS?.step(dt));
   safeLoopStep('donut-trails', () => updateDonutMotionTrails(dt));
   safeLoopStep('scythe-afterimages', () => updateScytheGhosts(dt));
@@ -90478,6 +90826,7 @@ function loop() {
   safeLoopStep('burn-zones', () => updateBurnZones(dt));
   safeLoopStep('black-holes', () => updateBlackHoles(dt)); // firework launcher DOT fields
   safeLoopStep('traps', () => updateTraps(dt)); // tripwires, magnet mines, bounce pads, hologram decoys
+  safeLoopStep('field utilities', () => window.PVP_FIELD_UTILITIES?.step(dt));
   safeLoopStep('p2w-systems', () => updateP2WSystems(dt)); // orbital strikes, guardian drones, nano shield
   safeLoopStep('tesla-coils', () => updateTeslaCoils(dt)); // deployed tesla coils zap nearby enemies
   safeLoopStep('mini-turrets', () => updateMiniTurrets(dt)); // deployed mini turrets zap nearby enemies + take fire
@@ -94785,6 +95134,7 @@ if (_aaBtn) {
 // model skins and its wrap -- instead of hunting for it through every weapon's section of the big wraps screen. The wrap
 // is the weapon's own (equippedWraps), so each gun, melee and utility can wear a different one at once.
 function setItemWrap(kind, id, wrapId) {
+  if(WEAPON_SKINS_BY_ID[wrapId]?.targetItem && WEAPON_SKINS_BY_ID[wrapId].targetItem!==id)return false;
   if (wrapId && !wrapUnlocked(wrapId)) return false;
   if (wrapId) equippedWraps[id] = wrapId; else delete equippedWraps[id];
   saveItemWraps();
@@ -94885,7 +95235,7 @@ function openItemSkins(kind, id, onClose, alwaysOnClose = false) {
       : _wsSwatchURL(s.id) ? `url('${_wsSwatchURL(s.id)}') center / 64px 64px` : bg(s.sw);
     const wraps = [cell({ name: 'DEFAULT WRAP', sub: 'Whatever the wraps screen has: ' + dflt.name, bg: swatchBg(dflt), on: !own, run: () => setItemWrap(kind, id, '') })];
     for (const s of WEAPON_SKINS) {
-      if (s.shopWrap || s.contract || s.prestige || (s.custom && !wrapUnlocked(s.id)) || (s.approvedBy && !wrapUnlocked(s.id))) continue;
+      if (s.shopWrap || s.blackout || s.contract || s.prestige || (s.custom && !wrapUnlocked(s.id)) || (s.approvedBy && !wrapUnlocked(s.id))) continue;
       wraps.push(cell({ name: s.name, rarity: s.rarity, sub: s.rarity && s.rarity.toUpperCase(), bg: swatchBg(s), on: own === s.id, run: () => setItemWrap(kind, id, s.id) }));
     }
     for (const ct of CONTRACTS) {
@@ -94895,6 +95245,8 @@ function openItemSkins(kind, id, onClose, alwaysOnClose = false) {
         note: open ? '' : `Contract: ${have.toLocaleString()} / ${need.toLocaleString()}`,
         run: () => { if (!open) { contractToast('🔒 CONTRACT', ct.kind === 'everyWeapon' ? `${ct.n} kills with every weapon` : ct.text, '#ffb347'); return false; } setItemWrap(kind, id, ct.wrap); } }));
     }
+    const blackout=window.PVP_BLACKOUT?.definitions.find(s=>s.targetItem===id);
+    if(blackout)sections.push(section('BLACKOUT', '', [cell({name:blackout.name,rarity:'legendary',bg:swatchBg(blackout),on:own===blackout.id,note:wrapUnlocked(blackout.id)?'OWNED':'2,500 donuts',run:()=>{window.PVP_BLACKOUT.open(id);return false;}})]));
     const ownPaint = kind === 'gun' && (() => { const sk = gunStatSkinFor(id); return sk && sk.body != null; })();
     sections.push(section('WRAP', 'This weapon\'s own wrap: every weapon can wear a different one at the same time.'
       + (ownPaint ? ' <span style="color:#ffb347;">This gun\'s skin has its own paint, so the wrap will not show until you pick STOCK above.</span>' : ''), wraps));
@@ -95171,7 +95523,8 @@ function openWeaponSkinsPanel() {
     </div>
     <div style="font-size:12px;letter-spacing:2px;color:#ffdd88;margin:20px 0 6px;border-top:1px solid #6a5520;padding-top:14px;">🎨 WEAPON WRAPS <button id="ws-pixelizer" style="margin-left:10px;padding:4px 8px;background:#2a1030;color:#ff99dd;border:1px solid #ff66cc;border-radius:4px;cursor:pointer;font-family:inherit;font-size:10px;letter-spacing:1px;">🎨 PAINT YOUR OWN</button></div>
     <div style="font-size:10px;color:#aa9966;margin-bottom:12px;line-height:1.4;">One pick here applies to every gun, melee and utility (to give ONE weapon its own, pick it in the loadout and press SKINS). Country themes use real national flags; the German theme is the Iron Cross military mark (no Nazi imagery).</div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">${WEAPON_SKINS.filter(s => !s.shopWrap && !s.contract && !s.prestige && (!s.approvedBy || wrapUnlocked(s.id))).map(swatch).join('')}</div>
+    <button id="blackout-open" type="button" style="min-height:44px;padding:10px 16px;background:#171a1e;border:1px solid #d21d38;color:#eee;border-radius:4px;cursor:pointer;">BLACKOUT COLLECTION</button>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">${WEAPON_SKINS.filter(s => !s.blackout && !s.shopWrap && !s.contract && !s.prestige && (!s.approvedBy || wrapUnlocked(s.id))).map(swatch).join('')}</div>
     <div style="font-size:12px;color:#ffdd88;margin:20px 0 6px;">PRESTIGE WRAPS</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;">${WEAPON_SKINS.filter(s => s.prestige).map(swatch).join('')}</div>
     <div style="font-size:10px;color:#9a8aa8;margin:8px 0 2px;line-height:1.45;">🔒 A wrap you paint yourself is a draft: send it for approval in the pixelizer, and once an admin has said yes it is yours to use and everyone sees it on your gun.
@@ -95181,6 +95534,7 @@ function openWeaponSkinsPanel() {
     ${gen2CaseSection()}
     ${basicCaseSection()}
   `;
+  panel.querySelector('#blackout-open').onclick=()=>window.PVP_BLACKOUT.open();
   // 🔎 Find a weapon: type its name (or a skin's) and it lists the matching weapons with how many skins each has;
   // pressing one opens that weapon's own skin page, every kind of skin it has in one place.
   {
@@ -96329,6 +96683,9 @@ document.querySelectorAll('.diff-card').forEach(card => {
 
 // Map selector
 const MAP_DESCS = {
+  zen_garden: 'Zen Garden: white-grid courtyard, walk-through rooms and two connected balconies.',
+  shipbreak: 'Shipbreak: white-grid ship layout with three deck lanes, cargo platforms and a high bridge.',
+  reactor: 'Reactor: white-grid facility with a lower bypass and connected middle and upper catwalks.',
   iron_harbor: 'Iron Harbor (10v10): a water channel with three bridges splits two banks. Four hollow warehouses (one with a roof ramp), containers, a gantry crane over the water, and a drop to the sea.',
   siegebreaker: 'Siegebreaker (10v10): a walled fortress with gates and breaches, four corner towers with ramps to an upper floor, and a central keep with an upper floor and four doors.',
   dead_city: 'Dead City (10v10): eight ruined two-floor buildings with doors, windows and an inside ramp, joined by streets with barricades and wrecks. Start in opposite corners.',

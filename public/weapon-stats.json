@@ -814,47 +814,47 @@
    "type": "Area",
    "slot": "primary",
    "archived": false,
-   "damage": 3,
-   "pellets": 4,
-   "headshotMult": 2,
-   "headDamage": 6,
-   "damagePerShot": 12,
-   "fireRateMs": 35,
-   "shotsPerSec": 28.571,
+   "damage": 10,
+   "pellets": 1,
+   "headshotMult": 1,
+   "headDamage": 10,
+   "damagePerShot": 10,
+   "fireRateMs": 50,
+   "shotsPerSec": 20,
    "auto": true,
-   "dps": 342.857,
+   "dps": 200,
    "magazine": 80,
    "reserve": 160,
    "reloadSec": 3.2,
    "reloadStyle": "magazine",
    "noReload": false,
-   "timeToEmptySec": 2.765,
-   "bulletSpeed": 48,
+   "timeToEmptySec": 3.95,
+   "bulletSpeed": 14,
    "adsZoom": 60,
    "falloff": {
-    "nearM": 5,
-    "farM": 13,
-    "minPct": 8
+    "nearM": 9999,
+    "farM": 9999,
+    "minPct": 100
    },
    "damageByRange": [
-    3,
-    1,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0
+    10,
+    10,
+    10,
+    10,
+    10,
+    10,
+    10,
+    10,
+    10,
+    10,
+    10
    ],
    "shotsToKill": {
-    "body": 25,
-    "head": 13
+    "body": 30,
+    "head": 30
    },
-   "ttkBodySec": 0.84,
-   "scatterDeg": 9.09,
+   "ttkBodySec": 1.45,
+   "scatterDeg": 0.688,
    "bloom": null,
    "recoil": {
     "kickPerShotDeg": 0.238,
@@ -868,11 +868,11 @@
    },
    "screenKick": 0.45,
    "ability": {
-    "name": "Propane Burst",
-    "desc": "Blast 22 concentrated flames directly forward"
+    "name": "Air Blast",
+    "desc": "Momentum boost with lift; works in midair without a surface"
    },
    "traits": [
-    "Short range: stops at 12 m",
+    "Short range: stops at 24 m",
     "Sets the target on fire"
    ]
   },
@@ -6662,10 +6662,10 @@
     32
    ],
    "shotsToKill": {
-    "body": 8,
-    "head": 8
+    "body": 10,
+    "head": 10
    },
-   "ttkBodySec": 0.777,
+   "ttkBodySec": 0.999,
    "scatterDeg": 0.688,
    "bloom": null,
    "recoil": {
@@ -6680,9 +6680,7 @@
    },
    "screenKick": 0.777,
    "ability": null,
-   "traits": [
-    "THORNBURST: the 4th thorn on the same person, with the other 3 still in (3 s), explodes for +40"
-   ]
+   "traits": []
   },
   {
    "id": "m4_commando",

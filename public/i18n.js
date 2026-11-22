@@ -244,6 +244,9 @@
     'Get 100 kills with every single weapon': '每一把武器都击杀 100 人', 'Xpert': '专家',
     'HARD': '困难', 'BRUTAL': '残酷', 'LEGENDARY': '传奇',
     // map descriptions (the names themselves stay)
+    'Zen Garden: white-grid courtyard, walk-through rooms and two connected balconies.': 'Zen Garden：白色网格庭院、可穿行的房间和两条相连的阳台路线。',
+    'Shipbreak: white-grid ship layout with three deck lanes, cargo platforms and a high bridge.': 'Shipbreak：白色网格船体布局，设有三条甲板路线、货物平台和高架桥。',
+    'Reactor: white-grid facility with a lower bypass and connected middle and upper catwalks.': 'Reactor：白色网格设施，设有底层绕行路线及相连的中层和上层走道。',
     'Random — game picks one for you each match': '随机——每局帮你挑一张图',
     'Classic — open arena with crosshatch walls (original)': '经典——开阔的场地和网格墙（最初的地图）',
     'Urban Plaza — corner buildings, cars as low cover': '城市广场——街角楼房，汽车当掩体',

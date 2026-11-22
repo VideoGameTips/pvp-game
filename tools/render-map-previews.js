@@ -17,6 +17,9 @@ const W = 960, H = 600, OUT_W = 400, OUT_H = 250;
 // Hand-placed views for the maps whose corner is indoors, walled in, or has nothing to look at. { from: [x, y, z],
 // to: [x, y, z], fov } in metres. Everything else gets the computed corner.
 const VIEWS = {
+  zen_garden: { from: [40, 70, 50], to: [0, 2, 0], fov: 65 },
+  shipbreak: { from: [42, 78, 54], to: [0, 2, 0], fov: 65 },
+  reactor: { from: [37, 65, 45], to: [0, 2, 0], fov: 65 },
   volcano: { from: [52, 44, 77], to: [0, 2, 0], fov: 78 },
   // the automatic pick faced a bare wall; from the harbour edge, up a little, the quays and the cranes show
   pearl_harbor: { from: [0, 8, 82], to: [0, 3, 0], fov: 80 },
