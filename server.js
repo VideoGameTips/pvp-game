@@ -754,15 +754,22 @@ function ensureShopFields(u) {
     if (!Array.isArray(u.skinInventory)) u.skinInventory = [];
     if (!u.skinInventory.includes('lever_classic_garand')) u.skinInventory.push('lever_classic_garand');
   }
+  // ...and the abilities bought for those two come along to the weapon they became, as the Machine Revolver's do.
+  const mergedAbilities={shorty_double:'sawed_off_double',shorty_slug:'sawed_off_slug',m1_garand_focus:'lever_focus',m1_garand_slug:'lever_slug'};
+  if(u.purchased.some(id=>Object.hasOwn(mergedAbilities,id))){
+    u.purchased=[...new Set(u.purchased.map(id=>Object.hasOwn(mergedAbilities,id)?mergedAbilities[id]:id))];
+  }
   // The Freeze Ray moved from the secondaries to the utilities (id freeze_ray). Whoever bought it keeps it.
   if (u.purchased.includes('frost_blaster') && !u.purchased.includes('freeze_ray')) u.purchased.push('freeze_ray');
   if (typeof u.fragments !== 'number') u.fragments = 0;
   if (!u.chests) u.chests = { common: 0, rare: 0 };
   if (!u.upgrades) u.upgrades = {}; // { [weaponId]: { damage, mag, reload } }
-  if(u.upgrades.machine_revolver){
-    const merged=u.upgrades.auto_revolver ||= {},old=u.upgrades.machine_revolver;
+  // Upgrade levels paid for on a weapon that was merged into another: the better of the two, on the weapon it became.
+  for(const [gone,into] of [['machine_revolver','auto_revolver'],['shorty','sawed_off'],['m1_garand','lever']]){
+    if(!u.upgrades[gone])continue;
+    const merged=u.upgrades[into] ||= {},old=u.upgrades[gone];
     for(const stat of ['damage','mag','reload'])merged[stat]=Math.max(merged[stat]||0,old[stat]||0);
-    delete u.upgrades.machine_revolver;
+    delete u.upgrades[gone];
   }
   if (!Array.isArray(u.skinCases)) u.skinCases = [];
   if (!u.skinCasePacks || typeof u.skinCasePacks !== 'object') u.skinCasePacks = {};
