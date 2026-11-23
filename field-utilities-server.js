@@ -9,7 +9,7 @@ module.exports=function({io,players,emit,blocked,canUse,weaponDamage,damage,hub,
     for(const f of fields.values())if(f.ownerId===p.id)remove(f);
   }
   function place(p,d){
-    const spec=Object.hasOwn(specs,String(d?.kind))?specs[d.kind]:null;
+    const spec=typeof d?.kind==='string'&&Object.hasOwn(specs,d.kind)?specs[d.kind]:null;
     if(!p||p.dead||!spec||!p.matchId||p.matchId===hub||p.matchId==='lobby'||!canUse(p,d.kind))return false;
     if(![d.x,d.y,d.z].every(Number.isFinite)||Math.hypot(d.x-p.x,d.y-p.y,d.z-p.z)>9)return false;
     let c=charges.get(p);
