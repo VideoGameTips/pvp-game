@@ -67146,7 +67146,7 @@ for (const id of GEN1_GATED_MODEL_SKIN_IDS) {
 }
 
 // Skins that were deleted for being the same model as a twin: whoever owned or wore one now has the twin.
-const SKIN_SWAPS = { freeze_slushie: 'freeze_hyperslush', railgun_metal_detector: 'railgun_portal_detector', p90_barcode_scanner: 'p90_quantum_scanner', firework_champagne: 'firework_showman' };
+const SKIN_SWAPS = { paintball_moldy_green: 'paintball_fishbowl', freeze_slushie: 'freeze_hyperslush', railgun_metal_detector: 'railgun_portal_detector', p90_barcode_scanner: 'p90_quantum_scanner', firework_champagne: 'firework_showman' };
 let equippedModelSkins = (() => {
   try {
     const eq = JSON.parse(localStorage.getItem('pvp_model_skins')) || {};

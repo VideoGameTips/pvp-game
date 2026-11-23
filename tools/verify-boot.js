@@ -3611,9 +3611,15 @@ if (ok && process.argv.includes('--quickmelee')) {
 }
 
 if (ok && process.argv.includes('--shop')) {
+  // What the server's cases can really deal, evaluated from server.js: 15 skins deleted from the client stayed in the Gen 1 pool
+  // for ten weeks, 40% of its drops, and nothing noticed (#88).
+  const _srv = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  globalThis.__CASE_POOL = vm.runInNewContext(_srv.slice(_srv.indexOf('const GEN1_SKIN_IDS'), _srv.indexOf('const SKIN_CASES')) +
+    '\n[...GEN1_SKIN_IDS,...GEN2_SKIN_IDS,...GEN3_SKIN_IDS].filter(id=>!ARCHIVED_SKIN_IDS.has(id))');
   const issues=vm.runInThisContext(`(() => {
     const issues=[],saved=currentUser;
     const check=(v,m)=>{if(!v)issues.push(m);};
+    for(const id of __CASE_POOL)check(catalogSkin(id)||GEN1_SKIN_BY_ID[id]||GEN2_SKIN_BY_ID[id],'A case can deal a skin that does not exist: '+id);
     for(const b of BUNDLES){
       check(b.items.length===3 && b.skins.length>0,'Bundle must have three weapons and skins: '+b.id);
       for(const id of b.items){

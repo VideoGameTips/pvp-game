@@ -2,6 +2,7 @@ const express = require('express');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const net = require('net');
 const { Server } = require('socket.io');
 const createRadiation = require('./radiation-authority');
 const createFlames = require('./flame-authority');
@@ -425,12 +426,7 @@ const P2W_ITEM_IDS = new Set([
   'nano_swarm', 'warp_beacon', 'stasis_mine', 'specter_drone', 'quantum_barrier',
 ]);
 const GEN1_SKIN_IDS = [
-  'ak20_twin_barrel', 'ak20_tracking_ar', 'ak20_swarm_rifle',
-  'pistol_darker_handgun', 'pistol_slightly_bluish', 'revolver_rusty_cylinder',
-  'ak20_cardboard_wrap', 'ak20_midnight_oil', 'sg8_duck_tape', 'sg8_confetti_shells',
-  'srx_laser_pointer_taped', 'paintball_moldy_green', 'flamethrower_water_thrower',
-  'crossbow_pool_noodle', 'minigun_arcade_cabinet', 'rpg_soda_bottle',
-  'knife_dental_floss', 'bat_pool_noodle',
+  'ak20_twin_barrel', 'ak20_swarm_rifle', 'bat_pool_noodle',
   // Realistic military model skins — gated behind Gen 1 cases too, unlike the
   // rest of MODEL_SKINS in public/game.js which stay free/always-equippable.
   'ak20_ak47_wood', 'burst_m4a1', 'flechette_bullpup', 'vector_mp5',
@@ -720,7 +716,7 @@ for(const b of Object.values(BUNDLES)){
 const STARTER_CREDITS = 500;       // a first weapon or two, not the shop
 const TRIAL_DIVISOR = 20; // trial costs 1/20 of buy price (min 1)
 
-const SKIN_SWAPS = { freeze_slushie: 'freeze_hyperslush', railgun_metal_detector: 'railgun_portal_detector', p90_barcode_scanner: 'p90_quantum_scanner', firework_champagne: 'firework_showman' };   // mirrors the client's
+const SKIN_SWAPS = { paintball_moldy_green: 'paintball_fishbowl', freeze_slushie: 'freeze_hyperslush', railgun_metal_detector: 'railgun_portal_detector', p90_barcode_scanner: 'p90_quantum_scanner', firework_champagne: 'firework_showman' };   // mirrors the client's
 function ensureShopFields(u) {
   if (!u) return;
   if (typeof u.credits !== 'number') u.credits = STARTER_CREDITS;
@@ -754,15 +750,22 @@ function ensureShopFields(u) {
     if (!Array.isArray(u.skinInventory)) u.skinInventory = [];
     if (!u.skinInventory.includes('lever_classic_garand')) u.skinInventory.push('lever_classic_garand');
   }
+  // ...and the abilities bought for those two come along to the weapon they became, as the Machine Revolver's do.
+  const mergedAbilities={shorty_double:'sawed_off_double',shorty_slug:'sawed_off_slug',m1_garand_focus:'lever_focus',m1_garand_slug:'lever_slug'};
+  if(u.purchased.some(id=>Object.hasOwn(mergedAbilities,id))){
+    u.purchased=[...new Set(u.purchased.map(id=>Object.hasOwn(mergedAbilities,id)?mergedAbilities[id]:id))];
+  }
   // The Freeze Ray moved from the secondaries to the utilities (id freeze_ray). Whoever bought it keeps it.
   if (u.purchased.includes('frost_blaster') && !u.purchased.includes('freeze_ray')) u.purchased.push('freeze_ray');
   if (typeof u.fragments !== 'number') u.fragments = 0;
   if (!u.chests) u.chests = { common: 0, rare: 0 };
   if (!u.upgrades) u.upgrades = {}; // { [weaponId]: { damage, mag, reload } }
-  if(u.upgrades.machine_revolver){
-    const merged=u.upgrades.auto_revolver ||= {},old=u.upgrades.machine_revolver;
+  // Upgrade levels paid for on a weapon that was merged into another: the better of the two, on the weapon it became.
+  for(const [gone,into] of [['machine_revolver','auto_revolver'],['shorty','sawed_off'],['m1_garand','lever']]){
+    if(!u.upgrades[gone])continue;
+    const merged=u.upgrades[into] ||= {},old=u.upgrades[gone];
     for(const stat of ['damage','mag','reload'])merged[stat]=Math.max(merged[stat]||0,old[stat]||0);
-    delete u.upgrades.machine_revolver;
+    delete u.upgrades[gone];
   }
   if (!Array.isArray(u.skinCases)) u.skinCases = [];
   if (!u.skinCasePacks || typeof u.skinCasePacks !== 'object') u.skinCasePacks = {};
@@ -1413,7 +1416,7 @@ app.post('/rank/season/close', (req, res) => {                    // admin only
 });
 app.get('/rank/top', (req, res) => {                              // the top 25: players who have played a ranked game
   const rows = PRESTIGE_WRAP.ladderRows(users).slice(0, 25)
-    .map(([name, u]) => ({ name, points: u.rank.points, label: RANK.tierOf(u.rank.points).label, rank: RANK.tierOf(u.rank.points).rank, games: u.rank.games, wins: u.rank.wins }));
+    .map(([name, u]) => ({ name: contentFilter.safeDisplayName(name), points: u.rank.points, label: RANK.tierOf(u.rank.points).label, rank: RANK.tierOf(u.rank.points).rank, games: u.rank.games, wins: u.rank.wins }));
   res.json({ ok: true, top: rows });
 });
 app.post('/shop/buy-skin-case', (req, res) => {
@@ -1815,6 +1818,14 @@ app.get('/status', (req, res) => {
 // 5 misses lock that address out for 10 minutes.
 const CHAT_ADMIN_HASH = '011aa8354064e7d1ef667da9bb3854c6:6394c28efbbf82256fcc07201afaf7a01ecd1b533a0d9563c23d0fb745e95253';
 const _claimMisses = new Map();
+// The visitor's address. In production a request comes Cloudflare -> cloudflared -> Caddy -> here and Caddy trusts no proxy, so
+// X-Forwarded-For is ::1 for EVERYONE: keyed on it, five misses by anybody locked the command for all. CF-Connecting-IP is set by
+// Cloudflare, and is believed only on a connection from this machine (sushigamelab's clientIp does the same).
+const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+function clientIp(req) {
+  const peer = req.socket?.remoteAddress || 'x', cf = String(req.headers['cf-connecting-ip'] || '').trim();
+  return cf && net.isIP(cf) && LOOPBACK.has(peer) ? cf : peer;
+}
 function chatAdminPassOk(pw) {
   try {
     const [salt, want] = CHAT_ADMIN_HASH.split(':');
@@ -1823,8 +1834,9 @@ function chatAdminPassOk(pw) {
   } catch (e) { return false; }
 }
 app.post('/auth/claim-admin', (req, res) => {
-  const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'x').split(',')[0].trim();
+  const ip = clientIp(req);
   const now = Date.now();
+  if (_claimMisses.size > 2000) for (const [k, v] of _claimMisses) if (v.until <= now) _claimMisses.delete(k);
   const m = _claimMisses.get(ip) || { n: 0, until: 0 };
   if (m.until > now) return res.status(429).json({ error: 'too many tries — wait a few minutes' });
   const u = authedUser(req);
@@ -2201,6 +2213,25 @@ function checkLobbyStart(L, { now = false } = {}) {
   stopLobbySearch(L);
   startLobbyMatch(L);
 }
+// 1v1 and 2v2 pair by rating, in a window that widens the longer a lobby waits. Only a NEW arrival used to look at it, so two people
+// searching at the same moment more than 200 points apart sat in two lobbies until each was given a bot. While lobbies wait, look again.
+function pairWaitingLobbies(mode) {
+  const open = () => (stagingLobbies[mode] || []).filter(l => l.players.length && l.players.length < lobbyMax(mode));
+  const avg = l => l.players.reduce((a, p) => a + ratingOfSocket(p.socketId), 0) / l.players.length;
+  for (const A of open().sort((a, b) => a.createdAt - b.createdAt)) {
+    if (!stagingLobbies[mode].includes(A) || !A.searchUntil) continue;
+    const reach = RANK.matchWindow(Date.now() - A.createdAt);
+    const B = open().filter(l => l !== A && l.searchUntil && l.players.length + A.players.length <= lobbyMax(mode) && Math.abs(avg(l) - avg(A)) <= reach)
+      .sort((x, y) => Math.abs(avg(x) - avg(A)) - Math.abs(avg(y) - avg(A)))[0];
+    if (!B) continue;
+    stopLobbySearch(B);
+    stagingLobbies[mode] = stagingLobbies[mode].filter(l => l !== B);
+    for (const p of B.players) { p.team = autoAssignTeam(A, mode); A.players.push(p); }
+    broadcastLobbyState(A);
+    checkLobbyStart(A);
+  }
+}
+setInterval(() => { for (const mode of RANKED_MODES) pairWaitingLobbies(mode); }, 1000).unref?.();
 // Everyone is ready — start the match. `extra` rides along on lobbyStart.
 function startLobbyMatch(L, extra = {}) {
   const mode = L.mode;
@@ -2428,7 +2459,7 @@ function tryPairPvpQueue(mode) {
 // Weapon damage table (must match client WEAPONS array)
 // Headshot multipliers, mirroring headshotMult in WEAPONS[] (CLAUDE.md gotcha
 // #4). Anything not listed is the x2 every weapon has always had.
-const WEAPON_HS_MULT = { thorncaster: 1, m12: 1, energy_rifle: 1, gravity_cannon: 1, rad_pulse:1, ak20: 2.333, flechette: 4, storm_bloom: 1, javelin_launcher: 1 };
+const WEAPON_HS_MULT = { thorncaster: 1, m12: 1, energy_rifle: 1, gravity_cannon: 1, rad_pulse:1, ak20: 2.333, flechette: 4, storm_bloom: 1, javelin_launcher: 1, m4a1_arena: 1, flamethrower: 1, fission_disc: 1 };
 const WEAPON_DAMAGE = {
   flashbang_basic:0,
   bear_trap:35,
@@ -2891,7 +2922,7 @@ const radiation=createRadiation({players,emit:emitToMatch,credit:creditFfaDamage
   }});
 setInterval(()=>radiation.update(),100);
 const flames=createFlames({players,emit:emitToMatch,blocked:blocksFriendlyFire,credit:creditFfaDamage,hub:HUB_MATCH,
-  onDeath:target=>{if(target.isBot)setTimeout(()=>{if(players[target.id]===target&&target.dead){respawnBot(target);emitToMatch(target.matchId,'playerRespawned',{...target,autoRespawn:true});}},3000);}});
+  onDeath:target=>{if(target.isBot)setTimeout(()=>{if(players[target.id]===target&&target.dead&&target.matchMode!=='underworld'){respawnBot(target);emitToMatch(target.matchId,'playerRespawned',{...target,autoRespawn:true});}},3000);}});
 setInterval(()=>flames.update(),50);
 const fieldUtilities=createFieldUtilities({io,players,emit:emitToMatch,blocked:blocksFriendlyFire,hub:HUB_MATCH,
   weaponDamage:WEAPON_DAMAGE,
@@ -3189,7 +3220,7 @@ io.on('connection', (socket) => {
 
   socket.on('move', (data) => {
     const p = players[socket.id];
-    if (!p || p.dead) return;
+    if (!p || p.dead || !data || typeof data !== 'object') return;
     if(Date.now()<(p._swapIgnoreMoveUntil||0))return;
     if(Date.now()<(p._fieldRootUntil||0))return;
     p.x = data.x; p.y = data.y; p.z = data.z;
@@ -3760,7 +3791,7 @@ io.on('connection', (socket) => {
   socket.on('healSelf', (data) => {
     const p = players[socket.id];
     if (!p || p.dead) return;
-    const amount = Math.max(0, Math.min(150, Number(data.amount) || 0));
+    const amount = Math.max(0, Math.min(150, Number(data?.amount) || 0));
     p.hp = Math.min(maxHpFor(p), p.hp + amount);
     emitToMatch(p.matchId, 'playerHit', { targetId: p.id, hp: p.hp, environmentSeq: p.environmentSeq || 0, healthEvent: 'heal', bulletId: null });
   });
@@ -3769,12 +3800,13 @@ io.on('connection', (socket) => {
   socket.on('setBossHp', (data = {}) => {
     const p = players[socket.id];
     if (!p || p.matchMode !== 'juggernaut') return;
-    p.bossMax = Number(data.hp) === JUGG_HP ? JUGG_HP : 0;
+    p.bossMax = Number(data?.hp) === JUGG_HP ? JUGG_HP : 0;
     p.hp = maxHpFor(p);
     emitToMatch(p.matchId, 'playerHit', { targetId: p.id, hp: p.hp, environmentSeq: p.environmentSeq || 0, healthEvent: 'heal', bulletId: null });
   });
 
-  socket.on('readyRespawn', (data = {}) => {
+  socket.on('readyRespawn', (data) => {
+    data = data && typeof data === 'object' ? data : {};
     const p = players[socket.id];
     if (!p || !p.dead) return;
     radiation.clear(p);
@@ -3793,7 +3825,8 @@ io.on('connection', (socket) => {
     emitToMatch(p.matchId, 'playerRespawned', { ...p, clientSpawn: data.x != null && data.z != null });
   });
 
-  socket.on('resetSelf', (data = {}) => {
+  socket.on('resetSelf', (data) => {
+    data = data && typeof data === 'object' ? data : {};
     const p = players[socket.id];
     if (!p) return;
     flames.clear(p);
@@ -4072,7 +4105,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('forceRespawnBot', (data) => {
-    const bot = players[data.id || data.botId];
+    const bot = players[data?.id || data?.botId];
     if (!bot || !bot.isBot || bot.ownerId !== socket.id) return;
     radiation.clear(bot);
     flames.clear(bot);
