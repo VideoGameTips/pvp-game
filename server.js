@@ -2459,7 +2459,7 @@ function tryPairPvpQueue(mode) {
 // Weapon damage table (must match client WEAPONS array)
 // Headshot multipliers, mirroring headshotMult in WEAPONS[] (CLAUDE.md gotcha
 // #4). Anything not listed is the x2 every weapon has always had.
-const WEAPON_HS_MULT = { thorncaster: 1, m12: 1, energy_rifle: 1, gravity_cannon: 1, rad_pulse:1, ak20: 2.333, flechette: 4, storm_bloom: 1, javelin_launcher: 1 };
+const WEAPON_HS_MULT = { m4a1_arena: 1, flamethrower: 1, fission_disc: 1, thorncaster: 1, m12: 1, energy_rifle: 1, gravity_cannon: 1, rad_pulse:1, ak20: 2.333, flechette: 4, storm_bloom: 1, javelin_launcher: 1 };
 const WEAPON_DAMAGE = {
   flashbang_basic:0,
   bear_trap:35,
