@@ -2,6 +2,7 @@ const express = require('express');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const net = require('net');
 const { Server } = require('socket.io');
 const createRadiation = require('./radiation-authority');
 const createFlames = require('./flame-authority');
@@ -1420,7 +1421,7 @@ app.post('/rank/season/close', (req, res) => {                    // admin only
 });
 app.get('/rank/top', (req, res) => {                              // the top 25: players who have played a ranked game
   const rows = PRESTIGE_WRAP.ladderRows(users).slice(0, 25)
-    .map(([name, u]) => ({ name, points: u.rank.points, label: RANK.tierOf(u.rank.points).label, rank: RANK.tierOf(u.rank.points).rank, games: u.rank.games, wins: u.rank.wins }));
+    .map(([name, u]) => ({ name: contentFilter.safeDisplayName(name), points: u.rank.points, label: RANK.tierOf(u.rank.points).label, rank: RANK.tierOf(u.rank.points).rank, games: u.rank.games, wins: u.rank.wins }));
   res.json({ ok: true, top: rows });
 });
 app.post('/shop/buy-skin-case', (req, res) => {
@@ -1822,6 +1823,14 @@ app.get('/status', (req, res) => {
 // 5 misses lock that address out for 10 minutes.
 const CHAT_ADMIN_HASH = '011aa8354064e7d1ef667da9bb3854c6:6394c28efbbf82256fcc07201afaf7a01ecd1b533a0d9563c23d0fb745e95253';
 const _claimMisses = new Map();
+// The visitor's address. In production a request comes Cloudflare -> cloudflared -> Caddy -> here and Caddy trusts no proxy, so
+// X-Forwarded-For is ::1 for EVERYONE: keyed on it, five misses by anybody locked the command for all. CF-Connecting-IP is set by
+// Cloudflare, and is believed only on a connection from this machine (sushigamelab's clientIp does the same).
+const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+function clientIp(req) {
+  const peer = req.socket?.remoteAddress || 'x', cf = String(req.headers['cf-connecting-ip'] || '').trim();
+  return cf && net.isIP(cf) && LOOPBACK.has(peer) ? cf : peer;
+}
 function chatAdminPassOk(pw) {
   try {
     const [salt, want] = CHAT_ADMIN_HASH.split(':');
@@ -1830,8 +1839,9 @@ function chatAdminPassOk(pw) {
   } catch (e) { return false; }
 }
 app.post('/auth/claim-admin', (req, res) => {
-  const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'x').split(',')[0].trim();
+  const ip = clientIp(req);
   const now = Date.now();
+  if (_claimMisses.size > 2000) for (const [k, v] of _claimMisses) if (v.until <= now) _claimMisses.delete(k);
   const m = _claimMisses.get(ip) || { n: 0, until: 0 };
   if (m.until > now) return res.status(429).json({ error: 'too many tries — wait a few minutes' });
   const u = authedUser(req);
@@ -2917,7 +2927,7 @@ const radiation=createRadiation({players,emit:emitToMatch,credit:creditFfaDamage
   }});
 setInterval(()=>radiation.update(),100);
 const flames=createFlames({players,emit:emitToMatch,blocked:blocksFriendlyFire,credit:creditFfaDamage,hub:HUB_MATCH,
-  onDeath:target=>{if(target.isBot)setTimeout(()=>{if(players[target.id]===target&&target.dead){respawnBot(target);emitToMatch(target.matchId,'playerRespawned',{...target,autoRespawn:true});}},3000);}});
+  onDeath:target=>{if(target.isBot)setTimeout(()=>{if(players[target.id]===target&&target.dead&&target.matchMode!=='underworld'){respawnBot(target);emitToMatch(target.matchId,'playerRespawned',{...target,autoRespawn:true});}},3000);}});
 setInterval(()=>flames.update(),50);
 const fieldUtilities=createFieldUtilities({io,players,emit:emitToMatch,blocked:blocksFriendlyFire,hub:HUB_MATCH,
   weaponDamage:WEAPON_DAMAGE,
@@ -3215,7 +3225,7 @@ io.on('connection', (socket) => {
 
   socket.on('move', (data) => {
     const p = players[socket.id];
-    if (!p || p.dead) return;
+    if (!p || p.dead || !data || typeof data !== 'object') return;
     if(Date.now()<(p._swapIgnoreMoveUntil||0))return;
     if(Date.now()<(p._fieldRootUntil||0))return;
     p.x = data.x; p.y = data.y; p.z = data.z;
@@ -3786,7 +3796,7 @@ io.on('connection', (socket) => {
   socket.on('healSelf', (data) => {
     const p = players[socket.id];
     if (!p || p.dead) return;
-    const amount = Math.max(0, Math.min(150, Number(data.amount) || 0));
+    const amount = Math.max(0, Math.min(150, Number(data?.amount) || 0));
     p.hp = Math.min(maxHpFor(p), p.hp + amount);
     emitToMatch(p.matchId, 'playerHit', { targetId: p.id, hp: p.hp, environmentSeq: p.environmentSeq || 0, healthEvent: 'heal', bulletId: null });
   });
@@ -3795,12 +3805,13 @@ io.on('connection', (socket) => {
   socket.on('setBossHp', (data = {}) => {
     const p = players[socket.id];
     if (!p || p.matchMode !== 'juggernaut') return;
-    p.bossMax = Number(data.hp) === JUGG_HP ? JUGG_HP : 0;
+    p.bossMax = Number(data?.hp) === JUGG_HP ? JUGG_HP : 0;
     p.hp = maxHpFor(p);
     emitToMatch(p.matchId, 'playerHit', { targetId: p.id, hp: p.hp, environmentSeq: p.environmentSeq || 0, healthEvent: 'heal', bulletId: null });
   });
 
-  socket.on('readyRespawn', (data = {}) => {
+  socket.on('readyRespawn', (data) => {
+    data = data && typeof data === 'object' ? data : {};
     const p = players[socket.id];
     if (!p || !p.dead) return;
     radiation.clear(p);
@@ -3819,7 +3830,8 @@ io.on('connection', (socket) => {
     emitToMatch(p.matchId, 'playerRespawned', { ...p, clientSpawn: data.x != null && data.z != null });
   });
 
-  socket.on('resetSelf', (data = {}) => {
+  socket.on('resetSelf', (data) => {
+    data = data && typeof data === 'object' ? data : {};
     const p = players[socket.id];
     if (!p) return;
     flames.clear(p);
@@ -4098,7 +4110,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('forceRespawnBot', (data) => {
-    const bot = players[data.id || data.botId];
+    const bot = players[data?.id || data?.botId];
     if (!bot || !bot.isBot || bot.ownerId !== socket.id) return;
     radiation.clear(bot);
     flames.clear(bot);

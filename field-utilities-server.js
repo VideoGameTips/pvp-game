@@ -9,7 +9,7 @@ module.exports=function({io,players,emit,blocked,canUse,weaponDamage,damage,hub,
     for(const f of fields.values())if(f.ownerId===p.id)remove(f);
   }
   function place(p,d){
-    const spec=specs[d?.kind];
+    const spec=Object.hasOwn(specs,String(d?.kind))?specs[d.kind]:null;
     if(!p||p.dead||!spec||!p.matchId||p.matchId===hub||p.matchId==='lobby'||!canUse(p,d.kind))return false;
     if(![d.x,d.y,d.z].every(Number.isFinite)||Math.hypot(d.x-p.x,d.y-p.y,d.z-p.z)>9)return false;
     let c=charges.get(p);
@@ -30,6 +30,7 @@ module.exports=function({io,players,emit,blocked,canUse,weaponDamage,damage,hub,
     if(Math.hypot(target.x-f.x,target.z-f.z)>spec.radius+.2||Math.abs(target.y-f.y)>2.6)return false;
     const owner=players[f.ownerId];
     if(f.kind==='bear_trap'&&(!owner||target.id===owner.id||blocked(owner,target)))return false;
+    if(f.kind==='bear_trap'&&now()<(target.shieldUntil||0))return false;   // spawn protection: nothing lands, and the trap stays set
     if(f.kind==='bear_trap'){
       remove(f,true);target._fieldRootUntil=now()+800;
       damage(target,owner,35,'bear_trap');
