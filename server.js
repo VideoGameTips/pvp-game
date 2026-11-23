@@ -2208,6 +2208,25 @@ function checkLobbyStart(L, { now = false } = {}) {
   stopLobbySearch(L);
   startLobbyMatch(L);
 }
+// 1v1 and 2v2 pair by rating, in a window that widens the longer a lobby waits. Only a NEW arrival used to look at it, so two people
+// searching at the same moment more than 200 points apart sat in two lobbies until each was given a bot. While lobbies wait, look again.
+function pairWaitingLobbies(mode) {
+  const open = () => (stagingLobbies[mode] || []).filter(l => l.players.length && l.players.length < lobbyMax(mode));
+  const avg = l => l.players.reduce((a, p) => a + ratingOfSocket(p.socketId), 0) / l.players.length;
+  for (const A of open().sort((a, b) => a.createdAt - b.createdAt)) {
+    if (!stagingLobbies[mode].includes(A) || !A.searchUntil) continue;
+    const reach = RANK.matchWindow(Date.now() - A.createdAt);
+    const B = open().filter(l => l !== A && l.searchUntil && l.players.length + A.players.length <= lobbyMax(mode) && Math.abs(avg(l) - avg(A)) <= reach)
+      .sort((x, y) => Math.abs(avg(x) - avg(A)) - Math.abs(avg(y) - avg(A)))[0];
+    if (!B) continue;
+    stopLobbySearch(B);
+    stagingLobbies[mode] = stagingLobbies[mode].filter(l => l !== B);
+    for (const p of B.players) { p.team = autoAssignTeam(A, mode); A.players.push(p); }
+    broadcastLobbyState(A);
+    checkLobbyStart(A);
+  }
+}
+setInterval(() => { for (const mode of RANKED_MODES) pairWaitingLobbies(mode); }, 1000).unref?.();
 // Everyone is ready — start the match. `extra` rides along on lobbyStart.
 function startLobbyMatch(L, extra = {}) {
   const mode = L.mode;
