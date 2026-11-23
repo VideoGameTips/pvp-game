@@ -26,7 +26,7 @@
     // refuses to boot otherwise — which is why these are not the obvious
     // choices: `paintball_gumball` and `lever_winchester94` exist as model
     // skins but are not sellable in a bundle.
-    {id:'retro',name:'Retro Pack',items:['paintball','laser_pointer','baguette'],skins:['paintball_moldy_green']},
+    {id:'retro',name:'Retro Pack',items:['paintball','laser_pointer','baguette'],skins:['paintball_fishbowl']},
     {id:'marksman',name:'Marksman',items:['lever','hand_cannon','knife'],skins:['knife_singularity']},
     {id:'stealth',name:'Stealth Ops',items:['air_rifle','throwing_knives','knife'],skins:['knife_hyperspace']},
     {id:'kitchen',name:'Kitchen Catastrophe',items:['paintball','baguette','frying_pan'],skins:['frying_pan_pizza_cutter']},

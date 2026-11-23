@@ -426,12 +426,7 @@ const P2W_ITEM_IDS = new Set([
   'nano_swarm', 'warp_beacon', 'stasis_mine', 'specter_drone', 'quantum_barrier',
 ]);
 const GEN1_SKIN_IDS = [
-  'ak20_twin_barrel', 'ak20_tracking_ar', 'ak20_swarm_rifle',
-  'pistol_darker_handgun', 'pistol_slightly_bluish', 'revolver_rusty_cylinder',
-  'ak20_cardboard_wrap', 'ak20_midnight_oil', 'sg8_duck_tape', 'sg8_confetti_shells',
-  'srx_laser_pointer_taped', 'paintball_moldy_green', 'flamethrower_water_thrower',
-  'crossbow_pool_noodle', 'minigun_arcade_cabinet', 'rpg_soda_bottle',
-  'knife_dental_floss', 'bat_pool_noodle',
+  'ak20_twin_barrel', 'ak20_swarm_rifle', 'bat_pool_noodle',
   // Realistic military model skins — gated behind Gen 1 cases too, unlike the
   // rest of MODEL_SKINS in public/game.js which stay free/always-equippable.
   'ak20_ak47_wood', 'burst_m4a1', 'flechette_bullpup', 'vector_mp5',
@@ -721,7 +716,7 @@ for(const b of Object.values(BUNDLES)){
 const STARTER_CREDITS = 500;       // a first weapon or two, not the shop
 const TRIAL_DIVISOR = 20; // trial costs 1/20 of buy price (min 1)
 
-const SKIN_SWAPS = { freeze_slushie: 'freeze_hyperslush', railgun_metal_detector: 'railgun_portal_detector', p90_barcode_scanner: 'p90_quantum_scanner', firework_champagne: 'firework_showman' };   // mirrors the client's
+const SKIN_SWAPS = { paintball_moldy_green: 'paintball_fishbowl', freeze_slushie: 'freeze_hyperslush', railgun_metal_detector: 'railgun_portal_detector', p90_barcode_scanner: 'p90_quantum_scanner', firework_champagne: 'firework_showman' };   // mirrors the client's
 function ensureShopFields(u) {
   if (!u) return;
   if (typeof u.credits !== 'number') u.credits = STARTER_CREDITS;
